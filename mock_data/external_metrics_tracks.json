@@ -1,0 +1,114 @@
+{
+  "Midnight Dreams": {
+    "total_streams": 5240000,
+    "monthly_streams": 425000,
+    "playlist_count": 78,
+    "top_playlist": "Indie Vibes",
+    "top_playlist_followers": 2800000,
+    "growth_3_month": 28.5,
+    "growth_12_month": 145.2,
+    "top_territories": [
+      {"country": "US", "streams": 2100000, "percentage": 40.1},
+      {"country": "UK", "streams": 890000, "percentage": 17.0},
+      {"country": "CA", "streams": 620000, "percentage": 11.8}
+    ],
+    "chartmetric_score": 82.4,
+    "popularity": 76
+  },
+  "Electric Pulse": {
+    "total_streams": 8750000,
+    "monthly_streams": 680000,
+    "playlist_count": 142,
+    "top_playlist": "Electronic Hits",
+    "top_playlist_followers": 5200000,
+    "growth_3_month": 42.8,
+    "growth_12_month": 285.7,
+    "top_territories": [
+      {"country": "US", "streams": 3850000, "percentage": 44.0},
+      {"country": "DE", "streams": 1225000, "percentage": 14.0},
+      {"country": "UK", "streams": 1050000, "percentage": 12.0}
+    ],
+    "chartmetric_score": 88.9,
+    "popularity": 84
+  },
+  "Golden Hour": {
+    "total_streams": 3420000,
+    "monthly_streams": 285000,
+    "playlist_count": 52,
+    "top_playlist": "Acoustic Sunrise",
+    "top_playlist_followers": 1800000,
+    "growth_3_month": 18.2,
+    "growth_12_month": 92.5,
+    "top_territories": [
+      {"country": "US", "streams": 1540000, "percentage": 45.0},
+      {"country": "AU", "streams": 480000, "percentage": 14.0},
+      {"country": "UK", "streams": 410000, "percentage": 12.0}
+    ],
+    "chartmetric_score": 74.5,
+    "popularity": 68
+  },
+  "City Lights": {
+    "total_streams": 12500000,
+    "monthly_streams": 950000,
+    "playlist_count": 215,
+    "top_playlist": "Urban Beats",
+    "top_playlist_followers": 8500000,
+    "growth_3_month": 55.3,
+    "growth_12_month": 420.8,
+    "top_territories": [
+      {"country": "US", "streams": 6250000, "percentage": 50.0},
+      {"country": "UK", "streams": 1875000, "percentage": 15.0},
+      {"country": "CA", "streams": 1250000, "percentage": 10.0}
+    ],
+    "chartmetric_score": 92.7,
+    "popularity": 89
+  },
+  "Waves of Tomorrow": {
+    "total_streams": 6800000,
+    "monthly_streams": 520000,
+    "playlist_count": 98,
+    "top_playlist": "Chill Electronica",
+    "top_playlist_followers": 3400000,
+    "growth_3_month": 32.4,
+    "growth_12_month": 195.6,
+    "top_territories": [
+      {"country": "US", "streams": 2720000, "percentage": 40.0},
+      {"country": "FR", "streams": 1020000, "percentage": 15.0},
+      {"country": "UK", "streams": 816000, "percentage": 12.0}
+    ],
+    "chartmetric_score": 85.2,
+    "popularity": 79
+  },
+  "Summertime Sadness": {
+    "total_streams": 45000000,
+    "monthly_streams": 1850000,
+    "playlist_count": 428,
+    "top_playlist": "Pop Hits 2024",
+    "top_playlist_followers": 18500000,
+    "growth_3_month": 15.2,
+    "growth_12_month": 68.4,
+    "top_territories": [
+      {"country": "US", "streams": 20250000, "percentage": 45.0},
+      {"country": "BR", "streams": 6750000, "percentage": 15.0},
+      {"country": "MX", "streams": 5400000, "percentage": 12.0}
+    ],
+    "chartmetric_score": 94.5,
+    "popularity": 92
+  },
+  "Neon Nights": {
+    "total_streams": 2150000,
+    "monthly_streams": 180000,
+    "playlist_count": 34,
+    "top_playlist": "Late Night Vibes",
+    "top_playlist_followers": 950000,
+    "growth_3_month": 45.8,
+    "growth_12_month": 215.3,
+    "top_territories": [
+      {"country": "US", "streams": 860000, "percentage": 40.0},
+      {"country": "CA", "streams": 322500, "percentage": 15.0},
+      {"country": "UK", "streams": 258000, "percentage": 12.0}
+    ],
+    "chartmetric_score": 68.3,
+    "popularity": 62
+  }
+}

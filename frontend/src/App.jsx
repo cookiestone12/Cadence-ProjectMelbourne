@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Home from './pages/Home'
-import Upload from './pages/Upload'
-import Dashboard from './pages/Dashboard'
+import CatalogView from './pages/CatalogView'
+import Search from './pages/Search'
 import SongDetail from './pages/SongDetail'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
@@ -41,22 +41,22 @@ function App() {
         {isAuthenticated && <Navigation user={user} onLogout={handleLogout} />}
         <Routes>
           <Route path="/login" element={
-            isAuthenticated ? <Navigate to="/dashboard" /> : <Login onLogin={handleLogin} />
+            isAuthenticated ? <Navigate to="/catalog" /> : <Login onLogin={handleLogin} />
           } />
           <Route path="/" element={
-            isAuthenticated ? <Navigate to="/dashboard" /> : <Home />
+            isAuthenticated ? <Navigate to="/catalog" /> : <Home />
           } />
-          <Route path="/upload" element={
-            isAuthenticated ? <Upload /> : <Navigate to="/login" />
+          <Route path="/catalog" element={
+            isAuthenticated ? <CatalogView /> : <Navigate to="/login" />
           } />
-          <Route path="/dashboard" element={
-            isAuthenticated ? <Dashboard /> : <Navigate to="/login" />
+          <Route path="/search" element={
+            isAuthenticated ? <Search /> : <Navigate to="/login" />
           } />
           <Route path="/song/:id" element={
             isAuthenticated ? <SongDetail /> : <Navigate to="/login" />
           } />
           <Route path="/settings" element={
-            isAuthenticated && user?.is_admin ? <Settings /> : <Navigate to="/dashboard" />
+            isAuthenticated && user?.is_admin ? <Settings /> : <Navigate to="/catalog" />
           } />
         </Routes>
       </div>

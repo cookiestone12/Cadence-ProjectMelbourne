@@ -1,0 +1,93 @@
+{
+  "Luna Rivers": {
+    "monthly_listeners": 825000,
+    "followers": 342000,
+    "follower_growth_3_month": 22.5,
+    "follower_growth_12_month": 145.8,
+    "top_cities": ["Los Angeles", "New York", "London"],
+    "genre_tags": ["indie pop", "dream pop", "alternative"],
+    "social_followers": {
+      "instagram": 185000,
+      "tiktok": 420000,
+      "twitter": 62000
+    }
+  },
+  "The Neon Collective": {
+    "monthly_listeners": 1450000,
+    "followers": 680000,
+    "follower_growth_3_month": 38.2,
+    "follower_growth_12_month": 285.4,
+    "top_cities": ["Berlin", "Los Angeles", "London"],
+    "genre_tags": ["electronic", "synthwave", "house"],
+    "social_followers": {
+      "instagram": 290000,
+      "tiktok": 750000,
+      "twitter": 95000
+    }
+  },
+  "Maya Sol": {
+    "monthly_listeners": 580000,
+    "followers": 215000,
+    "follower_growth_3_month": 15.8,
+    "follower_growth_12_month": 92.3,
+    "top_cities": ["Nashville", "Austin", "Los Angeles"],
+    "genre_tags": ["folk", "acoustic", "singer-songwriter"],
+    "social_followers": {
+      "instagram": 125000,
+      "tiktok": 180000,
+      "twitter": 38000
+    }
+  },
+  "Urban Echo": {
+    "monthly_listeners": 2850000,
+    "followers": 1250000,
+    "follower_growth_3_month": 48.5,
+    "follower_growth_12_month": 425.7,
+    "top_cities": ["Atlanta", "New York", "Toronto"],
+    "genre_tags": ["hip hop", "trap", "urban"],
+    "social_followers": {
+      "instagram": 580000,
+      "tiktok": 1850000,
+      "twitter": 245000
+    }
+  },
+  "Oceanic Soundscape": {
+    "monthly_listeners": 1120000,
+    "followers": 485000,
+    "follower_growth_3_month": 28.4,
+    "follower_growth_12_month": 198.6,
+    "top_cities": ["Los Angeles", "San Francisco", "Seattle"],
+    "genre_tags": ["ambient", "chillwave", "electronic"],
+    "social_followers": {
+      "instagram": 220000,
+      "tiktok": 520000,
+      "twitter": 72000
+    }
+  },
+  "Lana Del Rey": {
+    "monthly_listeners": 42500000,
+    "followers": 18200000,
+    "follower_growth_3_month": 8.5,
+    "follower_growth_12_month": 42.3,
+    "top_cities": ["Los Angeles", "New York", "London"],
+    "genre_tags": ["pop", "indie pop", "alternative"],
+    "social_followers": {
+      "instagram": 25000000,
+      "tiktok": 8500000,
+      "twitter": 9200000
+    }
+  },
+  "Rising Star Artist": {
+    "monthly_listeners": 185000,
+    "followers": 68000,
+    "follower_growth_3_month": 125.5,
+    "follower_growth_12_month": 582.4,
+    "top_cities": ["Brooklyn", "Portland", "Austin"],
+    "genre_tags": ["indie rock", "alternative", "garage rock"],
+    "social_followers": {
+      "instagram": 42000,
+      "tiktok": 285000,
+      "twitter": 18000
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "catalog_name": "Demo Catalog – MIME Schedule A",
+  "songwriter": {
+    "name": "Jordan Taylor",
+    "pro_affiliation": "ASCAP",
+    "ipi": "00123456789"
+  },
+  "songs": [
+    {
+      "title": "Midnight Dreams",
+      "artist_name": "Luna Rivers",
+      "publishing_percentage": 75.0,
+      "master_percentage": 50.0,
+      "spotify_link": "https://open.spotify.com/track/mock1",
+      "isrc": "USRC12345001",
+      "iswc": "T-123.456.789-1",
+      "writer_splits": [
+        {"name": "Jordan Taylor", "share": 75.0},
+        {"name": "Alex Chen", "share": 25.0}
+      ]
+    },
+    {
+      "title": "Electric Pulse",
+      "artist_name": "The Neon Collective",
+      "publishing_percentage": 100.0,
+      "master_percentage": 75.0,
+      "spotify_link": "https://open.spotify.com/track/mock2",
+      "isrc": "USRC12345002",
+      "iswc": "T-123.456.789-2",
+      "writer_splits": [
+        {"name": "Jordan Taylor", "share": 100.0}
+      ]
+    },
+    {
+      "title": "Golden Hour",
+      "artist_name": "Maya Sol",
+      "publishing_percentage": 50.0,
+      "master_percentage": 0.0,
+      "spotify_link": "https://open.spotify.com/track/mock3",
+      "isrc": "USRC12345003",
+      "iswc": "T-123.456.789-3",
+      "writer_splits": [
+        {"name": "Jordan Taylor", "share": 50.0},
+        {"name": "Sam Rivera", "share": 50.0}
+      ]
+    },
+    {
+      "title": "City Lights",
+      "artist_name": "Urban Echo",
+      "publishing_percentage": 60.0,
+      "master_percentage": 60.0,
+      "spotify_link": "https://open.spotify.com/track/mock4",
+      "isrc": "USRC12345004",
+      "iswc": "T-123.456.789-4",
+      "writer_splits": [
+        {"name": "Jordan Taylor", "share": 60.0},
+        {"name": "Chris Park", "share": 40.0}
+      ]
+    },
+    {
+      "title": "Waves of Tomorrow",
+      "artist_name": "Oceanic Soundscape",
+      "publishing_percentage": 80.0,
+      "master_percentage": 40.0,
+      "spotify_link": "https://open.spotify.com/track/mock5",
+      "isrc": "USRC12345005",
+      "iswc": "T-123.456.789-5",
+      "writer_splits": [
+        {"name": "Jordan Taylor", "share": 80.0},
+        {"name": "Taylor Swift", "share": 20.0}
+      ]
+    }
+  ]
+}

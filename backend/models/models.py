@@ -24,6 +24,16 @@ class Songwriter(Base):
     
     songs = relationship("Song", back_populates="songwriter")
 
+class Catalog(Base):
+    __tablename__ = "catalogs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    songs = relationship("Song", back_populates="catalog")
+
 class Song(Base):
     __tablename__ = "songs"
     
@@ -34,14 +44,25 @@ class Song(Base):
     master_percentage = Column(Float, default=0.0)
     spotify_link = Column(String, nullable=True)
     songwriter_id = Column(Integer, ForeignKey("songwriters.id"), nullable=True)
+    catalog_id = Column(Integer, ForeignKey("catalogs.id"), nullable=True)
     
-    valuation = Column(Float, default=0.0)
+    isrc = Column(String, nullable=True)
+    iswc = Column(String, nullable=True)
+    writer_splits = Column(JSON, default=list)
+    
+    valuation_low = Column(Float, default=0.0)
+    valuation_base = Column(Float, default=0.0)
+    valuation_high = Column(Float, default=0.0)
+    estimated_revenue = Column(Float, default=0.0)
+    
     score = Column(Float, default=0.0)
+    score_breakdown = Column(JSON, default=dict)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     songwriter = relationship("Songwriter", back_populates="songs")
+    catalog = relationship("Catalog", back_populates="songs")
     analytics = relationship("Analytics", back_populates="song", uselist=False)
 
 class Analytics(Base):

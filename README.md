@@ -1,21 +1,19 @@
-# MIME Catalog Intelligence Platform
+# MIME Catalog Intelligence - Internal Demo Dashboard
 
-A comprehensive music catalog intelligence platform for MIME Publishing that provides automated song valuation, performance scoring, and analytics dashboard.
+**Private Internal Demo Only** - A comprehensive music catalog intelligence platform demonstrating MIME Publishing's automated song valuation, performance scoring, and analytics capabilities.
 
 ## Overview
 
-MIME Catalog Intelligence is a single-client platform designed to help MIME Publishing manage and analyze their music catalog. The system automatically fetches data from multiple sources (Chartmetric, Spotify, Luminate) to calculate valuations and performance scores for each song.
+This is an **internal demo dashboard** showcasing the catalog intelligence tool that will eventually be offered to external clients. This demo simulates the workflow after a client uploads their completed Schedule A (using our standard template) through what will be a separate public website.
 
-## Features
+### Key Features
 
-- **Schedule A Template Upload**: Download and upload the official MIME Schedule A template to register songs
-- **Automated Analytics**: Fetch streaming data, playlist positions, and regional performance metrics
-- **Valuation Engine**: Calculate song worth based on streaming data, playlist reach, and market performance
-- **Scoring System**: Rate songs on commercial potential (0-100) based on trend analysis and catalog health
-- **Dashboard**: View all songs with key metrics, valuations, and scores at a glance
-- **Song Details**: Comprehensive analytics for each song including playlists, regional data, and trends
-- **Mock Data Fallback**: System runs with mock data by default and automatically switches to real APIs when keys are provided
-- **Admin Settings**: Configure API keys and view integration status
+- **Catalog View**: Comprehensive overview of your catalog with summary metrics, grading breakdowns, and detailed song listings
+- **Search View**: Search for songs by title or artist name, displaying valuations and metrics for both catalog and external songs
+- **Integrated Upload**: Upload filled Schedule A templates directly within the dashboard for demo purposes
+- **Advanced Valuations**: Low/Base/High valuation ranges plus estimated revenue projections
+- **Score Breakdown**: Four-factor scoring system (Catalog Value, Growth Momentum, Metadata Health, Exploitation Potential)
+- **Mock External Data**: Simulates Chartmetric, Luminate, and Spotify API responses until real keys are provided
 
 ## Tech Stack
 
@@ -23,106 +21,116 @@ MIME Catalog Intelligence is a single-client platform designed to help MIME Publ
 - React 18 with React Router
 - Tailwind CSS for styling
 - Vite for development and building
-- Recharts for data visualization
 - React Dropzone for file uploads
 - Axios for API communication
 
 ### Backend
-- FastAPI (Python)
+- FastAPI (Python 3.11)
 - PostgreSQL database via SQLAlchemy ORM
-- JWT authentication with role-based access control
-- Python libraries: pandas, openpyxl, PyPDF2
+- JWT authentication (minimal - single admin user)
+- Mock data system with automatic API switching
 
 ### Database
 - PostgreSQL (Replit-hosted)
-- Models: Users, Songwriters, Songs, Analytics, Settings
+- Models: Users, Songwriters, Songs, Catalogs, Analytics, Settings
 
-## Installation
+## Running the Demo
 
-### Prerequisites
-- Python 3.11+
-- Node.js 20+
-- PostgreSQL database (automatically provided by Replit)
+### Automatic Setup (Replit)
 
-### Setup Instructions
+The demo runs automatically on Replit with:
+- Backend on port 8000
+- Frontend on port 5000
+- Auto-seeded demo catalog on first run
+
+### Manual Setup
 
 1. **Install Dependencies**
 
 ```bash
-# Backend dependencies
-cd backend
-pip install -r requirements.txt
+# Backend
+cd backend && pip install -r requirements.txt
 
-# Frontend dependencies
-cd frontend
-npm install
+# Frontend
+cd frontend && npm install
 ```
 
 2. **Environment Variables**
 
-The following environment variables are automatically set by Replit:
+Required (automatically set by Replit):
 - `DATABASE_URL` - PostgreSQL connection string
 - `SESSION_SECRET` - JWT secret key
 
-Optional API keys (add via Replit Secrets):
-- `CHARTMETRIC_API_KEY` - For Chartmetric analytics
-- `SPOTIFY_CLIENT_ID` - For Spotify data
-- `SPOTIFY_CLIENT_SECRET` - For Spotify authentication
-- `LUMINATE_API_KEY` - For Luminate/radio data
-- `CLAUDE_API_KEY` - For future AI-powered features
-
-**Note**: The system runs with mock data by default. Add API keys to enable real data fetching.
+Optional API keys (for real data):
+- `CHARTMETRIC_API_KEY`
+- `SPOTIFY_CLIENT_ID` & `SPOTIFY_CLIENT_SECRET`
+- `LUMINATE_API_KEY`
 
 3. **Run the Application**
 
-The application uses two workflows:
-
 ```bash
-# Backend (runs on port 8000)
+# Backend
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
-# Frontend (runs on port 5000)
+# Frontend (must bind to 0.0.0.0:5000)
 cd frontend && npm run dev
 ```
 
-On Replit, both workflows start automatically.
+## Using the Demo
 
-4. **Access the Application**
+### First Time Access
 
-- Frontend: https://your-repl-url.repl.co
-- Backend API: https://your-repl-url.repl.co/api
+1. **Register**: Create an account (first user becomes admin automatically)
+2. **View Demo Catalog**: The dashboard loads with pre-seeded demo data
+3. **Explore**:
+   - **Catalog tab**: View catalog summary, score breakdowns, and all songs
+   - **Search tab**: Search for songs (searches catalog first, then shows mock external data if no match)
 
-## Usage
+### Demo Features
 
-### First Time Setup
+#### Catalog View
 
-1. **Register an Account**
-   - Visit the login page
-   - Click "Register" to create an account
-   - First user automatically gets admin privileges
+Displays:
+- **Catalog Summary**: Total songs, controlled publishing %, estimated valuations (Low/Base/High)
+- **Score Breakdown Card**: Visual breakdown of the four scoring factors
+- **Upload Panel**: Upload filled Schedule A templates for demo purposes
+- **Songs Table**: All songs with Publishing %, Master %, Revenue, Valuations, and Scores
+- **Song Details**: Click any song to see full analytics, writer splits, and metrics
 
-2. **Download Schedule A Template**
-   - Go to the home page
-   - Click "Download Template"
-   - Fill in songwriter and song information
+#### Search View
 
-3. **Upload Schedule A**
-   - Login to your account
-   - Navigate to "Upload" page
-   - Drag and drop or click to upload your completed template
-   - Supported formats: PDF, Excel (.xlsx, .xls)
+Features:
+- **Universal Search**: Search by song title or artist name
+- **Dual Data Sources**: 
+  - Shows catalog songs if they match
+  - Shows mock "external" results from Chartmetric/Luminate if no catalog match
+- **Result Cards**: Display valuation, track metrics, artist metrics, and territories
+- **In-Catalog Indicator**: Clearly shows whether a song is in your catalog or external data
 
-4. **View Analytics**
-   - Dashboard shows all songs with valuations and scores
-   - Click "View Details" on any song for comprehensive analytics
-   - View streaming data, playlist performance, and regional metrics
+#### Song Detail Page
 
-### Admin Features
+Comprehensive view including:
+- Estimated revenue and overall score
+- Valuation range (Low/Base/High) with visual emphasis on base valuation
+- Score breakdown with progress bars for each factor
+- Writer splits with percentages
+- ISRC/ISWC codes (if available)
+- Track performance metrics with growth indicators
+- Playlist performance and top playlists
+- Regional performance breakdown
 
-Admins can access the Settings page to:
-- View API configuration status
-- See which services are using mock vs. real data
-- Get instructions for adding API keys
+### Uploading a Schedule A (Internal Demo)
+
+1. Navigate to **Catalog View**
+2. Find the "Upload Filled Schedule A (Internal Demo)" panel
+3. Drag & drop or click to browse for your filled template (PDF, XLSX, or XLS)
+4. System will parse the file, fetch analytics (from mock data), and calculate valuations/scores
+5. New catalog will appear in the dashboard
+
+**Template Requirements:**
+- Use the official MIME Schedule A template
+- Include songwriter information (Name, PRO, IPI)
+- Song columns: Song Title, Artist(s) Name, Publishing % Owned, Master % Owned, Spotify Link
 
 ## API Endpoints
 
@@ -131,91 +139,84 @@ Admins can access the Settings page to:
 - `POST /api/auth/login` - Login and get JWT token
 
 ### Catalog
-- `GET /api/catalog/songs` - Get all songs (requires auth)
-- `GET /api/catalog/songs/{id}` - Get song details (requires auth)
-- `POST /api/catalog/upload` - Upload Schedule A file (requires auth)
+- `GET /api/catalog/summary` - Get catalog summaries with totals and breakdowns
+- `GET /api/catalog/songs` - Get all songs
+- `GET /api/catalog/songs/{id}` - Get song details with full analytics
+- `POST /api/catalog/upload` - Upload and parse Schedule A file
+- `GET /api/catalog/search?q=query` - Search songs (catalog + external mock data)
 
 ### Settings
-- `GET /api/settings` - Get all settings (admin only)
-- `POST /api/settings` - Create/update setting (admin only)
-- `GET /api/settings/api-status` - Check API configuration status
+- `GET /api/settings/api-status` - Check which APIs are configured vs. mock
 
-### Health
-- `GET /api/health` - Health check endpoint
+## Mock Data Structure
 
-## Mock Data
+Demo data is located in `mock_data/`:
 
-The `mock_data/` directory contains JSON files simulating responses from:
-- **chartmetric_response.json**: Chartmetric track data (scores, playlists, trends)
-- **spotify_response.json**: Spotify track and streaming data
-- **luminate_response.json**: Regional performance and radio data
+1. **demo_catalog.json** - Parsed demo catalog with 5 songs and songwriter info
+2. **external_metrics_tracks.json** - Mock track metrics keyed by song title (streams, playlists, growth, territories)
+3. **external_metrics_artists.json** - Mock artist metrics keyed by artist name (monthly listeners, followers, growth, genres)
 
-These mock files are used automatically when real API keys are not configured.
+These are used for:
+- Seeding the demo catalog on startup
+- Providing "external" search results when no catalog match exists
+- Simulating Chartmetric/Luminate/Spotify responses until real API keys are added
 
 ## Valuation Engine
 
-The valuation engine calculates song worth using weighted factors:
+Calculates **three valuation scenarios** plus revenue estimate:
 
-- **Stream Value (40%)**: $0.003 per stream average
-- **Playlist Value (30%)**: Based on follower count and position in high-profile playlists
-- **Chartmetric Score (20%)**: Industry standard scoring
-- **Regional Performance (10%)**: Geographic market share
+- **Estimated Revenue**: Annual revenue projection based on streams
+- **Low (Conservative)**: Base valuation × 8
+- **Base (Realistic)**: Weighted calculation using streams (40%), playlists (30%), Chartmetric score (20%), regional performance (10%)
+- **High (Optimistic)**: Base valuation × 15-18 (higher for high-growth songs)
+
+Growth rate influences the high-end multiplier.
 
 ## Scoring System
 
-Songs are scored 0-100 based on:
+**Four-factor scoring** (each 0-25 points, total 0-100):
 
-- **Commercial Potential (40 points)**: Stream counts and playlist positions
-- **Trend Momentum (30 points)**: Rising, stable, or declining trajectory
-- **Catalog Health (30 points)**: Engagement metrics and quality indicators
+1. **Catalog Value** (0-25): Based on total streams and commercial performance
+2. **Growth Momentum** (0-25): 3-month and 12-month growth rates
+3. **Metadata Health** (0-25): Data completeness (ISRC, ISWC, links) and Chartmetric quality score
+4. **Exploitation Potential** (0-25): Playlist reach and positions
 
-Score Ranges:
-- 80-100: Excellent (Green)
-- 60-79: Good (Yellow)
-- 0-59: Needs Attention (Red)
+Breakdown is displayed visually in both Catalog View and Song Detail pages.
 
-## File Format Requirements
+## Configuration for Real Data
 
-### Schedule A Template
+To switch from mock to real API data:
 
-The system expects the following structure:
+1. Go to **Settings** page (admin only)
+2. Note the API keys required
+3. Add keys via Replit Secrets:
+   - `CHARTMETRIC_API_KEY`
+   - `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`
+   - `LUMINATE_API_KEY`
+4. Restart the application
+5. System automatically uses real APIs when keys are detected
 
-**Songwriter Information:**
-- Songwriter Name
-- PRO Affiliation (ASCAP, BMI, SESAC, etc.)
-- IPI Number
-
-**Song Table:**
-| Song Title | Artist Name | Publishing % Owned | Master % Owned | Spotify Link |
-|-----------|-------------|-------------------|----------------|--------------|
-
-**Important Notes:**
-- Use the official MIME template for best results
-- Deviations from the format may cause parsing errors
-- Future updates will include AI-powered extraction for non-standard formats
+The flow is identical - only the data source changes.
 
 ## Branding
 
-The platform features MIME Publishing's brand colors:
-- **Purple** (#8B5CF6): Primary brand color
-- **Orange** (#F59E0B): Accent color
-- **Dark** (#1F2937): Text and UI elements
-
-Logo and branding elements are located in `frontend/public/`.
+- **Primary**: Purple (#8B5CF6)
+- **Accent**: Gold/Orange (#F59E0B)
+- **MIME Logo**: Displayed in navigation
+- **"Internal Demo" badge**: Visible in navigation header
 
 ## Future Enhancements
 
-Planned features for future releases:
-- AI-powered document extraction using Claude
-- Real-time API integration with live data
-- Advanced analytics with trend charts and revenue projections
-- Bulk catalog operations (import/export, batch updates)
-- Notification system for performance milestones
-- Multi-client tenant architecture
+For production release:
+- Separate public website for client Schedule A uploads
+- Real-time API integration
+- Advanced trend charts and revenue projections
+- Multi-tenant architecture for multiple clients
+- Automated reporting and export
 
 ## Support
 
-For questions or issues with MIME Catalog Intelligence, please contact your MIME Publishing administrator.
+This is an internal demo. For questions about the catalog intelligence tool, contact the MIME Publishing product team.
 
 ## License
 

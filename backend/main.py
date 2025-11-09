@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from .models import Base, engine
 from .routes import auth, catalog, settings
+from .seed_data import init_seed_data
 import os
 
 if not os.getenv("SESSION_SECRET"):
@@ -19,6 +20,10 @@ app.add_middleware(
 )
 
 Base.metadata.create_all(bind=engine)
+
+@app.on_event("startup")
+def startup_event():
+    init_seed_data()
 
 app.include_router(auth.router)
 app.include_router(catalog.router)
