@@ -1,0 +1,170 @@
+Here’s a prompt you can give Replit to update the existing project into a private internal dashboard demo with upload + search and mock data.
+
+⸻
+
+Prompt: Update MIME Catalog Intelligence into an Internal Demo Dashboard
+
+You already built a basic MIME Catalog Intelligence app. Now update and refocus it as follows:
+
+1. Scope & Purpose
+	•	This is now a private, internal dashboard demo only, not a public multi-user product.
+	•	There will later be a separate public website where external users upload their Schedule A files. For now:
+	•	The dashboard should simulate what happens after a filled-in Schedule A (using our standard template) is uploaded.
+	•	We still want the ability to upload a filled-in template inside this dashboard for demo purposes.
+	•	All external data (Chartmetric, Luminate, Spotify, etc.) should still use mock data until real API keys are plugged in.
+
+Keep the stack you used before:
+	•	Frontend: React + Tailwind.
+	•	Backend: FastAPI + SQLAlchemy + Postgres.
+	•	Single-tenant, single-org, minimal auth (one admin user is enough for now).
+
+⸻
+
+2. Data & Template Assumptions
+	•	We are using one fixed Schedule A template (the MIME Song Registration template we already created, with columns:
+Song Title | Artist(s) Name | Publishing % Owned | Master % Owned | Spotify Link plus header fields for songwriter name, PRO affiliation, and IPI).
+	•	Add a small sample filled-in CSV/XLSX version of that template to a demo_data/ folder and a corresponding JSON mock for parsed data (e.g. demo_schedule_parsed.json).
+	•	When the app starts, seed the database with:
+	•	One demo catalog created from this sample parsed template.
+	•	Mock external metrics for those demo songs and artists, using the same structure you used before (ExternalMetric table).
+
+⸻
+
+3. Internal Dashboard Layout
+
+The dashboard should have two main views accessible via a simple top nav:
+	1.	Catalog View
+	2.	Search View
+
+3.1 Catalog View
+	•	Show:
+	•	Catalog name (e.g. “Demo Catalog – MIME Schedule A”).
+	•	Totals: number of songs, total controlled publishing %, total estimated catalog value (low/base/high).
+	•	Render a table of songs with columns:
+	•	Song Title
+	•	Artist(s)
+	•	Publishing % Owned
+	•	Master % Owned
+	•	Spotify Link (clickable)
+	•	Estimated Revenue (from valuation engine)
+	•	Valuation – Low / Base / High
+	•	Overall Score (from grading engine)
+	•	Clicking a row opens a Song Detail panel that shows:
+	•	Writer splits (from template / parsed data).
+	•	Any ISRC/ISWC if present.
+	•	Mock external metrics:
+	•	Total streams (mock Chartmetric/Spotify).
+	•	Playlist count and top playlist name.
+	•	3–12 month growth indicator (e.g. % growth).
+	•	Top territories.
+	•	Include a small card on the side or at the top summarizing the grading breakdown for the whole catalog:
+	•	Catalog Value score
+	•	Growth Momentum score
+	•	Metadata Health score
+	•	Exploitation Potential score
+
+3.2 Upload Flow (Internal Only)
+	•	On the Catalog View page, add a panel titled “Upload Filled Schedule A (Internal Demo)” with:
+	•	File input for CSV/XLSX/PDF generated from the MIME template.
+	•	A note: “Use the official MIME Schedule A template only.”
+	•	When a file is uploaded:
+	•	Call the existing parse_schedule_a function.
+	•	For this demo, you can:
+	•	Either actually parse the file format if straightforward, or
+	•	Recognize the upload and simply use the existing demo parsed JSON to simulate success.
+	•	Create a new catalog record and re-run valuation + scoring for that catalog.
+	•	After processing, automatically navigate to the Catalog View for the newly uploaded catalog.
+
+⸻
+
+4. Search View (Song & Artist Search)
+
+Add a dedicated Search View focused on quickly showing valuation/metrics for a specific song.
+
+4.1 Search Bar
+	•	At the top of the Search View, add a single search input with placeholder:
+“Search by song title or artist name…”
+	•	When user types and presses Enter:
+	1.	First search inside the local catalog database:
+	•	Match song titles (case-insensitive) and artist names.
+	2.	If matches exist:
+	•	Show a results list of songs.
+	3.	If no matches exist:
+	•	Still show a mock “external” result using mock data to simulate pulling from Chartmetric/Luminate for a song not in the catalog.
+
+4.2 Result Card (per song)
+For each song in search results, display a card with:
+	•	Header: Song Title – Artist(s)
+	•	Valuation section (from internal engine):
+	•	Estimated revenue
+	•	Low/Base/High valuation
+	•	Key Chartmetric-style track metrics (from mock data):
+	•	Total streams
+	•	of active playlists and top playlist name
+	•	Recent growth % (e.g. last 3 months)
+	•	Top 3 territories / markets
+	•	Key artist metrics (also from mock data):
+	•	Monthly listeners
+	•	Follower count / fanbase size
+	•	Recent growth indicator
+	•	Basic genre/scene tags if available
+
+If the song is part of an uploaded catalog, indicate:
+	•	“In catalog: Yes” and show which catalog.
+If it’s only from external mock data:
+	•	“In catalog: No (external metrics only)”.
+
+You should re-use the same valuation logic for any search result that has enough data: even external mock results should call the same valuation service.
+
+⸻
+
+5. Backend Changes
+	1.	Simplify to Single Client
+	•	Remove or ignore any org_id / multi-tenant logic if you previously implemented it.
+	•	Treat all data as belonging to a single internal instance.
+	2.	Valuation & Scoring
+	•	Keep the existing valuation and scoring services.
+	•	Make sure there is a reusable function like get_song_valuation(recording_or_mock) that:
+	•	Accepts either a DB recording row or a mock object.
+	•	Returns revenue + low/base/high valuations.
+	•	Same for scoring: allow generating a “mini” score just for a single song, based on its metrics.
+	3.	Search Endpoint
+	•	Add an endpoint like GET /search?q=... that:
+	•	Queries songs in the DB by title or artist.
+	•	If no DB matches, builds a mock “external” song payload using mock JSON (e.g. mock_data/search_samples.json) and passes that to the valuation/metrics logic.
+
+⸻
+
+6. Mock Data Design
+	•	mock_data/catalog_demo.json – parsed version of the demo Schedule A template (list of songs + splits).
+	•	mock_data/external_metrics_tracks.json – keyed by song title or ISRC, with:
+	•	streams, playlists, territories, growth_rate, etc.
+	•	mock_data/external_metrics_artists.json – keyed by artist name, with:
+	•	monthly_listeners, followers, growth indicators, etc.
+	•	Search should read from these files when real API keys are not set.
+
+⸻
+
+7. Styling & Branding
+	•	Keep it clearly MIME-branded:
+	•	Use the MIME logo in the top-left of the dashboard.
+	•	Use purple as primary and gold/yellow as accent.
+	•	Make the Catalog View and Search View visually distinct but cohesive:
+	•	Catalog = table + detail pane.
+	•	Search = large search bar + cards for results.
+
+⸻
+
+8. README Update
+
+Update the README to clearly state:
+	•	This is a private internal demo for MIME’s catalog intelligence tool.
+	•	Steps to:
+	•	Run the backend and frontend in Replit.
+	•	Upload a filled Schedule A template for demo.
+	•	Use the Search tab to see per-song valuations and mock Chartmetric/Luminate-style metrics.
+	•	Where to plug in real API keys later for Chartmetric/Luminate/Spotify, and that until then all metrics are mocked but the flow is identical.
+
+⸻
+
+Use this as the full specification to refactor/extend the existing project into the internal-only dashboard demo described above.
