@@ -78,8 +78,7 @@ class CatalogSummaryResponse(BaseModel):
 
 @router.get("/summary", response_model=List[CatalogSummaryResponse])
 def get_catalog_summary(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """Get summary for all catalogs"""
     catalogs = db.query(Catalog).all()
@@ -127,8 +126,7 @@ def get_catalog_summary(
 
 @router.get("/songs", response_model=List[SongResponse])
 def get_songs(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     songs = db.query(Song).all()
     return songs
@@ -136,8 +134,7 @@ def get_songs(
 @router.get("/songs/{song_id}", response_model=SongDetailResponse)
 def get_song(
     song_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     song = db.query(Song).filter(Song.id == song_id).first()
     if not song:
@@ -170,8 +167,7 @@ def get_song(
 @router.post("/upload")
 async def upload_schedule_a(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     Upload and parse Schedule A template.
@@ -334,8 +330,7 @@ async def upload_schedule_a(
 @router.get("/search")
 def search_songs(
     q: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
     """
     Search for songs by title or artist name.

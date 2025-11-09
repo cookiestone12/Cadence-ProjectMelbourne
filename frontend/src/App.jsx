@@ -9,55 +9,23 @@ import Login from './pages/Login'
 import Navigation from './components/Navigation'
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [user, setUser] = useState(null)
-
-  useEffect(() => {
-    const token = localStorage.getItem('token')
-    const userData = localStorage.getItem('user')
-    if (token && userData) {
-      setIsAuthenticated(true)
-      setUser(JSON.parse(userData))
-    }
-  }, [])
-
-  const handleLogin = (token, userData) => {
-    localStorage.setItem('token', token)
-    localStorage.setItem('user', JSON.stringify(userData))
-    setIsAuthenticated(true)
-    setUser(userData)
-  }
+  const [isAuthenticated, setIsAuthenticated] = useState(true)
+  const [user, setUser] = useState({ username: 'Demo User', is_admin: true })
 
   const handleLogout = () => {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
-    setIsAuthenticated(false)
-    setUser(null)
   }
 
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
-        {isAuthenticated && <Navigation user={user} onLogout={handleLogout} />}
+        <Navigation user={user} onLogout={handleLogout} />
         <Routes>
-          <Route path="/login" element={
-            isAuthenticated ? <Navigate to="/catalog" /> : <Login onLogin={handleLogin} />
-          } />
-          <Route path="/" element={
-            isAuthenticated ? <Navigate to="/catalog" /> : <Home />
-          } />
-          <Route path="/catalog" element={
-            isAuthenticated ? <CatalogView /> : <Navigate to="/login" />
-          } />
-          <Route path="/search" element={
-            isAuthenticated ? <Search /> : <Navigate to="/login" />
-          } />
-          <Route path="/song/:id" element={
-            isAuthenticated ? <SongDetail /> : <Navigate to="/login" />
-          } />
-          <Route path="/settings" element={
-            isAuthenticated && user?.is_admin ? <Settings /> : <Navigate to="/catalog" />
-          } />
+          <Route path="/login" element={<Navigate to="/catalog" />} />
+          <Route path="/" element={<Home />} />
+          <Route path="/catalog" element={<CatalogView />} />
+          <Route path="/search" element={<Search />} />
+          <Route path="/catalog/songs/:id" element={<SongDetail />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </div>
     </Router>
