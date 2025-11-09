@@ -1,0 +1,27 @@
+{
+  "track": {
+    "id": "mock_spotify_456",
+    "name": "Sample Song",
+    "artists": [
+      {
+        "name": "Sample Artist",
+        "id": "artist_789",
+        "followers": 500000
+      }
+    ],
+    "popularity": 78,
+    "duration_ms": 210000,
+    "explicit": false
+  },
+  "audio_features": {
+    "danceability": 0.75,
+    "energy": 0.82,
+    "valence": 0.68,
+    "tempo": 120
+  },
+  "streams_data": {
+    "total_streams": 2500000,
+    "monthly_streams": 350000,
+    "daily_average": 12000
+  }
+}

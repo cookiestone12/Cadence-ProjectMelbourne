@@ -1,0 +1,31 @@
+{
+  "track_id": "luminate_mock_999",
+  "track_name": "Sample Song",
+  "regional_performance": {
+    "US": {
+      "streams": 1500000,
+      "radio_spins": 8500,
+      "market_share": 0.12
+    },
+    "UK": {
+      "streams": 400000,
+      "radio_spins": 2200,
+      "market_share": 0.08
+    },
+    "CA": {
+      "streams": 200000,
+      "radio_spins": 1100,
+      "market_share": 0.09
+    }
+  },
+  "sales_data": {
+    "total_sales": 15000,
+    "downloads": 8500,
+    "physical": 2000
+  },
+  "radio_data": {
+    "total_spins": 11800,
+    "peak_position": 8,
+    "weeks_on_chart": 12
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "track_id": "mock_123",
+  "track_name": "Sample Song",
+  "artist_name": "Sample Artist",
+  "chartmetric_score": 87.5,
+  "spotify_streams": 2500000,
+  "spotify_monthly_listeners": 150000,
+  "playlist_count": 45,
+  "top_playlists": [
+    {
+      "name": "Today's Top Hits",
+      "followers": 32000000,
+      "position": 23
+    },
+    {
+      "name": "RapCaviar",
+      "followers": 15000000,
+      "position": 12
+    },
+    {
+      "name": "Hot R&B",
+      "followers": 8000000,
+      "position": 8
+    }
+  ],
+  "trend_momentum": "rising",
+  "peak_rank": 15
+}
