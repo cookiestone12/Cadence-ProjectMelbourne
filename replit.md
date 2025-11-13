@@ -45,6 +45,19 @@ An internal demo dashboard showcasing MIME Publishing's catalog intelligence too
 - **Valuation Engine**: Returns estimated revenue and three valuation tiers (Low, Base, High) based on streams, playlists, Chartmetric score, and regional performance. Incorporates publishing vs. master revenue, and premium vs. ad-supported stream differentiation.
 - **Scoring Engine**: Returns a breakdown across four factors: Catalog Value, Growth Momentum, Metadata Health, and Exploitation Potential.
 
+## Deployment Configuration
+- **Deployment Type**: Autoscale (cost-effective for demos, runs only when accessed)
+- **Build Process**: `cd frontend && npm run build` - Compiles React app to static files in `frontend/dist/`
+- **Run Command**: `python -m uvicorn backend.main:app --host 0.0.0.0 --port 5000`
+- **Production Port**: 5000 (required for Replit web deployments)
+- **Static File Serving**: Backend serves frontend build files with path traversal protection
+- **SPA Routing**: All non-API routes fall back to `index.html` for client-side routing
+- **Security**: Path sanitization using `Path.is_relative_to()` prevents directory traversal attacks
+
+### Development vs Production
+- **Development**: Frontend (Vite dev server on port 5000) + Backend (FastAPI on port 8000)
+- **Production**: Single FastAPI server on port 5000 serving both API and built frontend
+
 ## External Dependencies
 - **PostgreSQL**: Primary database for all application data.
 - **Mock Chartmetric API**: Simulated external API for music analytics.
