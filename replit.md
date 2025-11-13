@@ -60,6 +60,8 @@ An **internal demo dashboard** showcasing MIME Publishing's catalog intelligence
 8. ✅ **Catalog Grouping** - Songs organized by catalog with ownership percentages
 9. ✅ **File Upload** - Drag-and-drop Schedule A processing (internal demo only)
 10. ✅ **MIME Branding** - Purple/orange theme with "Internal Demo" badge
+11. ✅ **Stream Count Display** - Spotify stream counts shown in songs table
+12. ✅ **Revenue Estimate (Admin Collection)** - Controlled streams calculation with label split scenarios (80/20 and 60/40)
 
 ### Future Enhancements
 - Separate public website for client Schedule A uploads
@@ -171,6 +173,27 @@ Two workflows configured:
    - Must bind to `0.0.0.0:5000` for Replit
 
 ## Recent Changes
+
+### November 13, 2025 - Revenue Estimate & Stream Count Display
+**Added administrative revenue tracking features:**
+
+#### Backend Changes
+- Added revenue estimate calculations to `/api/catalog/summary` endpoint
+- Implemented controlled streams calculation: `ownership % × total streams`
+- Added revenue formula: `controlled streams × $0.0012 × label split %`
+- Calculate label share scenarios: 80/20 (20% share) and 60/40 (40% share)
+- Fixed float precision in calculations (removed integer truncation)
+- Updated `CatalogSummaryResponse` model to use `float` for `total_controlled_streams`
+- Updated `/api/catalog/songs` endpoint to include `spotify_streams` in response
+
+#### Frontend Changes
+- Added "Revenue Estimate (Admin Collection)" section to Catalog View showing:
+  - Total Controlled Streams (ownership-weighted)
+  - Estimated Annual Revenue
+  - Label Share (80/20) - 20% of annual revenue
+  - Label Share (60/40) - 40% of annual revenue
+- Added "Streams" column to songs table displaying Spotify stream counts
+- Formatted large numbers with K/M suffixes for readability
 
 ### November 9, 2025 - Internal Demo Transformation
 **Transformed app from client-facing to internal demo dashboard:**
