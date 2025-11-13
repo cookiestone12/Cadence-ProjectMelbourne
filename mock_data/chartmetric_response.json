@@ -6,11 +6,26 @@
   "spotify_streams": 2500000,
   "spotify_monthly_listeners": 150000,
   "platform_streams": {
-    "spotify": 2500000,
-    "apple_music": 950000,
-    "youtube_music": 620000,
-    "amazon_music": 710000,
-    "tidal": 38000
+    "spotify": {
+      "premium": 1750000,
+      "ad_supported": 750000
+    },
+    "apple_music": {
+      "premium": 950000,
+      "ad_supported": 0
+    },
+    "youtube_music": {
+      "premium": 434000,
+      "ad_supported": 186000
+    },
+    "amazon_music": {
+      "premium": 497000,
+      "ad_supported": 213000
+    },
+    "tidal": {
+      "premium": 38000,
+      "ad_supported": 0
+    }
   },
   "playlist_count": 45,
   "top_playlists": [

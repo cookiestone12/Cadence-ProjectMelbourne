@@ -111,12 +111,21 @@ def seed_demo_catalog(db: Session):
                 ratio = MARKET_SHARE[platform] / MARKET_SHARE['spotify']
                 platform_total_streams[platform] = int(spotify_streams * ratio)
         
-        # Split each platform into 70% premium, 30% ad-supported
-        # (Apple Music and Tidal are premium-only, but we'll use same split for consistency)
+        # Split each platform into premium/ad-supported based on platform type
+        # Apple Music and Tidal are premium-only services
         streams_by_type = {}
+        premium_only_platforms = ['apple_music', 'tidal']
+        
         for platform, total in platform_total_streams.items():
-            premium = int(total * 0.7)
-            ad_supported = total - premium
+            if platform in premium_only_platforms:
+                # Premium-only platforms: 100% premium, 0% ad-supported
+                premium = total
+                ad_supported = 0
+            else:
+                # Other platforms: 70% premium, 30% ad-supported
+                premium = int(total * 0.7)
+                ad_supported = total - premium
+            
             streams_by_type[platform] = {
                 'premium': premium,
                 'ad_supported': ad_supported

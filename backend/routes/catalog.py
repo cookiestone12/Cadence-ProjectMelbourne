@@ -623,20 +623,87 @@ async def upload_schedule_a(
         analytics_combined['has_iswc'] = False
         analytics_combined['has_spotify_link'] = bool(song_data.get('spotify_link'))
         
-        # Calculate publishing and master revenue for separated valuations
-        PREMIUM_RATE = 0.0012
-        AD_SUPPORTED_RATE = 0.0004
+        # Tier-aware ingestion: preserve uploader-provided premium/ad-supported values
+        spotify_streams = analytics_combined.get('spotify_streams', 0)
+        platform_streams_from_chartmetric = chartmetric_data.get('platform_streams', {})
         
-        streams_by_type = spotify_data.get('streams_data', {}).get('streams_by_type', {})
-        spotify_streams_data = streams_by_type.get('spotify', {})
-        premium_streams = spotify_streams_data.get('premium', 0)
-        ad_supported_streams = spotify_streams_data.get('ad_supported', 0)
+        streams_by_type = {}
+        premium_only_platforms = ['apple_music', 'tidal']
         
+        # Process each tracked platform
+        for platform in TRACKED_PLATFORMS:
+            platform_data = platform_streams_from_chartmetric.get(platform)
+            
+            if isinstance(platform_data, dict) and ('premium' in platform_data or 'ad_supported' in platform_data):
+                # Case 1: Tier-level data provided (preserve it)
+                premium = int(platform_data.get('premium', 0))
+                ad_supported = int(platform_data.get('ad_supported', 0))
+                streams_by_type[platform] = {
+                    'premium': premium,
+                    'ad_supported': ad_supported
+                }
+            elif platform_data and isinstance(platform_data, (int, float)) and platform_data > 0:
+                # Case 2: Total provided without tier breakdown (apply heuristics)
+                total = int(platform_data)
+                if platform in premium_only_platforms:
+                    premium = total
+                    ad_supported = 0
+                else:
+                    premium = int(total * 0.7)
+                    ad_supported = total - premium
+                streams_by_type[platform] = {
+                    'premium': premium,
+                    'ad_supported': ad_supported
+                }
+            elif platform == 'spotify' and spotify_streams > 0:
+                # Case 3: Use Spotify data we already have (apply heuristic)
+                total = spotify_streams
+                premium = int(total * 0.7)
+                ad_supported = total - premium
+                streams_by_type[platform] = {
+                    'premium': premium,
+                    'ad_supported': ad_supported
+                }
+            else:
+                # Case 4: No data for this platform, estimate from Spotify using market share
+                from ..config.streaming_rates import MARKET_SHARE
+                if spotify_streams > 0:
+                    ratio = MARKET_SHARE[platform] / MARKET_SHARE['spotify']
+                    total = int(spotify_streams * ratio)
+                    if platform in premium_only_platforms:
+                        premium = total
+                        ad_supported = 0
+                    else:
+                        premium = int(total * 0.7)
+                        ad_supported = total - premium
+                    streams_by_type[platform] = {
+                        'premium': premium,
+                        'ad_supported': ad_supported
+                    }
+        
+        # Calculate publishing and master revenue across ALL platforms
         pub_pct = song_data['publishing_percentage'] / 100.0
         master_pct = song_data['master_percentage'] / 100.0
         
-        publishing_revenue = (premium_streams * PREMIUM_RATE * pub_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * pub_pct)
-        master_revenue = (premium_streams * PREMIUM_RATE * master_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * master_pct)
+        publishing_revenue = 0.0
+        master_revenue = 0.0
+        
+        for platform, stream_data in streams_by_type.items():
+            premium_streams = stream_data['premium']
+            ad_supported_streams = stream_data['ad_supported']
+            
+            # Publishing uses consistent rates across platforms
+            pub_premium_rate = get_publishing_rate('premium')
+            pub_ad_rate = get_publishing_rate('ad_supported')
+            
+            # Master uses platform-specific rates
+            master_premium_rate = get_master_rate(platform, 'premium')
+            master_ad_rate = get_master_rate(platform, 'ad_supported')
+            
+            publishing_revenue += (premium_streams * pub_premium_rate * pub_pct) + \
+                                 (ad_supported_streams * pub_ad_rate * pub_pct)
+            master_revenue += (premium_streams * master_premium_rate * master_pct) + \
+                             (ad_supported_streams * master_ad_rate * master_pct)
         
         # Calculate valuation and score with separated publishing/master revenues
         valuation = valuation_engine.calculate_valuation(analytics_combined, publishing_revenue, master_revenue)
@@ -650,50 +717,112 @@ async def upload_schedule_a(
             db.commit()
             db.refresh(catalog)
         
-        # Create song
-        song = Song(
-            title=song_data['title'],
-            artist_name=song_data['artist_name'],
-            publishing_percentage=song_data['publishing_percentage'],
-            master_percentage=song_data['master_percentage'],
-            spotify_link=song_data.get('spotify_link'),
-            songwriter_id=songwriter.id,
-            catalog_id=catalog.id,
-            valuation_low=valuation['valuation_low'],
-            valuation_base=valuation['valuation_base'],
-            valuation_high=valuation['valuation_high'],
-            valuation_low_pub=valuation['valuation_low_pub'],
-            valuation_base_pub=valuation['valuation_base_pub'],
-            valuation_high_pub=valuation['valuation_high_pub'],
-            valuation_low_master=valuation['valuation_low_master'],
-            valuation_base_master=valuation['valuation_base_master'],
-            valuation_high_master=valuation['valuation_high_master'],
-            estimated_revenue=valuation['estimated_revenue'],
-            score=score['overall_score'],
-            score_breakdown={
+        # Check if song already exists (deduplicate by spotify_link or title+artist)
+        existing_song = None
+        if song_data.get('spotify_link'):
+            existing_song = db.query(Song).filter(Song.spotify_link == song_data['spotify_link']).first()
+        if not existing_song:
+            existing_song = db.query(Song).filter(
+                Song.title == song_data['title'],
+                Song.artist_name == song_data['artist_name']
+            ).first()
+        
+        if existing_song:
+            # Update existing song with new valuation and score
+            existing_song.publishing_percentage = song_data['publishing_percentage']
+            existing_song.master_percentage = song_data['master_percentage']
+            existing_song.valuation_low = valuation['valuation_low']
+            existing_song.valuation_base = valuation['valuation_base']
+            existing_song.valuation_high = valuation['valuation_high']
+            existing_song.valuation_low_pub = valuation['valuation_low_pub']
+            existing_song.valuation_base_pub = valuation['valuation_base_pub']
+            existing_song.valuation_high_pub = valuation['valuation_high_pub']
+            existing_song.valuation_low_master = valuation['valuation_low_master']
+            existing_song.valuation_base_master = valuation['valuation_base_master']
+            existing_song.valuation_high_master = valuation['valuation_high_master']
+            existing_song.estimated_revenue = valuation['estimated_revenue']
+            existing_song.score = score['overall_score']
+            existing_song.score_breakdown = {
                 'catalog_value': score['catalog_value'],
                 'growth_momentum': score['growth_momentum'],
                 'metadata_health': score['metadata_health'],
                 'exploitation_potential': score['exploitation_potential']
             }
-        )
-        db.add(song)
-        db.commit()
-        db.refresh(song)
-        
-        # Create analytics
-        analytics = Analytics(
-            song_id=song.id,
-            spotify_streams=analytics_combined['spotify_streams'],
-            spotify_monthly_listeners=analytics_combined['spotify_monthly_listeners'],
-            chartmetric_score=analytics_combined['chartmetric_score'],
-            playlist_count=analytics_combined['playlist_count'],
-            top_playlists=analytics_combined['top_playlists'],
-            regional_data=analytics_combined['regional_data'],
-            trend_data=analytics_combined['trend_data']
-        )
-        db.add(analytics)
-        db.commit()
+            
+            # Update existing Analytics with new tier-aware streams_by_type
+            if existing_song.analytics:
+                existing_song.analytics.spotify_streams = analytics_combined['spotify_streams']
+                existing_song.analytics.spotify_monthly_listeners = analytics_combined['spotify_monthly_listeners']
+                existing_song.analytics.chartmetric_score = analytics_combined['chartmetric_score']
+                existing_song.analytics.playlist_count = analytics_combined['playlist_count']
+                existing_song.analytics.top_playlists = analytics_combined['top_playlists']
+                existing_song.analytics.regional_data = analytics_combined['regional_data']
+                existing_song.analytics.trend_data = analytics_combined['trend_data']
+                existing_song.analytics.streams_by_type = streams_by_type  # Preserve tier-aware data
+            else:
+                # Create new Analytics if missing
+                analytics = Analytics(
+                    song_id=existing_song.id,
+                    spotify_streams=analytics_combined['spotify_streams'],
+                    spotify_monthly_listeners=analytics_combined['spotify_monthly_listeners'],
+                    chartmetric_score=analytics_combined['chartmetric_score'],
+                    playlist_count=analytics_combined['playlist_count'],
+                    top_playlists=analytics_combined['top_playlists'],
+                    regional_data=analytics_combined['regional_data'],
+                    trend_data=analytics_combined['trend_data'],
+                    streams_by_type=streams_by_type
+                )
+                db.add(analytics)
+            
+            db.commit()
+            db.refresh(existing_song)
+            song = existing_song
+        else:
+            # Create new song
+            song = Song(
+                title=song_data['title'],
+                artist_name=song_data['artist_name'],
+                publishing_percentage=song_data['publishing_percentage'],
+                master_percentage=song_data['master_percentage'],
+                spotify_link=song_data.get('spotify_link'),
+                songwriter_id=songwriter.id,
+                catalog_id=catalog.id,
+                valuation_low=valuation['valuation_low'],
+                valuation_base=valuation['valuation_base'],
+                valuation_high=valuation['valuation_high'],
+                valuation_low_pub=valuation['valuation_low_pub'],
+                valuation_base_pub=valuation['valuation_base_pub'],
+                valuation_high_pub=valuation['valuation_high_pub'],
+                valuation_low_master=valuation['valuation_low_master'],
+                valuation_base_master=valuation['valuation_base_master'],
+                valuation_high_master=valuation['valuation_high_master'],
+                estimated_revenue=valuation['estimated_revenue'],
+                score=score['overall_score'],
+                score_breakdown={
+                    'catalog_value': score['catalog_value'],
+                    'growth_momentum': score['growth_momentum'],
+                    'metadata_health': score['metadata_health'],
+                    'exploitation_potential': score['exploitation_potential']
+                }
+            )
+            db.add(song)
+            db.commit()
+            db.refresh(song)
+            
+            # Create analytics with multi-platform tier-aware streams_by_type
+            analytics = Analytics(
+                song_id=song.id,
+                spotify_streams=analytics_combined['spotify_streams'],
+                spotify_monthly_listeners=analytics_combined['spotify_monthly_listeners'],
+                chartmetric_score=analytics_combined['chartmetric_score'],
+                playlist_count=analytics_combined['playlist_count'],
+                top_playlists=analytics_combined['top_playlists'],
+                regional_data=analytics_combined['regional_data'],
+                trend_data=analytics_combined['trend_data'],
+                streams_by_type=streams_by_type
+            )
+            db.add(analytics)
+            db.commit()
         
         created_songs.append(song)
     

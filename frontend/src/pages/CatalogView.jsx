@@ -294,7 +294,21 @@ export default function CatalogView() {
 
           {/* Publishing vs Master Revenue */}
           <div className="mb-4 pb-4 border-b">
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Revenue by Rights Type</h4>
+            <div className="flex items-center gap-2 mb-2">
+              <h4 className="text-sm font-semibold text-gray-700">Multi-Platform Revenue</h4>
+              <div className="group relative">
+                <svg className="w-4 h-4 text-gray-400 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="hidden group-hover:block absolute left-0 top-6 w-72 bg-gray-900 text-white text-xs rounded p-3 z-10 shadow-lg">
+                  <p className="font-semibold mb-1">Multi-Platform Revenue Calculation</p>
+                  <p className="mb-2">Revenue calculated across 5 major streaming platforms: Spotify, Apple Music, YouTube Music, Amazon Music, and Tidal.</p>
+                  <p className="mb-2"><span className="font-semibold">Publishing:</span> Consistent $0.0012/stream (premium) across all platforms</p>
+                  <p><span className="font-semibold">Master:</span> Platform-specific rates (Apple/Tidal pay 2-3× more than Spotify)</p>
+                  <p className="mt-2 pt-2 border-t border-gray-700 text-gray-300">These 5 platforms represent ~62.5% of global streaming market. Actual total market revenue may be ~60% higher.</p>
+                </div>
+              </div>
+            </div>
             <div className="space-y-3">
               <div className="bg-purple-50 p-3 rounded">
                 <div className="flex justify-between items-center mb-2">
@@ -302,11 +316,11 @@ export default function CatalogView() {
                   <span className="text-lg font-bold text-mime-purple">${formatNumber(catalogSummary.total_publishing_revenue)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs pl-2">
-                  <span className="text-gray-600">Premium @ $0.0012</span>
+                  <span className="text-gray-600">Premium Streams</span>
                   <span className="text-gray-700">${formatNumber(catalogSummary.publishing_revenue_by_type.premium)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs pl-2">
-                  <span className="text-gray-600">Ad-Supported @ $0.0004</span>
+                  <span className="text-gray-600">Ad-Supported Streams</span>
                   <span className="text-gray-700">${formatNumber(catalogSummary.publishing_revenue_by_type.ad_supported)}</span>
                 </div>
               </div>
@@ -317,12 +331,15 @@ export default function CatalogView() {
                   <span className="text-lg font-bold text-blue-600">${formatNumber(catalogSummary.total_master_revenue)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs pl-2">
-                  <span className="text-gray-600">Premium @ $0.0012</span>
+                  <span className="text-gray-600">Premium Streams</span>
                   <span className="text-gray-700">${formatNumber(catalogSummary.master_revenue_by_type.premium)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs pl-2">
-                  <span className="text-gray-600">Ad-Supported @ $0.0004</span>
+                  <span className="text-gray-600">Ad-Supported Streams</span>
                   <span className="text-gray-700">${formatNumber(catalogSummary.master_revenue_by_type.ad_supported)}</span>
+                </div>
+                <div className="mt-2 pt-2 border-t border-blue-200">
+                  <p className="text-xs text-gray-600 italic">Platform-specific rates: Spotify $0.004, Apple $0.01, YouTube $0.008, Amazon $0.004, Tidal $0.013</p>
                 </div>
               </div>
             </div>
