@@ -39,6 +39,8 @@ class SongResponse(BaseModel):
     spotify_link: str | None
     spotify_streams: int | None
     estimated_revenue: float
+    publishing_revenue: float
+    master_revenue: float
     valuation_low: float
     valuation_base: float
     valuation_high: float
@@ -59,12 +61,21 @@ class SongDetailResponse(BaseModel):
     iswc: str | None
     writer_splits: list | None
     estimated_revenue: float
+    publishing_revenue: float
+    master_revenue: float
     valuation_low: float
     valuation_base: float
     valuation_high: float
     score: float
     score_breakdown: dict | None
     analytics: dict | None
+    release_date: str | None
+    spotify_streams: int | None
+    premium_streams: int | None
+    ad_supported_streams: int | None
+    territory_streams: dict | None
+    collectible_publishing_value: float
+    black_box_loss: float
     
     class Config:
         from_attributes = True
@@ -294,8 +305,29 @@ def get_songs(
 ):
     songs = db.query(Song).all()
     result = []
+    
+    PREMIUM_RATE = 0.0012
+    AD_SUPPORTED_RATE = 0.0004
+    
     for song in songs:
         spotify_streams = song.analytics.spotify_streams if song.analytics else None
+        
+        publishing_revenue = 0.0
+        master_revenue = 0.0
+        
+        if song.analytics and song.analytics.streams_by_type:
+            streams_by_type = song.analytics.streams_by_type
+            spotify_streams_data = streams_by_type.get('spotify', {})
+            
+            premium_streams = spotify_streams_data.get('premium', 0)
+            ad_supported_streams = spotify_streams_data.get('ad_supported', 0)
+            
+            pub_pct = song.publishing_percentage / 100.0
+            master_pct = song.master_percentage / 100.0
+            
+            publishing_revenue = (premium_streams * PREMIUM_RATE * pub_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * pub_pct)
+            master_revenue = (premium_streams * PREMIUM_RATE * master_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * master_pct)
+        
         result.append({
             "id": song.id,
             "title": song.title,
@@ -305,6 +337,8 @@ def get_songs(
             "spotify_link": song.spotify_link,
             "spotify_streams": spotify_streams,
             "estimated_revenue": song.estimated_revenue,
+            "publishing_revenue": round(publishing_revenue, 2),
+            "master_revenue": round(master_revenue, 2),
             "valuation_low": song.valuation_low,
             "valuation_base": song.valuation_base,
             "valuation_high": song.valuation_high,
@@ -322,10 +356,21 @@ def get_song(
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
     
+    PREMIUM_RATE = 0.0012
+    AD_SUPPORTED_RATE = 0.0004
+    
     analytics_data = None
+    spotify_streams = 0
+    premium_streams = 0
+    ad_supported_streams = 0
+    territory_streams = {}
+    publishing_revenue = 0.0
+    master_revenue = 0.0
+    
     if song.analytics:
+        spotify_streams = song.analytics.spotify_streams or 0
         analytics_data = {
-            "spotify_streams": song.analytics.spotify_streams,
+            "spotify_streams": spotify_streams,
             "spotify_monthly_listeners": song.analytics.spotify_monthly_listeners,
             "chartmetric_score": song.analytics.chartmetric_score,
             "playlist_count": song.analytics.playlist_count,
@@ -333,6 +378,34 @@ def get_song(
             "regional_data": song.analytics.regional_data,
             "trend_data": song.analytics.trend_data
         }
+        
+        if song.analytics.streams_by_type:
+            streams_by_type = song.analytics.streams_by_type
+            spotify_streams_data = streams_by_type.get('spotify', {})
+            premium_streams = spotify_streams_data.get('premium', 0)
+            ad_supported_streams = spotify_streams_data.get('ad_supported', 0)
+            
+            pub_pct = song.publishing_percentage / 100.0
+            master_pct = song.master_percentage / 100.0
+            
+            publishing_revenue = (premium_streams * PREMIUM_RATE * pub_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * pub_pct)
+            master_revenue = (premium_streams * PREMIUM_RATE * master_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * master_pct)
+        
+        if song.analytics.territory_streams:
+            territory_streams = song.analytics.territory_streams
+    
+    release_date_str = song.release_date.isoformat() if song.release_date else None
+    
+    decay_factor = 1.0
+    if song.release_date:
+        age_years = (datetime.now() - song.release_date).days / 365.25
+        if age_years > 5:
+            decay_factor = 0.1
+        elif age_years > 3:
+            decay_factor = 0.5
+    
+    collectible_publishing_value = publishing_revenue * decay_factor
+    black_box_loss = publishing_revenue * (1 - decay_factor)
     
     return {
         "id": song.id,
@@ -341,9 +414,25 @@ def get_song(
         "publishing_percentage": song.publishing_percentage,
         "master_percentage": song.master_percentage,
         "spotify_link": song.spotify_link,
-        "valuation": song.valuation,
+        "isrc": song.isrc,
+        "iswc": song.iswc,
+        "writer_splits": song.writer_splits,
+        "estimated_revenue": song.estimated_revenue,
+        "publishing_revenue": round(publishing_revenue, 2),
+        "master_revenue": round(master_revenue, 2),
+        "valuation_low": song.valuation_low,
+        "valuation_base": song.valuation_base,
+        "valuation_high": song.valuation_high,
         "score": song.score,
-        "analytics": analytics_data
+        "score_breakdown": song.score_breakdown,
+        "analytics": analytics_data,
+        "release_date": release_date_str,
+        "spotify_streams": spotify_streams,
+        "premium_streams": premium_streams,
+        "ad_supported_streams": ad_supported_streams,
+        "territory_streams": territory_streams,
+        "collectible_publishing_value": round(collectible_publishing_value, 2),
+        "black_box_loss": round(black_box_loss, 2)
     }
 
 @router.post("/upload")

@@ -19,17 +19,19 @@ An internal demo dashboard showcasing MIME Publishing's catalog intelligence too
 - **Authentication**: JWT (minimal for demo)
 
 ### Core Features
-- **Catalog View**: Summary, score breakdown, songs table, integrated upload.
+- **Catalog View**: Summary with multiplier labels (8×, 12×, 18×), score breakdown, songs table with separated publishing/master revenue columns, integrated upload.
 - **Search View**: Universal search across catalog and external mock data.
-- **Song Detail**: Comprehensive analytics with valuations, scores, and metrics.
-- **3-Tier Valuations**: Low, Base, and High scenarios with estimated revenue projections, incorporating stream types (premium/ad-supported) and territory breakdowns.
+- **Song Detail Modal**: Pop-out modal displaying comprehensive analytics per song including release date, age, streams (premium/ad-supported), top 3 territories, ownership %, score breakdown, revenue (publishing/master), black box metrics, and valuations with multipliers.
+- **3-Tier Valuations**: Low (8×), Base (12×), and High (18×) scenarios with multiplier labels displayed throughout UI.
 - **4-Factor Scoring**: Evaluates Catalog Value, Growth Momentum, Metadata Health, and Exploitation Potential (0-25 points each, totaling 0-100).
 - **Mock External Data**: Simulation of Chartmetric, Spotify, and Luminate responses.
-- **Demo Catalog Seeding**: Auto-populates 5 demo songs on first run.
+- **Demo Catalog Seeding**: Auto-populates 5 demo songs with varying release dates (1-8 years old) on first run.
 - **Catalog Grouping**: Songs organized by catalog with ownership percentages.
 - **File Upload**: Drag-and-drop Schedule A processing (internal demo only).
 - **MIME Branding**: Purple/orange theme with an "Internal Demo" badge.
-- **Revenue Estimate (Admin Collection)**: Calculates revenue based on controlled streams and label split scenarios (80/20, 60/40), differentiating between publishing and master revenue, and premium vs. ad-supported streams.
+- **Revenue Estimate (Admin Collection)**: Calculates revenue based on controlled streams and label split scenarios (80/20, 60/40), differentiating between publishing and master revenue, and premium vs. ad-supported streams. Songs table displays separate Publishing Revenue and Master Revenue columns.
+- **Black Box Tracking**: Collectible publishing value and estimated black box loss calculations based on song age (0-3 years: 100%, 3-5 years: 50%, 5+ years: 10% collectible).
+- **Excel Export**: Comprehensive 4-sheet reports (Catalog Summary, Territory Breakdown, Song Details, Methodology) with downloadable XLSX format.
 
 ### Database Schema
 - **users**: Authentication.

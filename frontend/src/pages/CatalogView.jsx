@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { useDropzone } from 'react-dropzone'
 import axios from 'axios'
+import SongDetailModal from '../components/SongDetailModal'
 
 export default function CatalogView() {
   const [songs, setSongs] = useState([])
@@ -9,6 +10,7 @@ export default function CatalogView() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadMessage, setUploadMessage] = useState('')
+  const [selectedSongId, setSelectedSongId] = useState(null)
 
   useEffect(() => {
     fetchData()
@@ -163,14 +165,17 @@ export default function CatalogView() {
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Valuation (Low)</p>
                   <p className="text-xl font-semibold text-gray-700">${formatNumber(catalogSummary.total_valuation_low)}</p>
+                  <p className="text-xs text-gray-400 mt-1">8× multiplier</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Valuation (Base)</p>
                   <p className="text-xl font-semibold text-green-600">${formatNumber(catalogSummary.total_valuation_base)}</p>
+                  <p className="text-xs text-gray-400 mt-1">12× multiplier</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Valuation (High)</p>
                   <p className="text-xl font-semibold text-gray-700">${formatNumber(catalogSummary.total_valuation_high)}</p>
+                  <p className="text-xs text-gray-400 mt-1">18× multiplier</p>
                 </div>
               </div>
             </div>
@@ -387,7 +392,8 @@ export default function CatalogView() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Streams</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Publishing %</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Master %</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-mime-purple uppercase tracking-wider">Pub. Revenue</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-blue-600 uppercase tracking-wider">Master Revenue</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Val (Low/Base/High)</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -404,13 +410,16 @@ export default function CatalogView() {
                     <td className="px-6 py-4 whitespace-nowrap">{song.publishing_percentage}%</td>
                     <td className="px-6 py-4 whitespace-nowrap">{song.master_percentage}%</td>
                     <td className="px-6 py-4 whitespace-nowrap text-mime-purple font-semibold">
-                      ${formatNumber(song.estimated_revenue)}
+                      ${formatNumber(song.publishing_revenue)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-blue-600 font-semibold">
+                      ${formatNumber(song.master_revenue)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-xs">
-                        <div className="text-gray-600">${formatNumber(song.valuation_low)}</div>
-                        <div className="text-green-600 font-semibold">${formatNumber(song.valuation_base)}</div>
-                        <div className="text-gray-600">${formatNumber(song.valuation_high)}</div>
+                        <div className="text-gray-600">${formatNumber(song.valuation_low)} <span className="text-gray-400">(8×)</span></div>
+                        <div className="text-green-600 font-semibold">${formatNumber(song.valuation_base)} <span className="text-gray-400">(12×)</span></div>
+                        <div className="text-gray-600">${formatNumber(song.valuation_high)} <span className="text-gray-400">(18×)</span></div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -423,12 +432,12 @@ export default function CatalogView() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Link
-                        to={`/song/${song.id}`}
+                      <button
+                        onClick={() => setSelectedSongId(song.id)}
                         className="text-mime-purple hover:underline"
                       >
                         View Details
-                      </Link>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -436,6 +445,13 @@ export default function CatalogView() {
             </table>
           </div>
         </div>
+      )}
+
+      {selectedSongId && (
+        <SongDetailModal
+          songId={selectedSongId}
+          onClose={() => setSelectedSongId(null)}
+        />
       )}
     </div>
   )
