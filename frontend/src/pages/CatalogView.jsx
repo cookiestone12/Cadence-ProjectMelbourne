@@ -11,6 +11,7 @@ export default function CatalogView() {
   const [uploading, setUploading] = useState(false)
   const [uploadMessage, setUploadMessage] = useState('')
   const [selectedSongId, setSelectedSongId] = useState(null)
+  const [customMultiplier, setCustomMultiplier] = useState(12)
 
   useEffect(() => {
     fetchData()
@@ -80,6 +81,24 @@ export default function CatalogView() {
     if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
     if (num >= 1000) return (num / 1000).toFixed(0) + 'K'
     return num?.toString() || '0'
+  }
+
+  const calculateCustomValuation = (revenue, multiplier) => {
+    return revenue * multiplier
+  }
+
+  const getCustomPublishingValuation = () => {
+    if (!catalogSummary) return 0
+    return calculateCustomValuation(catalogSummary.total_publishing_revenue, customMultiplier)
+  }
+
+  const getCustomMasterValuation = () => {
+    if (!catalogSummary) return 0
+    return calculateCustomValuation(catalogSummary.total_master_revenue, customMultiplier)
+  }
+
+  const getTotalCustomValuation = () => {
+    return getCustomPublishingValuation() + getCustomMasterValuation()
   }
 
   const handleDownloadReport = async () => {
@@ -164,9 +183,64 @@ export default function CatalogView() {
                 </div>
               </div>
               
+              {/* Valuation Horizon Slider */}
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Valuation Horizon</h3>
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <label htmlFor="multiplier-slider" className="text-sm font-medium text-gray-700">
+                      Custom Multiplier
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl font-bold text-indigo-700">{customMultiplier}×</span>
+                      <span className="text-xs text-gray-600 bg-white px-2 py-1 rounded">
+                        {customMultiplier} years of revenue
+                      </span>
+                    </div>
+                  </div>
+                  <input
+                    id="multiplier-slider"
+                    type="range"
+                    min="0"
+                    max="15"
+                    step="0.5"
+                    value={customMultiplier}
+                    onChange={(e) => setCustomMultiplier(parseFloat(e.target.value))}
+                    className="w-full h-3 bg-indigo-200 rounded-lg appearance-none cursor-pointer slider"
+                    style={{
+                      background: `linear-gradient(to right, #6366f1 0%, #6366f1 ${(customMultiplier / 15) * 100}%, #e0e7ff ${(customMultiplier / 15) * 100}%, #e0e7ff 100%)`
+                    }}
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-2">
+                    <span>0×</span>
+                    <span>5×</span>
+                    <span>10×</span>
+                    <span>15×</span>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-indigo-200">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-gray-700">Total Catalog Value</span>
+                      <span className="text-2xl font-bold text-indigo-700">
+                        ${formatNumber(getTotalCustomValuation())}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div className="bg-white bg-opacity-70 rounded p-2">
+                        <p className="text-xs text-gray-600">Publishing</p>
+                        <p className="text-lg font-semibold text-purple-700">${formatNumber(getCustomPublishingValuation())}</p>
+                      </div>
+                      <div className="bg-white bg-opacity-70 rounded p-2">
+                        <p className="text-xs text-gray-600">Master</p>
+                        <p className="text-lg font-semibold text-orange-700">${formatNumber(getCustomMasterValuation())}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Separated Publishing and Master Valuations */}
               <div className="mt-6 pt-6 border-t border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">Catalog Valuations</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">Standard Valuation Scenarios</h3>
                 <div className="grid grid-cols-2 gap-6">
                   {/* Publishing Valuations */}
                   <div className="bg-purple-50 rounded-lg p-4">
