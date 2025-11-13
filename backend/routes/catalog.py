@@ -681,34 +681,6 @@ async def upload_schedule_a(
                         'ad_supported': ad_supported
                     }
         
-        # Calculate publishing and master revenue across ALL platforms
-        pub_pct = song_data['publishing_percentage'] / 100.0
-        master_pct = song_data['master_percentage'] / 100.0
-        
-        publishing_revenue = 0.0
-        master_revenue = 0.0
-        
-        for platform, stream_data in streams_by_type.items():
-            premium_streams = stream_data['premium']
-            ad_supported_streams = stream_data['ad_supported']
-            
-            # Publishing uses consistent rates across platforms
-            pub_premium_rate = get_publishing_rate('premium')
-            pub_ad_rate = get_publishing_rate('ad_supported')
-            
-            # Master uses platform-specific rates
-            master_premium_rate = get_master_rate(platform, 'premium')
-            master_ad_rate = get_master_rate(platform, 'ad_supported')
-            
-            publishing_revenue += (premium_streams * pub_premium_rate * pub_pct) + \
-                                 (ad_supported_streams * pub_ad_rate * pub_pct)
-            master_revenue += (premium_streams * master_premium_rate * master_pct) + \
-                             (ad_supported_streams * master_ad_rate * master_pct)
-        
-        # Calculate valuation and score with separated publishing/master revenues
-        valuation = valuation_engine.calculate_valuation(analytics_combined, publishing_revenue, master_revenue)
-        score = scoring_engine.calculate_score(analytics_combined)
-        
         # Create or get first catalog
         catalog = db.query(Catalog).first()
         if not catalog:
@@ -728,28 +700,11 @@ async def upload_schedule_a(
             ).first()
         
         if existing_song:
-            # Update existing song with new valuation and score
+            # Update ownership percentages
             existing_song.publishing_percentage = song_data['publishing_percentage']
             existing_song.master_percentage = song_data['master_percentage']
-            existing_song.valuation_low = valuation['valuation_low']
-            existing_song.valuation_base = valuation['valuation_base']
-            existing_song.valuation_high = valuation['valuation_high']
-            existing_song.valuation_low_pub = valuation['valuation_low_pub']
-            existing_song.valuation_base_pub = valuation['valuation_base_pub']
-            existing_song.valuation_high_pub = valuation['valuation_high_pub']
-            existing_song.valuation_low_master = valuation['valuation_low_master']
-            existing_song.valuation_base_master = valuation['valuation_base_master']
-            existing_song.valuation_high_master = valuation['valuation_high_master']
-            existing_song.estimated_revenue = valuation['estimated_revenue']
-            existing_song.score = score['overall_score']
-            existing_song.score_breakdown = {
-                'catalog_value': score['catalog_value'],
-                'growth_momentum': score['growth_momentum'],
-                'metadata_health': score['metadata_health'],
-                'exploitation_potential': score['exploitation_potential']
-            }
             
-            # Update existing Analytics with new tier-aware streams_by_type
+            # Update existing Analytics with ALL new data including tier-aware streams_by_type
             if existing_song.analytics:
                 existing_song.analytics.spotify_streams = analytics_combined['spotify_streams']
                 existing_song.analytics.spotify_monthly_listeners = analytics_combined['spotify_monthly_listeners']
@@ -774,11 +729,65 @@ async def upload_schedule_a(
                 )
                 db.add(analytics)
             
+            # Flush to make Analytics update visible
+            db.flush()
+            
+            # NOW calculate revenue from the updated Analytics.streams_by_type
+            pub_pct = song_data['publishing_percentage'] / 100.0
+            master_pct = song_data['master_percentage'] / 100.0
+            
+            publishing_revenue = 0.0
+            master_revenue = 0.0
+            
+            # Use the UPDATED streams_by_type from Analytics
+            fresh_streams_by_type = existing_song.analytics.streams_by_type if existing_song.analytics else streams_by_type
+            
+            for platform, stream_data in fresh_streams_by_type.items():
+                premium_streams = stream_data['premium']
+                ad_supported_streams = stream_data['ad_supported']
+                
+                # Publishing uses consistent rates across platforms
+                pub_premium_rate = get_publishing_rate('premium')
+                pub_ad_rate = get_publishing_rate('ad_supported')
+                
+                # Master uses platform-specific rates
+                master_premium_rate = get_master_rate(platform, 'premium')
+                master_ad_rate = get_master_rate(platform, 'ad_supported')
+                
+                publishing_revenue += (premium_streams * pub_premium_rate * pub_pct) + \
+                                     (ad_supported_streams * pub_ad_rate * pub_pct)
+                master_revenue += (premium_streams * master_premium_rate * master_pct) + \
+                                 (ad_supported_streams * master_ad_rate * master_pct)
+            
+            # Calculate valuation and score using analytics_combined (has all derived fields like growth_3_month, has_isrc, etc.)
+            # Revenue already uses fresh streams_by_type from updated Analytics
+            valuation = valuation_engine.calculate_valuation(analytics_combined, publishing_revenue, master_revenue)
+            score = scoring_engine.calculate_score(analytics_combined)
+            
+            # Update song with fresh valuations
+            existing_song.valuation_low = valuation['valuation_low']
+            existing_song.valuation_base = valuation['valuation_base']
+            existing_song.valuation_high = valuation['valuation_high']
+            existing_song.valuation_low_pub = valuation['valuation_low_pub']
+            existing_song.valuation_base_pub = valuation['valuation_base_pub']
+            existing_song.valuation_high_pub = valuation['valuation_high_pub']
+            existing_song.valuation_low_master = valuation['valuation_low_master']
+            existing_song.valuation_base_master = valuation['valuation_base_master']
+            existing_song.valuation_high_master = valuation['valuation_high_master']
+            existing_song.estimated_revenue = valuation['estimated_revenue']
+            existing_song.score = score['overall_score']
+            existing_song.score_breakdown = {
+                'catalog_value': score['catalog_value'],
+                'growth_momentum': score['growth_momentum'],
+                'metadata_health': score['metadata_health'],
+                'exploitation_potential': score['exploitation_potential']
+            }
+            
             db.commit()
             db.refresh(existing_song)
             song = existing_song
         else:
-            # Create new song
+            # For new songs, create placeholder song first
             song = Song(
                 title=song_data['title'],
                 artist_name=song_data['artist_name'],
@@ -787,27 +796,21 @@ async def upload_schedule_a(
                 spotify_link=song_data.get('spotify_link'),
                 songwriter_id=songwriter.id,
                 catalog_id=catalog.id,
-                valuation_low=valuation['valuation_low'],
-                valuation_base=valuation['valuation_base'],
-                valuation_high=valuation['valuation_high'],
-                valuation_low_pub=valuation['valuation_low_pub'],
-                valuation_base_pub=valuation['valuation_base_pub'],
-                valuation_high_pub=valuation['valuation_high_pub'],
-                valuation_low_master=valuation['valuation_low_master'],
-                valuation_base_master=valuation['valuation_base_master'],
-                valuation_high_master=valuation['valuation_high_master'],
-                estimated_revenue=valuation['estimated_revenue'],
-                score=score['overall_score'],
-                score_breakdown={
-                    'catalog_value': score['catalog_value'],
-                    'growth_momentum': score['growth_momentum'],
-                    'metadata_health': score['metadata_health'],
-                    'exploitation_potential': score['exploitation_potential']
-                }
+                valuation_low=0,  # Placeholder
+                valuation_base=0,  # Placeholder
+                valuation_high=0,  # Placeholder
+                valuation_low_pub=0,
+                valuation_base_pub=0,
+                valuation_high_pub=0,
+                valuation_low_master=0,
+                valuation_base_master=0,
+                valuation_high_master=0,
+                estimated_revenue=0,
+                score=0,
+                score_breakdown={}
             )
             db.add(song)
-            db.commit()
-            db.refresh(song)
+            db.flush()  # Get song ID without committing
             
             # Create analytics with multi-platform tier-aware streams_by_type
             analytics = Analytics(
@@ -822,7 +825,57 @@ async def upload_schedule_a(
                 streams_by_type=streams_by_type
             )
             db.add(analytics)
+            db.flush()  # Make Analytics visible
+            
+            # NOW calculate revenue from the persisted Analytics.streams_by_type
+            pub_pct = song_data['publishing_percentage'] / 100.0
+            master_pct = song_data['master_percentage'] / 100.0
+            
+            publishing_revenue = 0.0
+            master_revenue = 0.0
+            
+            for platform, stream_data in analytics.streams_by_type.items():
+                premium_streams = stream_data['premium']
+                ad_supported_streams = stream_data['ad_supported']
+                
+                # Publishing uses consistent rates across platforms
+                pub_premium_rate = get_publishing_rate('premium')
+                pub_ad_rate = get_publishing_rate('ad_supported')
+                
+                # Master uses platform-specific rates
+                master_premium_rate = get_master_rate(platform, 'premium')
+                master_ad_rate = get_master_rate(platform, 'ad_supported')
+                
+                publishing_revenue += (premium_streams * pub_premium_rate * pub_pct) + \
+                                     (ad_supported_streams * pub_ad_rate * pub_pct)
+                master_revenue += (premium_streams * master_premium_rate * master_pct) + \
+                                 (ad_supported_streams * master_ad_rate * master_pct)
+            
+            # Calculate valuation and score using fresh analytics
+            valuation = valuation_engine.calculate_valuation(analytics_combined, publishing_revenue, master_revenue)
+            score = scoring_engine.calculate_score(analytics_combined)
+            
+            # Update song with calculated valuations
+            song.valuation_low = valuation['valuation_low']
+            song.valuation_base = valuation['valuation_base']
+            song.valuation_high = valuation['valuation_high']
+            song.valuation_low_pub = valuation['valuation_low_pub']
+            song.valuation_base_pub = valuation['valuation_base_pub']
+            song.valuation_high_pub = valuation['valuation_high_pub']
+            song.valuation_low_master = valuation['valuation_low_master']
+            song.valuation_base_master = valuation['valuation_base_master']
+            song.valuation_high_master = valuation['valuation_high_master']
+            song.estimated_revenue = valuation['estimated_revenue']
+            song.score = score['overall_score']
+            song.score_breakdown = {
+                'catalog_value': score['catalog_value'],
+                'growth_momentum': score['growth_momentum'],
+                'metadata_health': score['metadata_health'],
+                'exploitation_potential': score['exploitation_potential']
+            }
+            
             db.commit()
+            db.refresh(song)
         
         created_songs.append(song)
     
