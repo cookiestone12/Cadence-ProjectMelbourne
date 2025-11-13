@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from typing import List
 from pydantic import BaseModel
+from datetime import datetime, timedelta
 from ..models import get_db, Song, Songwriter, Analytics, User, Catalog
 from ..utils.auth import get_current_user
 from ..services import chartmetric_service, spotify_service, luminate_service
@@ -86,6 +87,8 @@ class CatalogSummaryResponse(BaseModel):
     territory_breakdown: dict
     label_share_80_20: float
     label_share_60_40: float
+    collectible_publishing_value: float
+    black_box_loss: float
 
 @router.get("/summary", response_model=List[CatalogSummaryResponse])
 def get_catalog_summary(
@@ -205,6 +208,52 @@ def get_catalog_summary(
             for territory, data in territory_revenue.items()
         }
         
+        # Calculate Black Box Loss and Collectible Publishing Value
+        # Based on industry collection windows (2-3 years)
+        collectible_publishing_value = 0.0
+        black_box_loss = 0.0
+        
+        for song in songs:
+            if not song.analytics:
+                continue
+            
+            # Calculate lifetime publishing revenue for this song
+            streams_by_type = song.analytics.streams_by_type or {}
+            spotify_streams = streams_by_type.get('spotify', {})
+            premium_streams = spotify_streams.get('premium', 0)
+            ad_supported_streams = spotify_streams.get('ad_supported', 0)
+            
+            pub_pct = song.publishing_percentage / 100.0
+            lifetime_pub_revenue = (
+                (premium_streams * PREMIUM_RATE * pub_pct) +
+                (ad_supported_streams * AD_SUPPORTED_RATE * pub_pct)
+            )
+            
+            # Calculate collection window decay based on song age
+            # Industry standard: 2-3 years collection window
+            if song.release_date:
+                song_age_days = (datetime.utcnow() - song.release_date).days
+                song_age_years = song_age_days / 365.25
+                
+                if song_age_years <= 3.0:
+                    # 0-3 years: 100% collectible
+                    decay_factor = 1.0
+                elif song_age_years <= 5.0:
+                    # 3-5 years: 50% collectible (half lost to black box)
+                    decay_factor = 0.5
+                else:
+                    # 5+ years: 10% collectible (90% lost to black box)
+                    decay_factor = 0.1
+            else:
+                # No release date available, assume 100% collectible
+                decay_factor = 1.0
+            
+            collectible_value = lifetime_pub_revenue * decay_factor
+            lost_value = lifetime_pub_revenue * (1.0 - decay_factor)
+            
+            collectible_publishing_value += collectible_value
+            black_box_loss += lost_value
+        
         result.append({
             "id": catalog.id,
             "name": catalog.name,
@@ -230,7 +279,9 @@ def get_catalog_summary(
             },
             "territory_breakdown": territory_breakdown,
             "label_share_80_20": round(label_share_80_20, 2),
-            "label_share_60_40": round(label_share_60_40, 2)
+            "label_share_60_40": round(label_share_60_40, 2),
+            "collectible_publishing_value": round(collectible_publishing_value, 2),
+            "black_box_loss": round(black_box_loss, 2)
         })
     
     return result
