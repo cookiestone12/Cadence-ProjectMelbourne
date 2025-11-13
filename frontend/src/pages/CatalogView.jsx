@@ -104,8 +104,18 @@ export default function CatalogView() {
                   <p className="text-2xl font-bold">{catalogSummary.total_songs}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500 mb-1">Controlled Publishing %</p>
-                  <p className="text-2xl font-bold text-mime-purple">{catalogSummary.total_publishing_percentage}%</p>
+                  <p className="text-sm text-gray-500 mb-1 flex items-center gap-1">
+                    Collectible Pub. Value
+                    <span className="cursor-help" title="Based on 2-3 year collection windows. Recent songs are fully collectible, older songs face black box loss.">ℹ️</span>
+                  </p>
+                  <p className="text-2xl font-bold text-green-600">${formatNumber(catalogSummary.collectible_publishing_value)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1 flex items-center gap-1">
+                    Est. Black Box Loss
+                    <span className="cursor-help" title="Revenue likely lost forever due to industry collection delays. Songs over 3 years old face increasing black box risk.">ℹ️</span>
+                  </p>
+                  <p className="text-2xl font-bold text-red-600">${formatNumber(catalogSummary.black_box_loss)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Avg Score</p>
