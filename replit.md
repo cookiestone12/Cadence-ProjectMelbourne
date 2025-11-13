@@ -27,9 +27,10 @@ An internal demo dashboard showcasing MIME Publishing's catalog intelligence too
 - **Mock External Data**: Simulation of Chartmetric, Spotify, and Luminate responses.
 - **Demo Catalog Seeding**: Auto-populates 5 demo songs with varying release dates (1-8 years old) on first run.
 - **Catalog Grouping**: Songs organized by catalog with ownership percentages.
-- **File Upload**: Drag-and-drop Schedule A processing (internal demo only).
+- **File Upload**: Drag-and-drop Schedule A processing with tier-aware ingestion and deduplication (internal demo only).
 - **MIME Branding**: Purple/orange theme with an "Internal Demo" badge.
-- **Revenue Estimate (Admin Collection)**: Calculates revenue based on controlled streams and label split scenarios (80/20, 60/40), differentiating between publishing and master revenue, and premium vs. ad-supported streams. Songs table displays separate Publishing Revenue and Master Revenue columns.
+- **Multi-Platform Revenue Tracking**: Tracks streams across 5 major platforms (Spotify, Apple Music, YouTube Music, Amazon Music, Tidal) representing ~62.5% of global market. Uses accurate 2024-2025 platform-specific master recording rates ($0.003-$0.01284/stream) while publishing rates remain consistent ($0.0012 premium, $0.0004 ad-supported). Revenue separated into Publishing and Master columns throughout UI.
+- **Tier-Aware Ingestion**: Upload endpoint preserves uploader-provided premium/ad-supported stream breakdowns when available, falling back to market-share estimation for missing data. Supports re-upload deduplication with fresh valuation recalculation.
 - **Black Box Tracking**: Collectible publishing value and estimated black box loss calculations based on song age (0-3 years: 100%, 3-5 years: 50%, 5+ years: 10% collectible).
 - **Excel Export**: Comprehensive 4-sheet reports (Catalog Summary, Territory Breakdown, Song Details, Methodology) with downloadable XLSX format.
 
