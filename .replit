@@ -64,10 +64,6 @@ localPort = 36849
 externalPort = 3000
 
 [[ports]]
-localPort = 37563
-externalPort = 5000
-
-[[ports]]
 localPort = 44379
 externalPort = 4200
 
@@ -77,3 +73,8 @@ externalPort = 3003
 
 [nix]
 channel = "stable-25_05"
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "5000"]
+build = ["bash", "-c", "cd frontend && npm run build"]
