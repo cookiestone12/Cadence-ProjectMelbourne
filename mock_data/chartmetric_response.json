@@ -5,6 +5,13 @@
   "chartmetric_score": 87.5,
   "spotify_streams": 2500000,
   "spotify_monthly_listeners": 150000,
+  "platform_streams": {
+    "spotify": 2500000,
+    "apple_music": 950000,
+    "youtube_music": 620000,
+    "amazon_music": 710000,
+    "tidal": 38000
+  },
   "playlist_count": 45,
   "top_playlists": [
     {

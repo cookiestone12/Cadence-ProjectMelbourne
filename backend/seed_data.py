@@ -5,6 +5,12 @@ from sqlalchemy.orm import Session
 from .models import Catalog, Song, Songwriter, Analytics, get_db
 from .services.valuation_engine import calculate_valuation
 from .services.scoring_engine import calculate_score
+from .config.streaming_rates import (
+    MARKET_SHARE, 
+    TRACKED_PLATFORMS,
+    get_publishing_rate,
+    get_master_rate
+)
 
 def load_mock_data(file_path):
     """Load JSON mock data from file"""
@@ -89,19 +95,60 @@ def seed_demo_catalog(db: Session):
             'has_spotify_link': bool(song_data.get('spotify_link'))
         }
         
-        # Calculate stream type splits (70% premium, 30% ad-supported) for revenue calculation
-        total_streams = analytics_data['spotify_streams']
-        premium_streams = int(total_streams * 0.7)
-        ad_supported_streams = total_streams - premium_streams
+        # Generate multi-platform streams based on market share
+        # Start with Spotify streams, then estimate other platforms proportionally
+        spotify_streams = analytics_data['spotify_streams']
         
-        # Calculate publishing and master revenues
-        PREMIUM_RATE = 0.0012
-        AD_SUPPORTED_RATE = 0.0004
+        # Generate platform streams based on market share ratios
+        # Example: If Spotify has 34% market share and 2.5M streams,
+        # Apple Music (12.5% share) would have ~2.5M * (0.125/0.34) = ~920k streams
+        platform_total_streams = {}
+        for platform in TRACKED_PLATFORMS:
+            if platform == 'spotify':
+                platform_total_streams[platform] = spotify_streams
+            else:
+                # Estimate based on market share ratio to Spotify
+                ratio = MARKET_SHARE[platform] / MARKET_SHARE['spotify']
+                platform_total_streams[platform] = int(spotify_streams * ratio)
+        
+        # Split each platform into 70% premium, 30% ad-supported
+        # (Apple Music and Tidal are premium-only, but we'll use same split for consistency)
+        streams_by_type = {}
+        for platform, total in platform_total_streams.items():
+            premium = int(total * 0.7)
+            ad_supported = total - premium
+            streams_by_type[platform] = {
+                'premium': premium,
+                'ad_supported': ad_supported
+            }
+        
+        # Calculate publishing and master revenues across ALL platforms
         pub_pct = song_data['publishing_percentage'] / 100.0
         master_pct = song_data['master_percentage'] / 100.0
         
-        publishing_revenue = (premium_streams * PREMIUM_RATE * pub_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * pub_pct)
-        master_revenue = (premium_streams * PREMIUM_RATE * master_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * master_pct)
+        total_publishing_revenue = 0.0
+        total_master_revenue = 0.0
+        
+        for platform, stream_data in streams_by_type.items():
+            premium_streams = stream_data['premium']
+            ad_supported_streams = stream_data['ad_supported']
+            
+            # Publishing uses consistent rates across platforms
+            pub_premium_rate = get_publishing_rate('premium')
+            pub_ad_rate = get_publishing_rate('ad_supported')
+            
+            # Master uses platform-specific rates
+            master_premium_rate = get_master_rate(platform, 'premium')
+            master_ad_rate = get_master_rate(platform, 'ad_supported')
+            
+            total_publishing_revenue += (premium_streams * pub_premium_rate * pub_pct) + \
+                                       (ad_supported_streams * pub_ad_rate * pub_pct)
+            
+            total_master_revenue += (premium_streams * master_premium_rate * master_pct) + \
+                                   (ad_supported_streams * master_ad_rate * master_pct)
+        
+        publishing_revenue = total_publishing_revenue
+        master_revenue = total_master_revenue
         
         valuation_result = calculate_valuation(analytics_data, publishing_revenue, master_revenue)
         score_result = calculate_score(analytics_data)
@@ -140,13 +187,7 @@ def seed_demo_catalog(db: Session):
         db.commit()
         db.refresh(song)
         
-        # Create streams_by_type using already-calculated values
-        streams_by_type = {
-            'spotify': {
-                'premium': premium_streams,
-                'ad_supported': ad_supported_streams
-            }
-        }
+        # streams_by_type already calculated above with multi-platform data
         
         # Calculate territory breakdown with stream types
         territory_streams = {}
