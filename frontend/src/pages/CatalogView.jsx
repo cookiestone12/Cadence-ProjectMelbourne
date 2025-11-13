@@ -94,36 +94,37 @@ export default function CatalogView() {
       <h1 className="text-3xl font-bold mb-6">Catalog View</h1>
 
       {catalogSummary && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div className="col-span-2 bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold mb-4">{catalogSummary.name}</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Total Songs</p>
-                <p className="text-2xl font-bold">{catalogSummary.total_songs}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Controlled Publishing %</p>
-                <p className="text-2xl font-bold text-mime-purple">{catalogSummary.total_publishing_percentage}%</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Avg Score</p>
-                <p className="text-2xl font-bold">{catalogSummary.avg_score}/100</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Valuation (Low)</p>
-                <p className="text-xl font-semibold text-gray-700">${formatNumber(catalogSummary.total_valuation_low)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Valuation (Base)</p>
-                <p className="text-xl font-semibold text-green-600">${formatNumber(catalogSummary.total_valuation_base)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Valuation (High)</p>
-                <p className="text-xl font-semibold text-gray-700">${formatNumber(catalogSummary.total_valuation_high)}</p>
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="col-span-2 bg-white rounded-lg shadow p-6">
+              <h2 className="text-xl font-bold mb-4">{catalogSummary.name}</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Total Songs</p>
+                  <p className="text-2xl font-bold">{catalogSummary.total_songs}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Controlled Publishing %</p>
+                  <p className="text-2xl font-bold text-mime-purple">{catalogSummary.total_publishing_percentage}%</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Avg Score</p>
+                  <p className="text-2xl font-bold">{catalogSummary.avg_score}/100</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Valuation (Low)</p>
+                  <p className="text-xl font-semibold text-gray-700">${formatNumber(catalogSummary.total_valuation_low)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Valuation (Base)</p>
+                  <p className="text-xl font-semibold text-green-600">${formatNumber(catalogSummary.total_valuation_base)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">Valuation (High)</p>
+                  <p className="text-xl font-semibold text-gray-700">${formatNumber(catalogSummary.total_valuation_high)}</p>
+                </div>
               </div>
             </div>
-          </div>
 
           <div className="bg-white rounded-lg shadow p-6">
             <h3 className="text-lg font-bold mb-4">Score Breakdown</h3>
@@ -179,6 +180,29 @@ export default function CatalogView() {
             </div>
           </div>
         </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-bold mb-4">Revenue Estimate (Admin Collection)</h3>
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Total Controlled Streams</span>
+              <span className="text-lg font-semibold">{formatNumber(catalogSummary.total_controlled_streams)}</span>
+            </div>
+            <div className="flex justify-between items-center border-t pt-3">
+              <span className="text-sm text-gray-600">Est. Annual Revenue</span>
+              <span className="text-lg font-semibold text-mime-purple">${formatNumber(catalogSummary.estimated_annual_revenue)}</span>
+            </div>
+            <div className="flex justify-between items-center bg-gray-50 p-3 rounded">
+              <span className="text-sm font-medium">Label Share (80/20)</span>
+              <span className="text-lg font-bold text-green-600">${formatNumber(catalogSummary.label_share_80_20)}</span>
+            </div>
+            <div className="flex justify-between items-center bg-gray-50 p-3 rounded">
+              <span className="text-sm font-medium">Label Share (60/40)</span>
+              <span className="text-lg font-bold text-orange-600">${formatNumber(catalogSummary.label_share_60_40)}</span>
+            </div>
+          </div>
+        </div>
+      </>
       )}
 
       <div className="bg-white rounded-lg shadow p-6 mb-6">
@@ -228,6 +252,7 @@ export default function CatalogView() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Song Title</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artist(s)</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Streams</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Publishing %</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Master %</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
@@ -241,6 +266,9 @@ export default function CatalogView() {
                   <tr key={song.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap font-medium">{song.title}</td>
                     <td className="px-6 py-4 whitespace-nowrap">{song.artist_name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">
+                      {song.spotify_streams ? formatNumber(song.spotify_streams) : 'N/A'}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">{song.publishing_percentage}%</td>
                     <td className="px-6 py-4 whitespace-nowrap">{song.master_percentage}%</td>
                     <td className="px-6 py-4 whitespace-nowrap text-mime-purple font-semibold">
