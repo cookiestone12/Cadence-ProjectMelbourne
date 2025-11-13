@@ -80,6 +80,34 @@ export default function CatalogView() {
     return num?.toString() || '0'
   }
 
+  const handleDownloadReport = async () => {
+    if (!catalogSummary) return
+    
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get(`/api/catalog/export/${catalogSummary.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        responseType: 'blob'
+      })
+      
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `MIME_Catalog_Report_${catalogSummary.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Error downloading report:', error)
+      alert('Failed to download report. Please try again.')
+    }
+  }
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
@@ -97,7 +125,18 @@ export default function CatalogView() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
             <div className="col-span-2 bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold mb-4">{catalogSummary.name}</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">{catalogSummary.name}</h2>
+                <button
+                  onClick={handleDownloadReport}
+                  className="bg-mime-purple text-white px-4 py-2 rounded-lg hover:bg-opacity-90 transition flex items-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Download Report
+                </button>
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Total Songs</p>
