@@ -34,6 +34,7 @@ class SongResponse(BaseModel):
     publishing_percentage: float
     master_percentage: float
     spotify_link: str | None
+    spotify_streams: int | None
     estimated_revenue: float
     valuation_low: float
     valuation_base: float
@@ -75,6 +76,10 @@ class CatalogSummaryResponse(BaseModel):
     total_valuation_high: float
     avg_score: float
     avg_score_breakdown: dict
+    total_controlled_streams: int
+    estimated_annual_revenue: float
+    label_share_80_20: float
+    label_share_60_40: float
 
 @router.get("/summary", response_model=List[CatalogSummaryResponse])
 def get_catalog_summary(
@@ -110,6 +115,18 @@ def get_catalog_summary(
         for key in avg_breakdown.keys():
             avg_breakdown[key] = round(avg_breakdown[key] / len(songs), 2) if songs else 0
         
+        # Calculate controlled streams and revenue
+        total_controlled_streams = 0
+        for song in songs:
+            if song.analytics and song.analytics.spotify_streams:
+                controlled_streams = (song.publishing_percentage / 100) * song.analytics.spotify_streams
+                total_controlled_streams += controlled_streams
+        
+        # Calculate revenue at $0.0012 per stream
+        estimated_annual_revenue = total_controlled_streams * 0.0012
+        label_share_80_20 = estimated_annual_revenue * 0.2
+        label_share_60_40 = estimated_annual_revenue * 0.4
+        
         result.append({
             "id": catalog.id,
             "name": catalog.name,
@@ -119,7 +136,11 @@ def get_catalog_summary(
             "total_valuation_base": round(total_val_base, 2),
             "total_valuation_high": round(total_val_high, 2),
             "avg_score": round(avg_score, 2),
-            "avg_score_breakdown": avg_breakdown
+            "avg_score_breakdown": avg_breakdown,
+            "total_controlled_streams": int(total_controlled_streams),
+            "estimated_annual_revenue": round(estimated_annual_revenue, 2),
+            "label_share_80_20": round(label_share_80_20, 2),
+            "label_share_60_40": round(label_share_60_40, 2)
         })
     
     return result
@@ -129,7 +150,25 @@ def get_songs(
     db: Session = Depends(get_db)
 ):
     songs = db.query(Song).all()
-    return songs
+    result = []
+    for song in songs:
+        spotify_streams = song.analytics.spotify_streams if song.analytics else None
+        result.append({
+            "id": song.id,
+            "title": song.title,
+            "artist_name": song.artist_name,
+            "publishing_percentage": song.publishing_percentage,
+            "master_percentage": song.master_percentage,
+            "spotify_link": song.spotify_link,
+            "spotify_streams": spotify_streams,
+            "estimated_revenue": song.estimated_revenue,
+            "valuation_low": song.valuation_low,
+            "valuation_base": song.valuation_base,
+            "valuation_high": song.valuation_high,
+            "score": song.score,
+            "score_breakdown": song.score_breakdown
+        })
+    return result
 
 @router.get("/songs/{song_id}", response_model=SongDetailResponse)
 def get_song(
