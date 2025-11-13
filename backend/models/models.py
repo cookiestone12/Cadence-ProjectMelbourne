@@ -80,6 +80,12 @@ class Analytics(Base):
     regional_data = Column(JSON, default=dict)
     trend_data = Column(JSON, default=dict)
     
+    # Stream breakdown by type: {spotify: {premium: int, ad_supported: int}}
+    streams_by_type = Column(JSON, default=dict)
+    
+    # Territory breakdown: {US: {premium: int, ad_supported: int}, UK: {...}, ...}
+    territory_streams = Column(JSON, default=dict)
+    
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     song = relationship("Song", back_populates="analytics")

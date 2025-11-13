@@ -76,8 +76,14 @@ class CatalogSummaryResponse(BaseModel):
     total_valuation_high: float
     avg_score: float
     avg_score_breakdown: dict
-    total_controlled_streams: float
-    estimated_annual_revenue: float
+    total_streams_gross: int
+    total_premium_streams: int
+    total_ad_supported_streams: int
+    total_publishing_revenue: float
+    total_master_revenue: float
+    publishing_revenue_by_type: dict
+    master_revenue_by_type: dict
+    territory_breakdown: dict
     label_share_80_20: float
     label_share_60_40: float
 
@@ -115,17 +121,89 @@ def get_catalog_summary(
         for key in avg_breakdown.keys():
             avg_breakdown[key] = round(avg_breakdown[key] / len(songs), 2) if songs else 0
         
-        # Calculate controlled streams and revenue
-        total_controlled_streams = 0.0
-        for song in songs:
-            if song.analytics and song.analytics.spotify_streams:
-                controlled_streams = (song.publishing_percentage / 100.0) * song.analytics.spotify_streams
-                total_controlled_streams += controlled_streams
+        # Calculate publishing and master revenue with stream type breakdown
+        # Stream type rates
+        PREMIUM_RATE = 0.0012  # Premium streams
+        AD_SUPPORTED_RATE = 0.0004  # Ad-supported streams (~1/3 of premium)
         
-        # Calculate revenue at $0.0012 per stream
-        estimated_annual_revenue = total_controlled_streams * 0.0012
-        label_share_80_20 = estimated_annual_revenue * 0.2
-        label_share_60_40 = estimated_annual_revenue * 0.4
+        total_publishing_revenue = 0.0
+        total_master_revenue = 0.0
+        total_streams_gross = 0
+        total_premium_streams = 0
+        total_ad_supported_streams = 0
+        
+        publishing_revenue_by_type = {'premium': 0.0, 'ad_supported': 0.0}
+        master_revenue_by_type = {'premium': 0.0, 'ad_supported': 0.0}
+        
+        # Territory breakdown
+        territory_revenue = {}
+        
+        for song in songs:
+            if not song.analytics:
+                continue
+                
+            total_streams_gross += song.analytics.spotify_streams or 0
+            
+            # Get stream breakdown by type
+            streams_by_type = song.analytics.streams_by_type or {}
+            spotify_streams = streams_by_type.get('spotify', {})
+            
+            premium_streams = spotify_streams.get('premium', 0)
+            ad_supported_streams = spotify_streams.get('ad_supported', 0)
+            
+            total_premium_streams += premium_streams
+            total_ad_supported_streams += ad_supported_streams
+            
+            # Calculate publishing revenue by stream type
+            pub_pct = song.publishing_percentage / 100.0
+            master_pct = song.master_percentage / 100.0
+            
+            premium_pub_rev = premium_streams * PREMIUM_RATE * pub_pct
+            ad_pub_rev = ad_supported_streams * AD_SUPPORTED_RATE * pub_pct
+            publishing_revenue_by_type['premium'] += premium_pub_rev
+            publishing_revenue_by_type['ad_supported'] += ad_pub_rev
+            total_publishing_revenue += premium_pub_rev + ad_pub_rev
+            
+            # Calculate master revenue by stream type
+            premium_master_rev = premium_streams * PREMIUM_RATE * master_pct
+            ad_master_rev = ad_supported_streams * AD_SUPPORTED_RATE * master_pct
+            master_revenue_by_type['premium'] += premium_master_rev
+            master_revenue_by_type['ad_supported'] += ad_master_rev
+            total_master_revenue += premium_master_rev + ad_master_rev
+            
+            # Calculate territory breakdown
+            territory_streams = song.analytics.territory_streams or {}
+            for territory, streams in territory_streams.items():
+                if territory not in territory_revenue:
+                    territory_revenue[territory] = {
+                        'publishing': 0.0,
+                        'master': 0.0,
+                        'total_streams': 0
+                    }
+                
+                terr_premium = streams.get('premium', 0)
+                terr_ad = streams.get('ad_supported', 0)
+                territory_revenue[territory]['total_streams'] += terr_premium + terr_ad
+                
+                terr_pub_rev = (terr_premium * PREMIUM_RATE + terr_ad * AD_SUPPORTED_RATE) * pub_pct
+                terr_master_rev = (terr_premium * PREMIUM_RATE + terr_ad * AD_SUPPORTED_RATE) * master_pct
+                
+                territory_revenue[territory]['publishing'] += terr_pub_rev
+                territory_revenue[territory]['master'] += terr_master_rev
+        
+        # Label share calculations (on publishing revenue only)
+        label_share_80_20 = total_publishing_revenue * 0.2
+        label_share_60_40 = total_publishing_revenue * 0.4
+        
+        # Round territory revenues
+        territory_breakdown = {
+            territory: {
+                'publishing': round(data['publishing'], 2),
+                'master': round(data['master'], 2),
+                'total_streams': data['total_streams']
+            }
+            for territory, data in territory_revenue.items()
+        }
         
         result.append({
             "id": catalog.id,
@@ -137,8 +215,20 @@ def get_catalog_summary(
             "total_valuation_high": round(total_val_high, 2),
             "avg_score": round(avg_score, 2),
             "avg_score_breakdown": avg_breakdown,
-            "total_controlled_streams": round(total_controlled_streams, 2),
-            "estimated_annual_revenue": round(estimated_annual_revenue, 2),
+            "total_streams_gross": total_streams_gross,
+            "total_premium_streams": total_premium_streams,
+            "total_ad_supported_streams": total_ad_supported_streams,
+            "total_publishing_revenue": round(total_publishing_revenue, 2),
+            "total_master_revenue": round(total_master_revenue, 2),
+            "publishing_revenue_by_type": {
+                'premium': round(publishing_revenue_by_type['premium'], 2),
+                'ad_supported': round(publishing_revenue_by_type['ad_supported'], 2)
+            },
+            "master_revenue_by_type": {
+                'premium': round(master_revenue_by_type['premium'], 2),
+                'ad_supported': round(master_revenue_by_type['ad_supported'], 2)
+            },
+            "territory_breakdown": territory_breakdown,
             "label_share_80_20": round(label_share_80_20, 2),
             "label_share_60_40": round(label_share_60_40, 2)
         })

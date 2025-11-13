@@ -108,6 +108,27 @@ def seed_demo_catalog(db: Session):
         db.commit()
         db.refresh(song)
         
+        # Calculate stream type splits (70% premium, 30% ad-supported)
+        total_streams = analytics_data['spotify_streams']
+        premium_streams = int(total_streams * 0.7)
+        ad_supported_streams = total_streams - premium_streams
+        
+        streams_by_type = {
+            'spotify': {
+                'premium': premium_streams,
+                'ad_supported': ad_supported_streams
+            }
+        }
+        
+        # Calculate territory breakdown with stream types
+        territory_streams = {}
+        for territory, data in analytics_data['regional_data'].items():
+            territory_total = data['streams']
+            territory_streams[territory] = {
+                'premium': int(territory_total * 0.7),
+                'ad_supported': int(territory_total * 0.3)
+            }
+        
         analytics = Analytics(
             song_id=song.id,
             spotify_streams=analytics_data['spotify_streams'],
@@ -116,7 +137,9 @@ def seed_demo_catalog(db: Session):
             playlist_count=analytics_data['playlist_count'],
             top_playlists=analytics_data['top_playlists'],
             regional_data=analytics_data['regional_data'],
-            trend_data=analytics_data['trend_data']
+            trend_data=analytics_data['trend_data'],
+            streams_by_type=streams_by_type,
+            territory_streams=territory_streams
         )
         db.add(analytics)
     

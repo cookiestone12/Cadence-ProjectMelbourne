@@ -183,25 +183,108 @@ export default function CatalogView() {
 
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-bold mb-4">Revenue Estimate (Admin Collection)</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Total Controlled Streams</span>
-              <span className="text-lg font-semibold">{formatNumber(catalogSummary.total_controlled_streams)}</span>
+          
+          {/* Streams Breakdown */}
+          <div className="mb-4 pb-4 border-b">
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">Total Streams</h4>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Gross Streams</span>
+                <span className="font-semibold">{formatNumber(catalogSummary.total_streams_gross)}</span>
+              </div>
+              <div className="flex justify-between items-center pl-4">
+                <span className="text-xs text-gray-500">Premium (70%)</span>
+                <span className="text-sm text-gray-700">{formatNumber(catalogSummary.total_premium_streams)}</span>
+              </div>
+              <div className="flex justify-between items-center pl-4">
+                <span className="text-xs text-gray-500">Ad-Supported (30%)</span>
+                <span className="text-sm text-gray-700">{formatNumber(catalogSummary.total_ad_supported_streams)}</span>
+              </div>
             </div>
-            <div className="flex justify-between items-center border-t pt-3">
-              <span className="text-sm text-gray-600">Est. Annual Revenue</span>
-              <span className="text-lg font-semibold text-mime-purple">${formatNumber(catalogSummary.estimated_annual_revenue)}</span>
+          </div>
+
+          {/* Publishing vs Master Revenue */}
+          <div className="mb-4 pb-4 border-b">
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">Revenue by Rights Type</h4>
+            <div className="space-y-3">
+              <div className="bg-purple-50 p-3 rounded">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium text-gray-700">Publishing Revenue</span>
+                  <span className="text-lg font-bold text-mime-purple">${formatNumber(catalogSummary.total_publishing_revenue)}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs pl-2">
+                  <span className="text-gray-600">Premium @ $0.0012</span>
+                  <span className="text-gray-700">${formatNumber(catalogSummary.publishing_revenue_by_type.premium)}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs pl-2">
+                  <span className="text-gray-600">Ad-Supported @ $0.0004</span>
+                  <span className="text-gray-700">${formatNumber(catalogSummary.publishing_revenue_by_type.ad_supported)}</span>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 p-3 rounded">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium text-gray-700">Master Revenue</span>
+                  <span className="text-lg font-bold text-blue-600">${formatNumber(catalogSummary.total_master_revenue)}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs pl-2">
+                  <span className="text-gray-600">Premium @ $0.0012</span>
+                  <span className="text-gray-700">${formatNumber(catalogSummary.master_revenue_by_type.premium)}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs pl-2">
+                  <span className="text-gray-600">Ad-Supported @ $0.0004</span>
+                  <span className="text-gray-700">${formatNumber(catalogSummary.master_revenue_by_type.ad_supported)}</span>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between items-center bg-gray-50 p-3 rounded">
-              <span className="text-sm font-medium">Label Share (80/20)</span>
-              <span className="text-lg font-bold text-green-600">${formatNumber(catalogSummary.label_share_80_20)}</span>
-            </div>
-            <div className="flex justify-between items-center bg-gray-50 p-3 rounded">
-              <span className="text-sm font-medium">Label Share (60/40)</span>
-              <span className="text-lg font-bold text-orange-600">${formatNumber(catalogSummary.label_share_60_40)}</span>
+          </div>
+
+          {/* Label Share (Publishing Only) */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">Label Share (Publishing Only)</h4>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center bg-green-50 p-3 rounded">
+                <span className="text-sm font-medium">80/20 Deal (20% to label)</span>
+                <span className="text-lg font-bold text-green-600">${formatNumber(catalogSummary.label_share_80_20)}</span>
+              </div>
+              <div className="flex justify-between items-center bg-orange-50 p-3 rounded">
+                <span className="text-sm font-medium">60/40 Deal (40% to label)</span>
+                <span className="text-lg font-bold text-orange-600">${formatNumber(catalogSummary.label_share_60_40)}</span>
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Territory Breakdown */}
+        {catalogSummary.territory_breakdown && Object.keys(catalogSummary.territory_breakdown).length > 0 && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-bold mb-4">Revenue by Territory</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-2 px-3 text-sm font-semibold text-gray-700">Territory</th>
+                    <th className="text-right py-2 px-3 text-sm font-semibold text-gray-700">Streams</th>
+                    <th className="text-right py-2 px-3 text-sm font-semibold text-mime-purple">Publishing</th>
+                    <th className="text-right py-2 px-3 text-sm font-semibold text-blue-600">Master</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {Object.entries(catalogSummary.territory_breakdown)
+                    .sort(([, a], [, b]) => b.publishing - a.publishing)
+                    .map(([territory, data]) => (
+                    <tr key={territory} className="hover:bg-gray-50">
+                      <td className="py-2 px-3 font-medium">{territory}</td>
+                      <td className="py-2 px-3 text-right text-sm text-gray-600">{formatNumber(data.total_streams)}</td>
+                      <td className="py-2 px-3 text-right font-semibold text-mime-purple">${formatNumber(data.publishing)}</td>
+                      <td className="py-2 px-3 text-right font-semibold text-blue-600">${formatNumber(data.master)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </>
       )}
 
