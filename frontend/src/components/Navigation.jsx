@@ -11,6 +11,7 @@ export default function Navigation({ user, onLogout }) {
       <div className="container mx-auto px-4 py-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-8">
+            <img src="/mime-publishing-logo.png" alt="MIME Publishing" className="h-12" />
             <h1 className="text-2xl font-bold">MIME Catalog Intelligence</h1>
             <div className="flex space-x-4">
               <Link 

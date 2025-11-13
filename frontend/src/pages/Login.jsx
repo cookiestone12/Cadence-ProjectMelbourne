@@ -31,6 +31,9 @@ export default function Login({ onLogin }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-mime-purple to-mime-orange">
       <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
+        <div className="flex justify-center mb-6">
+          <img src="/mime-publishing-logo.png" alt="MIME Publishing" className="h-24" />
+        </div>
         <h2 className="text-3xl font-bold text-center mb-6 text-mime-purple">
           MIME Catalog Intelligence
         </h2>

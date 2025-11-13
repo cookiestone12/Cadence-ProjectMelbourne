@@ -345,9 +345,9 @@ export default function CatalogView() {
             </div>
           </div>
 
-          {/* Label Share (Publishing Only) */}
+          {/* Revenue Split (Publishing Only) */}
           <div>
-            <h4 className="text-sm font-semibold text-gray-700 mb-2">Label Share (Publishing Only)</h4>
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">Revenue Split (Publishing Only)</h4>
             <div className="space-y-2">
               <div className="flex justify-between items-center bg-green-50 p-3 rounded">
                 <span className="text-sm font-medium">80/20 Deal (20% to label)</span>
