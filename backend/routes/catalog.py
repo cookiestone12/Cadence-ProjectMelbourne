@@ -921,7 +921,10 @@ def export_catalog_report(
     wb.save(output)
     output.seek(0)
     
-    filename = f"MIME_Catalog_Report_{catalog.name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    # Sanitize filename to remove special characters that can't be encoded in latin-1
+    safe_catalog_name = ''.join(c if c.isalnum() or c in (' ', '_', '-') else '_' for c in catalog.name)
+    safe_catalog_name = safe_catalog_name.replace(' ', '_')
+    filename = f"MIME_Catalog_Report_{safe_catalog_name}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
     
     return StreamingResponse(
         output,
