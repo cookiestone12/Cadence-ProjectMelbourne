@@ -1,5 +1,6 @@
 import json
 import os
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from .models import Catalog, Song, Songwriter, Analytics, get_db
 from .services.valuation_engine import calculate_valuation
@@ -29,6 +30,16 @@ def seed_demo_catalog(db: Session):
     demo_data = load_mock_data(demo_catalog_path)
     track_metrics = load_mock_data(tracks_metrics_path)
     
+    # Define release dates with varying ages to demonstrate black box effect
+    # 0-3 years: fully collectible, 3-5 years: partial loss, 5+ years: mostly black box
+    release_dates = [
+        datetime.utcnow() - timedelta(days=365),      # 1 year old (100% collectible)
+        datetime.utcnow() - timedelta(days=730),      # 2 years old (100% collectible)
+        datetime.utcnow() - timedelta(days=1460),     # 4 years old (50% collectible)
+        datetime.utcnow() - timedelta(days=2190),     # 6 years old (10% collectible)
+        datetime.utcnow() - timedelta(days=2920),     # 8 years old (10% collectible)
+    ]
+    
     songwriter_data = demo_data.get('songwriter', {})
     songwriter = Songwriter(
         name=songwriter_data.get('name', 'Demo Songwriter'),
@@ -44,7 +55,7 @@ def seed_demo_catalog(db: Session):
     db.commit()
     db.refresh(catalog)
     
-    for song_data in demo_data.get('songs', []):
+    for idx, song_data in enumerate(demo_data.get('songs', [])):
         title = song_data['title']
         
         metrics = track_metrics.get(title, {})
@@ -90,6 +101,7 @@ def seed_demo_catalog(db: Session):
             isrc=song_data.get('isrc'),
             iswc=song_data.get('iswc'),
             writer_splits=song_data.get('writer_splits', []),
+            release_date=release_dates[idx] if idx < len(release_dates) else datetime.utcnow(),
             songwriter_id=songwriter.id,
             catalog_id=catalog.id,
             valuation_low=valuation_result['valuation_low'],

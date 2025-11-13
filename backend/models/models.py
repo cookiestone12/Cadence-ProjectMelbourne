@@ -49,6 +49,7 @@ class Song(Base):
     isrc = Column(String, nullable=True)
     iswc = Column(String, nullable=True)
     writer_splits = Column(JSON, default=list)
+    release_date = Column(DateTime, nullable=True)
     
     valuation_low = Column(Float, default=0.0)
     valuation_base = Column(Float, default=0.0)
