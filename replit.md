@@ -23,6 +23,7 @@ An internal demo dashboard showcasing MIME Publishing's catalog intelligence too
 - **Search View**: Universal search across catalog and external mock data.
 - **Song Detail Modal**: Pop-out modal displaying comprehensive analytics per song including release date, age, streams (premium/ad-supported), top 3 territories, ownership %, score breakdown, revenue (publishing/master), black box metrics, and valuations with multipliers.
 - **3-Tier Valuations**: Low (8×), Base (12×), and High (18×) scenarios with multiplier labels displayed throughout UI.
+- **Interactive Valuation Slider**: Dynamic slider (0-15 years) allowing real-time exploration of custom valuation multipliers with instant calculation of total catalog value, separated by publishing and master rights. Updates valuations in real-time as users adjust the multiplier.
 - **4-Factor Scoring**: Evaluates Catalog Value, Growth Momentum, Metadata Health, and Exploitation Potential (0-25 points each, totaling 0-100).
 - **Mock External Data**: Simulation of Chartmetric, Spotify, and Luminate responses.
 - **Demo Catalog Seeding**: Auto-populates 5 demo songs with varying release dates (1-8 years old) on first run.
