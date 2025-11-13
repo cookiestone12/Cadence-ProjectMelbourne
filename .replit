@@ -75,6 +75,6 @@ externalPort = 3003
 channel = "stable-25_05"
 
 [deployment]
-deploymentTarget = "autoscale"
+build = ["sh", "-c", "cd frontend && npm run build"]
 run = ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "5000"]
-build = ["bash", "-c", "cd frontend && npm run build"]
+deploymentTarget = "autoscale"
