@@ -9,6 +9,12 @@ from ..models import get_db, Song, Songwriter, Analytics, User, Catalog
 from ..utils.auth import get_current_user
 from ..services import chartmetric_service, spotify_service, luminate_service
 from ..services import valuation_engine, scoring_engine
+from ..config.streaming_rates import (
+    TRACKED_PLATFORMS,
+    MARKET_MULTIPLIER,
+    get_publishing_rate,
+    get_master_rate
+)
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 import PyPDF2
@@ -161,11 +167,7 @@ def get_catalog_summary(
         for key in avg_breakdown.keys():
             avg_breakdown[key] = round(avg_breakdown[key] / len(songs), 2) if songs else 0
         
-        # Calculate publishing and master revenue with stream type breakdown
-        # Stream type rates
-        PREMIUM_RATE = 0.0012  # Premium streams
-        AD_SUPPORTED_RATE = 0.0004  # Ad-supported streams (~1/3 of premium)
-        
+        # Calculate publishing and master revenue across ALL platforms with correct rates
         total_publishing_revenue = 0.0
         total_master_revenue = 0.0
         total_streams_gross = 0
@@ -181,37 +183,47 @@ def get_catalog_summary(
         for song in songs:
             if not song.analytics:
                 continue
-                
-            total_streams_gross += song.analytics.spotify_streams or 0
             
-            # Get stream breakdown by type
+            # Get multi-platform stream breakdown
             streams_by_type = song.analytics.streams_by_type or {}
-            spotify_streams = streams_by_type.get('spotify', {})
             
-            premium_streams = spotify_streams.get('premium', 0)
-            ad_supported_streams = spotify_streams.get('ad_supported', 0)
-            
-            total_premium_streams += premium_streams
-            total_ad_supported_streams += ad_supported_streams
-            
-            # Calculate publishing revenue by stream type
             pub_pct = song.publishing_percentage / 100.0
             master_pct = song.master_percentage / 100.0
             
-            premium_pub_rev = premium_streams * PREMIUM_RATE * pub_pct
-            ad_pub_rev = ad_supported_streams * AD_SUPPORTED_RATE * pub_pct
-            publishing_revenue_by_type['premium'] += premium_pub_rev
-            publishing_revenue_by_type['ad_supported'] += ad_pub_rev
-            total_publishing_revenue += premium_pub_rev + ad_pub_rev
+            # Calculate revenue across ALL platforms
+            for platform, stream_data in streams_by_type.items():
+                premium_streams = stream_data.get('premium', 0)
+                ad_supported_streams = stream_data.get('ad_supported', 0)
+                
+                # Track total streams (use Spotify as reference for gross count)
+                if platform == 'spotify':
+                    total_streams_gross += premium_streams + ad_supported_streams
+                    total_premium_streams += premium_streams
+                    total_ad_supported_streams += ad_supported_streams
+                
+                # Publishing uses consistent rates across platforms
+                pub_premium_rate = get_publishing_rate('premium')
+                pub_ad_rate = get_publishing_rate('ad_supported')
+                
+                # Master uses platform-specific rates (KEY DIFFERENCE!)
+                master_premium_rate = get_master_rate(platform, 'premium')
+                master_ad_rate = get_master_rate(platform, 'ad_supported')
+                
+                # Calculate publishing revenue
+                premium_pub_rev = premium_streams * pub_premium_rate * pub_pct
+                ad_pub_rev = ad_supported_streams * pub_ad_rate * pub_pct
+                publishing_revenue_by_type['premium'] += premium_pub_rev
+                publishing_revenue_by_type['ad_supported'] += ad_pub_rev
+                total_publishing_revenue += premium_pub_rev + ad_pub_rev
+                
+                # Calculate master revenue with platform-specific rates
+                premium_master_rev = premium_streams * master_premium_rate * master_pct
+                ad_master_rev = ad_supported_streams * master_ad_rate * master_pct
+                master_revenue_by_type['premium'] += premium_master_rev
+                master_revenue_by_type['ad_supported'] += ad_master_rev
+                total_master_revenue += premium_master_rev + ad_master_rev
             
-            # Calculate master revenue by stream type
-            premium_master_rev = premium_streams * PREMIUM_RATE * master_pct
-            ad_master_rev = ad_supported_streams * AD_SUPPORTED_RATE * master_pct
-            master_revenue_by_type['premium'] += premium_master_rev
-            master_revenue_by_type['ad_supported'] += ad_master_rev
-            total_master_revenue += premium_master_rev + ad_master_rev
-            
-            # Calculate territory breakdown
+            # Calculate territory breakdown (using Spotify data for now)
             territory_streams = song.analytics.territory_streams or {}
             for territory, streams in territory_streams.items():
                 if territory not in territory_revenue:
@@ -225,8 +237,14 @@ def get_catalog_summary(
                 terr_ad = streams.get('ad_supported', 0)
                 territory_revenue[territory]['total_streams'] += terr_premium + terr_ad
                 
-                terr_pub_rev = (terr_premium * PREMIUM_RATE + terr_ad * AD_SUPPORTED_RATE) * pub_pct
-                terr_master_rev = (terr_premium * PREMIUM_RATE + terr_ad * AD_SUPPORTED_RATE) * master_pct
+                # Territory data is Spotify-only, so use Spotify rates
+                pub_premium_rate = get_publishing_rate('premium')
+                pub_ad_rate = get_publishing_rate('ad_supported')
+                master_premium_rate = get_master_rate('spotify', 'premium')
+                master_ad_rate = get_master_rate('spotify', 'ad_supported')
+                
+                terr_pub_rev = (terr_premium * pub_premium_rate + terr_ad * pub_ad_rate) * pub_pct
+                terr_master_rev = (terr_premium * master_premium_rate + terr_ad * master_ad_rate) * master_pct
                 
                 territory_revenue[territory]['publishing'] += terr_pub_rev
                 territory_revenue[territory]['master'] += terr_master_rev
@@ -254,17 +272,20 @@ def get_catalog_summary(
             if not song.analytics:
                 continue
             
-            # Calculate lifetime publishing revenue for this song
+            # Calculate lifetime publishing revenue for this song across ALL platforms
             streams_by_type = song.analytics.streams_by_type or {}
-            spotify_streams = streams_by_type.get('spotify', {})
-            premium_streams = spotify_streams.get('premium', 0)
-            ad_supported_streams = spotify_streams.get('ad_supported', 0)
-            
             pub_pct = song.publishing_percentage / 100.0
-            lifetime_pub_revenue = (
-                (premium_streams * PREMIUM_RATE * pub_pct) +
-                (ad_supported_streams * AD_SUPPORTED_RATE * pub_pct)
-            )
+            
+            lifetime_pub_revenue = 0.0
+            for platform, stream_data in streams_by_type.items():
+                premium_streams = stream_data.get('premium', 0)
+                ad_supported_streams = stream_data.get('ad_supported', 0)
+                
+                pub_premium_rate = get_publishing_rate('premium')
+                pub_ad_rate = get_publishing_rate('ad_supported')
+                
+                lifetime_pub_revenue += (premium_streams * pub_premium_rate * pub_pct) + \
+                                       (ad_supported_streams * pub_ad_rate * pub_pct)
             
             # Calculate collection window decay based on song age
             # Industry standard: 2-3 years collection window
@@ -336,9 +357,6 @@ def get_songs(
     songs = db.query(Song).all()
     result = []
     
-    PREMIUM_RATE = 0.0012
-    AD_SUPPORTED_RATE = 0.0004
-    
     for song in songs:
         spotify_streams = song.analytics.spotify_streams if song.analytics else None
         
@@ -347,16 +365,26 @@ def get_songs(
         
         if song.analytics and song.analytics.streams_by_type:
             streams_by_type = song.analytics.streams_by_type
-            spotify_streams_data = streams_by_type.get('spotify', {})
-            
-            premium_streams = spotify_streams_data.get('premium', 0)
-            ad_supported_streams = spotify_streams_data.get('ad_supported', 0)
-            
             pub_pct = song.publishing_percentage / 100.0
             master_pct = song.master_percentage / 100.0
             
-            publishing_revenue = (premium_streams * PREMIUM_RATE * pub_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * pub_pct)
-            master_revenue = (premium_streams * PREMIUM_RATE * master_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * master_pct)
+            # Calculate revenue across ALL platforms with correct rates
+            for platform, stream_data in streams_by_type.items():
+                premium_streams = stream_data.get('premium', 0)
+                ad_supported_streams = stream_data.get('ad_supported', 0)
+                
+                # Publishing uses consistent rates
+                pub_premium_rate = get_publishing_rate('premium')
+                pub_ad_rate = get_publishing_rate('ad_supported')
+                
+                # Master uses platform-specific rates
+                master_premium_rate = get_master_rate(platform, 'premium')
+                master_ad_rate = get_master_rate(platform, 'ad_supported')
+                
+                publishing_revenue += (premium_streams * pub_premium_rate * pub_pct) + \
+                                     (ad_supported_streams * pub_ad_rate * pub_pct)
+                master_revenue += (premium_streams * master_premium_rate * master_pct) + \
+                                 (ad_supported_streams * master_ad_rate * master_pct)
         
         result.append({
             "id": song.id,
@@ -392,9 +420,6 @@ def get_song(
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
     
-    PREMIUM_RATE = 0.0012
-    AD_SUPPORTED_RATE = 0.0004
-    
     analytics_data = None
     spotify_streams = 0
     premium_streams = 0
@@ -417,15 +442,31 @@ def get_song(
         
         if song.analytics.streams_by_type:
             streams_by_type = song.analytics.streams_by_type
-            spotify_streams_data = streams_by_type.get('spotify', {})
-            premium_streams = spotify_streams_data.get('premium', 0)
-            ad_supported_streams = spotify_streams_data.get('ad_supported', 0)
-            
             pub_pct = song.publishing_percentage / 100.0
             master_pct = song.master_percentage / 100.0
             
-            publishing_revenue = (premium_streams * PREMIUM_RATE * pub_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * pub_pct)
-            master_revenue = (premium_streams * PREMIUM_RATE * master_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * master_pct)
+            # Calculate revenue across ALL platforms with correct rates
+            for platform, stream_data in streams_by_type.items():
+                platform_premium = stream_data.get('premium', 0)
+                platform_ad = stream_data.get('ad_supported', 0)
+                
+                # Track Spotify streams for display
+                if platform == 'spotify':
+                    premium_streams = platform_premium
+                    ad_supported_streams = platform_ad
+                
+                # Publishing uses consistent rates
+                pub_premium_rate = get_publishing_rate('premium')
+                pub_ad_rate = get_publishing_rate('ad_supported')
+                
+                # Master uses platform-specific rates
+                master_premium_rate = get_master_rate(platform, 'premium')
+                master_ad_rate = get_master_rate(platform, 'ad_supported')
+                
+                publishing_revenue += (platform_premium * pub_premium_rate * pub_pct) + \
+                                     (platform_ad * pub_ad_rate * pub_pct)
+                master_revenue += (platform_premium * master_premium_rate * master_pct) + \
+                                 (platform_ad * master_ad_rate * master_pct)
         
         if song.analytics.territory_streams:
             territory_streams = song.analytics.territory_streams
