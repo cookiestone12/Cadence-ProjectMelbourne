@@ -162,20 +162,55 @@ export default function CatalogView() {
                   <p className="text-sm text-gray-500 mb-1">Avg Score</p>
                   <p className="text-2xl font-bold">{catalogSummary.avg_score}/100</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">Valuation (Low)</p>
-                  <p className="text-xl font-semibold text-gray-700">${formatNumber(catalogSummary.total_valuation_low)}</p>
-                  <p className="text-xs text-gray-400 mt-1">8× multiplier</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">Valuation (Base)</p>
-                  <p className="text-xl font-semibold text-green-600">${formatNumber(catalogSummary.total_valuation_base)}</p>
-                  <p className="text-xs text-gray-400 mt-1">12× multiplier</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">Valuation (High)</p>
-                  <p className="text-xl font-semibold text-gray-700">${formatNumber(catalogSummary.total_valuation_high)}</p>
-                  <p className="text-xs text-gray-400 mt-1">18× multiplier</p>
+              </div>
+              
+              {/* Separated Publishing and Master Valuations */}
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-700 mb-4">Catalog Valuations</h3>
+                <div className="grid grid-cols-2 gap-6">
+                  {/* Publishing Valuations */}
+                  <div className="bg-purple-50 rounded-lg p-4">
+                    <h4 className="text-xs font-semibold text-purple-700 mb-3 uppercase">Publishing Valuations</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Low Scenario</p>
+                        <p className="text-lg font-semibold text-purple-700">${formatNumber(catalogSummary.total_valuation_low_pub)}</p>
+                        <p className="text-xs text-gray-500">8× multiplier</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Base Scenario</p>
+                        <p className="text-lg font-semibold text-purple-700">${formatNumber(catalogSummary.total_valuation_base_pub)}</p>
+                        <p className="text-xs text-gray-500">12× multiplier</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">High Scenario</p>
+                        <p className="text-lg font-semibold text-purple-700">${formatNumber(catalogSummary.total_valuation_high_pub)}</p>
+                        <p className="text-xs text-gray-500">18× multiplier</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Master Valuations */}
+                  <div className="bg-orange-50 rounded-lg p-4">
+                    <h4 className="text-xs font-semibold text-orange-700 mb-3 uppercase">Master Valuations</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Low Scenario</p>
+                        <p className="text-lg font-semibold text-orange-700">${formatNumber(catalogSummary.total_valuation_low_master)}</p>
+                        <p className="text-xs text-gray-500">8× multiplier</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">Base Scenario</p>
+                        <p className="text-lg font-semibold text-orange-700">${formatNumber(catalogSummary.total_valuation_base_master)}</p>
+                        <p className="text-xs text-gray-500">12× multiplier</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600 mb-1">High Scenario</p>
+                        <p className="text-lg font-semibold text-orange-700">${formatNumber(catalogSummary.total_valuation_high_master)}</p>
+                        <p className="text-xs text-gray-500">18× multiplier</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -394,7 +429,8 @@ export default function CatalogView() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Master %</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-mime-purple uppercase tracking-wider">Pub. Revenue</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-blue-600 uppercase tracking-wider">Master Revenue</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Val (Low/Base/High)</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Publishing Val</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Master Val</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -415,11 +451,18 @@ export default function CatalogView() {
                     <td className="px-6 py-4 whitespace-nowrap text-blue-600 font-semibold">
                       ${formatNumber(song.master_revenue)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4 whitespace-nowrap bg-purple-50">
                       <div className="text-xs">
-                        <div className="text-gray-600">${formatNumber(song.valuation_low)} <span className="text-gray-400">(8×)</span></div>
-                        <div className="text-green-600 font-semibold">${formatNumber(song.valuation_base)} <span className="text-gray-400">(12×)</span></div>
-                        <div className="text-gray-600">${formatNumber(song.valuation_high)} <span className="text-gray-400">(18×)</span></div>
+                        <div className="text-purple-600">${formatNumber(song.valuation_low_pub)} <span className="text-gray-400">(8×)</span></div>
+                        <div className="text-purple-700 font-semibold">${formatNumber(song.valuation_base_pub)} <span className="text-gray-400">(12×)</span></div>
+                        <div className="text-purple-600">${formatNumber(song.valuation_high_pub)} <span className="text-gray-400">(18×)</span></div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap bg-orange-50">
+                      <div className="text-xs">
+                        <div className="text-orange-600">${formatNumber(song.valuation_low_master)} <span className="text-gray-400">(8×)</span></div>
+                        <div className="text-orange-700 font-semibold">${formatNumber(song.valuation_base_master)} <span className="text-gray-400">(12×)</span></div>
+                        <div className="text-orange-600">${formatNumber(song.valuation_high_master)} <span className="text-gray-400">(18×)</span></div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">

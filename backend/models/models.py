@@ -54,6 +54,12 @@ class Song(Base):
     valuation_low = Column(Float, default=0.0)
     valuation_base = Column(Float, default=0.0)
     valuation_high = Column(Float, default=0.0)
+    valuation_low_pub = Column(Float, default=0.0)
+    valuation_base_pub = Column(Float, default=0.0)
+    valuation_high_pub = Column(Float, default=0.0)
+    valuation_low_master = Column(Float, default=0.0)
+    valuation_base_master = Column(Float, default=0.0)
+    valuation_high_master = Column(Float, default=0.0)
     estimated_revenue = Column(Float, default=0.0)
     
     score = Column(Float, default=0.0)

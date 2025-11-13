@@ -89,7 +89,21 @@ def seed_demo_catalog(db: Session):
             'has_spotify_link': bool(song_data.get('spotify_link'))
         }
         
-        valuation_result = calculate_valuation(analytics_data)
+        # Calculate stream type splits (70% premium, 30% ad-supported) for revenue calculation
+        total_streams = analytics_data['spotify_streams']
+        premium_streams = int(total_streams * 0.7)
+        ad_supported_streams = total_streams - premium_streams
+        
+        # Calculate publishing and master revenues
+        PREMIUM_RATE = 0.0012
+        AD_SUPPORTED_RATE = 0.0004
+        pub_pct = song_data['publishing_percentage'] / 100.0
+        master_pct = song_data['master_percentage'] / 100.0
+        
+        publishing_revenue = (premium_streams * PREMIUM_RATE * pub_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * pub_pct)
+        master_revenue = (premium_streams * PREMIUM_RATE * master_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * master_pct)
+        
+        valuation_result = calculate_valuation(analytics_data, publishing_revenue, master_revenue)
         score_result = calculate_score(analytics_data)
         
         song = Song(
@@ -107,6 +121,12 @@ def seed_demo_catalog(db: Session):
             valuation_low=valuation_result['valuation_low'],
             valuation_base=valuation_result['valuation_base'],
             valuation_high=valuation_result['valuation_high'],
+            valuation_low_pub=valuation_result['valuation_low_pub'],
+            valuation_base_pub=valuation_result['valuation_base_pub'],
+            valuation_high_pub=valuation_result['valuation_high_pub'],
+            valuation_low_master=valuation_result['valuation_low_master'],
+            valuation_base_master=valuation_result['valuation_base_master'],
+            valuation_high_master=valuation_result['valuation_high_master'],
             estimated_revenue=valuation_result['estimated_revenue'],
             score=score_result['overall_score'],
             score_breakdown={
@@ -120,11 +140,7 @@ def seed_demo_catalog(db: Session):
         db.commit()
         db.refresh(song)
         
-        # Calculate stream type splits (70% premium, 30% ad-supported)
-        total_streams = analytics_data['spotify_streams']
-        premium_streams = int(total_streams * 0.7)
-        ad_supported_streams = total_streams - premium_streams
-        
+        # Create streams_by_type using already-calculated values
         streams_by_type = {
             'spotify': {
                 'premium': premium_streams,

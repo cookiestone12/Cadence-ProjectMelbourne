@@ -44,6 +44,12 @@ class SongResponse(BaseModel):
     valuation_low: float
     valuation_base: float
     valuation_high: float
+    valuation_low_pub: float
+    valuation_base_pub: float
+    valuation_high_pub: float
+    valuation_low_master: float
+    valuation_base_master: float
+    valuation_high_master: float
     score: float
     score_breakdown: dict | None
     
@@ -66,6 +72,12 @@ class SongDetailResponse(BaseModel):
     valuation_low: float
     valuation_base: float
     valuation_high: float
+    valuation_low_pub: float
+    valuation_base_pub: float
+    valuation_high_pub: float
+    valuation_low_master: float
+    valuation_base_master: float
+    valuation_high_master: float
     score: float
     score_breakdown: dict | None
     analytics: dict | None
@@ -88,6 +100,12 @@ class CatalogSummaryResponse(BaseModel):
     total_valuation_low: float
     total_valuation_base: float
     total_valuation_high: float
+    total_valuation_low_pub: float
+    total_valuation_base_pub: float
+    total_valuation_high_pub: float
+    total_valuation_low_master: float
+    total_valuation_base_master: float
+    total_valuation_high_master: float
     avg_score: float
     avg_score_breakdown: dict
     total_streams_gross: int
@@ -120,6 +138,12 @@ def get_catalog_summary(
         total_val_low = sum(s.valuation_low for s in songs)
         total_val_base = sum(s.valuation_base for s in songs)
         total_val_high = sum(s.valuation_high for s in songs)
+        total_val_low_pub = sum(s.valuation_low_pub for s in songs)
+        total_val_base_pub = sum(s.valuation_base_pub for s in songs)
+        total_val_high_pub = sum(s.valuation_high_pub for s in songs)
+        total_val_low_master = sum(s.valuation_low_master for s in songs)
+        total_val_base_master = sum(s.valuation_base_master for s in songs)
+        total_val_high_master = sum(s.valuation_high_master for s in songs)
         avg_score = sum(s.score for s in songs) / len(songs) if songs else 0
         
         avg_breakdown = {
@@ -275,6 +299,12 @@ def get_catalog_summary(
             "total_valuation_low": round(total_val_low, 2),
             "total_valuation_base": round(total_val_base, 2),
             "total_valuation_high": round(total_val_high, 2),
+            "total_valuation_low_pub": round(total_val_low_pub, 2),
+            "total_valuation_base_pub": round(total_val_base_pub, 2),
+            "total_valuation_high_pub": round(total_val_high_pub, 2),
+            "total_valuation_low_master": round(total_val_low_master, 2),
+            "total_valuation_base_master": round(total_val_base_master, 2),
+            "total_valuation_high_master": round(total_val_high_master, 2),
             "avg_score": round(avg_score, 2),
             "avg_score_breakdown": avg_breakdown,
             "total_streams_gross": total_streams_gross,
@@ -342,6 +372,12 @@ def get_songs(
             "valuation_low": song.valuation_low,
             "valuation_base": song.valuation_base,
             "valuation_high": song.valuation_high,
+            "valuation_low_pub": song.valuation_low_pub,
+            "valuation_base_pub": song.valuation_base_pub,
+            "valuation_high_pub": song.valuation_high_pub,
+            "valuation_low_master": song.valuation_low_master,
+            "valuation_base_master": song.valuation_base_master,
+            "valuation_high_master": song.valuation_high_master,
             "score": song.score,
             "score_breakdown": song.score_breakdown
         })
@@ -423,6 +459,12 @@ def get_song(
         "valuation_low": song.valuation_low,
         "valuation_base": song.valuation_base,
         "valuation_high": song.valuation_high,
+        "valuation_low_pub": song.valuation_low_pub,
+        "valuation_base_pub": song.valuation_base_pub,
+        "valuation_high_pub": song.valuation_high_pub,
+        "valuation_low_master": song.valuation_low_master,
+        "valuation_base_master": song.valuation_base_master,
+        "valuation_high_master": song.valuation_high_master,
         "score": song.score,
         "score_breakdown": song.score_breakdown,
         "analytics": analytics_data,
@@ -540,8 +582,23 @@ async def upload_schedule_a(
         analytics_combined['has_iswc'] = False
         analytics_combined['has_spotify_link'] = bool(song_data.get('spotify_link'))
         
-        # Calculate valuation and score
-        valuation = valuation_engine.calculate_valuation(analytics_combined)
+        # Calculate publishing and master revenue for separated valuations
+        PREMIUM_RATE = 0.0012
+        AD_SUPPORTED_RATE = 0.0004
+        
+        streams_by_type = spotify_data.get('streams_data', {}).get('streams_by_type', {})
+        spotify_streams_data = streams_by_type.get('spotify', {})
+        premium_streams = spotify_streams_data.get('premium', 0)
+        ad_supported_streams = spotify_streams_data.get('ad_supported', 0)
+        
+        pub_pct = song_data['publishing_percentage'] / 100.0
+        master_pct = song_data['master_percentage'] / 100.0
+        
+        publishing_revenue = (premium_streams * PREMIUM_RATE * pub_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * pub_pct)
+        master_revenue = (premium_streams * PREMIUM_RATE * master_pct) + (ad_supported_streams * AD_SUPPORTED_RATE * master_pct)
+        
+        # Calculate valuation and score with separated publishing/master revenues
+        valuation = valuation_engine.calculate_valuation(analytics_combined, publishing_revenue, master_revenue)
         score = scoring_engine.calculate_score(analytics_combined)
         
         # Create or get first catalog
@@ -564,6 +621,12 @@ async def upload_schedule_a(
             valuation_low=valuation['valuation_low'],
             valuation_base=valuation['valuation_base'],
             valuation_high=valuation['valuation_high'],
+            valuation_low_pub=valuation['valuation_low_pub'],
+            valuation_base_pub=valuation['valuation_base_pub'],
+            valuation_high_pub=valuation['valuation_high_pub'],
+            valuation_low_master=valuation['valuation_low_master'],
+            valuation_base_master=valuation['valuation_base_master'],
+            valuation_high_master=valuation['valuation_high_master'],
             estimated_revenue=valuation['estimated_revenue'],
             score=score['overall_score'],
             score_breakdown={
