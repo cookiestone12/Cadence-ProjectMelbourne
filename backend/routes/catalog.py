@@ -76,7 +76,7 @@ class CatalogSummaryResponse(BaseModel):
     total_valuation_high: float
     avg_score: float
     avg_score_breakdown: dict
-    total_controlled_streams: int
+    total_controlled_streams: float
     estimated_annual_revenue: float
     label_share_80_20: float
     label_share_60_40: float
@@ -116,10 +116,10 @@ def get_catalog_summary(
             avg_breakdown[key] = round(avg_breakdown[key] / len(songs), 2) if songs else 0
         
         # Calculate controlled streams and revenue
-        total_controlled_streams = 0
+        total_controlled_streams = 0.0
         for song in songs:
             if song.analytics and song.analytics.spotify_streams:
-                controlled_streams = (song.publishing_percentage / 100) * song.analytics.spotify_streams
+                controlled_streams = (song.publishing_percentage / 100.0) * song.analytics.spotify_streams
                 total_controlled_streams += controlled_streams
         
         # Calculate revenue at $0.0012 per stream
@@ -137,7 +137,7 @@ def get_catalog_summary(
             "total_valuation_high": round(total_val_high, 2),
             "avg_score": round(avg_score, 2),
             "avg_score_breakdown": avg_breakdown,
-            "total_controlled_streams": int(total_controlled_streams),
+            "total_controlled_streams": round(total_controlled_streams, 2),
             "estimated_annual_revenue": round(estimated_annual_revenue, 2),
             "label_share_80_20": round(label_share_80_20, 2),
             "label_share_60_40": round(label_share_60_40, 2)
