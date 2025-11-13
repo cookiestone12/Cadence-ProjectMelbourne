@@ -9,8 +9,6 @@ export default function CatalogView() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadMessage, setUploadMessage] = useState('')
-  const [selectedSong, setSelectedSong] = useState(null)
-  const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -165,17 +163,14 @@ export default function CatalogView() {
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Valuation (Low)</p>
                   <p className="text-xl font-semibold text-gray-700">${formatNumber(catalogSummary.total_valuation_low)}</p>
-                  <p className="text-xs text-gray-400 mt-1">8× Revenue Multiple</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Valuation (Base)</p>
                   <p className="text-xl font-semibold text-green-600">${formatNumber(catalogSummary.total_valuation_base)}</p>
-                  <p className="text-xs text-gray-400 mt-1">12× Revenue Multiple</p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500 mb-1">Valuation (High)</p>
                   <p className="text-xl font-semibold text-gray-700">${formatNumber(catalogSummary.total_valuation_high)}</p>
-                  <p className="text-xs text-gray-400 mt-1">18× Revenue Multiple</p>
                 </div>
               </div>
             </div>
@@ -392,8 +387,7 @@ export default function CatalogView() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Streams</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Publishing %</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Master %</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Publishing Rev</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Master Rev</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Val (Low/Base/High)</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Score</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
