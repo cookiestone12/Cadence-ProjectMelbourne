@@ -47,12 +47,12 @@ export default function Search() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by song title or artist name..."
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-mime-purple focus:border-transparent"
+              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ampersound-red focus:border-transparent"
             />
             <button
               type="submit"
               disabled={loading}
-              className="bg-mime-purple text-white px-8 py-3 rounded-lg hover:bg-opacity-90 disabled:bg-gray-400"
+              className="bg-ampersound-red text-white px-8 py-3 rounded-lg hover:bg-opacity-90 disabled:bg-gray-400"
             >
               {loading ? 'Searching...' : 'Search'}
             </button>
@@ -61,7 +61,7 @@ export default function Search() {
 
         {loading && (
           <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-mime-purple"></div>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-ampersound-red"></div>
             <p className="mt-4">Searching...</p>
           </div>
         )}
@@ -101,7 +101,7 @@ export default function Search() {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Estimated Revenue</p>
-                      <p className="text-xl font-bold text-mime-purple">
+                      <p className="text-xl font-bold text-ampersound-red">
                         ${formatNumber(result.valuation.estimated_revenue || result.valuation.valuation_base * 0.05)}
                       </p>
                     </div>
@@ -145,7 +145,7 @@ export default function Search() {
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-1">Score</p>
-                      <p className="text-lg font-semibold text-mime-purple">{result.score?.toFixed(1) || 0}/100</p>
+                      <p className="text-lg font-semibold text-ampersound-red">{result.score?.toFixed(1) || 0}/100</p>
                     </div>
                   </div>
                   
@@ -196,7 +196,7 @@ export default function Search() {
                         <p className="text-xs text-gray-500 mb-2">Genres</p>
                         <div className="flex flex-wrap gap-2">
                           {result.artist_metrics.genre_tags.map((tag, idx) => (
-                            <span key={idx} className="px-3 py-1 bg-mime-purple bg-opacity-10 text-mime-purple rounded-full text-sm">
+                            <span key={idx} className="px-3 py-1 bg-ampersound-red bg-opacity-10 text-ampersound-red rounded-full text-sm">
                               {tag}
                             </span>
                           ))}
@@ -212,7 +212,7 @@ export default function Search() {
                       href={result.spotify_link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-mime-purple hover:underline"
+                      className="text-ampersound-red hover:underline"
                     >
                       View on Spotify →
                     </a>

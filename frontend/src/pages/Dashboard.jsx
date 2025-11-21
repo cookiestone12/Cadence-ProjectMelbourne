@@ -27,7 +27,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-mime-purple"></div>
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-ampersound-red"></div>
         <p className="mt-4">Loading catalog...</p>
       </div>
     )
@@ -39,7 +39,7 @@ export default function Dashboard() {
         <h1 className="text-3xl font-bold">Catalog Dashboard</h1>
         <Link
           to="/upload"
-          className="bg-mime-purple text-white px-6 py-2 rounded hover:bg-opacity-90"
+          className="bg-ampersound-red text-white px-6 py-2 rounded hover:bg-opacity-90"
         >
           Upload Songs
         </Link>
@@ -48,7 +48,7 @@ export default function Dashboard() {
       {songs.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg shadow">
           <p className="text-gray-600 mb-4">No songs in your catalog yet</p>
-          <Link to="/upload" className="text-mime-purple hover:underline">
+          <Link to="/upload" className="text-ampersound-red hover:underline">
             Upload your first Schedule A
           </Link>
         </div>
@@ -86,7 +86,7 @@ export default function Dashboard() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <Link
                       to={`/song/${song.id}`}
-                      className="text-mime-purple hover:underline"
+                      className="text-ampersound-red hover:underline"
                     >
                       View Details
                     </Link>

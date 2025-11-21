@@ -11,7 +11,7 @@ from pathlib import Path
 if not os.getenv("SESSION_SECRET"):
     raise RuntimeError("SESSION_SECRET environment variable must be set for production use")
 
-app = FastAPI(title="MIME Catalog Intelligence API")
+app = FastAPI(title="Ampersound Catalog Intelligence API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -33,7 +33,7 @@ app.include_router(settings.router)
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "healthy", "service": "MIME Catalog Intelligence"}
+    return {"status": "healthy", "service": "Ampersound Catalog Intelligence"}
 
 # Serve static files from frontend build (production)
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"

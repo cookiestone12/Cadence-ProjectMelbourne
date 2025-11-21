@@ -29,13 +29,13 @@ export default function Login({ onLogin }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-mime-purple to-mime-orange">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-ampersound-red to-ampersound-red">
       <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full">
         <div className="flex justify-center mb-6">
-          <img src="/mime-publishing-logo.png" alt="MIME Publishing" className="h-24" />
+          <img src="/ampersound-logo.png" alt="Ampersound Intelligence" className="h-24" />
         </div>
-        <h2 className="text-3xl font-bold text-center mb-6 text-mime-purple">
-          MIME Catalog Intelligence
+        <h2 className="text-3xl font-bold text-center mb-6 text-ampersound-red">
+          Ampersound Catalog Intelligence
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -44,7 +44,7 @@ export default function Login({ onLogin }) {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-mime-purple"
+              className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-ampersound-red"
               required
             />
           </div>
@@ -55,7 +55,7 @@ export default function Login({ onLogin }) {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-mime-purple"
+                className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-ampersound-red"
                 required
               />
             </div>
@@ -66,14 +66,14 @@ export default function Login({ onLogin }) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-mime-purple"
+              className="w-full px-4 py-2 border rounded focus:ring-2 focus:ring-ampersound-red"
               required
             />
           </div>
           {error && <p className="text-red-500 text-sm">{error}</p>}
           <button
             type="submit"
-            className="w-full bg-mime-purple text-white py-2 rounded hover:bg-opacity-90"
+            className="w-full bg-ampersound-red text-white py-2 rounded hover:bg-opacity-90"
           >
             {isRegister ? 'Register' : 'Login'}
           </button>
@@ -82,7 +82,7 @@ export default function Login({ onLogin }) {
           {isRegister ? 'Already have an account?' : "Don't have an account?"}
           <button
             onClick={() => setIsRegister(!isRegister)}
-            className="ml-2 text-mime-purple hover:underline"
+            className="ml-2 text-ampersound-red hover:underline"
           >
             {isRegister ? 'Login' : 'Register'}
           </button>

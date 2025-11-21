@@ -1047,7 +1047,7 @@ def export_catalog_report(
     
     # Sheet 1: Catalog Summary
     ws_summary = wb.create_sheet("Catalog Summary")
-    ws_summary.append(["MIME Catalog Intelligence Report"])
+    ws_summary.append(["Ampersound Catalog Intelligence Report"])
     ws_summary.append(["Catalog:", catalog.name])
     ws_summary.append(["Generated:", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")])
     ws_summary.append([])
@@ -1254,7 +1254,7 @@ def export_catalog_report(
     
     # Sheet 4: Methodology
     ws_method = wb.create_sheet("Methodology")
-    ws_method.append(["MIME Catalog Intelligence - Calculation Methodology"])
+    ws_method.append(["Ampersound Catalog Intelligence - Calculation Methodology"])
     ws_method.append([])
     ws_method.append(["Revenue Calculations:"])
     ws_method.append(["- Premium Stream Rate: $0.0012 per stream"])
@@ -1299,7 +1299,7 @@ def export_catalog_report(
     # Sanitize filename to remove special characters that can't be encoded in latin-1
     safe_catalog_name = ''.join(c if c.isalnum() or c in (' ', '_', '-') else '_' for c in catalog.name)
     safe_catalog_name = safe_catalog_name.replace(' ', '_')
-    filename = f"MIME_Catalog_Report_{safe_catalog_name}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    filename = f"Ampersound_Catalog_Report_{safe_catalog_name}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
     
     return StreamingResponse(
         output,

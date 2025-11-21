@@ -1,6 +1,6 @@
-# MIME Catalog Intelligence - Internal Demo Dashboard
+# Ampersound Catalog Intelligence - Internal Demo Dashboard
 
-**Private Internal Demo Only** - A comprehensive music catalog intelligence platform demonstrating MIME Publishing's automated song valuation, performance scoring, and analytics capabilities.
+**Private Internal Demo Only** - A comprehensive music catalog intelligence platform demonstrating Ampersound Intelligence's automated song valuation, performance scoring, and analytics capabilities.
 
 ## Overview
 
@@ -128,7 +128,7 @@ Comprehensive view including:
 5. New catalog will appear in the dashboard
 
 **Template Requirements:**
-- Use the official MIME Schedule A template
+- Use the official Ampersound Schedule A template
 - Include songwriter information (Name, PRO, IPI)
 - Song columns: Song Title, Artist(s) Name, Publishing % Owned, Master % Owned, Spotify Link
 
@@ -200,9 +200,8 @@ The flow is identical - only the data source changes.
 
 ## Branding
 
-- **Primary**: Purple (#8B5CF6)
-- **Accent**: Gold/Orange (#F59E0B)
-- **MIME Logo**: Displayed in navigation
+- **Primary**: Red (#DC2626)
+- **Ampersound Logo**: Displayed in navigation
 - **"Internal Demo" badge**: Visible in navigation header
 
 ## Future Enhancements
@@ -216,13 +215,13 @@ For production release:
 
 ## Support
 
-This is an internal demo. For questions about the catalog intelligence tool, contact the MIME Publishing product team.
+This is an internal demo. For questions about the catalog intelligence tool, contact the Ampersound Intelligence product team.
 
 ## License
 
-Proprietary - MIME Publishing © 2025
+Proprietary - Ampersound Intelligence © 2025
 
 ---
 
-**Made In Memphis Entertainment, LLC (MIME)**
-*Empowering Artists, Amplifying Voices*
+**Ampersound Intelligence**
+*Advanced Music Intelligence & Analytics*

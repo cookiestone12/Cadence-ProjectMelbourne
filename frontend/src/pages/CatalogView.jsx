@@ -118,7 +118,7 @@ export default function CatalogView() {
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `MIME_Catalog_Report_${catalogSummary.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+      link.download = `Ampersound_Catalog_Report_${catalogSummary.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -132,7 +132,7 @@ export default function CatalogView() {
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-mime-purple"></div>
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-ampersound-red"></div>
         <p className="mt-4">Loading catalog...</p>
       </div>
     )
@@ -150,7 +150,7 @@ export default function CatalogView() {
                 <h2 className="text-xl font-bold">{catalogSummary.name}</h2>
                 <button
                   onClick={handleDownloadReport}
-                  className="bg-mime-purple text-white px-4 py-2 rounded-lg hover:bg-opacity-90 transition flex items-center gap-2"
+                  className="bg-ampersound-red text-white px-4 py-2 rounded-lg hover:bg-opacity-90 transition flex items-center gap-2"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -299,7 +299,7 @@ export default function CatalogView() {
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
-                    className="bg-mime-purple h-2 rounded-full"
+                    className="bg-ampersound-red h-2 rounded-full"
                     style={{ width: `${((catalogSummary.avg_score_breakdown?.catalog_value || 0) / 25) * 100}%` }}
                   ></div>
                 </div>
@@ -387,7 +387,7 @@ export default function CatalogView() {
               <div className="bg-purple-50 p-3 rounded">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium text-gray-700">Publishing Revenue</span>
-                  <span className="text-lg font-bold text-mime-purple">${formatNumber(catalogSummary.total_publishing_revenue)}</span>
+                  <span className="text-lg font-bold text-ampersound-red">${formatNumber(catalogSummary.total_publishing_revenue)}</span>
                 </div>
                 <div className="flex justify-between items-center text-xs pl-2">
                   <span className="text-gray-600">Premium Streams</span>
@@ -445,7 +445,7 @@ export default function CatalogView() {
                   <tr className="border-b">
                     <th className="text-left py-2 px-3 text-sm font-semibold text-gray-700">Territory</th>
                     <th className="text-right py-2 px-3 text-sm font-semibold text-gray-700">Streams</th>
-                    <th className="text-right py-2 px-3 text-sm font-semibold text-mime-purple">Publishing</th>
+                    <th className="text-right py-2 px-3 text-sm font-semibold text-ampersound-red">Publishing</th>
                     <th className="text-right py-2 px-3 text-sm font-semibold text-blue-600">Master</th>
                   </tr>
                 </thead>
@@ -456,7 +456,7 @@ export default function CatalogView() {
                     <tr key={territory} className="hover:bg-gray-50">
                       <td className="py-2 px-3 font-medium">{territory}</td>
                       <td className="py-2 px-3 text-right text-sm text-gray-600">{formatNumber(data.total_streams)}</td>
-                      <td className="py-2 px-3 text-right font-semibold text-mime-purple">${formatNumber(data.publishing)}</td>
+                      <td className="py-2 px-3 text-right font-semibold text-ampersound-red">${formatNumber(data.publishing)}</td>
                       <td className="py-2 px-3 text-right font-semibold text-blue-600">${formatNumber(data.master)}</td>
                     </tr>
                   ))}
@@ -470,17 +470,17 @@ export default function CatalogView() {
 
       <div className="bg-white rounded-lg shadow p-6 mb-6">
         <h3 className="text-lg font-bold mb-4">Upload Filled Schedule A (Internal Demo)</h3>
-        <p className="text-sm text-gray-600 mb-4">Use the official MIME Schedule A template only.</p>
+        <p className="text-sm text-gray-600 mb-4">Use the official Ampersound Schedule A template only.</p>
         <div
           {...getRootProps()}
           className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition ${
-            isDragActive ? 'border-mime-purple bg-purple-50' : 'border-gray-300 hover:border-mime-purple'
+            isDragActive ? 'border-ampersound-red bg-red-50' : 'border-gray-300 hover:border-ampersound-red'
           }`}
         >
           <input {...getInputProps()} />
           {uploading ? (
             <div>
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-mime-purple mb-2"></div>
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-ampersound-red mb-2"></div>
               <p>Uploading...</p>
             </div>
           ) : isDragActive ? (
@@ -518,7 +518,7 @@ export default function CatalogView() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Streams</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Publishing %</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Master %</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-mime-purple uppercase tracking-wider">Pub. Revenue</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-ampersound-red uppercase tracking-wider">Pub. Revenue</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-blue-600 uppercase tracking-wider">Master Revenue</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Publishing Val</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Master Val</th>
@@ -536,7 +536,7 @@ export default function CatalogView() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">{song.publishing_percentage}%</td>
                     <td className="px-6 py-4 whitespace-nowrap">{song.master_percentage}%</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-mime-purple font-semibold">
+                    <td className="px-6 py-4 whitespace-nowrap text-ampersound-red font-semibold">
                       ${formatNumber(song.publishing_revenue)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-blue-600 font-semibold">
@@ -568,7 +568,7 @@ export default function CatalogView() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
                         onClick={() => setSelectedSongId(song.id)}
-                        className="text-mime-purple hover:underline"
+                        className="text-ampersound-red hover:underline"
                       >
                         View Details
                       </button>

@@ -1,4 +1,4 @@
-# MIME Catalog Intelligence Platform
+# Ampersound Catalog Intelligence Platform
 ## Technical Whitepaper & System Documentation
 
 **Version:** 1.0  
@@ -27,7 +27,7 @@
 
 ### Platform Overview
 
-The MIME Catalog Intelligence Platform is an internal demonstration dashboard showcasing advanced catalog valuation, scoring, and analytics capabilities for musical intellectual property. The platform is designed to demonstrate MIME Publishing's technological capabilities to future external clients while providing comprehensive insights into catalog performance, revenue potential, and exploitation opportunities.
+The Ampersound Catalog Intelligence Platform is an internal demonstration dashboard showcasing advanced catalog valuation, scoring, and analytics capabilities for musical intellectual property. The platform is designed to demonstrate Ampersound Intelligence's technological capabilities to future external clients while providing comprehensive insights into catalog performance, revenue potential, and exploitation opportunities.
 
 ### Key Capabilities
 
@@ -40,7 +40,7 @@ The MIME Catalog Intelligence Platform is an internal demonstration dashboard sh
 
 ### Business Value
 
-This platform demonstrates MIME Publishing's ability to:
+This platform demonstrates Ampersound Intelligence's ability to:
 1. Accurately value music catalogs using industry-standard methodologies
 2. Track multi-platform streaming performance with platform-specific economics
 3. Identify growth opportunities and exploitation potential
@@ -456,7 +456,7 @@ def calculate_black_box_metrics(song_age_years, publishing_revenue):
 
 ### Overview
 
-The MIME platform calculates streaming revenue using accurate, platform-specific economics that reflect real-world 2024-2025 rates. This methodology separates **Publishing** (mechanical/composition rights) from **Master** (sound recording rights) and differentiates between **Premium** (subscription) and **Ad-Supported** (free tier) streams.
+The Ampersound platform calculates streaming revenue using accurate, platform-specific economics that reflect real-world 2024-2025 rates. This methodology separates **Publishing** (mechanical/composition rights) from **Master** (sound recording rights) and differentiates between **Premium** (subscription) and **Ad-Supported** (free tier) streams.
 
 ### Platform Rate Research
 
@@ -645,7 +645,7 @@ total_market_revenue = known_revenue / 0.625
 
 ### Overview
 
-The MIME platform uses PostgreSQL with SQLAlchemy ORM for data persistence. The schema is designed to support multi-platform analytics, separated publishing/master revenue, and comprehensive scoring.
+The Ampersound platform uses PostgreSQL with SQLAlchemy ORM for data persistence. The schema is designed to support multi-platform analytics, separated publishing/master revenue, and comprehensive scoring.
 
 ### Entity-Relationship Diagram
 
@@ -1351,7 +1351,7 @@ Host: localhost:8000
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-Content-Disposition: attachment; filename="mime_catalog_export_2025-11-13.xlsx"
+Content-Disposition: attachment; filename="ampersound_catalog_export_2025-11-13.xlsx"
 
 [Binary Excel file data]
 ```
@@ -1737,7 +1737,7 @@ useEffect(() => {
   {/* Valuations with Multiplier Labels */}
   <div className="grid grid-cols-3 gap-4">
     <div>
-      <span className="text-purple-600">8× Low</span>
+      <span className="text-red-600">8× Low</span>
       <p className="text-2xl font-bold">
         ${formatCurrency(catalogData.total_valuation_low)}
       </p>
@@ -1760,7 +1760,7 @@ useEffect(() => {
           <span className="w-48">{formatFactorName(factor)}</span>
           <div className="flex-1 bg-gray-200 rounded">
             <div 
-              className="bg-purple-600 h-4 rounded"
+              className="bg-red-600 h-4 rounded"
               style={{ width: `${(score / 25) * 100}%` }}
             />
           </div>
@@ -1877,7 +1877,7 @@ function InfoTooltip({ text }) {
       <h3>Multi-Platform Streams</h3>
       <div className="space-y-4">
         {Object.entries(song.analytics.streams_by_type).map(([platform, data]) => (
-          <div key={platform} className="border-l-4 border-purple-600 pl-4">
+          <div key={platform} className="border-l-4 border-red-600 pl-4">
             <div className="flex justify-between">
               <span className="font-semibold capitalize">
                 {platform.replace('_', ' ')}
@@ -1909,7 +1909,7 @@ function InfoTooltip({ text }) {
           .map(([territory, streams]) => (
             <div key={territory} className="bg-gray-50 p-4 rounded">
               <p className="text-lg font-semibold">{territory}</p>
-              <p className="text-2xl text-purple-600">
+              <p className="text-2xl text-red-600">
                 {formatNumber(streams)}
               </p>
             </div>
@@ -1929,7 +1929,7 @@ function InfoTooltip({ text }) {
             </div>
             <div className="bg-gray-200 rounded-full h-2">
               <div 
-                className="bg-purple-600 h-2 rounded-full"
+                className="bg-red-600 h-2 rounded-full"
                 style={{ width: `${(score / 25) * 100}%` }}
               />
             </div>
@@ -1980,12 +1980,12 @@ function InfoTooltip({ text }) {
     </div>
     
     {/* Black Box Metrics */}
-    <div className="mt-8 bg-orange-50 p-4 rounded">
+    <div className="mt-8 bg-red-50 p-4 rounded">
       <h3>Black Box Analysis</h3>
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label>Collectible %</label>
-          <p className="text-2xl font-bold text-orange-600">
+          <p className="text-2xl font-bold text-red-600">
             {song.black_box.collectible_percentage}%
           </p>
         </div>
@@ -2064,11 +2064,8 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        purple: {
-          600: '#7c3aed',  // MIME primary purple
-        },
-        orange: {
-          500: '#f97316',  // MIME secondary orange
+        red: {
+          600: '#DC2626',  // Ampersound primary red
         }
       }
     }
@@ -2077,11 +2074,10 @@ module.exports = {
 ```
 
 **Color Usage**:
-- **Purple (#7c3aed)**: Primary brand color, buttons, accents
-- **Orange (#f97316)**: Secondary color, highlights, warnings
+- **Red (#DC2626)**: Primary brand color, buttons, accents
 - **Green**: Score >75
 - **Yellow**: Score 50-75
-- **Red**: Score <50
+- **Red (darker)**: Score <50
 
 ---
 
@@ -2442,7 +2438,7 @@ openpyxl==3.1.2
 
 Create `.env` file:
 ```bash
-DATABASE_URL=postgresql://user:password@localhost:5432/mime_catalog
+DATABASE_URL=postgresql://user:password@localhost:5432/ampersound_catalog
 SECRET_KEY=your-secret-key-here
 ```
 
@@ -2597,8 +2593,8 @@ alembic upgrade head
 
 ### Contact & Support
 
-For questions about this platform or MIME Publishing services:
-- **Email**: tech@mimepublishing.com
+For questions about this platform or Ampersound Intelligence services:
+- **Email**: tech@ampersound.ai
 - **Documentation**: This whitepaper
 - **Demo**: Internal access only
 

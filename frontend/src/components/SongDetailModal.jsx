@@ -53,7 +53,7 @@ export default function SongDetailModal({ songId, onClose }) {
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-mime-purple mb-4"></div>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-ampersound-red mb-4"></div>
             <p>Loading song details...</p>
           </div>
         </div>
@@ -111,7 +111,7 @@ export default function SongDetailModal({ songId, onClose }) {
             <div className="space-y-2">
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Publishing %</span>
-                <span className="text-sm font-semibold text-mime-purple">{song.publishing_percentage}%</span>
+                <span className="text-sm font-semibold text-ampersound-red">{song.publishing_percentage}%</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Master %</span>
@@ -166,7 +166,7 @@ export default function SongDetailModal({ songId, onClose }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-gray-500 mb-1">Publishing Revenue</p>
-              <p className="text-lg font-bold text-mime-purple">${formatNumber(song.publishing_revenue)}</p>
+              <p className="text-lg font-bold text-ampersound-red">${formatNumber(song.publishing_revenue)}</p>
             </div>
             <div>
               <p className="text-xs text-gray-500 mb-1">Master Revenue</p>
@@ -245,7 +245,7 @@ export default function SongDetailModal({ songId, onClose }) {
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
-                    className="bg-mime-purple h-2 rounded-full"
+                    className="bg-ampersound-red h-2 rounded-full"
                     style={{ width: `${(song.score_breakdown.catalog_value / 25) * 100}%` }}
                   ></div>
                 </div>
@@ -317,7 +317,7 @@ export default function SongDetailModal({ songId, onClose }) {
         <div className="mt-6 flex justify-end">
           <button
             onClick={onClose}
-            className="bg-mime-purple text-white px-6 py-2 rounded-lg hover:bg-opacity-90 transition"
+            className="bg-ampersound-red text-white px-6 py-2 rounded-lg hover:bg-opacity-90 transition"
           >
             Close
           </button>

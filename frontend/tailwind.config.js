@@ -6,9 +6,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        'mime-purple': '#8B5CF6',
-        'mime-orange': '#F59E0B',
-        'mime-dark': '#1F2937',
+        'ampersound-red': '#D94848',
+        'ampersound-dark': '#1F2937',
       },
     },
   },

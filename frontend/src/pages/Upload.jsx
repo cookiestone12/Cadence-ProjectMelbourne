@@ -53,7 +53,7 @@ export default function Upload() {
         <div
           {...getRootProps()}
           className={`border-4 border-dashed rounded-lg p-12 text-center cursor-pointer transition ${
-            isDragActive ? 'border-mime-purple bg-purple-50' : 'border-gray-300 hover:border-mime-purple'
+            isDragActive ? 'border-ampersound-red bg-red-50' : 'border-gray-300 hover:border-ampersound-red'
           }`}
         >
           <input {...getInputProps()} />
@@ -73,7 +73,7 @@ export default function Upload() {
 
         {uploading && (
           <div className="mt-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-mime-purple"></div>
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-ampersound-red"></div>
             <p className="mt-2">Uploading and processing...</p>
           </div>
         )}
@@ -87,7 +87,7 @@ export default function Upload() {
         <div className="mt-8 bg-blue-50 border-l-4 border-blue-500 p-4">
           <h3 className="font-semibold mb-2">Important Notes:</h3>
           <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
-            <li>Use the official MIME Schedule A template</li>
+            <li>Use the official Ampersound Schedule A template</li>
             <li>Ensure all required fields are filled out</li>
             <li>Deviations from the format may result in parsing errors</li>
             <li>The system will automatically fetch analytics and calculate valuations</li>

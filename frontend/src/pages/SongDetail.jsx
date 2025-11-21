@@ -34,7 +34,7 @@ export default function SongDetail() {
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
-        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-mime-purple"></div>
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-ampersound-red"></div>
       </div>
     )
   }
@@ -53,7 +53,7 @@ export default function SongDetail() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <Link to="/catalog" className="text-mime-purple hover:underline mb-4 inline-block">
+      <Link to="/catalog" className="text-ampersound-red hover:underline mb-4 inline-block">
         &larr; Back to Catalog
       </Link>
 
@@ -64,7 +64,7 @@ export default function SongDetail() {
         <div className="grid md:grid-cols-4 gap-6 mb-6">
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">Estimated Revenue</h3>
-            <p className="text-2xl font-bold text-mime-purple">${formatNumber(song.estimated_revenue)}</p>
+            <p className="text-2xl font-bold text-ampersound-red">${formatNumber(song.estimated_revenue)}</p>
           </div>
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">Overall Score</h3>
@@ -110,7 +110,7 @@ export default function SongDetail() {
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
-                  className="bg-mime-purple h-2 rounded-full"
+                  className="bg-ampersound-red h-2 rounded-full"
                   style={{ width: `${((scoreBreakdown.catalog_value || 0) / 25) * 100}%` }}
                 ></div>
               </div>
@@ -161,7 +161,7 @@ export default function SongDetail() {
               {writerSplits.map((writer, index) => (
                 <div key={index} className="flex justify-between items-center border-b pb-2">
                   <span className="font-medium">{writer.name}</span>
-                  <span className="text-mime-purple font-semibold">{writer.share}%</span>
+                  <span className="text-ampersound-red font-semibold">{writer.share}%</span>
                 </div>
               ))}
             </div>
@@ -212,7 +212,7 @@ export default function SongDetail() {
             <p className="text-sm font-medium mb-2">Top Playlists</p>
             <div className="space-y-2">
               {analytics.top_playlists?.slice(0, 5).map((playlist, index) => (
-                <div key={index} className="border-l-4 border-mime-purple pl-3 py-2 bg-gray-50 rounded">
+                <div key={index} className="border-l-4 border-ampersound-red pl-3 py-2 bg-gray-50 rounded">
                   <p className="font-semibold text-sm">{playlist.name}</p>
                   <div className="flex justify-between text-xs text-gray-600 mt-1">
                     <span>{formatNumber(playlist.followers)} followers</span>
@@ -248,7 +248,7 @@ export default function SongDetail() {
             href={song.spotify_link}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block bg-mime-purple text-white px-6 py-3 rounded-lg hover:bg-opacity-90"
+            className="inline-block bg-ampersound-red text-white px-6 py-3 rounded-lg hover:bg-opacity-90"
           >
             Open in Spotify →
           </a>
