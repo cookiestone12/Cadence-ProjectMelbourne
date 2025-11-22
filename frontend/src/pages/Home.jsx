@@ -30,21 +30,21 @@ export default function Home() {
               <div className="bg-signal-red text-white rounded w-16 h-16 flex items-center justify-center mx-auto mb-4 text-2xl font-bold shadow-red-glow">
                 1
               </div>
-              <h3 className="font-semibold mb-2 text-white uppercase text-sm tracking-wide">Download Template</h3>
+              <h3 className="font-semibold font-heading mb-2 text-white uppercase text-sm tracking-wide">Download Template</h3>
               <p className="text-tech-grey text-sm">Get the Schedule A template and fill in your catalog information</p>
             </div>
             <div className="text-center">
               <div className="bg-signal-red text-white rounded w-16 h-16 flex items-center justify-center mx-auto mb-4 text-2xl font-bold shadow-red-glow">
                 2
               </div>
-              <h3 className="font-semibold mb-2 text-white uppercase text-sm tracking-wide">Upload</h3>
+              <h3 className="font-semibold font-heading mb-2 text-white uppercase text-sm tracking-wide">Upload</h3>
               <p className="text-tech-grey text-sm">Upload your completed template through our secure platform</p>
             </div>
             <div className="text-center">
               <div className="bg-signal-red text-white rounded w-16 h-16 flex items-center justify-center mx-auto mb-4 text-2xl font-bold shadow-red-glow">
                 3
               </div>
-              <h3 className="font-semibold mb-2 text-white uppercase text-sm tracking-wide">Analyze</h3>
+              <h3 className="font-semibold font-heading mb-2 text-white uppercase text-sm tracking-wide">Analyze</h3>
               <p className="text-tech-grey text-sm">View valuations, scores, and analytics for your entire catalog</p>
             </div>
           </div>

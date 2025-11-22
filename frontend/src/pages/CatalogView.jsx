@@ -185,7 +185,7 @@ export default function CatalogView() {
               
               {/* Valuation Horizon Slider */}
               <div className="mt-6 pt-6 border-t border-border-grey">
-                <h3 className="text-sm font-semibold text-tech-grey mb-3 uppercase tracking-wide">Valuation Horizon</h3>
+                <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Valuation Horizon</h3>
                 <div className="bg-black bg-opacity-50 rounded border border-border-grey p-5">
                   <div className="flex items-center justify-between mb-3">
                     <label htmlFor="multiplier-slider" className="text-sm font-medium text-tech-grey uppercase tracking-wide">
@@ -240,11 +240,11 @@ export default function CatalogView() {
 
               {/* Separated Publishing and Master Valuations */}
               <div className="mt-6 pt-6 border-t border-border-grey">
-                <h3 className="text-sm font-semibold text-tech-grey mb-4 uppercase tracking-wide">Standard Valuation Scenarios</h3>
+                <h3 className="text-sm font-semibold font-heading text-tech-grey mb-4 uppercase tracking-wide">Standard Valuation Scenarios</h3>
                 <div className="grid grid-cols-2 gap-6">
                   {/* Publishing Valuations */}
                   <div className="bg-black bg-opacity-50 rounded border border-border-grey p-4">
-                    <h4 className="text-xs font-semibold text-purple-400 mb-3 uppercase tracking-wide">Publishing Valuations</h4>
+                    <h4 className="text-xs font-semibold font-heading text-purple-400 mb-3 uppercase tracking-wide">Publishing Valuations</h4>
                     <div className="space-y-2">
                       <div>
                         <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Low Scenario</p>
@@ -266,7 +266,7 @@ export default function CatalogView() {
                   
                   {/* Master Valuations */}
                   <div className="bg-black bg-opacity-50 rounded border border-border-grey p-4">
-                    <h4 className="text-xs font-semibold text-orange-400 mb-3 uppercase tracking-wide">Master Valuations</h4>
+                    <h4 className="text-xs font-semibold font-heading text-orange-400 mb-3 uppercase tracking-wide">Master Valuations</h4>
                     <div className="space-y-2">
                       <div>
                         <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Low Scenario</p>
@@ -290,7 +290,7 @@ export default function CatalogView() {
             </div>
 
           <div className="bg-surface-black rounded border border-border-grey shadow-lg p-6 hover:border-signal-red transition-colors duration-200">
-            <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">Score Breakdown</h3>
+            <h3 className="text-lg font-bold font-heading mb-4 uppercase tracking-wide">Score Breakdown</h3>
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between mb-1">
@@ -345,11 +345,11 @@ export default function CatalogView() {
         </div>
 
         <div className="bg-surface-black rounded border border-border-grey shadow-lg p-6 hover:border-signal-red transition-colors duration-200">
-          <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">Revenue Estimate (Admin Collection)</h3>
+          <h3 className="text-lg font-bold font-heading mb-4 uppercase tracking-wide">Revenue Estimate (Admin Collection)</h3>
           
           {/* Streams Breakdown */}
           <div className="mb-4 pb-4 border-b border-border-grey">
-            <h4 className="text-sm font-semibold text-tech-grey mb-2 uppercase tracking-wide">Total Streams</h4>
+            <h4 className="text-sm font-semibold font-heading text-tech-grey mb-2 uppercase tracking-wide">Total Streams</h4>
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-tech-grey">Gross Streams</span>
@@ -369,7 +369,7 @@ export default function CatalogView() {
           {/* Publishing vs Master Revenue */}
           <div className="mb-4 pb-4 border-b border-border-grey">
             <div className="flex items-center gap-2 mb-2">
-              <h4 className="text-sm font-semibold text-tech-grey uppercase tracking-wide">Multi-Platform Revenue</h4>
+              <h4 className="text-sm font-semibold font-heading text-tech-grey uppercase tracking-wide">Multi-Platform Revenue</h4>
               <div className="group relative">
                 <svg className="w-4 h-4 text-tech-grey cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -421,7 +421,7 @@ export default function CatalogView() {
 
           {/* Revenue Split (Publishing Only) */}
           <div>
-            <h4 className="text-sm font-semibold text-tech-grey mb-2 uppercase tracking-wide">Revenue Split (Publishing Only)</h4>
+            <h4 className="text-sm font-semibold font-heading text-tech-grey mb-2 uppercase tracking-wide">Revenue Split (Publishing Only)</h4>
             <div className="space-y-2">
               <div className="flex justify-between items-center bg-black bg-opacity-50 border border-border-grey p-3 rounded">
                 <span className="text-sm font-medium">80/20 Deal (20% to label)</span>
@@ -438,7 +438,7 @@ export default function CatalogView() {
         {/* Territory Breakdown */}
         {catalogSummary.territory_breakdown && Object.keys(catalogSummary.territory_breakdown).length > 0 && (
           <div className="bg-surface-black rounded border border-border-grey shadow-lg p-6 hover:border-signal-red transition-colors duration-200">
-            <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">Revenue by Territory</h3>
+            <h3 className="text-lg font-bold font-heading mb-4 uppercase tracking-wide">Revenue by Territory</h3>
             <div className="overflow-x-auto">
               <table className="min-w-full">
                 <thead>
@@ -469,7 +469,7 @@ export default function CatalogView() {
       )}
 
       <div className="bg-surface-black rounded border border-border-grey shadow-lg p-6 mb-6 hover:border-signal-red transition-colors duration-200">
-        <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">Upload Filled Schedule A (Internal Demo)</h3>
+        <h3 className="text-lg font-bold font-heading mb-4 uppercase tracking-wide">Upload Filled Schedule A (Internal Demo)</h3>
         <p className="text-sm text-tech-grey mb-4">Use the official Ampersound Schedule A template only.</p>
         <div
           {...getRootProps()}

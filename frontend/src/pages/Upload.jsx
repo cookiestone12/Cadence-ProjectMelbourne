@@ -46,52 +46,54 @@ export default function Upload() {
   })
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8">Upload Schedule A</h1>
-      
-      <div className="max-w-2xl mx-auto">
-        <div
-          {...getRootProps()}
-          className={`border-4 border-dashed rounded-lg p-12 text-center cursor-pointer transition ${
-            isDragActive ? 'border-ampersound-red bg-red-50' : 'border-gray-300 hover:border-ampersound-red'
-          }`}
-        >
-          <input {...getInputProps()} />
-          <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-            <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          {isDragActive ? (
-            <p className="text-lg">Drop the file here...</p>
-          ) : (
-            <>
-              <p className="text-lg mb-2">Drag & drop your Schedule A file here</p>
-              <p className="text-sm text-gray-500">or click to browse</p>
-              <p className="text-xs text-gray-400 mt-4">Supported formats: PDF, Excel (.xlsx, .xls)</p>
-            </>
+    <div className="bg-void-black min-h-screen">
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold font-heading mb-8 text-white uppercase tracking-wide">Upload Schedule A</h1>
+        
+        <div className="max-w-2xl mx-auto">
+          <div
+            {...getRootProps()}
+            className={`border-4 border-dashed rounded-lg p-12 text-center cursor-pointer transition bg-surface-black ${
+              isDragActive ? 'border-signal-red bg-signal-red bg-opacity-10' : 'border-border-grey hover:border-signal-red'
+            }`}
+          >
+            <input {...getInputProps()} />
+            <svg className="mx-auto h-12 w-12 text-tech-grey mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+              <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {isDragActive ? (
+              <p className="text-lg text-white">Drop the file here...</p>
+            ) : (
+              <>
+                <p className="text-lg mb-2 text-white">Drag & drop your Schedule A file here</p>
+                <p className="text-sm text-tech-grey">or click to browse</p>
+                <p className="text-xs text-tech-grey mt-4">Supported formats: PDF, Excel (.xlsx, .xls)</p>
+              </>
+            )}
+          </div>
+
+          {uploading && (
+            <div className="mt-8 text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-signal-red"></div>
+              <p className="mt-2 text-white">Uploading and processing...</p>
+            </div>
           )}
-        </div>
 
-        {uploading && (
-          <div className="mt-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-ampersound-red"></div>
-            <p className="mt-2">Uploading and processing...</p>
+          {message && (
+            <div className={`mt-8 p-4 rounded border ${message.startsWith('Error') ? 'bg-black bg-opacity-50 border-red-500 text-red-400' : 'bg-black bg-opacity-50 border-green-500 text-green-400'}`}>
+              {message}
+            </div>
+          )}
+
+          <div className="mt-8 bg-surface-black border border-border-grey border-l-4 border-l-signal-red p-4">
+            <h3 className="font-semibold font-heading mb-2 text-white uppercase tracking-wide">Important Notes:</h3>
+            <ul className="list-disc list-inside text-sm text-tech-grey space-y-1">
+              <li>Use the official Ampersound Schedule A template</li>
+              <li>Ensure all required fields are filled out</li>
+              <li>Deviations from the format may result in parsing errors</li>
+              <li>The system will automatically fetch analytics and calculate valuations</li>
+            </ul>
           </div>
-        )}
-
-        {message && (
-          <div className={`mt-8 p-4 rounded ${message.startsWith('Error') ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-            {message}
-          </div>
-        )}
-
-        <div className="mt-8 bg-blue-50 border-l-4 border-blue-500 p-4">
-          <h3 className="font-semibold mb-2">Important Notes:</h3>
-          <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
-            <li>Use the official Ampersound Schedule A template</li>
-            <li>Ensure all required fields are filled out</li>
-            <li>Deviations from the format may result in parsing errors</li>
-            <li>The system will automatically fetch analytics and calculate valuations</li>
-          </ul>
         </div>
       </div>
     </div>

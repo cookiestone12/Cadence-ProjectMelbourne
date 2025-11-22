@@ -97,7 +97,7 @@ export default function Search() {
                 </div>
 
                 <div className="border-t border-border-grey pt-4 mb-4">
-                  <h3 className="font-semibold text-tech-grey mb-3 uppercase text-sm tracking-wide">Valuation</h3>
+                  <h3 className="font-semibold font-heading text-tech-grey mb-3 uppercase text-sm tracking-wide">Valuation</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Estimated Revenue</p>
@@ -127,7 +127,7 @@ export default function Search() {
                 </div>
 
                 <div className="border-t border-border-grey pt-4 mb-4">
-                  <h3 className="font-semibold text-tech-grey mb-3 uppercase text-sm tracking-wide">Track Metrics</h3>
+                  <h3 className="font-semibold font-heading text-tech-grey mb-3 uppercase text-sm tracking-wide">Track Metrics</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Total Streams</p>
@@ -160,7 +160,7 @@ export default function Search() {
 
                 {result.metrics?.top_territories && result.metrics.top_territories.length > 0 && (
                   <div className="border-t border-border-grey pt-4 mb-4">
-                    <h3 className="font-semibold text-tech-grey mb-3 uppercase text-sm tracking-wide">Top Territories</h3>
+                    <h3 className="font-semibold font-heading text-tech-grey mb-3 uppercase text-sm tracking-wide">Top Territories</h3>
                     <div className="grid grid-cols-3 gap-3">
                       {result.metrics.top_territories.slice(0, 3).map((territory, idx) => (
                         <div key={idx} className="text-center p-2 bg-black bg-opacity-50 border border-border-grey rounded">
@@ -174,7 +174,7 @@ export default function Search() {
 
                 {result.artist_metrics && (
                   <div className="border-t border-border-grey pt-4">
-                    <h3 className="font-semibold text-tech-grey mb-3 uppercase text-sm tracking-wide">Artist Metrics</h3>
+                    <h3 className="font-semibold font-heading text-tech-grey mb-3 uppercase text-sm tracking-wide">Artist Metrics</h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
                         <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Monthly Listeners</p>

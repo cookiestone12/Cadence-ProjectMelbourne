@@ -53,7 +53,7 @@ export default function Settings() {
       </div>
 
       <div className="max-w-2xl bg-signal-red bg-opacity-10 border-l-4 border-signal-red p-4 rounded">
-        <h3 className="font-semibold mb-2 uppercase tracking-wide">How to Configure API Keys:</h3>
+        <h3 className="font-semibold font-heading mb-2 uppercase tracking-wide">How to Configure API Keys:</h3>
         <ol className="list-decimal list-inside space-y-2 text-sm text-tech-grey">
           <li>Go to the Replit Secrets panel (Tools → Secrets or the lock icon)</li>
           <li>Add the following environment variables:

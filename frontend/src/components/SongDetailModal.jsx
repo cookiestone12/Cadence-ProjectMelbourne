@@ -50,11 +50,11 @@ export default function SongDetailModal({ songId, onClose }) {
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
+        <div className="bg-surface-black border border-border-grey rounded-lg p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-ampersound-red mb-4"></div>
-            <p>Loading song details...</p>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-signal-red mb-4"></div>
+            <p className="text-white">Loading song details...</p>
           </div>
         </div>
       </div>
@@ -68,170 +68,170 @@ export default function SongDetailModal({ songId, onClose }) {
   const collectionWindow = getCollectionWindow(song.release_date)
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-surface-black border border-border-grey rounded-lg p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">{song.title}</h2>
-            <p className="text-lg text-gray-600">{song.artist_name}</p>
+            <h2 className="text-2xl font-bold font-heading text-white uppercase tracking-wide">{song.title}</h2>
+            <p className="text-lg text-tech-grey">{song.artist_name}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+            className="text-tech-grey hover:text-signal-red text-2xl font-bold"
           >
             ×
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-purple-50 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Basic Information</h3>
+          <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
+            <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Basic Information</h3>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Release Date</span>
-                <span className="text-sm font-semibold">{song.release_date || 'N/A'}</span>
+                <span className="text-sm text-tech-grey">Release Date</span>
+                <span className="text-sm font-semibold text-white">{song.release_date || 'N/A'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Song Age</span>
-                <span className="text-sm font-semibold">{calculateAge(song.release_date)}</span>
+                <span className="text-sm text-tech-grey">Song Age</span>
+                <span className="text-sm font-semibold text-white">{calculateAge(song.release_date)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">ISRC</span>
-                <span className="text-sm font-semibold">{song.isrc || 'N/A'}</span>
+                <span className="text-sm text-tech-grey">ISRC</span>
+                <span className="text-sm font-semibold text-white">{song.isrc || 'N/A'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">ISWC</span>
-                <span className="text-sm font-semibold">{song.iswc || 'N/A'}</span>
+                <span className="text-sm text-tech-grey">ISWC</span>
+                <span className="text-sm font-semibold text-white">{song.iswc || 'N/A'}</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-blue-50 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Ownership</h3>
+          <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
+            <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Ownership</h3>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Publishing %</span>
-                <span className="text-sm font-semibold text-ampersound-red">{song.publishing_percentage}%</span>
+                <span className="text-sm text-tech-grey">Publishing %</span>
+                <span className="text-sm font-semibold text-signal-red">{song.publishing_percentage}%</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Master %</span>
-                <span className="text-sm font-semibold text-blue-600">{song.master_percentage}%</span>
+                <span className="text-sm text-tech-grey">Master %</span>
+                <span className="text-sm font-semibold text-blue-400">{song.master_percentage}%</span>
               </div>
             </div>
           </div>
 
-          <div className="bg-green-50 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Streaming Performance</h3>
+          <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
+            <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Streaming Performance</h3>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Total Streams</span>
-                <span className="text-sm font-semibold">{formatNumber(song.spotify_streams)}</span>
+                <span className="text-sm text-tech-grey">Total Streams</span>
+                <span className="text-sm font-semibold text-white">{formatNumber(song.spotify_streams)}</span>
               </div>
               {song.premium_streams !== undefined && song.premium_streams !== null && (
                 <>
                   <div className="flex justify-between pl-4">
-                    <span className="text-xs text-gray-500">Premium (70%)</span>
-                    <span className="text-sm text-gray-700">{formatNumber(song.premium_streams)}</span>
+                    <span className="text-xs text-tech-grey">Premium (70%)</span>
+                    <span className="text-sm text-tech-grey">{formatNumber(song.premium_streams)}</span>
                   </div>
                   <div className="flex justify-between pl-4">
-                    <span className="text-xs text-gray-500">Ad-Supported (30%)</span>
-                    <span className="text-sm text-gray-700">{formatNumber(song.ad_supported_streams)}</span>
+                    <span className="text-xs text-tech-grey">Ad-Supported (30%)</span>
+                    <span className="text-sm text-tech-grey">{formatNumber(song.ad_supported_streams)}</span>
                   </div>
                 </>
               )}
             </div>
           </div>
 
-          <div className="bg-orange-50 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Black Box Tracking</h3>
+          <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
+            <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Black Box Tracking</h3>
             <div className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Collection Window</span>
-                <span className="text-sm font-semibold">{collectionWindow.label}</span>
+                <span className="text-sm text-tech-grey">Collection Window</span>
+                <span className="text-sm font-semibold text-white">{collectionWindow.label}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Collectible Value</span>
-                <span className="text-sm font-semibold text-green-600">${formatNumber(song.collectible_publishing_value)}</span>
+                <span className="text-sm text-tech-grey">Collectible Value</span>
+                <span className="text-sm font-semibold text-green-400">${formatNumber(song.collectible_publishing_value)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Black Box Loss</span>
-                <span className="text-sm font-semibold text-red-600">${formatNumber(song.black_box_loss)}</span>
+                <span className="text-sm text-tech-grey">Black Box Loss</span>
+                <span className="text-sm font-semibold text-signal-red">${formatNumber(song.black_box_loss)}</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 bg-gray-50 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Revenue Breakdown</h3>
+        <div className="mt-6 bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
+          <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Revenue Breakdown</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-gray-500 mb-1">Publishing Revenue</p>
-              <p className="text-lg font-bold text-ampersound-red">${formatNumber(song.publishing_revenue)}</p>
+              <p className="text-xs text-tech-grey mb-1">Publishing Revenue</p>
+              <p className="text-lg font-bold text-signal-red">${formatNumber(song.publishing_revenue)}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-500 mb-1">Master Revenue</p>
-              <p className="text-lg font-bold text-blue-600">${formatNumber(song.master_revenue)}</p>
+              <p className="text-xs text-tech-grey mb-1">Master Revenue</p>
+              <p className="text-lg font-bold text-blue-400">${formatNumber(song.master_revenue)}</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 bg-gray-50 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Valuations</h3>
+        <div className="mt-6 bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
+          <h3 className="text-sm font-semibold font-heading text-tech-grey mb-4 uppercase tracking-wide">Valuations</h3>
           <div className="grid grid-cols-2 gap-4">
             {/* Publishing Valuations */}
-            <div className="bg-purple-50 rounded-lg p-3">
-              <h4 className="text-xs font-semibold text-purple-700 mb-2 uppercase">Publishing Valuations</h4>
+            <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-3">
+              <h4 className="text-xs font-semibold font-heading text-purple-400 mb-2 uppercase tracking-wide">Publishing Valuations</h4>
               <div className="space-y-2">
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">Low Scenario</p>
-                  <p className="text-base font-semibold text-purple-700">${formatNumber(song.valuation_low_pub)}</p>
-                  <p className="text-xs text-gray-400">8× multiplier</p>
+                  <p className="text-xs text-tech-grey mb-1">Low Scenario</p>
+                  <p className="text-base font-semibold text-purple-400">${formatNumber(song.valuation_low_pub)}</p>
+                  <p className="text-xs text-tech-grey">8× multiplier</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">Base Scenario</p>
-                  <p className="text-base font-semibold text-purple-700">${formatNumber(song.valuation_base_pub)}</p>
-                  <p className="text-xs text-gray-400">12× multiplier</p>
+                  <p className="text-xs text-tech-grey mb-1">Base Scenario</p>
+                  <p className="text-base font-semibold text-purple-400">${formatNumber(song.valuation_base_pub)}</p>
+                  <p className="text-xs text-tech-grey">12× multiplier</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">High Scenario</p>
-                  <p className="text-base font-semibold text-purple-700">${formatNumber(song.valuation_high_pub)}</p>
-                  <p className="text-xs text-gray-400">18× multiplier</p>
+                  <p className="text-xs text-tech-grey mb-1">High Scenario</p>
+                  <p className="text-base font-semibold text-purple-400">${formatNumber(song.valuation_high_pub)}</p>
+                  <p className="text-xs text-tech-grey">18× multiplier</p>
                 </div>
               </div>
             </div>
             
             {/* Master Valuations */}
-            <div className="bg-orange-50 rounded-lg p-3">
-              <h4 className="text-xs font-semibold text-orange-700 mb-2 uppercase">Master Valuations</h4>
+            <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-3">
+              <h4 className="text-xs font-semibold font-heading text-orange-400 mb-2 uppercase tracking-wide">Master Valuations</h4>
               <div className="space-y-2">
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">Low Scenario</p>
-                  <p className="text-base font-semibold text-orange-700">${formatNumber(song.valuation_low_master)}</p>
-                  <p className="text-xs text-gray-400">8× multiplier</p>
+                  <p className="text-xs text-tech-grey mb-1">Low Scenario</p>
+                  <p className="text-base font-semibold text-orange-400">${formatNumber(song.valuation_low_master)}</p>
+                  <p className="text-xs text-tech-grey">8× multiplier</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">Base Scenario</p>
-                  <p className="text-base font-semibold text-orange-700">${formatNumber(song.valuation_base_master)}</p>
-                  <p className="text-xs text-gray-400">12× multiplier</p>
+                  <p className="text-xs text-tech-grey mb-1">Base Scenario</p>
+                  <p className="text-base font-semibold text-orange-400">${formatNumber(song.valuation_base_master)}</p>
+                  <p className="text-xs text-tech-grey">12× multiplier</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 mb-1">High Scenario</p>
-                  <p className="text-base font-semibold text-orange-700">${formatNumber(song.valuation_high_master)}</p>
-                  <p className="text-xs text-gray-400">18× multiplier</p>
+                  <p className="text-xs text-tech-grey mb-1">High Scenario</p>
+                  <p className="text-base font-semibold text-orange-400">${formatNumber(song.valuation_high_master)}</p>
+                  <p className="text-xs text-tech-grey">18× multiplier</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="mt-6 bg-gray-50 rounded-lg p-4">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Score Breakdown</h3>
+        <div className="mt-6 bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
+          <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Score Breakdown</h3>
           <div className="flex justify-between items-center mb-3">
-            <span className="text-lg font-bold">Total Score</span>
-            <span className={`px-3 py-1 rounded text-lg font-bold ${
-              song.score >= 80 ? 'bg-green-100 text-green-800' :
-              song.score >= 60 ? 'bg-yellow-100 text-yellow-800' :
-              'bg-red-100 text-red-800'
+            <span className="text-lg font-bold text-white">Total Score</span>
+            <span className={`px-3 py-1 rounded text-lg font-bold border ${
+              song.score >= 80 ? 'bg-green-900 bg-opacity-30 text-green-400 border-green-400' :
+              song.score >= 60 ? 'bg-yellow-900 bg-opacity-30 text-yellow-400 border-yellow-400' :
+              'bg-red-900 bg-opacity-30 text-signal-red border-signal-red'
             }`}>
               {song.score}/100
             </span>
@@ -240,22 +240,22 @@ export default function SongDetailModal({ songId, onClose }) {
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between mb-1">
-                  <span className="text-sm text-gray-600">Catalog Value</span>
-                  <span className="text-sm font-semibold">{song.score_breakdown.catalog_value}/25</span>
+                  <span className="text-sm text-tech-grey">Catalog Value</span>
+                  <span className="text-sm font-semibold text-white">{song.score_breakdown.catalog_value}/25</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-border-grey rounded-full h-2">
                   <div
-                    className="bg-ampersound-red h-2 rounded-full"
+                    className="bg-signal-red h-2 rounded-full"
                     style={{ width: `${(song.score_breakdown.catalog_value / 25) * 100}%` }}
                   ></div>
                 </div>
               </div>
               <div>
                 <div className="flex justify-between mb-1">
-                  <span className="text-sm text-gray-600">Growth Momentum</span>
-                  <span className="text-sm font-semibold">{song.score_breakdown.growth_momentum}/25</span>
+                  <span className="text-sm text-tech-grey">Growth Momentum</span>
+                  <span className="text-sm font-semibold text-white">{song.score_breakdown.growth_momentum}/25</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-border-grey rounded-full h-2">
                   <div
                     className="bg-green-500 h-2 rounded-full"
                     style={{ width: `${(song.score_breakdown.growth_momentum / 25) * 100}%` }}
@@ -264,10 +264,10 @@ export default function SongDetailModal({ songId, onClose }) {
               </div>
               <div>
                 <div className="flex justify-between mb-1">
-                  <span className="text-sm text-gray-600">Metadata Health</span>
-                  <span className="text-sm font-semibold">{song.score_breakdown.metadata_health}/25</span>
+                  <span className="text-sm text-tech-grey">Metadata Health</span>
+                  <span className="text-sm font-semibold text-white">{song.score_breakdown.metadata_health}/25</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-border-grey rounded-full h-2">
                   <div
                     className="bg-blue-500 h-2 rounded-full"
                     style={{ width: `${(song.score_breakdown.metadata_health / 25) * 100}%` }}
@@ -276,10 +276,10 @@ export default function SongDetailModal({ songId, onClose }) {
               </div>
               <div>
                 <div className="flex justify-between mb-1">
-                  <span className="text-sm text-gray-600">Exploitation Potential</span>
-                  <span className="text-sm font-semibold">{song.score_breakdown.exploitation_potential}/25</span>
+                  <span className="text-sm text-tech-grey">Exploitation Potential</span>
+                  <span className="text-sm font-semibold text-white">{song.score_breakdown.exploitation_potential}/25</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-border-grey rounded-full h-2">
                   <div
                     className="bg-yellow-500 h-2 rounded-full"
                     style={{ width: `${(song.score_breakdown.exploitation_potential / 25) * 100}%` }}
@@ -291,8 +291,8 @@ export default function SongDetailModal({ songId, onClose }) {
         </div>
 
         {song.territory_streams && Object.keys(song.territory_streams).length > 0 && (
-          <div className="mt-6 bg-gray-50 rounded-lg p-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">Top 3 Territories</h3>
+          <div className="mt-6 bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
+            <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Top 3 Territories</h3>
             <div className="space-y-2">
               {Object.entries(song.territory_streams)
                 .map(([territory, data]) => {
@@ -304,10 +304,10 @@ export default function SongDetailModal({ songId, onClose }) {
                 .slice(0, 3)
                 .map(([territory, streams], index) => (
                   <div key={territory} className="flex justify-between items-center">
-                    <span className="text-sm font-medium">
+                    <span className="text-sm font-medium text-white">
                       {index + 1}. {territory}
                     </span>
-                    <span className="text-sm font-semibold text-gray-700">{formatNumber(streams)} streams</span>
+                    <span className="text-sm font-semibold text-tech-grey">{formatNumber(streams)} streams</span>
                   </div>
                 ))}
             </div>
@@ -317,7 +317,7 @@ export default function SongDetailModal({ songId, onClose }) {
         <div className="mt-6 flex justify-end">
           <button
             onClick={onClose}
-            className="bg-ampersound-red text-white px-6 py-2 rounded-lg hover:bg-opacity-90 transition"
+            className="bg-signal-red text-white px-6 py-2 rounded-lg hover:bg-opacity-90 transition"
           >
             Close
           </button>
