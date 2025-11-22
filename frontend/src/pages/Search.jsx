@@ -36,9 +36,9 @@ export default function Search() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 bg-void-black min-h-screen">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Search Songs & Artists</h1>
+        <h1 className="text-3xl font-bold font-heading mb-8 uppercase tracking-wide">Search Songs & Artists</h1>
         
         <form onSubmit={handleSearch} className="mb-8">
           <div className="flex gap-2">
@@ -47,12 +47,12 @@ export default function Search() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by song title or artist name..."
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ampersound-red focus:border-transparent"
+              className="flex-1 px-4 py-3 bg-surface-black border border-border-grey rounded text-white focus:ring-2 focus:ring-signal-red focus:border-signal-red"
             />
             <button
               type="submit"
               disabled={loading}
-              className="bg-ampersound-red text-white px-8 py-3 rounded-lg hover:bg-opacity-90 disabled:bg-gray-400"
+              className="bg-signal-red text-white px-8 py-3 rounded font-bold uppercase text-sm tracking-wide shadow-red-glow hover:shadow-red-glow-intense hover:scale-105 transition-all duration-200 disabled:bg-tech-grey disabled:shadow-none"
             >
               {loading ? 'Searching...' : 'Search'}
             </button>
@@ -61,111 +61,111 @@ export default function Search() {
 
         {loading && (
           <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-ampersound-red"></div>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-signal-red"></div>
             <p className="mt-4">Searching...</p>
           </div>
         )}
 
         {!loading && searched && results.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-lg shadow">
-            <p className="text-gray-600">No results found for "{searchQuery}"</p>
+          <div className="text-center py-12 bg-surface-black border border-border-grey rounded shadow-lg">
+            <p className="text-tech-grey">No results found for "{searchQuery}"</p>
           </div>
         )}
 
         {!loading && results.length > 0 && (
           <div className="space-y-6">
-            <p className="text-gray-600">Found {results.length} result(s)</p>
+            <p className="text-tech-grey uppercase text-sm tracking-wide">Found {results.length} result(s)</p>
             
             {results.map((result, index) => (
-              <div key={index} className="bg-white rounded-lg shadow-lg p-6">
+              <div key={index} className="bg-surface-black border border-border-grey rounded shadow-lg p-6 hover:border-signal-red transition-colors duration-200">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h2 className="text-2xl font-bold">{result.title}</h2>
-                    <p className="text-lg text-gray-600">by {result.artist_name}</p>
+                    <h2 className="text-2xl font-bold font-heading">{result.title}</h2>
+                    <p className="text-lg text-tech-grey">by {result.artist_name}</p>
                   </div>
                   <div className="text-right">
                     {result.in_catalog ? (
-                      <span className="inline-block bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold">
+                      <span className="inline-block bg-green-500 bg-opacity-20 text-green-400 border border-green-500 px-3 py-1 rounded text-sm font-semibold">
                         In Catalog: {result.catalog_name}
                       </span>
                     ) : (
-                      <span className="inline-block bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm font-semibold">
+                      <span className="inline-block bg-tech-grey bg-opacity-20 text-tech-grey border border-border-grey px-3 py-1 rounded text-sm font-semibold">
                         External Data Only
                       </span>
                     )}
                   </div>
                 </div>
 
-                <div className="border-t pt-4 mb-4">
-                  <h3 className="font-semibold text-gray-700 mb-3">Valuation</h3>
+                <div className="border-t border-border-grey pt-4 mb-4">
+                  <h3 className="font-semibold text-tech-grey mb-3 uppercase text-sm tracking-wide">Valuation</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Estimated Revenue</p>
-                      <p className="text-xl font-bold text-ampersound-red">
+                      <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Estimated Revenue</p>
+                      <p className="text-xl font-bold text-signal-red">
                         ${formatNumber(result.valuation.estimated_revenue || result.valuation.valuation_base * 0.05)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Low</p>
-                      <p className="text-lg font-semibold text-gray-700">
+                      <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Low</p>
+                      <p className="text-lg font-semibold">
                         ${formatNumber(result.valuation.low || result.valuation.valuation_low)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Base</p>
-                      <p className="text-lg font-semibold text-gray-700">
+                      <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Base</p>
+                      <p className="text-lg font-semibold">
                         ${formatNumber(result.valuation.base || result.valuation.valuation_base)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">High</p>
-                      <p className="text-lg font-semibold text-gray-700">
+                      <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">High</p>
+                      <p className="text-lg font-semibold">
                         ${formatNumber(result.valuation.high || result.valuation.valuation_high)}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="border-t pt-4 mb-4">
-                  <h3 className="font-semibold text-gray-700 mb-3">Track Metrics</h3>
+                <div className="border-t border-border-grey pt-4 mb-4">
+                  <h3 className="font-semibold text-tech-grey mb-3 uppercase text-sm tracking-wide">Track Metrics</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Total Streams</p>
+                      <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Total Streams</p>
                       <p className="text-lg font-semibold">{formatNumber(result.metrics?.total_streams || 0)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Playlists</p>
+                      <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Playlists</p>
                       <p className="text-lg font-semibold">{result.metrics?.playlist_count || 0}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">3-Month Growth</p>
-                      <p className={`text-lg font-semibold ${(result.metrics?.growth_3_month || 0) > 0 ? 'text-green-600' : 'text-gray-700'}`}>
+                      <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">3-Month Growth</p>
+                      <p className={`text-lg font-semibold ${(result.metrics?.growth_3_month || 0) > 0 ? 'text-green-400' : 'text-tech-grey'}`}>
                         {(result.metrics?.growth_3_month || 0) > 0 ? '+' : ''}{(result.metrics?.growth_3_month || 0).toFixed(1)}%
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 mb-1">Score</p>
-                      <p className="text-lg font-semibold text-ampersound-red">{result.score?.toFixed(1) || 0}/100</p>
+                      <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Score</p>
+                      <p className="text-lg font-semibold text-signal-red">{result.score?.toFixed(1) || 0}/100</p>
                     </div>
                   </div>
                   
                   {result.metrics?.top_playlist && (
-                    <div className="mt-3 p-3 bg-gray-50 rounded">
-                      <p className="text-xs text-gray-500">Top Playlist</p>
+                    <div className="mt-3 p-3 bg-black bg-opacity-50 border border-border-grey rounded">
+                      <p className="text-xs text-tech-grey uppercase tracking-wide">Top Playlist</p>
                       <p className="font-semibold">{result.metrics.top_playlist}</p>
-                      <p className="text-sm text-gray-600">{formatNumber(result.metrics.top_playlist_followers || 0)} followers</p>
+                      <p className="text-sm text-tech-grey">{formatNumber(result.metrics.top_playlist_followers || 0)} followers</p>
                     </div>
                   )}
                 </div>
 
                 {result.metrics?.top_territories && result.metrics.top_territories.length > 0 && (
-                  <div className="border-t pt-4 mb-4">
-                    <h3 className="font-semibold text-gray-700 mb-3">Top Territories</h3>
+                  <div className="border-t border-border-grey pt-4 mb-4">
+                    <h3 className="font-semibold text-tech-grey mb-3 uppercase text-sm tracking-wide">Top Territories</h3>
                     <div className="grid grid-cols-3 gap-3">
                       {result.metrics.top_territories.slice(0, 3).map((territory, idx) => (
-                        <div key={idx} className="text-center p-2 bg-gray-50 rounded">
+                        <div key={idx} className="text-center p-2 bg-black bg-opacity-50 border border-border-grey rounded">
                           <p className="font-semibold">{territory.country}</p>
-                          <p className="text-sm text-gray-600">{formatNumber(territory.streams)} streams</p>
+                          <p className="text-sm text-tech-grey">{formatNumber(territory.streams)} streams</p>
                         </div>
                       ))}
                     </div>
@@ -173,30 +173,30 @@ export default function Search() {
                 )}
 
                 {result.artist_metrics && (
-                  <div className="border-t pt-4">
-                    <h3 className="font-semibold text-gray-700 mb-3">Artist Metrics</h3>
+                  <div className="border-t border-border-grey pt-4">
+                    <h3 className="font-semibold text-tech-grey mb-3 uppercase text-sm tracking-wide">Artist Metrics</h3>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <div>
-                        <p className="text-xs text-gray-500 mb-1">Monthly Listeners</p>
+                        <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Monthly Listeners</p>
                         <p className="text-lg font-semibold">{formatNumber(result.artist_metrics.monthly_listeners || 0)}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 mb-1">Followers</p>
+                        <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">Followers</p>
                         <p className="text-lg font-semibold">{formatNumber(result.artist_metrics.followers || 0)}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-500 mb-1">3-Month Growth</p>
-                        <p className={`text-lg font-semibold ${(result.artist_metrics.follower_growth_3_month || 0) > 0 ? 'text-green-600' : 'text-gray-700'}`}>
+                        <p className="text-xs text-tech-grey mb-1 uppercase tracking-wide">3-Month Growth</p>
+                        <p className={`text-lg font-semibold ${(result.artist_metrics.follower_growth_3_month || 0) > 0 ? 'text-green-400' : 'text-tech-grey'}`}>
                           {(result.artist_metrics.follower_growth_3_month || 0) > 0 ? '+' : ''}{(result.artist_metrics.follower_growth_3_month || 0).toFixed(1)}%
                         </p>
                       </div>
                     </div>
                     {result.artist_metrics.genre_tags && result.artist_metrics.genre_tags.length > 0 && (
                       <div className="mt-3">
-                        <p className="text-xs text-gray-500 mb-2">Genres</p>
+                        <p className="text-xs text-tech-grey mb-2 uppercase tracking-wide">Genres</p>
                         <div className="flex flex-wrap gap-2">
                           {result.artist_metrics.genre_tags.map((tag, idx) => (
-                            <span key={idx} className="px-3 py-1 bg-ampersound-red bg-opacity-10 text-ampersound-red rounded-full text-sm">
+                            <span key={idx} className="px-3 py-1 bg-signal-red bg-opacity-20 text-signal-red border border-signal-red rounded text-sm">
                               {tag}
                             </span>
                           ))}
@@ -207,12 +207,12 @@ export default function Search() {
                 )}
 
                 {result.in_catalog && result.spotify_link && (
-                  <div className="mt-4 pt-4 border-t">
+                  <div className="mt-4 pt-4 border-t border-border-grey">
                     <a
                       href={result.spotify_link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-ampersound-red hover:underline"
+                      className="text-signal-red hover:underline uppercase text-sm tracking-wide font-bold"
                     >
                       View on Spotify →
                     </a>

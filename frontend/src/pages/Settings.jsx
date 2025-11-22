@@ -31,17 +31,19 @@ export default function Settings() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-8">Admin Settings</h1>
+    <div className="container mx-auto px-4 py-8 bg-void-black min-h-screen">
+      <h1 className="text-3xl font-bold font-heading mb-8 uppercase tracking-wide">Admin Settings</h1>
 
-      <div className="max-w-2xl bg-white rounded-lg shadow p-6 mb-6">
-        <h2 className="text-xl font-bold mb-4">API Configuration Status</h2>
+      <div className="max-w-2xl bg-surface-black border border-border-grey rounded shadow-lg p-6 mb-6 hover:border-signal-red transition-colors duration-200">
+        <h2 className="text-xl font-bold font-heading mb-4 uppercase tracking-wide">API Configuration Status</h2>
         <div className="space-y-3">
           {Object.entries(apiStatus).map(([key, configured]) => (
-            <div key={key} className="flex items-center justify-between py-2 border-b">
-              <span className="font-medium">{key}</span>
-              <span className={`px-3 py-1 rounded text-sm ${
-                configured ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+            <div key={key} className="flex items-center justify-between py-2 border-b border-border-grey">
+              <span className="font-medium text-tech-grey uppercase text-sm tracking-wide">{key}</span>
+              <span className={`px-3 py-1 rounded text-sm font-bold border ${
+                configured 
+                  ? 'bg-green-500 bg-opacity-20 text-green-400 border-green-500' 
+                  : 'bg-orange-500 bg-opacity-20 text-orange-400 border-orange-500'
               }`}>
                 {configured ? 'Configured' : 'Using Mock Data'}
               </span>
@@ -50,9 +52,9 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="max-w-2xl bg-blue-50 border-l-4 border-blue-500 p-4">
-        <h3 className="font-semibold mb-2">How to Configure API Keys:</h3>
-        <ol className="list-decimal list-inside space-y-2 text-sm">
+      <div className="max-w-2xl bg-signal-red bg-opacity-10 border-l-4 border-signal-red p-4 rounded">
+        <h3 className="font-semibold mb-2 uppercase tracking-wide">How to Configure API Keys:</h3>
+        <ol className="list-decimal list-inside space-y-2 text-sm text-tech-grey">
           <li>Go to the Replit Secrets panel (Tools → Secrets or the lock icon)</li>
           <li>Add the following environment variables:
             <ul className="ml-6 mt-2 space-y-1 list-disc">
@@ -69,7 +71,7 @@ export default function Settings() {
       </div>
 
       {message && (
-        <div className="max-w-2xl mt-4 p-4 bg-blue-100 text-blue-700 rounded">
+        <div className="max-w-2xl mt-4 p-4 bg-signal-red bg-opacity-20 border border-signal-red text-signal-red rounded">
           {message}
         </div>
       )}
