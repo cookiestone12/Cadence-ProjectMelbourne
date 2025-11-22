@@ -11,7 +11,8 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #0a0a0a;
+  background: linear-gradient(135deg, #0a0a0a 0%, rgba(230, 46, 46, 0.08) 25%, rgba(138, 43, 226, 0.06) 50%, rgba(230, 46, 46, 0.08) 75%, #0a0a0a 100%), #0a0a0a;
+  background-attachment: fixed;
   color: #FFFFFF;
 }
 
