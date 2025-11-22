@@ -28,12 +28,15 @@ An internal demo dashboard showcasing Ampersound Intelligence's catalog intellig
 - **Mock External Data**: Simulation of Chartmetric, Spotify, and Luminate responses.
 - **Demo Catalog Seeding**: Auto-populates 5 demo songs with varying release dates (1-8 years old) on first run.
 - **Catalog Grouping**: Songs organized by catalog with ownership percentages.
-- **File Upload**: Drag-and-drop Schedule A processing with tier-aware ingestion and deduplication (internal demo only).
+- **File Upload**: Drag-and-drop Schedule A processing with tier-aware ingestion and deduplication (internal demo only). Parser reads songwriter info from cells B5-B7 and song data from row 12 onwards to match template structure.
 - **Ampersound Branding**: Red theme with an "Internal Demo" badge.
 - **Multi-Platform Revenue Tracking**: Tracks streams across 5 major platforms (Spotify, Apple Music, YouTube Music, Amazon Music, Tidal) representing ~62.5% of global market. Uses accurate 2024-2025 platform-specific master recording rates ($0.003-$0.01284/stream) while publishing rates remain consistent ($0.0012 premium, $0.0004 ad-supported). Revenue separated into Publishing and Master columns throughout UI.
 - **Tier-Aware Ingestion**: Upload endpoint preserves uploader-provided premium/ad-supported stream breakdowns when available, falling back to market-share estimation for missing data. Supports re-upload deduplication with fresh valuation recalculation.
 - **Black Box Tracking**: Collectible publishing value and estimated black box loss calculations based on song age (0-3 years: 100%, 3-5 years: 50%, 5+ years: 10% collectible).
 - **Excel Export**: Comprehensive 4-sheet reports (Catalog Summary, Territory Breakdown, Song Details, Methodology) with downloadable XLSX format.
+- **Excel Templates**: Professional downloadable templates matching "Amplified Signal" branding:
+  - **Export Reports**: Dark theme with Signal Red (#E62E2E) branding, Inter font, uppercase titles in reports
+  - **Schedule A Upload Template**: Light theme (print-friendly) with Signal Red headers, white text, professional layout. Includes songwriter info section (rows 5-7) and song catalog table (starting row 12). Download via Home page.
 
 ### Database Schema
 - **users**: Authentication.

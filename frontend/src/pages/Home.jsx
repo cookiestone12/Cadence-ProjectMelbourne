@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 
 export default function Home() {
   const handleDownloadTemplate = () => {
-    alert('Ampersound Schedule A template coming soon. Please contact support for template access.')
+    // Trigger download of Schedule A template
+    window.location.href = '/api/catalog/template/schedule-a'
   }
 
   return (

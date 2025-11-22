@@ -540,22 +540,23 @@ async def upload_schedule_a(
             wb = openpyxl.load_workbook(io.BytesIO(content))
             ws = wb.active
             
-            # Extract songwriter info (assuming first few rows)
+            # Extract songwriter info from updated template format (rows 5-7)
             songwriter_data = {
-                "name": ws['B1'].value if ws['B1'].value else "Unknown",
-                "pro_affiliation": ws['B2'].value,
-                "ipi_number": ws['B3'].value
+                "name": ws['B5'].value if ws['B5'].value else "Unknown",
+                "pro_affiliation": ws['B6'].value,
+                "ipi_number": ws['B7'].value
             }
             
-            # Extract song data (assuming table starts at row 5+)
-            for row in ws.iter_rows(min_row=6, values_only=True):
+            # Extract song data (table starts at row 12, after headers in row 11)
+            for row in ws.iter_rows(min_row=12, values_only=True):
                 if row[0]:  # If title exists
                     songs_data.append({
                         "title": row[0],
                         "artist_name": row[1] if row[1] else "Unknown",
                         "publishing_percentage": float(row[2]) if row[2] else 0.0,
                         "master_percentage": float(row[3]) if row[3] else 0.0,
-                        "spotify_link": row[4] if row[4] else None
+                        "spotify_link": row[4] if row[4] else None,
+                        "release_date": row[5] if row[5] else None
                     })
         
         elif filename.endswith('.pdf'):
@@ -1040,16 +1041,25 @@ def export_catalog_report(
     # Remove default sheet
     wb.remove(wb.active)
     
-    # Define styles
-    header_fill = PatternFill(start_color="7B2CBF", end_color="7B2CBF", fill_type="solid")
-    header_font = Font(color="FFFFFF", bold=True)
+    # Define styles - Ampersound Signal Red branding
+    header_fill = PatternFill(start_color="E62E2E", end_color="E62E2E", fill_type="solid")
+    header_font = Font(name="Inter", color="FFFFFF", bold=True, size=11)
     header_alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Title styles
+    title_font = Font(name="Inter", size=16, bold=True, color="E62E2E")
+    subtitle_font = Font(name="Inter", size=10, color="666666")
     
     # Sheet 1: Catalog Summary
     ws_summary = wb.create_sheet("Catalog Summary")
-    ws_summary.append(["Ampersound Catalog Intelligence Report"])
+    ws_summary.append(["AMPERSOUND CATALOG INTELLIGENCE REPORT"])
+    ws_summary["A1"].font = title_font
     ws_summary.append(["Catalog:", catalog.name])
+    ws_summary["A2"].font = subtitle_font
+    ws_summary["B2"].font = Font(name="Inter", size=10, bold=True)
     ws_summary.append(["Generated:", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")])
+    ws_summary["A3"].font = subtitle_font
+    ws_summary["B3"].font = subtitle_font
     ws_summary.append([])
     
     # Calculate summary metrics
@@ -1300,6 +1310,136 @@ def export_catalog_report(
     safe_catalog_name = ''.join(c if c.isalnum() or c in (' ', '_', '-') else '_' for c in catalog.name)
     safe_catalog_name = safe_catalog_name.replace(' ', '_')
     filename = f"Ampersound_Catalog_Report_{safe_catalog_name}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+@router.get("/template/schedule-a")
+def download_schedule_a_template():
+    """Generate and serve the official Ampersound Schedule A upload template"""
+    
+    # Create Excel workbook
+    wb = openpyxl.Workbook()
+    
+    # Remove default sheet and create a new one
+    wb.remove(wb.active)
+    ws = wb.create_sheet("Schedule A")
+    
+    # Define styles - Ampersound branding
+    title_font = Font(name="Inter", size=18, bold=True, color="E62E2E")
+    section_header_font = Font(name="Inter", size=12, bold=True, color="FFFFFF")
+    section_header_fill = PatternFill(start_color="E62E2E", end_color="E62E2E", fill_type="solid")
+    field_label_font = Font(name="Inter", size=10, bold=True, color="333333")
+    table_header_font = Font(name="Inter", size=10, bold=True, color="FFFFFF")
+    table_header_fill = PatternFill(start_color="E62E2E", end_color="E62E2E", fill_type="solid")
+    instruction_font = Font(name="Inter", size=9, italic=True, color="666666")
+    center_alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Title
+    ws.merge_cells('A1:F1')
+    ws['A1'] = "AMPERSOUND SCHEDULE A TEMPLATE"
+    ws['A1'].font = title_font
+    ws['A1'].alignment = center_alignment
+    ws.row_dimensions[1].height = 30
+    
+    # Subtitle
+    ws.merge_cells('A2:F2')
+    ws['A2'] = "Catalog Upload Template - Official Use Only"
+    ws['A2'].font = Font(name="Inter", size=10, color="666666", italic=True)
+    ws['A2'].alignment = center_alignment
+    
+    # Empty row
+    ws.append([])
+    
+    # Songwriter Information Section
+    ws.merge_cells('A4:F4')
+    ws['A4'] = "SONGWRITER INFORMATION"
+    ws['A4'].font = section_header_font
+    ws['A4'].fill = section_header_fill
+    ws['A4'].alignment = center_alignment
+    ws.row_dimensions[4].height = 25
+    
+    # Songwriter fields
+    ws.append(["Songwriter Name:", "", "", "", "", ""])
+    ws['A5'].font = field_label_font
+    ws.merge_cells('B5:F5')
+    
+    ws.append(["PRO Affiliation:", "", "", "", "", ""])
+    ws['A6'].font = field_label_font
+    ws.merge_cells('B6:F6')
+    
+    ws.append(["IPI Number:", "", "", "", "", ""])
+    ws['A7'].font = field_label_font
+    ws.merge_cells('B7:F7')
+    
+    # Empty rows
+    ws.append([])
+    ws.append([])
+    
+    # Song Catalog Table Header
+    ws.merge_cells('A10:F10')
+    ws['A10'] = "SONG CATALOG"
+    ws['A10'].font = section_header_font
+    ws['A10'].fill = section_header_fill
+    ws['A10'].alignment = center_alignment
+    ws.row_dimensions[10].height = 25
+    
+    # Table column headers
+    headers = ["Song Title", "Artist Name", "Publishing %", "Master %", "Spotify Link", "Release Date"]
+    ws.append(headers)
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=11, column=col_idx)
+        cell.font = table_header_font
+        cell.fill = table_header_fill
+        cell.alignment = center_alignment
+    ws.row_dimensions[11].height = 20
+    
+    # Add 15 empty rows for song data
+    for i in range(15):
+        ws.append(["", "", "", "", "", ""])
+    
+    # Instructions section
+    ws.append([])
+    ws.append([])
+    ws.merge_cells(f'A{ws.max_row}:F{ws.max_row}')
+    ws[f'A{ws.max_row}'] = "INSTRUCTIONS"
+    ws[f'A{ws.max_row}'].font = Font(name="Inter", size=11, bold=True, color="E62E2E")
+    
+    ws.append([])
+    instructions = [
+        "1. Fill in your songwriter information in the designated fields above",
+        "2. Enter each song in the catalog table with all required information",
+        "3. Publishing % and Master % should be entered as numbers (e.g., 50 for 50%)",
+        "4. Spotify Link should be the full URL to the track on Spotify",
+        "5. Release Date format: YYYY-MM-DD (e.g., 2024-01-15)",
+        "6. Save this file and upload it through the Ampersound platform",
+        "7. The system will automatically fetch analytics and calculate valuations",
+        "",
+        "For assistance, contact Ampersound support"
+    ]
+    
+    for instruction in instructions:
+        ws.append([instruction])
+        ws[f'A{ws.max_row}'].font = instruction_font
+        ws.merge_cells(f'A{ws.max_row}:F{ws.max_row}')
+    
+    # Set column widths
+    ws.column_dimensions['A'].width = 30
+    ws.column_dimensions['B'].width = 25
+    ws.column_dimensions['C'].width = 15
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 40
+    ws.column_dimensions['F'].width = 15
+    
+    # Save to BytesIO buffer
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f"Ampersound_Schedule_A_Template_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
     
     return StreamingResponse(
         output,
