@@ -3,15 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from .models import Base, engine
-from .routes import auth, catalog, settings
-from .seed_data import init_seed_data
+from .routes import (
+    auth, catalog, settings,
+    organizations, creators, songs, credits,
+    checklist, exports, valuations
+)
 import os
 from pathlib import Path
 
 if not os.getenv("SESSION_SECRET"):
     raise RuntimeError("SESSION_SECRET environment variable must be set for production use")
 
-app = FastAPI(title="Ampersound Catalog Intelligence API")
+app = FastAPI(title="Gotcha Catalog Manager API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -21,19 +24,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-Base.metadata.create_all(bind=engine)
-
-@app.on_event("startup")
-def startup_event():
-    init_seed_data()
-
 app.include_router(auth.router)
 app.include_router(catalog.router)
 app.include_router(settings.router)
+app.include_router(organizations.router)
+app.include_router(creators.router)
+app.include_router(songs.router)
+app.include_router(credits.router)
+app.include_router(checklist.router)
+app.include_router(exports.router)
+app.include_router(valuations.router)
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "healthy", "service": "Ampersound Catalog Intelligence"}
+    return {"status": "healthy", "service": "Gotcha Catalog Manager"}
 
 # Serve static files from frontend build (production)
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"

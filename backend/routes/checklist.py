@@ -1,0 +1,130 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+from pydantic import BaseModel
+from typing import List
+from ..models import (
+    get_db, SongChecklistStatus, ChecklistItem, Song,
+    OrganizationMember, User
+)
+from ..utils.auth import get_current_user
+
+router = APIRouter(prefix="/api/songs", tags=["checklist"])
+
+class ChecklistItemResponse(BaseModel):
+    id: int
+    code: str
+    category: str
+    description: str
+    weight: int
+    
+    class Config:
+        from_attributes = True
+
+class ChecklistStatusUpdateRequest(BaseModel):
+    checklist_item_id: int
+    status: str
+
+class ChecklistBatchUpdateRequest(BaseModel):
+    updates: List[ChecklistStatusUpdateRequest]
+
+@router.get("/checklist-items", response_model=List[ChecklistItemResponse])
+def get_checklist_items(db: Session = Depends(get_db)):
+    items = db.query(ChecklistItem).all()
+    return items
+
+@router.get("/{song_id}/checklist")
+def get_song_checklist(
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    song = db.query(Song).filter(Song.id == song_id).first()
+    
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+    
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == song.organization_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized to access this song")
+    
+    checklist_statuses = db.query(SongChecklistStatus, ChecklistItem).join(
+        ChecklistItem, SongChecklistStatus.checklist_item_id == ChecklistItem.id
+    ).filter(SongChecklistStatus.song_id == song_id).all()
+    
+    return {
+        "song_id": song_id,
+        "health_score": song.status_health_score,
+        "statuses": [
+            {
+                "id": status.id,
+                "checklist_item_id": item.id,
+                "code": item.code,
+                "category": item.category,
+                "description": item.description,
+                "weight": item.weight,
+                "status": status.status
+            }
+            for status, item in checklist_statuses
+        ]
+    }
+
+@router.patch("/{song_id}/checklist")
+def update_song_checklist(
+    song_id: int,
+    request: ChecklistBatchUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    song = db.query(Song).filter(Song.id == song_id).first()
+    
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+    
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == song.organization_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this song")
+    
+    for update in request.updates:
+        status = db.query(SongChecklistStatus).filter(
+            SongChecklistStatus.song_id == song_id,
+            SongChecklistStatus.checklist_item_id == update.checklist_item_id
+        ).first()
+        
+        if status:
+            status.status = update.status
+        else:
+            new_status = SongChecklistStatus(
+                song_id=song_id,
+                checklist_item_id=update.checklist_item_id,
+                status=update.status
+            )
+            db.add(new_status)
+    
+    total_weight = db.query(func.sum(ChecklistItem.weight)).scalar() or 1
+    
+    completed_weight = db.query(func.sum(ChecklistItem.weight)).join(
+        SongChecklistStatus,
+        ChecklistItem.id == SongChecklistStatus.checklist_item_id
+    ).filter(
+        SongChecklistStatus.song_id == song_id,
+        SongChecklistStatus.status == "COMPLETED"
+    ).scalar() or 0
+    
+    health_score = (completed_weight / total_weight) * 100
+    song.status_health_score = round(health_score, 2)
+    
+    db.commit()
+    
+    return {
+        "message": "Checklist updated",
+        "health_score": song.status_health_score
+    }
