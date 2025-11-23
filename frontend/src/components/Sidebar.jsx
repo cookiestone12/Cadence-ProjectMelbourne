@@ -30,8 +30,8 @@ export default function Sidebar({ user, onLogout }) {
   return (
     <div className="h-screen w-64 bg-gradient-to-b from-gray-900 to-black text-white flex flex-col border-r border-gray-800">
       <div className="p-6 border-b border-gray-800">
-        <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
-          Gotcha
+        <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+          Ampersound Intelligence
         </h1>
         <p className="text-sm text-gray-400 mt-1">Catalog Manager</p>
       </div>

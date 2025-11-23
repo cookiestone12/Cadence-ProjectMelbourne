@@ -1,4 +1,4 @@
-# Gotcha Catalog Manager - Multi-Tenant Rights & Catalog Administration
+# Ampersound Intelligence - Catalog Manager - Multi-Tenant Rights & Catalog Administration
 
 ## Overview
 A comprehensive multi-tenant catalog management platform for labels, publishers, production companies, and individual creators. Features an Apple Music-style interface with creator-centric catalog views, health scoring, placement tracking, and rights administration. Built using Python/FastAPI/SQLAlchemy/PostgreSQL stack.
@@ -189,7 +189,7 @@ health_score = (sum of completed item weights / total weight) × 100
 
 - **Color Scheme**: Purple (#9333EA) to Pink (#EC4899) gradient
 - **Typography**: Sans-serif, clean and modern
-- **Logo**: Text-based "Gotcha" with gradient effect
+- **Logo**: Text-based "Ampersound Intelligence" with gradient effect
 - **Aesthetic**: Apple Music-inspired design language
 
 ## External Dependencies

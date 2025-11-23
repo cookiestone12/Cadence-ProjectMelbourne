@@ -1,10 +1,10 @@
-# Gotcha Catalog Manager
+# Ampersound Intelligence - Catalog Manager
 
 **Multi-Tenant Rights & Catalog Administration Platform** - A comprehensive catalog management system for labels, publishers, production companies, and individual creators, featuring Apple Music-style interface with creator-centric catalog views, health scoring, and rights administration.
 
 ## Overview
 
-Gotcha Catalog Manager is a multi-tenant platform that combines sophisticated catalog administration with an intuitive, modern interface. Built for music industry professionals, it provides complete visibility into catalog health, creator performance, placement tracking, and rights management.
+Ampersound Intelligence Catalog Manager is a multi-tenant platform that combines sophisticated catalog administration with an intuitive, modern interface. Built for music industry professionals, it provides complete visibility into catalog health, creator performance, placement tracking, and rights management.
 
 ### Key Features
 
@@ -214,7 +214,7 @@ Checklist items can be dynamically added, and the system automatically creates s
 ## Branding
 
 - **Primary Gradient**: Purple (#9333EA) to Pink (#EC4899)
-- **Gotcha Logo**: Clean text-based logo with gradient
+- **Ampersound Intelligence Logo**: Clean text-based logo with gradient
 - **Apple Music Aesthetic**: Sidebar navigation, hero headers, rounded cards, smooth transitions
 
 ## Future Enhancements
@@ -229,13 +229,13 @@ Planned features:
 
 ## Support
 
-For questions about Gotcha Catalog Manager, contact your administrator or the development team.
+For questions about Ampersound Intelligence Catalog Manager, contact your administrator or the development team.
 
 ## License
 
-Proprietary © 2025
+Proprietary - Ampersound Intelligence © 2025
 
 ---
 
-**Gotcha Catalog Manager**
-*Modern Catalog Administration for the Music Industry*
+**Ampersound Intelligence**
+*Advanced Music Catalog Intelligence & Administration*
