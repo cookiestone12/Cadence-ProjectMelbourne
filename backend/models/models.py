@@ -143,6 +143,19 @@ class Song(Base):
     is_invoiced = Column(Boolean, default=False)
     is_paid = Column(Boolean, default=False)
     
+    is_released = Column(Boolean, default=False)
+    label = Column(String, nullable=True)
+    publishing_percentage = Column(Float, nullable=True)
+    master_percentage = Column(Float, nullable=True)
+    advance_amount = Column(Float, nullable=True)
+    recording_code = Column(String, nullable=True)
+    
+    master_paid = Column(String, nullable=True)
+    soundexchange_registered = Column(String, nullable=True)
+    payment_status = Column(String, nullable=True)
+    contract_location = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

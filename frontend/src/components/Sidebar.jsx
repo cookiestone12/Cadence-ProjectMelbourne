@@ -23,7 +23,6 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/', label: 'Home', icon: HomeIcon },
     { path: '/roster', label: 'Roster', icon: UsersIcon },
     { path: '/catalog', label: 'Catalog', icon: MusicalNoteIcon },
-    { path: '/placements', label: 'Placements', icon: DocumentTextIcon },
     { path: '/reports', label: 'Reports', icon: ChartBarIcon },
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
   ]

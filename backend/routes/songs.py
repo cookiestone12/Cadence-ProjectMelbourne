@@ -27,6 +27,17 @@ class SongResponse(BaseModel):
     is_registered_with_dsp: bool
     is_invoiced: bool
     is_paid: bool
+    is_released: bool
+    label: Optional[str]
+    publishing_percentage: Optional[float]
+    master_percentage: Optional[float]
+    advance_amount: Optional[float]
+    recording_code: Optional[str]
+    master_paid: Optional[str]
+    soundexchange_registered: Optional[str]
+    payment_status: Optional[str]
+    contract_location: Optional[str]
+    notes: Optional[str]
     
     class Config:
         from_attributes = True
@@ -76,6 +87,17 @@ class SongDetailResponse(BaseModel):
     is_registered_with_dsp: bool
     is_invoiced: bool
     is_paid: bool
+    is_released: bool
+    label: Optional[str]
+    publishing_percentage: Optional[float]
+    master_percentage: Optional[float]
+    advance_amount: Optional[float]
+    recording_code: Optional[str]
+    master_paid: Optional[str]
+    soundexchange_registered: Optional[str]
+    payment_status: Optional[str]
+    contract_location: Optional[str]
+    notes: Optional[str]
     credits: List[CreditResponse]
     dsp_links: List[DSPLinkResponse]
     checklist_statuses: List[ChecklistStatusResponse]
@@ -170,7 +192,18 @@ def get_organization_songs(
             "is_registered_with_pro": song.is_registered_with_pro,
             "is_registered_with_dsp": song.is_registered_with_dsp,
             "is_invoiced": song.is_invoiced,
-            "is_paid": song.is_paid
+            "is_paid": song.is_paid,
+            "is_released": song.is_released,
+            "label": song.label,
+            "publishing_percentage": song.publishing_percentage,
+            "master_percentage": song.master_percentage,
+            "advance_amount": song.advance_amount,
+            "recording_code": song.recording_code,
+            "master_paid": song.master_paid,
+            "soundexchange_registered": song.soundexchange_registered,
+            "payment_status": song.payment_status,
+            "contract_location": song.contract_location,
+            "notes": song.notes
         }
         for song in songs
     ]
@@ -219,6 +252,17 @@ def get_song(
         "is_registered_with_dsp": song.is_registered_with_dsp,
         "is_invoiced": song.is_invoiced,
         "is_paid": song.is_paid,
+        "is_released": song.is_released,
+        "label": song.label,
+        "publishing_percentage": song.publishing_percentage,
+        "master_percentage": song.master_percentage,
+        "advance_amount": song.advance_amount,
+        "recording_code": song.recording_code,
+        "master_paid": song.master_paid,
+        "soundexchange_registered": song.soundexchange_registered,
+        "payment_status": song.payment_status,
+        "contract_location": song.contract_location,
+        "notes": song.notes,
         "credits": [
             {
                 "id": credit.id,
@@ -273,7 +317,8 @@ def create_song(
         isrc=request.isrc,
         iswc=request.iswc,
         project_title=request.project_title,
-        release_date=request.release_date
+        release_date=request.release_date,
+        is_released=(request.release_date is not None)
     )
     db.add(song)
     db.flush()
@@ -304,7 +349,18 @@ def create_song(
         "is_registered_with_pro": song.is_registered_with_pro,
         "is_registered_with_dsp": song.is_registered_with_dsp,
         "is_invoiced": song.is_invoiced,
-        "is_paid": song.is_paid
+        "is_paid": song.is_paid,
+        "is_released": song.is_released,
+        "label": song.label,
+        "publishing_percentage": song.publishing_percentage,
+        "master_percentage": song.master_percentage,
+        "advance_amount": song.advance_amount,
+        "recording_code": song.recording_code,
+        "master_paid": song.master_paid,
+        "soundexchange_registered": song.soundexchange_registered,
+        "payment_status": song.payment_status,
+        "contract_location": song.contract_location,
+        "notes": song.notes
     }
 
 @router.patch("/{song_id}", response_model=SongResponse)
@@ -331,6 +387,10 @@ def update_song(
     for key, value in update_data.items():
         setattr(song, key, value)
     
+    # Auto-update is_released if release_date changes
+    if 'release_date' in update_data:
+        song.is_released = (song.release_date is not None)
+    
     db.commit()
     db.refresh(song)
     
@@ -348,5 +408,16 @@ def update_song(
         "is_registered_with_pro": song.is_registered_with_pro,
         "is_registered_with_dsp": song.is_registered_with_dsp,
         "is_invoiced": song.is_invoiced,
-        "is_paid": song.is_paid
+        "is_paid": song.is_paid,
+        "is_released": song.is_released,
+        "label": song.label,
+        "publishing_percentage": song.publishing_percentage,
+        "master_percentage": song.master_percentage,
+        "advance_amount": song.advance_amount,
+        "recording_code": song.recording_code,
+        "master_paid": song.master_paid,
+        "soundexchange_registered": song.soundexchange_registered,
+        "payment_status": song.payment_status,
+        "contract_location": song.contract_location,
+        "notes": song.notes
     }

@@ -5,8 +5,7 @@ import axios from 'axios'
 import HomePage from './pages/HomePage'
 import RosterPage from './pages/RosterPage'
 import CreatorDetailPage from './pages/CreatorDetailPage'
-import CatalogPage from './pages/CatalogPage'
-import PlacementsPage from './pages/PlacementsPage'
+import NewCatalogPage from './pages/NewCatalogPage'
 import ReportsPage from './pages/ReportsPage'
 import ValuationPage from './pages/ValuationPage'
 import Settings from './pages/Settings'
@@ -86,8 +85,7 @@ function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/roster" element={<RosterPage />} />
             <Route path="/roster/:id" element={<CreatorDetailPage />} />
-            <Route path="/catalog" element={<CatalogPage />} />
-            <Route path="/placements" element={<PlacementsPage />} />
+            <Route path="/catalog" element={<NewCatalogPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/valuation" element={<ValuationPage />} />
             <Route path="/settings" element={<Settings />} />

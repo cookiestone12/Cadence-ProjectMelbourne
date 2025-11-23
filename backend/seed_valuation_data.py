@@ -111,8 +111,8 @@ def seed_valuation_data():
                 pct = territory_distribution[territory_code]
                 terr_streams = int(total_streams * pct)
                 
-                stream_rate_cents = random.uniform(0.003, 0.006)
-                gross_revenue = terr_streams * stream_rate_cents
+                ICARUS_STREAM_RATE = 0.0012
+                gross_revenue = terr_streams * ICARUS_STREAM_RATE
                 
                 publishing_split = random.uniform(0.55, 0.65)
                 publishing_revenue_cents = int(gross_revenue * publishing_split * ownership)
@@ -131,8 +131,8 @@ def seed_valuation_data():
                 )
                 db.add(territory)
             
-            stream_rate = random.uniform(0.003, 0.006)
-            monthly_revenue_cents = int(total_streams * stream_rate * ownership * 100)
+            ICARUS_STREAM_RATE = 0.0012
+            monthly_revenue_cents = int(total_streams * ICARUS_STREAM_RATE * ownership * 100)
             annual_revenue_cents = monthly_revenue_cents * 12
             thirty_day_revenue_cents = monthly_revenue_cents
             ninety_day_revenue_cents = monthly_revenue_cents * 3

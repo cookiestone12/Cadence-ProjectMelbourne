@@ -1,326 +1,333 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import {
+  XMarkIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon,
+  MusicalNoteIcon, ChartBarIcon, DocumentTextIcon, LinkIcon
+} from '@heroicons/react/24/outline'
 
-export default function SongDetailModal({ songId, onClose }) {
-  const [song, setSong] = useState(null)
+export default function SongDetailModal({ song, onClose }) {
+  const [activeTab, setActiveTab] = useState('overview')
+  const [songDetails, setSongDetails] = useState(null)
   const [loading, setLoading] = useState(true)
-
+  
   useEffect(() => {
-    fetchSongDetails()
-  }, [songId])
-
-  const fetchSongDetails = async () => {
+    loadSongDetails()
+  }, [song.id])
+  
+  async function loadSongDetails() {
     try {
       const token = localStorage.getItem('token')
-      const response = await axios.get(`/api/catalog/songs/${songId}`, {
+      const response = await axios.get(`/api/songs/${song.id}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
-      setSong(response.data)
+      setSongDetails(response.data)
     } catch (error) {
-      console.error('Error fetching song details:', error)
+      console.error('Failed to load song details:', error)
     } finally {
       setLoading(false)
     }
   }
-
+  
+  const getStatusIcon = (value) => {
+    if (value === 'Yes' || value === true) return <CheckCircleIcon className="w-5 h-5 text-green-500" />
+    if (value === 'No' || value === false) return <XCircleIcon className="w-5 h-5 text-red-500" />
+    return <MinusCircleIcon className="w-5 h-5 text-gray-400" />
+  }
+  
+  const formatCurrency = (cents) => {
+    if (!cents) return '$0.00'
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(cents / 100)
+  }
+  
   const formatNumber = (num) => {
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
-    if (num >= 1000) return (num / 1000).toFixed(0) + 'K'
-    return num?.toString() || '0'
+    if (!num) return '0'
+    return new Intl.NumberFormat('en-US').format(num)
   }
-
-  const calculateAge = (releaseDate) => {
-    if (!releaseDate) return 'N/A'
-    const now = new Date()
-    const release = new Date(releaseDate)
-    const years = (now - release) / (1000 * 60 * 60 * 24 * 365.25)
-    return `${years.toFixed(1)} years`
-  }
-
-  const getCollectionWindow = (releaseDate) => {
-    if (!releaseDate) return { decay: 100, label: 'Full collectibility' }
-    const now = new Date()
-    const release = new Date(releaseDate)
-    const years = (now - release) / (1000 * 60 * 60 * 24 * 365.25)
-    
-    if (years <= 3) return { decay: 100, label: '100% collectible (0-3 years)' }
-    if (years <= 5) return { decay: 50, label: '50% collectible (3-5 years)' }
-    return { decay: 10, label: '10% collectible (5+ years)' }
-  }
-
-  if (loading) {
+  
+  if (loading || !songDetails) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
-        <div className="bg-surface-black border border-border-grey rounded-lg p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-signal-red mb-4"></div>
-            <p className="text-white">Loading song details...</p>
-          </div>
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl p-8">
+          <div className="text-gray-500">Loading song details...</div>
         </div>
       </div>
     )
   }
-
-  if (!song) {
-    return null
-  }
-
-  const collectionWindow = getCollectionWindow(song.release_date)
-
+  
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-surface-black border border-border-grey rounded-lg p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h2 className="text-2xl font-bold font-heading text-white uppercase tracking-wide">{song.title}</h2>
-            <p className="text-lg text-tech-grey">{song.artist_name}</p>
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div 
+        className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <h2 className="text-3xl font-bold text-gray-900 mb-2">{songDetails.title}</h2>
+              <p className="text-lg text-gray-600 mb-3">{songDetails.primary_artist}</p>
+              <div className="flex flex-wrap gap-2">
+                {songDetails.is_released && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Released
+                  </span>
+                )}
+                {!songDetails.is_released && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                    Unreleased
+                  </span>
+                )}
+                {songDetails.payment_status === 'PAID' && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    Paid
+                  </span>
+                )}
+                {songDetails.label && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    {songDetails.label}
+                  </span>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <XMarkIcon className="w-8 h-8" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="text-tech-grey hover:text-signal-red text-2xl font-bold"
-          >
-            ×
-          </button>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
-            <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Basic Information</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm text-tech-grey">Release Date</span>
-                <span className="text-sm font-semibold text-white">{song.release_date || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-tech-grey">Song Age</span>
-                <span className="text-sm font-semibold text-white">{calculateAge(song.release_date)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-tech-grey">ISRC</span>
-                <span className="text-sm font-semibold text-white">{song.isrc || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-tech-grey">ISWC</span>
-                <span className="text-sm font-semibold text-white">{song.iswc || 'N/A'}</span>
-              </div>
-            </div>
+        
+        {/* Tabs */}
+        <div className="border-b border-gray-200 px-6">
+          <div className="flex space-x-8">
+            {[
+              { id: 'overview', label: 'Overview', icon: MusicalNoteIcon },
+              { id: 'placement', label: 'Placement Status', icon: DocumentTextIcon },
+              { id: 'streaming', label: 'Streaming & Valuation', icon: ChartBarIcon },
+              { id: 'links', label: 'Credits & Links', icon: LinkIcon }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center space-x-2 py-4 px-1 border-b-2 font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-purple-600 text-purple-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <tab.icon className="w-5 h-5" />
+                <span>{tab.label}</span>
+              </button>
+            ))}
           </div>
-
-          <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
-            <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Ownership</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm text-tech-grey">Publishing %</span>
-                <span className="text-sm font-semibold text-signal-red">{song.publishing_percentage}%</span>
+        </div>
+        
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {activeTab === 'overview' && (
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Basic Information</h3>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Title</label>
+                  <p className="text-gray-900">{songDetails.title}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Primary Artist</label>
+                  <p className="text-gray-900">{songDetails.primary_artist}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Project/Album</label>
+                  <p className="text-gray-900">{songDetails.project_title || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Label</label>
+                  <p className="text-gray-900">{songDetails.label || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Release Date</label>
+                  <p className="text-gray-900">{songDetails.release_date || 'N/A'}</p>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-tech-grey">Master %</span>
-                <span className="text-sm font-semibold text-blue-400">{song.master_percentage}%</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
-            <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Streaming Performance</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm text-tech-grey">Total Streams</span>
-                <span className="text-sm font-semibold text-white">{formatNumber(song.spotify_streams)}</span>
-              </div>
-              {song.premium_streams !== undefined && song.premium_streams !== null && (
-                <>
-                  <div className="flex justify-between pl-4">
-                    <span className="text-xs text-tech-grey">Premium (70%)</span>
-                    <span className="text-sm text-tech-grey">{formatNumber(song.premium_streams)}</span>
+              
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Metadata</h3>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">ISRC</label>
+                  <p className="text-gray-900 font-mono">{songDetails.isrc || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">ISWC</label>
+                  <p className="text-gray-900 font-mono">{songDetails.iswc || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Recording Code</label>
+                  <p className="text-gray-900 font-mono">{songDetails.recording_code || 'N/A'}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Health Score</label>
+                  <div className="flex items-center space-x-3">
+                    <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
+                        style={{ width: `${songDetails.status_health_score || 0}%` }}
+                      ></div>
+                    </div>
+                    <span className="text-sm font-bold text-gray-700">
+                      {Math.round(songDetails.status_health_score || 0)}%
+                    </span>
                   </div>
-                  <div className="flex justify-between pl-4">
-                    <span className="text-xs text-tech-grey">Ad-Supported (30%)</span>
-                    <span className="text-sm text-tech-grey">{formatNumber(song.ad_supported_streams)}</span>
+                </div>
+              </div>
+              
+              {songDetails.notes && (
+                <div className="col-span-2">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Notes</h3>
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{songDetails.notes}</p>
                   </div>
-                </>
+                </div>
               )}
             </div>
-          </div>
-
-          <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
-            <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Black Box Tracking</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm text-tech-grey">Collection Window</span>
-                <span className="text-sm font-semibold text-white">{collectionWindow.label}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-tech-grey">Collectible Value</span>
-                <span className="text-sm font-semibold text-green-400">${formatNumber(song.collectible_publishing_value)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-tech-grey">Black Box Loss</span>
-                <span className="text-sm font-semibold text-signal-red">${formatNumber(song.black_box_loss)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
-          <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Revenue Breakdown</h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs text-tech-grey mb-1">Publishing Revenue</p>
-              <p className="text-lg font-bold text-signal-red">${formatNumber(song.publishing_revenue)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-tech-grey mb-1">Master Revenue</p>
-              <p className="text-lg font-bold text-blue-400">${formatNumber(song.master_revenue)}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
-          <h3 className="text-sm font-semibold font-heading text-tech-grey mb-4 uppercase tracking-wide">Valuations</h3>
-          <div className="grid grid-cols-2 gap-4">
-            {/* Publishing Valuations */}
-            <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-3">
-              <h4 className="text-xs font-semibold font-heading text-purple-400 mb-2 uppercase tracking-wide">Publishing Valuations</h4>
-              <div className="space-y-2">
+          )}
+          
+          {activeTab === 'placement' && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <p className="text-xs text-tech-grey mb-1">Low Scenario</p>
-                  <p className="text-base font-semibold text-purple-400">${formatNumber(song.valuation_low_pub)}</p>
-                  <p className="text-xs text-tech-grey">8× multiplier</p>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Ownership</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Publishing %</label>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {songDetails.publishing_percentage 
+                          ? `${(songDetails.publishing_percentage * 100).toFixed(2)}%`
+                          : 'N/A'
+                        }
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Master %</label>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {songDetails.master_percentage 
+                          ? `${(songDetails.master_percentage * 100).toFixed(2)}%`
+                          : 'N/A'
+                        }
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Advance</label>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {songDetails.advance_amount 
+                          ? `$${songDetails.advance_amount.toLocaleString()}`
+                          : 'N/A'
+                        }
+                      </p>
+                    </div>
+                  </div>
                 </div>
+                
                 <div>
-                  <p className="text-xs text-tech-grey mb-1">Base Scenario</p>
-                  <p className="text-base font-semibold text-purple-400">${formatNumber(song.valuation_base_pub)}</p>
-                  <p className="text-xs text-tech-grey">12× multiplier</p>
-                </div>
-                <div>
-                  <p className="text-xs text-tech-grey mb-1">High Scenario</p>
-                  <p className="text-base font-semibold text-purple-400">${formatNumber(song.valuation_high_pub)}</p>
-                  <p className="text-xs text-tech-grey">18× multiplier</p>
-                </div>
-              </div>
-            </div>
-            
-            {/* Master Valuations */}
-            <div className="bg-black bg-opacity-50 border border-border-grey rounded-lg p-3">
-              <h4 className="text-xs font-semibold font-heading text-orange-400 mb-2 uppercase tracking-wide">Master Valuations</h4>
-              <div className="space-y-2">
-                <div>
-                  <p className="text-xs text-tech-grey mb-1">Low Scenario</p>
-                  <p className="text-base font-semibold text-orange-400">${formatNumber(song.valuation_low_master)}</p>
-                  <p className="text-xs text-tech-grey">8× multiplier</p>
-                </div>
-                <div>
-                  <p className="text-xs text-tech-grey mb-1">Base Scenario</p>
-                  <p className="text-base font-semibold text-orange-400">${formatNumber(song.valuation_base_master)}</p>
-                  <p className="text-xs text-tech-grey">12× multiplier</p>
-                </div>
-                <div>
-                  <p className="text-xs text-tech-grey mb-1">High Scenario</p>
-                  <p className="text-base font-semibold text-orange-400">${formatNumber(song.valuation_high_master)}</p>
-                  <p className="text-xs text-tech-grey">18× multiplier</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-6 bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
-          <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Score Breakdown</h3>
-          <div className="flex justify-between items-center mb-3">
-            <span className="text-lg font-bold text-white">Total Score</span>
-            <span className={`px-3 py-1 rounded text-lg font-bold border ${
-              song.score >= 80 ? 'bg-green-900 bg-opacity-30 text-green-400 border-green-400' :
-              song.score >= 60 ? 'bg-yellow-900 bg-opacity-30 text-yellow-400 border-yellow-400' :
-              'bg-red-900 bg-opacity-30 text-signal-red border-signal-red'
-            }`}>
-              {song.score}/100
-            </span>
-          </div>
-          {song.score_breakdown && (
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-sm text-tech-grey">Catalog Value</span>
-                  <span className="text-sm font-semibold text-white">{song.score_breakdown.catalog_value}/25</span>
-                </div>
-                <div className="w-full bg-border-grey rounded-full h-2">
-                  <div
-                    className="bg-signal-red h-2 rounded-full"
-                    style={{ width: `${(song.score_breakdown.catalog_value / 25) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-sm text-tech-grey">Growth Momentum</span>
-                  <span className="text-sm font-semibold text-white">{song.score_breakdown.growth_momentum}/25</span>
-                </div>
-                <div className="w-full bg-border-grey rounded-full h-2">
-                  <div
-                    className="bg-green-500 h-2 rounded-full"
-                    style={{ width: `${(song.score_breakdown.growth_momentum / 25) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-sm text-tech-grey">Metadata Health</span>
-                  <span className="text-sm font-semibold text-white">{song.score_breakdown.metadata_health}/25</span>
-                </div>
-                <div className="w-full bg-border-grey rounded-full h-2">
-                  <div
-                    className="bg-blue-500 h-2 rounded-full"
-                    style={{ width: `${(song.score_breakdown.metadata_health / 25) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-sm text-tech-grey">Exploitation Potential</span>
-                  <span className="text-sm font-semibold text-white">{song.score_breakdown.exploitation_potential}/25</span>
-                </div>
-                <div className="w-full bg-border-grey rounded-full h-2">
-                  <div
-                    className="bg-yellow-500 h-2 rounded-full"
-                    style={{ width: `${(song.score_breakdown.exploitation_potential / 25) * 100}%` }}
-                  ></div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Status Checklist</h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">Contract Executed</span>
+                      {getStatusIcon(songDetails.has_contract_executed)}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">Contract Location</span>
+                      <span className="text-sm font-medium text-gray-900">{songDetails.contract_location || 'N/A'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">PRO Registered</span>
+                      {getStatusIcon(songDetails.is_registered_with_pro)}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">DSP Registered</span>
+                      {getStatusIcon(songDetails.is_registered_with_dsp)}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">SoundExchange Registered</span>
+                      {getStatusIcon(songDetails.soundexchange_registered)}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">Master Paid</span>
+                      {getStatusIcon(songDetails.master_paid)}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-700">Payment Status</span>
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        songDetails.payment_status === 'PAID' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {songDetails.payment_status || 'N/A'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           )}
-        </div>
-
-        {song.territory_streams && Object.keys(song.territory_streams).length > 0 && (
-          <div className="mt-6 bg-black bg-opacity-50 border border-border-grey rounded-lg p-4">
-            <h3 className="text-sm font-semibold font-heading text-tech-grey mb-3 uppercase tracking-wide">Top 3 Territories</h3>
-            <div className="space-y-2">
-              {Object.entries(song.territory_streams)
-                .map(([territory, data]) => {
-                  const totalStreams = typeof data === 'number' ? data : 
-                    (data.premium || 0) + (data.ad_supported || 0);
-                  return [territory, totalStreams];
-                })
-                .sort(([, a], [, b]) => b - a)
-                .slice(0, 3)
-                .map(([territory, streams], index) => (
-                  <div key={territory} className="flex justify-between items-center">
-                    <span className="text-sm font-medium text-white">
-                      {index + 1}. {territory}
-                    </span>
-                    <span className="text-sm font-semibold text-tech-grey">{formatNumber(streams)} streams</span>
-                  </div>
-                ))}
+          
+          {activeTab === 'streaming' && (
+            <div className="text-center text-gray-500 py-12">
+              Streaming metrics and valuation data will be displayed here
             </div>
-          </div>
-        )}
-
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={onClose}
-            className="bg-signal-red text-white px-6 py-2 rounded-lg hover:bg-opacity-90 transition"
-          >
-            Close
-          </button>
+          )}
+          
+          {activeTab === 'links' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Credits</h3>
+                {songDetails.credits && songDetails.credits.length > 0 ? (
+                  <div className="space-y-2">
+                    {songDetails.credits.map((credit, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        <div>
+                          <p className="font-medium text-gray-900">{credit.creator?.display_name || 'Unknown'}</p>
+                          <p className="text-sm text-gray-500">{credit.role}</p>
+                        </div>
+                        <span className="text-sm font-medium text-gray-700">
+                          {credit.share_percentage ? `${credit.share_percentage}%` : '-'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500">No credits added yet</p>
+                )}
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">DSP Links</h3>
+                {songDetails.dsp_links && songDetails.dsp_links.length > 0 ? (
+                  <div className="space-y-2">
+                    {songDetails.dsp_links.map((link, idx) => (
+                      <a
+                        key={idx}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                      >
+                        <span className="font-medium text-gray-900">{link.platform}</span>
+                        <LinkIcon className="w-5 h-5 text-gray-400" />
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500">No DSP links added yet</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
