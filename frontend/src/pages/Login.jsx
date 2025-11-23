@@ -13,14 +13,9 @@ export default function Login({ onLogin }) {
     setLoading(true)
 
     try {
-      const formData = new FormData()
-      formData.append('username', username)
-      formData.append('password', password)
-
-      const response = await axios.post('/api/auth/login', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+      const response = await axios.post('/api/auth/login', {
+        username,
+        password
       })
 
       const { access_token } = response.data
