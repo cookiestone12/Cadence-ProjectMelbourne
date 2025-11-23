@@ -1,92 +1,101 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 
 export default function Login({ onLogin }) {
-  const [isRegister, setIsRegister] = useState(false)
   const [username, setUsername] = useState('')
-  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const navigate = useNavigate()
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
-    
+    setLoading(true)
+
     try {
-      const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login'
-      const payload = isRegister 
-        ? { username, email, password }
-        : { username, password }
-      
-      const response = await axios.post(endpoint, payload)
-      onLogin(response.data.access_token, response.data.user)
-      navigate('/dashboard')
+      const formData = new FormData()
+      formData.append('username', username)
+      formData.append('password', password)
+
+      const response = await axios.post('/api/auth/login', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      })
+
+      const { access_token } = response.data
+      onLogin(access_token, { username, role: 'Admin' })
     } catch (err) {
-      setError(err.response?.data?.detail || 'An error occurred')
+      setError(err.response?.data?.detail || 'Login failed. Please try again.')
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-void-black">
-      <div className="bg-surface-black border border-border-grey p-8 rounded shadow-lg max-w-md w-full hover:border-signal-red transition-colors duration-200">
-        <div className="flex justify-center mb-6">
-          <img src="/ampersound-logo-3d.png" alt="Ampersound Intelligence" className="h-24" />
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-purple-900 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent mb-2">
+            Gotcha
+          </h1>
+          <p className="text-gray-600">Catalog Manager</p>
         </div>
-        <h2 className="text-3xl font-bold font-heading text-center mb-6 text-signal-red uppercase tracking-wide">
-          Ampersound Catalog Intelligence
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
+
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium mb-1 text-tech-grey uppercase text-xs tracking-wide">Username</label>
+            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+              Username
+            </label>
             <input
+              id="username"
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-2 bg-black bg-opacity-50 border border-border-grey rounded text-white focus:ring-2 focus:ring-signal-red focus:border-signal-red"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               required
+              disabled={loading}
             />
           </div>
-          {isRegister && (
-            <div>
-              <label className="block text-sm font-medium mb-1 text-tech-grey uppercase text-xs tracking-wide">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-2 bg-black bg-opacity-50 border border-border-grey rounded text-white focus:ring-2 focus:ring-signal-red focus:border-signal-red"
-                required
-              />
-            </div>
-          )}
+
           <div>
-            <label className="block text-sm font-medium mb-1 text-tech-grey uppercase text-xs tracking-wide">Password</label>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              Password
+            </label>
             <input
+              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 bg-black bg-opacity-50 border border-border-grey rounded text-white focus:ring-2 focus:ring-signal-red focus:border-signal-red"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              autoComplete="current-password"
               required
+              disabled={loading}
             />
           </div>
-          {error && <p className="text-signal-red text-sm border border-signal-red bg-signal-red bg-opacity-10 p-2 rounded">{error}</p>}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+
           <button
             type="submit"
-            className="w-full bg-signal-red text-white py-2 rounded shadow-red-glow hover:shadow-red-glow-intense hover:scale-105 transition-all duration-200 font-bold uppercase text-sm tracking-wide"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-purple-600 to-pink-500 text-white py-3 rounded-lg font-medium hover:from-purple-700 hover:to-pink-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isRegister ? 'Register' : 'Login'}
+            {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-        <p className="mt-4 text-center text-sm text-tech-grey">
-          {isRegister ? 'Already have an account?' : "Don't have an account?"}
-          <button
-            onClick={() => setIsRegister(!isRegister)}
-            className="ml-2 text-signal-red hover:underline font-bold"
-          >
-            {isRegister ? 'Login' : 'Register'}
-          </button>
-        </p>
+
+        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+          <p className="text-xs text-gray-600 text-center mb-2">Demo Credentials</p>
+          <div className="text-xs text-gray-700 space-y-1">
+            <p><span className="font-medium">Username:</span> admin</p>
+            <p><span className="font-medium">Password:</span> demo123</p>
+          </div>
+        </div>
       </div>
     </div>
   )
