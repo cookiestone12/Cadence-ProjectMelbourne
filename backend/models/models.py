@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, JSON, Enum, Date
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, JSON, Enum as SQLEnum, Date, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -90,9 +90,9 @@ class OrganizationMember(Base):
     __tablename__ = "organization_members"
     
     id = Column(Integer, primary_key=True, index=True)
-    organization_id = Column(Integer, ForeignKey("organizations.id"))
-    user_id = Column(Integer, ForeignKey("users.id"))
-    role = Column(String)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    role = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     organization = relationship("Organization", back_populates="members")
@@ -100,10 +100,13 @@ class OrganizationMember(Base):
 
 class Creator(Base):
     __tablename__ = "creators"
+    __table_args__ = (
+        Index('ix_creators_organization_id', 'organization_id'),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
-    organization_id = Column(Integer, ForeignKey("organizations.id"))
-    display_name = Column(String, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    display_name = Column(String, index=True, nullable=False)
     legal_name = Column(String, nullable=True)
     roles = Column(JSON, default=list)
     primary_territory = Column(String, nullable=True)
@@ -118,11 +121,15 @@ class Creator(Base):
 
 class Song(Base):
     __tablename__ = "songs"
+    __table_args__ = (
+        Index('ix_songs_organization_id', 'organization_id'),
+        Index('ix_songs_org_health', 'organization_id', 'status_health_score'),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
-    organization_id = Column(Integer, ForeignKey("organizations.id"))
-    title = Column(String, index=True)
-    primary_artist = Column(String)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    title = Column(String, index=True, nullable=False)
+    primary_artist = Column(String, nullable=False)
     isrc = Column(String, nullable=True)
     iswc = Column(String, nullable=True)
     project_title = Column(String, nullable=True)
@@ -150,9 +157,9 @@ class SongCredit(Base):
     __tablename__ = "song_credits"
     
     id = Column(Integer, primary_key=True, index=True)
-    song_id = Column(Integer, ForeignKey("songs.id"))
-    creator_id = Column(Integer, ForeignKey("creators.id"))
-    role = Column(String)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=False, index=True)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=False, index=True)
+    role = Column(String, nullable=False)
     share_percentage = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -163,9 +170,9 @@ class SongDSPLink(Base):
     __tablename__ = "song_dsp_links"
     
     id = Column(Integer, primary_key=True, index=True)
-    song_id = Column(Integer, ForeignKey("songs.id"))
-    platform = Column(String)
-    url = Column(String)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=False, index=True)
+    platform = Column(String, nullable=False)
+    url = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     song = relationship("Song", back_populates="dsp_links")
@@ -184,11 +191,15 @@ class ChecklistItem(Base):
 
 class SongChecklistStatus(Base):
     __tablename__ = "song_checklist_status"
+    __table_args__ = (
+        UniqueConstraint('song_id', 'checklist_item_id', name='uq_song_checklist'),
+        Index('ix_song_checklist_song_id', 'song_id'),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
-    song_id = Column(Integer, ForeignKey("songs.id"))
-    checklist_item_id = Column(Integer, ForeignKey("checklist_items.id"))
-    status = Column(String, default="NOT_STARTED")
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=False)
+    checklist_item_id = Column(Integer, ForeignKey("checklist_items.id"), nullable=False)
+    status = Column(String, nullable=False, default="NOT_STARTED")
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     song = relationship("Song", back_populates="checklist_statuses")
@@ -198,9 +209,9 @@ class SongValuationSnapshot(Base):
     __tablename__ = "song_valuation_snapshots"
     
     id = Column(Integer, primary_key=True, index=True)
-    song_id = Column(Integer, ForeignKey("songs.id"))
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=False, index=True)
     valuation_cents = Column(Integer, nullable=True)
-    source = Column(String, default="MANUAL")
+    source = Column(String, nullable=False, default="MANUAL")
     snapshot_date = Column(DateTime, default=datetime.utcnow)
     notes = Column(Text, nullable=True)
     
@@ -210,7 +221,7 @@ class Analytics(Base):
     __tablename__ = "analytics"
     
     id = Column(Integer, primary_key=True, index=True)
-    song_id = Column(Integer, ForeignKey("songs.id"), unique=True)
+    song_id = Column(Integer, ForeignKey("songs.id"), unique=True, nullable=False)
     
     spotify_streams = Column(Integer, default=0)
     spotify_monthly_listeners = Column(Integer, default=0)

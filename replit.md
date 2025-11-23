@@ -1,75 +1,206 @@
-# Ampersound Catalog Intelligence Platform - Internal Demo
+# Gotcha Catalog Manager - Multi-Tenant Rights & Catalog Administration
 
 ## Overview
-An internal demo dashboard showcasing Ampersound Intelligence's catalog intelligence tool. This platform demonstrates advanced capabilities for catalog valuation, scoring, and search, intended for future external client offerings. The project's core purpose is to provide comprehensive analytics for musical catalogs, including multi-tiered valuations, a 4-factor scoring system, and integration with mock external data sources to simulate real-world performance metrics.
+A comprehensive multi-tenant catalog management platform for labels, publishers, production companies, and individual creators. Features an Apple Music-style interface with creator-centric catalog views, health scoring, placement tracking, and rights administration. Built using Python/FastAPI/SQLAlchemy/PostgreSQL stack.
 
 ## User Preferences
 ### Coding Style
-- Python: PEP 8 style, type hints where helpful
-- JavaScript/React: Functional components, hooks
-- CSS: Tailwind utility classes
+- Python: PEP 8 style, type hints, SQLAlchemy ORM patterns
+- JavaScript/React: Functional components, hooks, modern ES6+
+- CSS: Tailwind utility classes with gradient themes
 - Imports: Absolute imports for backend modules
 
 ## System Architecture
 
 ### Tech Stack
-- **Frontend**: React 18, Tailwind CSS, Vite
-- **Backend**: FastAPI (Python 3.11)
-- **Database**: PostgreSQL
-- **Authentication**: JWT (minimal for demo)
+- **Frontend**: React 18, React Router, Tailwind CSS, Vite, Heroicons, Recharts
+- **Backend**: FastAPI (Python 3.11), SQLAlchemy ORM, PostgreSQL
+- **Authentication**: JWT with bcrypt password hashing
+- **Database**: PostgreSQL (Replit-hosted)
 
 ### Core Features
-- **Catalog View**: Summary with multiplier labels (8×, 12×, 18×), score breakdown, songs table with separated publishing/master revenue columns, integrated upload.
-- **Search View**: Universal search across catalog and external mock data.
-- **Song Detail Modal**: Pop-out modal displaying comprehensive analytics per song including release date, age, streams (premium/ad-supported), top 3 territories, ownership %, score breakdown, revenue (publishing/master), black box metrics, and valuations with multipliers.
-- **3-Tier Valuations**: Low (8×), Base (12×), and High (18×) scenarios with multiplier labels displayed throughout UI.
-- **Interactive Valuation Slider**: Dynamic slider (0-15 years) allowing real-time exploration of custom valuation multipliers with instant calculation of total catalog value, separated by publishing and master rights. Updates valuations in real-time as users adjust the multiplier.
-- **4-Factor Scoring**: Evaluates Catalog Value, Growth Momentum, Metadata Health, and Exploitation Potential (0-25 points each, totaling 0-100).
-- **Mock External Data**: Simulation of Chartmetric, Spotify, and Luminate responses.
-- **Demo Catalog Seeding**: Auto-populates 5 demo songs with varying release dates (1-8 years old) on first run.
-- **Catalog Grouping**: Songs organized by catalog with ownership percentages.
-- **File Upload**: Drag-and-drop Schedule A processing with tier-aware ingestion and deduplication (internal demo only). Parser reads songwriter info from cells B5-B7 and song data from row 12 onwards to match template structure.
-- **Ampersound Branding**: Red theme with an "Internal Demo" badge.
-- **Multi-Platform Revenue Tracking**: Tracks streams across 5 major platforms (Spotify, Apple Music, YouTube Music, Amazon Music, Tidal) representing ~62.5% of global market. Uses accurate 2024-2025 platform-specific master recording rates ($0.003-$0.01284/stream) while publishing rates remain consistent ($0.0012 premium, $0.0004 ad-supported). Revenue separated into Publishing and Master columns throughout UI.
-- **Tier-Aware Ingestion**: Upload endpoint preserves uploader-provided premium/ad-supported stream breakdowns when available, falling back to market-share estimation for missing data. Supports re-upload deduplication with fresh valuation recalculation.
-- **Black Box Tracking**: Collectible publishing value and estimated black box loss calculations based on song age (0-3 years: 100%, 3-5 years: 50%, 5+ years: 10% collectible).
-- **Excel Export**: Comprehensive 4-sheet reports (Catalog Summary, Territory Breakdown, Song Details, Methodology) with downloadable XLSX format.
-- **Excel Templates**: Professional downloadable templates matching "Amplified Signal" branding:
-  - **Export Reports**: Dark theme with Signal Red (#E62E2E) branding, Inter font, uppercase titles in reports
-  - **Schedule A Upload Template**: Light theme (print-friendly) with Signal Red headers, white text, professional layout. Includes songwriter info section (rows 5-7) and song catalog table (starting row 12). Download via Home page.
+- **Multi-Tenant Architecture**: Organization-scoped access control with secure data isolation
+- **Apple Music-Style UI**: Gradient sidebar navigation, hero headers, responsive design
+- **Creator Roster Management**: Visual creator cards with stats, detailed profiles with tabs
+- **Health Score System**: Dynamic checklist-based scoring (0-100%) with weighted completion
+- **Catalog View**: Spreadsheet-style table with advanced filters (creator, role, health, status)
+- **Placement Tracking**: Pipeline visualization (Offer → Contract → Executed → Registered → Paid)
+- **Schedule A Export**: CSV generation of creator catalogs
+- **Reports & Analytics**: Health distribution charts, placement rates, actionable insights
+- **Valuation Stub**: Placeholder for future Luminate integration
 
-### Database Schema
-- **users**: Authentication.
-- **catalogs**: Catalog metadata.
-- **songwriters**: Songwriter information.
-- **songs**: Core song data with ownership, valuations (`valuation_low`, `valuation_base`, `valuation_high`, `estimated_revenue`), and scoring (`score`, `score_breakdown`), `streams_by_type`, `territory_streams`.
-- **settings**: System configuration.
+## Database Schema
 
-### Core Engines
-- **Valuation Engine**: Returns estimated revenue and three valuation tiers (Low, Base, High) based on streams, playlists, Chartmetric score, and regional performance. Incorporates publishing vs. master revenue, and premium vs. ad-supported stream differentiation.
-- **Scoring Engine**: Returns a breakdown across four factors: Catalog Value, Growth Momentum, Metadata Health, and Exploitation Potential.
+### Core Models (backend/models/models.py)
+- **Organization**: Multi-tenant root entity (id, name, type, created_at)
+- **OrganizationMember**: User-organization relationship with roles
+- **User**: Authentication (id, username, email, hashed_password)
+- **Creator**: Talent roster (id, name, role, hero_image_url, organization_id)
+- **Song**: Catalog entries with ownership, health scores, status flags
+- **SongCredit**: Many-to-many creator-song relationships with role and split percentage
+- **SongDSPLink**: DSP platform links (Spotify, Apple Music, etc.)
+- **ChecklistItem**: System-wide checklist items with weights
+- **SongChecklistStatus**: Per-song checklist completion tracking
+- **SongValuationSnapshot**: Placeholder for future valuation data
+
+### Key Fields
+- **Song**: isrc, iswc, project_title, release_date, status_health_score, has_paid, has_pro_registration, has_dsp_registration, has_contract
+- **Organization**: type (label, publisher, production_company, individual)
+- **Creator**: role (Writer, Producer, Performer, Manager, Other)
+
+## API Architecture
+
+### Security Pattern
+All endpoints enforce multi-tenant isolation:
+1. JWT authentication required
+2. User-organization membership validation
+3. Organization-scoped queries on all resources
+4. Cross-tenant validation on relationships (e.g., creator-song credits)
+
+### Key Endpoints
+
+#### Authentication
+- `POST /api/auth/register` - Creates user and organization
+- `POST /api/auth/login` - Returns JWT token
+
+#### Organizations
+- `GET /api/organizations/current` - User's current org
+- `GET /api/organizations/{org_id}/members` - List members
+
+#### Creators / Roster
+- `GET /api/creators/org/{org_id}` - List creators with stats
+- `GET /api/creators/{creator_id}` - Creator details with computed stats
+- `POST /api/creators/org/{org_id}` - Create new creator
+
+#### Songs / Catalog
+- `GET /api/songs/org/{org_id}` - List songs with filters (creator_id, role, min_health, max_health, status)
+- `GET /api/songs/{song_id}` - Song details with credits, DSP links, checklist
+- `POST /api/songs/org/{org_id}` - Create song
+- `PATCH /api/songs/{song_id}` - Update song
+
+#### Credits & DSP Links
+- `POST /api/credits/{song_id}` - Add credit (validates creator org matches song org)
+- `DELETE /api/credits/{credit_id}` - Remove credit
+- `POST /api/dsp-links/{song_id}` - Add DSP link
+- `DELETE /api/dsp-links/{link_id}` - Remove DSP link
+
+#### Checklist & Health
+- `GET /api/checklist/checklist-items` - List all checklist items
+- `GET /api/checklist/{song_id}/checklist` - Song checklist status
+- `PATCH /api/checklist/{song_id}/checklist` - Update checklist (auto-recalculates health score, uses upsert pattern)
+
+#### Export
+- `GET /api/schedule-a/creator/{creator_id}` - CSV export of creator catalog
+
+#### Valuation (Stub)
+- `GET /api/valuations/song/{song_id}` - Placeholder
+- `POST /api/valuations/song/{song_id}` - Placeholder
+
+## Frontend Architecture
+
+### Navigation Structure
+- **Sidebar**: Home, Roster, Catalog, Placements, Reports, Valuation
+- **Apple Music Aesthetic**: Gradient headers, rounded cards, smooth transitions
+
+### Page Components
+1. **HomePage**: Dashboard with stats, needs attention, top creators
+2. **RosterPage**: Creator grid with search
+3. **CreatorDetailPage**: Hero header with tabs (Overview, Songs, Placements, Schedule A)
+4. **CatalogPage**: Spreadsheet table with search and filters
+5. **PlacementsPage**: Timeline with progress bars
+6. **ReportsPage**: Health analytics with Recharts visualizations
+7. **ValuationPage**: Coming soon placeholder
+
+### State Management
+- JWT token in localStorage
+- Organization context loaded on mount
+- API calls via Axios with bearer token
+- React Router for client-side routing
+
+## Health Score Calculation
+
+**Formula:**
+```
+health_score = (sum of completed item weights / total weight) × 100
+```
+
+**Default Checklist Items:**
+- Songwriting splits verified (10%)
+- Production credits complete (10%)
+- ISRC registered (15%)
+- ISWC registered (15%)
+- PRO registration complete (20%)
+- DSP links added (10%)
+- Lyrics uploaded (5%)
+- Audio file uploaded (15%)
+
+**Upsert Pattern:** When checklist items are dynamically added, the system creates missing SongChecklistStatus rows automatically.
+
+## Demo Data
+
+### Seed Script: backend/init_gotcha_db.py
+- **Organization**: Demo Label Co. (Record Label)
+- **User**: admin / demo123 (admin@demolabel.com)
+- **Creators**: 6 creators (mix of Writers, Producers, Performers)
+- **Songs**: 35 songs with varied:
+  - Release dates (2019-2025)
+  - Health scores (0-100%)
+  - Status flags (Paid, PRO Registered, DSP Registered, Contracts)
+  - Credits with splits
+  - DSP links
+  - Placement statuses
+
+## Development Configuration
+
+### Workflows
+- **Backend**: `bash run_backend.sh` → uvicorn on port 8000
+- **Frontend**: `cd frontend && npm run dev` → Vite on port 5000
+
+### Environment Variables
+- `DATABASE_URL` - PostgreSQL connection (auto-set by Replit)
+- `SESSION_SECRET` - JWT secret key (auto-set by Replit)
 
 ## Deployment Configuration
-- **Deployment Type**: Autoscale (cost-effective for demos, runs only when accessed)
-- **Build Process**: `cd frontend && npm run build` - Compiles React app to static files in `frontend/dist/`
-- **Run Command**: `python -m uvicorn backend.main:app --host 0.0.0.0 --port 5000`
-- **Production Port**: 5000 (required for Replit web deployments)
-- **Static File Serving**: Backend serves frontend build files with path traversal protection
-- **SPA Routing**: All non-API routes fall back to `index.html` for client-side routing
-- **Security**: Path sanitization using `Path.is_relative_to()` prevents directory traversal attacks
 
-### Development vs Production
-- **Development**: Frontend (Vite dev server on port 5000) + Backend (FastAPI on port 8000)
-- **Production**: Single FastAPI server on port 5000 serving both API and built frontend
+### Future Production Setup
+- **Build**: `cd frontend && npm run build` → static files in `frontend/dist/`
+- **Run**: `python -m uvicorn backend.main:app --host 0.0.0.0 --port 5000`
+- **Deployment Type**: Autoscale (cost-effective, runs only when accessed)
+- **Static Serving**: Backend serves frontend build files with SPA routing fallback
+
+## Security Highlights
+
+1. **Multi-Tenant Isolation**: All queries scoped to user's organization
+2. **Cross-Tenant Validation**: Creator-song relationships validated at org level
+3. **Password Hashing**: bcrypt with automatic salt generation
+4. **JWT Authentication**: Secure token-based sessions
+5. **SQL Injection Prevention**: SQLAlchemy ORM with parameterized queries
+
+## Future Enhancements
+
+- Song Detail Drawer with inline editing
+- Luminate API integration for real-time valuations
+- Bulk import/export (CSV, Excel)
+- Advanced reporting with revenue projections
+- User permission management (admin vs. member roles)
+- Automated placement status tracking via webhooks
+
+## Branding
+
+- **Color Scheme**: Purple (#9333EA) to Pink (#EC4899) gradient
+- **Typography**: Sans-serif, clean and modern
+- **Logo**: Text-based "Gotcha" with gradient effect
+- **Aesthetic**: Apple Music-inspired design language
 
 ## External Dependencies
-- **PostgreSQL**: Primary database for all application data.
-- **Mock Chartmetric API**: Simulated external API for music analytics.
-- **Mock Spotify API**: Simulated external API for music streaming data.
-- **Mock Luminate API**: Simulated external API for music industry data.
-- **Vite**: Frontend build tool.
-- **Tailwind CSS**: Utility-first CSS framework.
-- **React**: Frontend JavaScript library.
-- **FastAPI**: Backend Python web framework.
-- **SQLAlchemy**: Python SQL toolkit and ORM.
-- **Uvicorn**: ASGI server for FastAPI.
+
+- **PostgreSQL**: Primary database
+- **React**: Frontend library
+- **FastAPI**: Backend framework
+- **SQLAlchemy**: Python ORM
+- **Tailwind CSS**: Utility-first CSS framework
+- **Vite**: Frontend build tool
+- **Recharts**: React charting library
+- **Heroicons**: Icon library
+- **JWT**: Authentication tokens
+- **bcrypt**: Password hashing
