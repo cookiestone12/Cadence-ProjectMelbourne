@@ -7,10 +7,11 @@ import {
   DocumentTextIcon,
   ChartBarIcon,
   CurrencyDollarIcon,
-  Cog6ToothIcon
+  Cog6ToothIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 
-export default function Sidebar({ user, onLogout }) {
+export default function Sidebar({ user, onLogout, isOpen, onClose }) {
   const location = useLocation()
   
   const isActive = (path) => {
@@ -28,12 +29,36 @@ export default function Sidebar({ user, onLogout }) {
   ]
   
   return (
-    <div className="h-screen w-64 bg-gradient-to-b from-gray-900 to-black text-white flex flex-col border-r border-gray-800">
+    <>
+      {isOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={onClose}
+        />
+      )}
+      
+      <div className={`
+        fixed lg:relative inset-y-0 left-0 z-50
+        h-screen w-64 bg-gradient-to-b from-gray-900 to-black text-white 
+        flex flex-col border-r border-gray-800
+        transform transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
       <div className="p-6 border-b border-gray-800">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
-          Ampersound Intelligence
-        </h1>
-        <p className="text-sm text-gray-400 mt-1">Catalog Manager</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
+              Ampersound Intelligence
+            </h1>
+            <p className="text-sm text-gray-400 mt-1">Catalog Manager</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="lg:hidden text-gray-400 hover:text-white transition-colors"
+          >
+            <XMarkIcon className="w-6 h-6" />
+          </button>
+        </div>
       </div>
       
       <nav className="flex-1 px-3 py-4 space-y-1">
@@ -45,6 +70,7 @@ export default function Sidebar({ user, onLogout }) {
             <Link
               key={item.path}
               to={item.path}
+              onClick={() => window.innerWidth < 1024 && onClose()}
               className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
                 active 
                   ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
@@ -71,6 +97,7 @@ export default function Sidebar({ user, onLogout }) {
         
         <Link
           to="/settings"
+          onClick={() => window.innerWidth < 1024 && onClose()}
           className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition-all duration-200 ${
             isActive('/settings')
               ? 'bg-gray-800 text-white'
@@ -89,5 +116,6 @@ export default function Sidebar({ user, onLogout }) {
         </button>
       </div>
     </div>
+    </>
   )
 }

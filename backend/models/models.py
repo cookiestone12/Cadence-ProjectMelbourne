@@ -152,6 +152,9 @@ class Song(Base):
     checklist_statuses = relationship("SongChecklistStatus", back_populates="song", cascade="all, delete-orphan")
     valuation_snapshots = relationship("SongValuationSnapshot", back_populates="song", cascade="all, delete-orphan")
     analytics = relationship("Analytics", back_populates="song", uselist=False)
+    streaming_metrics = relationship("SongStreamingMetrics", back_populates="song", cascade="all, delete-orphan")
+    territory_revenues = relationship("TerritoryRevenue", back_populates="song", cascade="all, delete-orphan")
+    valuation_calculations = relationship("ValuationCalculation", back_populates="song", cascade="all, delete-orphan")
 
 class SongCredit(Base):
     __tablename__ = "song_credits"
@@ -263,3 +266,95 @@ class Catalog(Base):
     name = Column(String, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class SongStreamingMetrics(Base):
+    __tablename__ = "song_streaming_metrics"
+    __table_args__ = (
+        Index('ix_streaming_metrics_song_id', 'song_id'),
+        Index('ix_streaming_metrics_period_date', 'period_date'),
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    
+    period_date = Column(Date, nullable=False)
+    
+    total_streams = Column(Integer, default=0)
+    ad_supported_streams = Column(Integer, default=0)
+    premium_streams = Column(Integer, default=0)
+    interactive_streams = Column(Integer, default=0)
+    on_demand_streams = Column(Integer, default=0)
+    programmed_streams = Column(Integer, default=0)
+    audio_streams = Column(Integer, default=0)
+    video_streams = Column(Integer, default=0)
+    
+    song_sales = Column(Integer, default=0)
+    
+    ownership_percentage = Column(Float, default=1.0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    song = relationship("Song", back_populates="streaming_metrics")
+    organization = relationship("Organization")
+
+class TerritoryRevenue(Base):
+    __tablename__ = "territory_revenue"
+    __table_args__ = (
+        Index('ix_territory_revenue_song_id', 'song_id'),
+        Index('ix_territory_revenue_period', 'period_date'),
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    
+    period_date = Column(Date, nullable=False)
+    territory_code = Column(String(3), nullable=False)
+    territory_name = Column(String, nullable=False)
+    
+    total_streams = Column(Integer, default=0)
+    publishing_revenue_cents = Column(Integer, default=0)
+    master_revenue_cents = Column(Integer, default=0)
+    total_revenue_cents = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    song = relationship("Song", back_populates="territory_revenues")
+    organization = relationship("Organization")
+
+class ValuationCalculation(Base):
+    __tablename__ = "valuation_calculations"
+    __table_args__ = (
+        Index('ix_valuation_calc_song_id', 'song_id'),
+        Index('ix_valuation_calc_date', 'calculation_date'),
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    
+    calculation_date = Column(DateTime, default=datetime.utcnow)
+    
+    streaming_multiple_value_cents = Column(Integer, default=0)
+    revenue_multiple_value_cents = Column(Integer, default=0)
+    market_comp_value_cents = Column(Integer, default=0)
+    black_box_value_cents = Column(Integer, default=0)
+    
+    final_valuation_cents = Column(Integer, default=0)
+    valuation_methodology = Column(String, default="HYBRID")
+    
+    thirty_day_revenue_cents = Column(Integer, default=0)
+    ninety_day_revenue_cents = Column(Integer, default=0)
+    annual_revenue_cents = Column(Integer, default=0)
+    
+    growth_rate = Column(Float, default=0.0)
+    risk_score = Column(Float, default=0.5)
+    
+    calc_metadata = Column(JSON, default=dict)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    song = relationship("Song", back_populates="valuation_calculations")
+    organization = relationship("Organization")
