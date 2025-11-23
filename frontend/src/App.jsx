@@ -13,8 +13,6 @@ import Settings from './pages/Settings'
 import Login from './pages/Login'
 import Sidebar from './components/Sidebar'
 
-axios.defaults.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState(null)
