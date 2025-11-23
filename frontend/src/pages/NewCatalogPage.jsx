@@ -5,6 +5,8 @@ import {
   CheckCircleIcon, XCircleIcon, MinusCircleIcon
 } from '@heroicons/react/24/outline'
 import SongDetailModal from '../components/SongDetailModal'
+import AddSongModal from '../components/AddSongModal'
+import ScheduleAUploadModal from '../components/ScheduleAUploadModal'
 
 export default function NewCatalogPage() {
   const [songs, setSongs] = useState([])
@@ -13,6 +15,9 @@ export default function NewCatalogPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('all') // 'all', 'released', 'unreleased'
   const [selectedSong, setSelectedSong] = useState(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [organizationId, setOrganizationId] = useState(null)
   const [filters, setFilters] = useState({
     creator_id: '',
     role: '',
@@ -30,6 +35,7 @@ export default function NewCatalogPage() {
     try {
       const orgResponse = await axios.get('/api/organizations/current')
       const orgId = orgResponse.data.id
+      setOrganizationId(orgId)
       
       const params = new URLSearchParams()
       if (filters.creator_id) params.append('creator_id', filters.creator_id)
@@ -110,14 +116,14 @@ export default function NewCatalogPage() {
         <div className="flex items-center space-x-3">
           <button 
             className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            onClick={() => {/* TODO: Show add song modal */}}
+            onClick={() => setShowAddModal(true)}
           >
             <PlusIcon className="w-5 h-5" />
             <span>Add Song</span>
           </button>
           <button 
             className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all"
-            onClick={() => {/* TODO: Show upload modal */}}
+            onClick={() => setShowUploadModal(true)}
           >
             <ArrowUpTrayIcon className="w-5 h-5" />
             <span>Upload Schedule A</span>
@@ -329,6 +335,24 @@ export default function NewCatalogPage() {
       {/* Song Detail Modal */}
       {selectedSong && (
         <SongDetailModal song={selectedSong} onClose={() => setSelectedSong(null)} />
+      )}
+      
+      {/* Add Song Modal */}
+      {showAddModal && organizationId && (
+        <AddSongModal 
+          onClose={() => setShowAddModal(false)}
+          onSuccess={loadData}
+          organizationId={organizationId}
+        />
+      )}
+      
+      {/* Schedule A Upload Modal */}
+      {showUploadModal && organizationId && (
+        <ScheduleAUploadModal 
+          onClose={() => setShowUploadModal(false)}
+          onSuccess={loadData}
+          organizationId={organizationId}
+        />
       )}
     </div>
   )

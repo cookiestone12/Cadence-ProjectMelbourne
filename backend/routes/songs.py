@@ -112,6 +112,19 @@ class SongCreateRequest(BaseModel):
     iswc: Optional[str] = None
     project_title: Optional[str] = None
     release_date: Optional[date] = None
+    label: Optional[str] = None
+    publishing_percentage: Optional[float] = None
+    master_percentage: Optional[float] = None
+    advance_amount: Optional[int] = None  # Already in cents from frontend
+    recording_code: Optional[str] = None
+    master_paid: Optional[str] = None
+    soundexchange_registered: Optional[str] = None
+    payment_status: Optional[str] = None
+    contract_location: Optional[str] = None
+    notes: Optional[str] = None
+    has_contract_executed: Optional[bool] = None
+    is_registered_with_pro: Optional[bool] = None
+    is_registered_with_dsp: Optional[bool] = None
 
 class SongUpdateRequest(BaseModel):
     title: Optional[str] = None
@@ -318,7 +331,20 @@ def create_song(
         iswc=request.iswc,
         project_title=request.project_title,
         release_date=request.release_date,
-        is_released=(request.release_date is not None)
+        is_released=(request.release_date is not None),
+        label=request.label,
+        publishing_percentage=request.publishing_percentage,
+        master_percentage=request.master_percentage,
+        advance_amount=request.advance_amount,
+        recording_code=request.recording_code,
+        master_paid=request.master_paid,
+        soundexchange_registered=request.soundexchange_registered,
+        payment_status=request.payment_status,
+        contract_location=request.contract_location,
+        notes=request.notes,
+        has_contract_executed=request.has_contract_executed or False,
+        is_registered_with_pro=request.is_registered_with_pro or False,
+        is_registered_with_dsp=request.is_registered_with_dsp or False
     )
     db.add(song)
     db.flush()
