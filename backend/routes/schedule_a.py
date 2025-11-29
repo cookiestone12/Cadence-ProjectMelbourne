@@ -323,8 +323,9 @@ def export_schedule_a_pdf(
     from reportlab.lib.pagesizes import letter, landscape
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    import os
     
     data = get_schedule_a_data(creator_id, db, current_user)
     
@@ -383,7 +384,14 @@ def export_schedule_a_pdf(
     
     elements = []
     
-    # Header
+    # Header with logo
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo.png')
+    if os.path.exists(logo_path):
+        logo = Image(logo_path, width=0.8*inch, height=0.8*inch)
+        logo.hAlign = 'CENTER'
+        elements.append(logo)
+        elements.append(Spacer(1, 6))
+    
     elements.append(Paragraph("AMPERSOUND INTELLIGENCE", title_style))
     elements.append(Paragraph("Schedule A - Catalog of Compositions", subtitle_style))
     elements.append(Spacer(1, 12))
