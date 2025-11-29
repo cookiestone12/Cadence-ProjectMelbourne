@@ -43,13 +43,20 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-      <div className="p-6 border-b border-gray-800">
+      <div className="p-4 border-b border-gray-800">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
-              Ampersound Intelligence
-            </h1>
-            <p className="text-sm text-gray-400 mt-1">Catalog Manager</p>
+          <div className="flex items-center space-x-3">
+            <img 
+              src="/logo-small.png" 
+              alt="Ampersound" 
+              className="h-10 w-10"
+            />
+            <div>
+              <h1 className="text-lg font-bold text-white">
+                Ampersound
+              </h1>
+              <p className="text-xs text-gray-400">Catalog Manager</p>
+            </div>
           </div>
           <button
             onClick={onClose}

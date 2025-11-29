@@ -31,7 +31,14 @@ export default function Login({ onLogin }) {
     <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-purple-900 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent mb-2">
+          <div className="flex justify-center mb-4">
+            <img 
+              src="/logo-medium.png" 
+              alt="Ampersound Intelligence" 
+              className="h-24 w-auto"
+            />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-1">
             Ampersound Intelligence
           </h1>
           <p className="text-gray-600">Catalog Manager</p>
