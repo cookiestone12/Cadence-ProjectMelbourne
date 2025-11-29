@@ -207,7 +207,7 @@ export default function SongDetailModal({ song, onClose }) {
                       <label className="text-sm font-medium text-gray-500">Publishing %</label>
                       <p className="text-2xl font-bold text-gray-900">
                         {songDetails.publishing_percentage 
-                          ? `${(songDetails.publishing_percentage * 100).toFixed(2)}%`
+                          ? `${Math.min(songDetails.publishing_percentage, 100).toFixed(2)}%`
                           : 'N/A'
                         }
                       </p>
@@ -216,7 +216,7 @@ export default function SongDetailModal({ song, onClose }) {
                       <label className="text-sm font-medium text-gray-500">Master %</label>
                       <p className="text-2xl font-bold text-gray-900">
                         {songDetails.master_percentage 
-                          ? `${(songDetails.master_percentage * 100).toFixed(2)}%`
+                          ? `${Math.min(songDetails.master_percentage, 100).toFixed(2)}%`
                           : 'N/A'
                         }
                       </p>

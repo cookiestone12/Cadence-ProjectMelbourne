@@ -288,7 +288,7 @@ export default function NewCatalogPage() {
                     {song.label || '-'}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
-                    {song.publishing_percentage ? `${(song.publishing_percentage * 100).toFixed(1)}%` : '-'}
+                    {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center space-x-2">
