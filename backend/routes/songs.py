@@ -139,6 +139,14 @@ class SongUpdateRequest(BaseModel):
     is_registered_with_dsp: Optional[bool] = None
     is_invoiced: Optional[bool] = None
     is_paid: Optional[bool] = None
+    label: Optional[str] = None
+    publishing_percentage: Optional[float] = None
+    master_percentage: Optional[float] = None
+    advance_amount: Optional[int] = None
+    soundexchange_registered: Optional[str] = None
+    payment_status: Optional[str] = None
+    contract_location: Optional[str] = None
+    notes: Optional[str] = None
 
 @router.get("/org/{org_id}", response_model=List[SongResponse])
 def get_organization_songs(
