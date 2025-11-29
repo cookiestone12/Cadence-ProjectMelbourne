@@ -208,6 +208,19 @@ health_score = (sum of completed item weights / total weight) × 100
 - **Total Demo Catalog Value**: $92,648,317.65
 - **Total Annual Revenue**: $5,796,552.12
 
+**backend/seed_jack_lomastro.py** - Jack Lomastro placement data:
+- **Creator**: Jack Lomastro (Producer, Songwriter)
+- **Placements**: 142 songs (52 released, 90 pipeline)
+- **Paid Placements**: 27 ($71,177.49 total advances)
+- **Status Distribution**: 43 contracted, 32 PRO registered, 48 DSP registered
+
+### Schedule A Export System
+- **Data Endpoint**: `/api/schedule-a/creator/{id}/data` - JSON with Released/Pipeline sections
+- **PDF Export**: `/api/schedule-a/creator/{id}/pdf` - Branded reportlab PDF with summary stats
+- **CSV Export**: `/api/schedule-a/creator/{id}/csv` - Industry-standard CSV with headers first
+- **Status Logic**: Derived from placement fields (Paid → Contracted → Contract Sent → In Pipeline)
+- **Publishing Percentages**: Capped at 100%, normalized to 2 decimal places
+
 ## Development Configuration
 
 ### Workflows
