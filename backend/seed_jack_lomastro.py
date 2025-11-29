@@ -13,15 +13,18 @@ from models.database import SessionLocal
 from models.models import Creator, Song, Organization, SongCredit, ChecklistItem, SongChecklistStatus
 
 def parse_percentage(value):
-    """Parse percentage value from sheet (handles decimals like 0.24 = 24%)."""
+    """Parse percentage value from sheet (handles decimals like 0.24 = 24%).
+    Always caps at 100% and rounds to 2 decimal places."""
     if value == '??' or value == 'N/A' or value is None:
         return None
     try:
         pct = float(value)
         # If value is less than 1, it's probably a decimal (0.24 = 24%)
         if pct < 1:
-            return pct * 100
-        return pct
+            pct = pct * 100
+        # Cap at 100% and round to 2 decimal places
+        pct = min(pct, 100.0)
+        return round(pct, 2)
     except (ValueError, TypeError):
         return None
 
