@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import axios from 'axios'
-import { ArrowLeftIcon, ArrowDownTrayIcon, CheckIcon, XMarkIcon, PencilIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, ArrowDownTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline'
 import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/24/solid'
 
 export default function CreatorDetailPage() {
   const { id } = useParams()
   const [creator, setCreator] = useState(null)
   const [songs, setSongs] = useState([])
+  const [scheduleAData, setScheduleAData] = useState(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [loading, setLoading] = useState(true)
   const [editingSong, setEditingSong] = useState(null)
@@ -17,6 +18,15 @@ export default function CreatorDetailPage() {
   const loadSongs = async (orgId) => {
     const songsResponse = await axios.get(`/api/songs/org/${orgId}?creator_id=${id}&limit=1000`)
     setSongs(songsResponse.data)
+  }
+  
+  const loadScheduleAData = async () => {
+    try {
+      const response = await axios.get(`/api/schedule-a/creator/${id}/data`)
+      setScheduleAData(response.data)
+    } catch (error) {
+      console.error('Failed to load Schedule A data:', error)
+    }
   }
   
   useEffect(() => {
@@ -39,21 +49,45 @@ export default function CreatorDetailPage() {
     loadCreatorData()
   }, [id])
   
-  const handleScheduleAExport = async () => {
+  useEffect(() => {
+    if (activeTab === 'schedule-a') {
+      loadScheduleAData()
+    }
+  }, [activeTab, id])
+  
+  const handleScheduleAExportCSV = async () => {
     try {
-      const response = await axios.get(`/api/schedule-a/creator/${id}`, {
+      const response = await axios.get(`/api/schedule-a/creator/${id}/csv`, {
         responseType: 'blob'
       })
       
       const url = window.URL.createObjectURL(new Blob([response.data]))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `schedule-a-${creator.display_name}.csv`)
+      link.setAttribute('download', `Schedule_A_${creator.display_name.replace(/ /g, '_')}.csv`)
       document.body.appendChild(link)
       link.click()
       link.remove()
     } catch (error) {
-      console.error('Failed to export Schedule A:', error)
+      console.error('Failed to export Schedule A CSV:', error)
+    }
+  }
+  
+  const handleScheduleAExportPDF = async () => {
+    try {
+      const response = await axios.get(`/api/schedule-a/creator/${id}/pdf`, {
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `Schedule_A_${creator.display_name.replace(/ /g, '_')}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (error) {
+      console.error('Failed to export Schedule A PDF:', error)
     }
   }
   
@@ -83,8 +117,8 @@ export default function CreatorDetailPage() {
     setSaving(true)
     try {
       const payload = {
-        publishing_percentage: editForm.publishing_percentage === '' ? null : parseFloat(editForm.publishing_percentage),
-        master_percentage: editForm.master_percentage === '' ? null : parseFloat(editForm.master_percentage),
+        publishing_percentage: editForm.publishing_percentage === '' ? null : Math.min(parseFloat(editForm.publishing_percentage), 100),
+        master_percentage: editForm.master_percentage === '' ? null : Math.min(parseFloat(editForm.master_percentage), 100),
         advance_amount: editForm.advance_amount === '' ? null : Math.round(parseFloat(editForm.advance_amount) * 100),
         label: editForm.label || null,
         is_registered_with_pro: editForm.is_registered_with_pro,
@@ -134,6 +168,22 @@ export default function CreatorDetailPage() {
         </span>
       )
     }
+  }
+  
+  const PlacementStatusBadge = ({ status }) => {
+    const colors = {
+      'Paid': 'bg-green-100 text-green-700',
+      'Invoiced': 'bg-blue-100 text-blue-700',
+      'Contracted': 'bg-purple-100 text-purple-700',
+      'Contract Sent': 'bg-indigo-100 text-indigo-700',
+      'Released - Awaiting Contract': 'bg-yellow-100 text-yellow-700',
+      'In Pipeline': 'bg-gray-100 text-gray-600'
+    }
+    return (
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || colors['In Pipeline']}`}>
+        {status}
+      </span>
+    )
   }
   
   if (loading) {
@@ -396,6 +446,7 @@ export default function CreatorDetailPage() {
                               className="w-16 px-2 py-1 border rounded text-sm text-center"
                               placeholder="%"
                               step="0.01"
+                              max="100"
                             />
                           </td>
                           <td className="px-4 py-2">
@@ -480,7 +531,7 @@ export default function CreatorDetailPage() {
                             {song.label || '-'}
                           </td>
                           <td className="px-4 py-3 text-center text-gray-600">
-                            {song.publishing_percentage ? `${song.publishing_percentage.toFixed(1)}%` : '-'}
+                            {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
                           </td>
                           <td className="px-4 py-3 text-right text-gray-600">
                             {song.advance_amount ? `$${(song.advance_amount / 100).toLocaleString()}` : '-'}
@@ -552,7 +603,7 @@ export default function CreatorDetailPage() {
                         {song.label || '-'}
                       </td>
                       <td className="px-4 py-3 text-center text-gray-600">
-                        {song.publishing_percentage ? `${song.publishing_percentage.toFixed(1)}%` : '-'}
+                        {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-green-600">
                         ${song.advance_amount ? (song.advance_amount / 100).toLocaleString() : 0}
@@ -583,39 +634,174 @@ export default function CreatorDetailPage() {
         )}
         
         {activeTab === 'schedule-a' && (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">Schedule A Export</h2>
-            <p className="text-gray-600 mb-6 max-w-2xl mx-auto">
-              Export a complete Schedule A document for {creator.display_name}'s catalog. 
-              This includes all songs with credits, splits, and registration details.
-            </p>
-            
-            <button
-              onClick={handleScheduleAExport}
-              className="inline-flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-pink-500 text-white px-6 py-3 rounded-lg font-medium hover:from-purple-700 hover:to-pink-600 transition-all duration-200"
-            >
-              <ArrowDownTrayIcon className="w-5 h-5" />
-              <span>Download Schedule A (CSV)</span>
-            </button>
-            
-            <div className="mt-8 grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-500 mb-1">Total Songs</p>
-                <p className="text-2xl font-bold text-gray-900">{songs.length}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-500 mb-1">Paid Placements</p>
-                <p className="text-2xl font-bold text-green-600">{placedSongs.length}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-500 mb-1">Total Advances</p>
-                <p className="text-2xl font-bold text-green-600">${totalAdvance.toLocaleString()}</p>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-500 mb-1">Avg Health</p>
-                <p className="text-2xl font-bold text-gray-900">{creator.avg_health_score?.toFixed(0) || 0}%</p>
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-purple-600 to-pink-500 rounded-xl shadow-sm p-8 text-white">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold mb-2">Schedule A - Catalog of Compositions</h2>
+                  <p className="text-white/80">
+                    Official export document for {creator.display_name}'s catalog with industry-standard fields.
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleScheduleAExportPDF}
+                    className="inline-flex items-center space-x-2 bg-white text-purple-600 px-5 py-2.5 rounded-lg font-medium hover:bg-purple-50 transition-all duration-200"
+                  >
+                    <DocumentTextIcon className="w-5 h-5" />
+                    <span>Download PDF</span>
+                  </button>
+                  <button
+                    onClick={handleScheduleAExportCSV}
+                    className="inline-flex items-center space-x-2 bg-white/20 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-white/30 transition-all duration-200 border border-white/30"
+                  >
+                    <DocumentArrowDownIcon className="w-5 h-5" />
+                    <span>Download CSV</span>
+                  </button>
+                </div>
               </div>
             </div>
+            
+            {scheduleAData && (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <p className="text-sm text-gray-500 mb-1">Total Compositions</p>
+                    <p className="text-2xl font-bold text-gray-900">{scheduleAData.summary.total_songs}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <p className="text-sm text-gray-500 mb-1">Released</p>
+                    <p className="text-2xl font-bold text-purple-600">{scheduleAData.summary.released_count}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <p className="text-sm text-gray-500 mb-1">Pipeline</p>
+                    <p className="text-2xl font-bold text-pink-600">{scheduleAData.summary.pipeline_count}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <p className="text-sm text-gray-500 mb-1">Paid</p>
+                    <p className="text-2xl font-bold text-green-600">{scheduleAData.summary.paid_count}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <p className="text-sm text-gray-500 mb-1">Contracted</p>
+                    <p className="text-2xl font-bold text-blue-600">{scheduleAData.summary.contracted_count}</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-4 shadow-sm">
+                    <p className="text-sm text-gray-500 mb-1">Total Advances</p>
+                    <p className="text-2xl font-bold text-green-600">{scheduleAData.summary.total_advance_display}</p>
+                  </div>
+                </div>
+                
+                {scheduleAData.released.length > 0 && (
+                  <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-gray-200 bg-purple-50">
+                      <h3 className="text-lg font-bold text-purple-900">Released Catalog ({scheduleAData.released.length})</h3>
+                      <p className="text-sm text-purple-700">Songs that have been officially released</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Title</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Artist</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Release</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Label</th>
+                            <th className="px-4 py-3 text-center font-semibold text-gray-900">Pub %</th>
+                            <th className="px-4 py-3 text-right font-semibold text-gray-900">Advance</th>
+                            <th className="px-4 py-3 text-center font-semibold text-gray-900">Status</th>
+                            <th className="px-4 py-3 text-center font-semibold text-gray-900">PRO</th>
+                            <th className="px-4 py-3 text-center font-semibold text-gray-900">DSP</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {scheduleAData.released.map((song) => (
+                            <tr key={song.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 font-medium text-gray-900">{song.title}</td>
+                              <td className="px-4 py-3 text-gray-600">{song.primary_artist}</td>
+                              <td className="px-4 py-3 text-gray-600">{song.release_date || '-'}</td>
+                              <td className="px-4 py-3 text-gray-600 max-w-32 truncate">{song.label || '-'}</td>
+                              <td className="px-4 py-3 text-center text-gray-600">
+                                {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-right text-gray-600">{song.advance_display || '-'}</td>
+                              <td className="px-4 py-3 text-center">
+                                <PlacementStatusBadge status={song.status} />
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <StatusBadge value={song.is_registered_with_pro} />
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <StatusBadge value={song.is_registered_with_dsp} />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                
+                {scheduleAData.pipeline.length > 0 && (
+                  <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-gray-200 bg-pink-50">
+                      <h3 className="text-lg font-bold text-pink-900">Pipeline ({scheduleAData.pipeline.length})</h3>
+                      <p className="text-sm text-pink-700">Unreleased songs in various stages of the placement process</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Title</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Artist</th>
+                            <th className="px-4 py-3 text-left font-semibold text-gray-900">Label</th>
+                            <th className="px-4 py-3 text-center font-semibold text-gray-900">Pub %</th>
+                            <th className="px-4 py-3 text-right font-semibold text-gray-900">Advance</th>
+                            <th className="px-4 py-3 text-center font-semibold text-gray-900">Status</th>
+                            <th className="px-4 py-3 text-center font-semibold text-gray-900">Contract</th>
+                            <th className="px-4 py-3 text-center font-semibold text-gray-900">Paid</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {scheduleAData.pipeline.map((song) => (
+                            <tr key={song.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 font-medium text-gray-900">{song.title}</td>
+                              <td className="px-4 py-3 text-gray-600">{song.primary_artist}</td>
+                              <td className="px-4 py-3 text-gray-600 max-w-32 truncate">{song.label || '-'}</td>
+                              <td className="px-4 py-3 text-center text-gray-600">
+                                {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
+                              </td>
+                              <td className="px-4 py-3 text-right text-gray-600">{song.advance_display || '-'}</td>
+                              <td className="px-4 py-3 text-center">
+                                <PlacementStatusBadge status={song.status} />
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <StatusBadge value={song.has_contract_executed} />
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <StatusBadge value={song.is_paid} />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                
+                {scheduleAData.released.length === 0 && scheduleAData.pipeline.length === 0 && (
+                  <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                    <DocumentTextIcon className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No compositions yet</h3>
+                    <p className="text-gray-500">Add songs to this creator's catalog to generate a Schedule A.</p>
+                  </div>
+                )}
+              </>
+            )}
+            
+            {!scheduleAData && (
+              <div className="bg-white rounded-xl shadow-sm p-12 text-center">
+                <div className="text-gray-400">Loading Schedule A data...</div>
+              </div>
+            )}
           </div>
         )}
       </div>

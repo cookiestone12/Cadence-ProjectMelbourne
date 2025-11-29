@@ -1,11 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import and_
 from openpyxl import load_workbook
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, date
+from typing import Optional
 from ..models import (
-    get_db, Song, Creator, SongCredit, OrganizationMember, User
+    get_db, Song, Creator, SongCredit, OrganizationMember, User, Organization
 )
 from ..utils.auth import get_current_user
 
@@ -23,13 +26,15 @@ def parse_yes_no_na(value):
     return 'N/A'
 
 def parse_percentage(value):
-    """Parse percentage values"""
+    """Parse percentage values, cap at 100%"""
     if value is None:
         return None
     try:
         if isinstance(value, str):
             value = value.replace('%', '').strip()
-        return float(value)
+        pct = float(value)
+        # Cap at 100% and round to 2 decimal places
+        return min(round(pct, 2), 100.0)
     except:
         return None
 
@@ -51,7 +56,6 @@ def parse_date(value):
         return None
     try:
         if isinstance(value, str):
-            # Try common date formats
             for fmt in ['%Y-%m-%d', '%m/%d/%Y', '%m-%d-%Y', '%Y/%m/%d']:
                 try:
                     return datetime.strptime(value, fmt).date()
@@ -62,6 +66,482 @@ def parse_date(value):
         return None
     except:
         return None
+
+def get_placement_status(song):
+    """Derive placement status from song fields for Schedule A"""
+    if song.is_paid:
+        return "Paid"
+    elif song.has_contract_executed:
+        if song.is_invoiced:
+            return "Invoiced"
+        else:
+            return "Contracted"
+    elif song.has_contract_sent:
+        return "Contract Sent"
+    elif song.is_released:
+        return "Released - Awaiting Contract"
+    else:
+        return "In Pipeline"
+
+def format_date(d):
+    """Format date for export"""
+    if d is None:
+        return ""
+    if isinstance(d, (datetime, date)):
+        return d.strftime("%Y-%m-%d")
+    return str(d)
+
+def format_currency(cents):
+    """Format cents to dollars"""
+    if cents is None:
+        return ""
+    return f"${cents / 100:,.2f}"
+
+def format_percentage(pct):
+    """Format percentage"""
+    if pct is None:
+        return ""
+    return f"{pct:.2f}%"
+
+def format_bool(val):
+    """Format boolean to Yes/No"""
+    if val is True:
+        return "Yes"
+    elif val is False:
+        return "No"
+    return "N/A"
+
+
+@router.get("/creator/{creator_id}/data")
+def get_schedule_a_data(
+    creator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get Schedule A data for a creator, organized by Released and Pipeline"""
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == creator.organization_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    org = db.query(Organization).filter(Organization.id == creator.organization_id).first()
+    
+    # Get all songs for this creator
+    songs = db.query(Song).join(SongCredit).filter(
+        SongCredit.creator_id == creator_id
+    ).order_by(Song.release_date.desc().nullslast(), Song.title).all()
+    
+    released = []
+    pipeline = []
+    
+    for song in songs:
+        # Get credits for this song
+        credits = db.query(SongCredit).filter(SongCredit.song_id == song.id).all()
+        credit_info = []
+        for c in credits:
+            cr = db.query(Creator).filter(Creator.id == c.creator_id).first()
+            if cr:
+                credit_info.append({
+                    "name": cr.display_name,
+                    "role": c.role,
+                    "share": c.share_percentage
+                })
+        
+        song_data = {
+            "id": song.id,
+            "title": song.title,
+            "primary_artist": song.primary_artist,
+            "isrc": song.isrc or "",
+            "iswc": song.iswc or "",
+            "release_date": format_date(song.release_date),
+            "label": song.label or "",
+            "publishing_percentage": song.publishing_percentage,
+            "master_percentage": song.master_percentage,
+            "advance_amount": song.advance_amount,
+            "advance_display": format_currency(song.advance_amount),
+            "is_registered_with_pro": song.is_registered_with_pro,
+            "is_registered_with_dsp": song.is_registered_with_dsp,
+            "soundexchange_registered": song.soundexchange_registered or "N/A",
+            "has_contract_executed": song.has_contract_executed,
+            "has_contract_sent": song.has_contract_sent,
+            "is_invoiced": song.is_invoiced,
+            "is_paid": song.is_paid,
+            "status": get_placement_status(song),
+            "notes": song.notes or "",
+            "credits": credit_info
+        }
+        
+        if song.is_released or song.release_date:
+            released.append(song_data)
+        else:
+            pipeline.append(song_data)
+    
+    # Calculate summary stats
+    total_advance = sum(s.advance_amount or 0 for s in songs)
+    paid_count = sum(1 for s in songs if s.is_paid)
+    contracted_count = sum(1 for s in songs if s.has_contract_executed)
+    pro_registered = sum(1 for s in songs if s.is_registered_with_pro)
+    dsp_registered = sum(1 for s in songs if s.is_registered_with_dsp)
+    
+    return {
+        "creator": {
+            "id": creator.id,
+            "display_name": creator.display_name,
+            "legal_name": creator.legal_name,
+            "roles": creator.roles,
+            "primary_pro": creator.primary_pro,
+            "primary_ipi": creator.primary_ipi
+        },
+        "organization": {
+            "id": org.id,
+            "name": org.name,
+            "type": org.type
+        },
+        "summary": {
+            "total_songs": len(songs),
+            "released_count": len(released),
+            "pipeline_count": len(pipeline),
+            "paid_count": paid_count,
+            "contracted_count": contracted_count,
+            "pro_registered": pro_registered,
+            "dsp_registered": dsp_registered,
+            "total_advance": total_advance,
+            "total_advance_display": format_currency(total_advance)
+        },
+        "released": released,
+        "pipeline": pipeline,
+        "generated_at": datetime.utcnow().isoformat()
+    }
+
+
+@router.get("/creator/{creator_id}/csv")
+def export_schedule_a_csv(
+    creator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Export Schedule A as properly formatted CSV with metadata in comment rows"""
+    data = get_schedule_a_data(creator_id, db, current_user)
+    
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Column headers - first row for proper CSV import
+    headers = [
+        "Section", "Song Title", "Artist", "Release Date", "Label",
+        "ISRC", "ISWC", "Publishing %", "Master %", "Advance",
+        "Status", "PRO Registered", "DSP Registered", "SoundExchange",
+        "Contract Executed", "Invoiced", "Paid", "Notes"
+    ]
+    writer.writerow(headers)
+    
+    # Released catalog songs
+    for song in data['released']:
+        writer.writerow([
+            "Released",
+            song['title'],
+            song['primary_artist'],
+            song['release_date'],
+            song['label'],
+            song['isrc'],
+            song['iswc'],
+            format_percentage(song['publishing_percentage']),
+            format_percentage(song['master_percentage']),
+            song['advance_display'],
+            song['status'],
+            format_bool(song['is_registered_with_pro']),
+            format_bool(song['is_registered_with_dsp']),
+            song['soundexchange_registered'],
+            format_bool(song['has_contract_executed']),
+            format_bool(song['is_invoiced']),
+            format_bool(song['is_paid']),
+            song['notes']
+        ])
+    
+    # Pipeline songs
+    for song in data['pipeline']:
+        writer.writerow([
+            "Pipeline",
+            song['title'],
+            song['primary_artist'],
+            song['release_date'],
+            song['label'],
+            song['isrc'],
+            song['iswc'],
+            format_percentage(song['publishing_percentage']),
+            format_percentage(song['master_percentage']),
+            song['advance_display'],
+            song['status'],
+            format_bool(song['is_registered_with_pro']),
+            format_bool(song['is_registered_with_dsp']),
+            song['soundexchange_registered'],
+            format_bool(song['has_contract_executed']),
+            format_bool(song['is_invoiced']),
+            format_bool(song['is_paid']),
+            song['notes']
+        ])
+    
+    # Add metadata as comment rows at the end (prefixed with # for CSV compatibility)
+    writer.writerow([])
+    writer.writerow(["# AMPERSOUND INTELLIGENCE - SCHEDULE A"])
+    writer.writerow([f"# Creator: {data['creator']['display_name']}"])
+    writer.writerow([f"# Legal Name: {data['creator'].get('legal_name') or 'N/A'}"])
+    writer.writerow([f"# Organization: {data['organization']['name']}"])
+    writer.writerow([f"# Total Compositions: {data['summary']['total_songs']}"])
+    writer.writerow([f"# Released: {data['summary']['released_count']} | Pipeline: {data['summary']['pipeline_count']}"])
+    writer.writerow([f"# Paid: {data['summary']['paid_count']} | Contracted: {data['summary']['contracted_count']}"])
+    writer.writerow([f"# Total Advances: {data['summary']['total_advance_display']}"])
+    writer.writerow([f"# Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"])
+    
+    content = output.getvalue()
+    output.close()
+    
+    filename = f"Schedule_A_{data['creator']['display_name'].replace(' ', '_')}_{datetime.utcnow().strftime('%Y-%m-%d')}.csv"
+    
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@router.get("/creator/{creator_id}/pdf")
+def export_schedule_a_pdf(
+    creator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Export Schedule A as branded PDF"""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    
+    data = get_schedule_a_data(creator_id, db, current_user)
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=landscape(letter),
+        rightMargin=0.5*inch,
+        leftMargin=0.5*inch,
+        topMargin=0.5*inch,
+        bottomMargin=0.5*inch
+    )
+    
+    styles = getSampleStyleSheet()
+    
+    # Custom styles
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#9333EA'),
+        alignment=TA_CENTER,
+        spaceAfter=6
+    )
+    
+    subtitle_style = ParagraphStyle(
+        'CustomSubtitle',
+        parent=styles['Normal'],
+        fontSize=14,
+        textColor=colors.HexColor('#EC4899'),
+        alignment=TA_CENTER,
+        spaceAfter=12
+    )
+    
+    section_style = ParagraphStyle(
+        'SectionHeader',
+        parent=styles['Heading2'],
+        fontSize=14,
+        textColor=colors.HexColor('#9333EA'),
+        spaceBefore=20,
+        spaceAfter=10
+    )
+    
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=10
+    )
+    
+    small_style = ParagraphStyle(
+        'Small',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.grey
+    )
+    
+    elements = []
+    
+    # Header
+    elements.append(Paragraph("AMPERSOUND INTELLIGENCE", title_style))
+    elements.append(Paragraph("Schedule A - Catalog of Compositions", subtitle_style))
+    elements.append(Spacer(1, 12))
+    
+    # Creator info
+    creator_info = f"""
+    <b>Creator:</b> {data['creator']['display_name']}<br/>
+    <b>Legal Name:</b> {data['creator'].get('legal_name') or 'N/A'}<br/>
+    <b>Organization:</b> {data['organization']['name']}<br/>
+    <b>PRO:</b> {data['creator'].get('primary_pro') or 'N/A'} | <b>IPI:</b> {data['creator'].get('primary_ipi') or 'N/A'}<br/>
+    <b>Generated:</b> {datetime.utcnow().strftime('%B %d, %Y')}
+    """
+    elements.append(Paragraph(creator_info, normal_style))
+    elements.append(Spacer(1, 12))
+    
+    # Summary table
+    elements.append(Paragraph("SUMMARY", section_style))
+    
+    summary_data = [
+        ["Total Compositions", str(data['summary']['total_songs']),
+         "Released", str(data['summary']['released_count']),
+         "Pipeline", str(data['summary']['pipeline_count'])],
+        ["Paid Placements", str(data['summary']['paid_count']),
+         "Contracted", str(data['summary']['contracted_count']),
+         "Total Advances", data['summary']['total_advance_display']],
+        ["PRO Registered", str(data['summary']['pro_registered']),
+         "DSP Registered", str(data['summary']['dsp_registered']),
+         "", ""]
+    ]
+    
+    summary_table = Table(summary_data, colWidths=[1.5*inch, 0.8*inch, 1.2*inch, 0.8*inch, 1.2*inch, 1.2*inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F3E8FF')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#581C87')),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#C084FC'))
+    ]))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 20))
+    
+    # Table headers for songs
+    table_headers = [
+        "Title", "Artist", "Release", "Label", "Pub %", 
+        "Advance", "Status", "PRO", "DSP", "Contract", "Paid"
+    ]
+    
+    # Released catalog
+    if data['released']:
+        elements.append(Paragraph("RELEASED CATALOG", section_style))
+        
+        table_data = [table_headers]
+        for song in data['released']:
+            table_data.append([
+                Paragraph(song['title'][:30], small_style),
+                Paragraph(song['primary_artist'][:20], small_style),
+                song['release_date'][:10] if song['release_date'] else "",
+                Paragraph((song['label'] or "")[:15], small_style),
+                format_percentage(song['publishing_percentage'])[:8],
+                song['advance_display'],
+                song['status'],
+                "Y" if song['is_registered_with_pro'] else "N",
+                "Y" if song['is_registered_with_dsp'] else "N",
+                "Y" if song['has_contract_executed'] else "N",
+                "Y" if song['is_paid'] else "N"
+            ])
+        
+        released_table = Table(table_data, colWidths=[
+            1.4*inch, 1.2*inch, 0.7*inch, 0.9*inch, 0.6*inch,
+            0.8*inch, 0.9*inch, 0.4*inch, 0.4*inch, 0.5*inch, 0.4*inch
+        ])
+        released_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#9333EA')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E9D5FF')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FAF5FF')])
+        ]))
+        elements.append(released_table)
+        elements.append(Spacer(1, 20))
+    
+    # Pipeline
+    if data['pipeline']:
+        elements.append(Paragraph("PIPELINE (UNRELEASED)", section_style))
+        
+        table_data = [table_headers]
+        for song in data['pipeline']:
+            table_data.append([
+                Paragraph(song['title'][:30], small_style),
+                Paragraph(song['primary_artist'][:20], small_style),
+                song['release_date'][:10] if song['release_date'] else "TBD",
+                Paragraph((song['label'] or "")[:15], small_style),
+                format_percentage(song['publishing_percentage'])[:8],
+                song['advance_display'],
+                song['status'],
+                "Y" if song['is_registered_with_pro'] else "N",
+                "Y" if song['is_registered_with_dsp'] else "N",
+                "Y" if song['has_contract_executed'] else "N",
+                "Y" if song['is_paid'] else "N"
+            ])
+        
+        pipeline_table = Table(table_data, colWidths=[
+            1.4*inch, 1.2*inch, 0.7*inch, 0.9*inch, 0.6*inch,
+            0.8*inch, 0.9*inch, 0.4*inch, 0.4*inch, 0.5*inch, 0.4*inch
+        ])
+        pipeline_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#EC4899')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#FBCFE8')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FDF2F8')])
+        ]))
+        elements.append(pipeline_table)
+    
+    # Footer
+    elements.append(Spacer(1, 30))
+    footer_text = f"""
+    <i>This Schedule A was generated by Ampersound Intelligence Catalog Manager</i><br/>
+    <i>Report Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</i>
+    """
+    elements.append(Paragraph(footer_text, small_style))
+    
+    doc.build(elements)
+    
+    buffer.seek(0)
+    
+    filename = f"Schedule_A_{data['creator']['display_name'].replace(' ', '_')}_{datetime.utcnow().strftime('%Y-%m-%d')}.pdf"
+    
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+# Keep backward compatibility with old endpoint
+@router.get("/creator/{creator_id}")
+def export_schedule_a_legacy(
+    creator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Legacy CSV export - redirects to new CSV endpoint"""
+    return export_schedule_a_csv(creator_id, db, current_user)
+
 
 @router.post("/upload/{org_id}")
 async def upload_schedule_a(
@@ -106,12 +586,10 @@ async def upload_schedule_a(
         'application/csv'
     ]
     if file.content_type not in allowed_types:
-        # Fallback to extension check if MIME type is generic
         if not (file.filename.endswith('.csv') or file.filename.endswith('.xlsx') or file.filename.endswith('.xls')):
             raise HTTPException(status_code=400, detail="Invalid file type. Please upload CSV or Excel file")
     
     try:
-        
         songs_created = 0
         songs_updated = 0
         songs_skipped = 0
@@ -119,14 +597,12 @@ async def upload_schedule_a(
         
         # Detect file type and parse
         if file.filename.endswith('.xlsx') or file.filename.endswith('.xls'):
-            # Parse Excel file with error handling
             try:
                 wb = load_workbook(io.BytesIO(contents), data_only=True, read_only=True)
                 ws = wb.active
             except Exception as e:
                 raise HTTPException(status_code=400, detail=f"Failed to parse Excel file: {str(e)}")
             
-            # Get headers from first row
             headers = [cell.value for cell in ws[1]]
             header_map = {}
             for idx, header in enumerate(headers):
@@ -134,10 +610,8 @@ async def upload_schedule_a(
                     header_lower = str(header).lower().strip()
                     header_map[header_lower] = idx
             
-            # Process each row
             for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
                 try:
-                    # Extract required fields
                     song_title = row[header_map.get('song title', header_map.get('title', 0))]
                     artist = row[header_map.get('artist', header_map.get('primary artist', 1))]
                     
@@ -145,7 +619,6 @@ async def upload_schedule_a(
                         songs_skipped += 1
                         continue
                     
-                    # Parse all fields
                     data = {
                         'isrc': row[header_map.get('isrc')] if 'isrc' in header_map else None,
                         'iswc': row[header_map.get('iswc')] if 'iswc' in header_map else None,
@@ -161,7 +634,6 @@ async def upload_schedule_a(
                         'notes': row[header_map.get('notes')] if 'notes' in header_map else None,
                     }
                     
-                    # Parse Yes/No fields
                     has_contract = False
                     if 'contract signed' in header_map:
                         has_contract_str = parse_yes_no_na(row[header_map['contract signed']])
@@ -180,7 +652,6 @@ async def upload_schedule_a(
                     data['master_paid'] = parse_yes_no_na(row[header_map.get('master paid')]) if 'master paid' in header_map else 'N/A'
                     data['soundexchange_registered'] = parse_yes_no_na(row[header_map.get('soundexchange registered')]) if 'soundexchange registered' in header_map else 'N/A'
                     
-                    # Check if song exists
                     existing_song = db.query(Song).filter(
                         Song.organization_id == org_id,
                         Song.title == song_title,
@@ -188,7 +659,6 @@ async def upload_schedule_a(
                     ).first()
                     
                     if existing_song:
-                        # Update existing song
                         for key, value in data.items():
                             if value is not None:
                                 setattr(existing_song, key, value)
@@ -198,7 +668,6 @@ async def upload_schedule_a(
                         existing_song.is_released = (data['release_date'] is not None)
                         songs_updated += 1
                     else:
-                        # Create new song
                         song = Song(
                             organization_id=org_id,
                             title=song_title,
@@ -217,7 +686,6 @@ async def upload_schedule_a(
                     songs_skipped += 1
         
         elif file.filename.endswith('.csv'):
-            # Parse CSV file with encoding detection
             try:
                 content_str = contents.decode('utf-8')
             except UnicodeDecodeError:
@@ -237,7 +705,6 @@ async def upload_schedule_a(
                         songs_skipped += 1
                         continue
                     
-                    # Similar parsing logic as Excel
                     data = {
                         'isrc': row.get('ISRC'),
                         'iswc': row.get('ISWC'),
@@ -259,7 +726,6 @@ async def upload_schedule_a(
                     is_pro_registered = parse_yes_no_na(row.get('PRO Registered')) == 'Yes'
                     is_dsp_registered = parse_yes_no_na(row.get('DSP Registered')) == 'Yes'
                     
-                    # Check if song exists
                     existing_song = db.query(Song).filter(
                         Song.organization_id == org_id,
                         Song.title == song_title,
@@ -303,7 +769,7 @@ async def upload_schedule_a(
             "songs_created": songs_created,
             "songs_updated": songs_updated,
             "songs_skipped": songs_skipped,
-            "errors": errors[:10]  # Return first 10 errors
+            "errors": errors[:10]
         }
         
     except Exception as e:

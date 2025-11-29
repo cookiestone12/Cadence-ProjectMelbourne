@@ -64,6 +64,10 @@ localPort = 36423
 externalPort = 3001
 
 [[ports]]
+localPort = 36647
+externalPort = 8080
+
+[[ports]]
 localPort = 36849
 externalPort = 3000
 
@@ -93,6 +97,7 @@ externalPort = 3003
 
 [nix]
 channel = "stable-25_05"
+packages = ["freetype", "glibcLocales"]
 
 [deployment]
 build = ["sh", "-c", "cd frontend && npm run build"]
