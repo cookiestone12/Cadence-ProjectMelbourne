@@ -26,6 +26,25 @@ function App() {
       setUser({ username: 'Demo User', role: 'Admin' })
     }
     setLoading(false)
+
+    // Add axios interceptor to handle expired tokens
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          // Token expired or invalid - log user out
+          localStorage.removeItem('token')
+          delete axios.defaults.headers.common['Authorization']
+          setIsAuthenticated(false)
+          setUser(null)
+        }
+        return Promise.reject(error)
+      }
+    )
+
+    return () => {
+      axios.interceptors.response.eject(interceptor)
+    }
   }, [])
 
   const handleLogin = (token, userData) => {
