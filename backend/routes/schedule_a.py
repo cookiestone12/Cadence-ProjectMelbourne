@@ -14,6 +14,70 @@ from ..utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/schedule-a", tags=["schedule-a"])
 
+
+@router.post("/upload/{org_id}")
+async def upload_schedule_a(
+    org_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Upload a Schedule A / Placement Status Sheet file.
+    Automatically creates creators and imports songs.
+    
+    The creator name is extracted from the filename.
+    Expected format: "CREATOR NAME - Placement Sheet.xlsx"
+    """
+    from backend.services.schedule_a_ingestion import ingest_schedule_a, ScheduleAIngestionResult
+    
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member of this organization")
+    
+    organization = db.query(Organization).filter(Organization.id == org_id).first()
+    if not organization:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+    
+    allowed_extensions = ['.csv', '.xlsx', '.xls']
+    file_ext = file.filename.lower()
+    if not any(file_ext.endswith(ext) for ext in allowed_extensions):
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid file type. Allowed types: {', '.join(allowed_extensions)}"
+        )
+    
+    if file.size and file.size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10MB.")
+    
+    try:
+        file_content = await file.read()
+        
+        result = ingest_schedule_a(
+            db=db,
+            organization=organization,
+            file_content=file_content,
+            filename=file.filename
+        )
+        
+        if result.errors:
+            raise HTTPException(status_code=400, detail=result.errors[0])
+        
+        return result.to_dict()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+
+
 def parse_yes_no_na(value):
     """Parse Yes/No/N/A values from Excel"""
     if value is None:

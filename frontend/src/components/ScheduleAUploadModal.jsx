@@ -174,16 +174,20 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
               
               {/* File Format Guide */}
               <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-blue-900 mb-2">File Naming</h3>
+                <p className="text-xs text-blue-800 mb-3">
+                  Name your file: <strong>CREATOR NAME - Placement Sheet.xlsx</strong><br/>
+                  Example: "JACK LOMASTRO - Placement Status Sheet.xlsx"
+                </p>
                 <h3 className="text-sm font-semibold text-blue-900 mb-2">Expected Columns</h3>
                 <div className="text-xs text-blue-800 space-y-1">
-                  <p><strong>Required:</strong> Song Title, Artist</p>
-                  <p><strong>Optional:</strong> ISRC, ISWC, Project Title, Release Date, Label, Recording Code</p>
-                  <p><strong>Financial:</strong> Publishing %, Master %, Advance Amount</p>
-                  <p><strong>Status:</strong> Contract Signed, Master Paid, PRO Registered, DSP Registered, SoundExchange Registered, Payment Status</p>
-                  <p><strong>Notes:</strong> Contract Location, Notes</p>
+                  <p><strong>Required:</strong> Song Title, Artist Name</p>
+                  <p><strong>Financial:</strong> Publishing %, Royalty/Master %, Advance ($)</p>
+                  <p><strong>Status:</strong> Credited, Received Paperwork, Agreement, BMI Registration, Kobalt Reg, SoundExchange, Payment Received, Invoice Sent</p>
+                  <p><strong>Details:</strong> Label, Date Released, Notes</p>
                 </div>
                 <p className="text-xs text-blue-700 mt-3">
-                  💡 The system will match existing songs by Title + Artist and update them, or create new ones.
+                  The system will create the creator if they don't exist, then import all songs and link them to that creator.
                 </p>
               </div>
             </>
@@ -197,19 +201,27 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
               </div>
               <div className="text-center">
                 <h3 className="text-xl font-bold text-gray-900 mb-2">Upload Successful!</h3>
+                {result.creator_name && (
+                  <p className="text-purple-600 font-medium mb-3">
+                    Creator: {result.creator_name}
+                  </p>
+                )}
                 <div className="space-y-2 text-sm text-gray-600">
                   <p><strong className="text-green-600">{result.songs_created}</strong> songs created</p>
                   <p><strong className="text-blue-600">{result.songs_updated}</strong> songs updated</p>
                   {result.songs_skipped > 0 && (
                     <p><strong className="text-yellow-600">{result.songs_skipped}</strong> songs skipped</p>
                   )}
+                  {result.credits_created > 0 && (
+                    <p><strong className="text-purple-600">{result.credits_created}</strong> credits linked</p>
+                  )}
                 </div>
-                {result.errors && result.errors.length > 0 && (
-                  <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-left">
-                    <p className="text-sm font-semibold text-yellow-900 mb-1">Warnings:</p>
-                    <ul className="text-xs text-yellow-800 list-disc list-inside space-y-1">
-                      {result.errors.map((err, idx) => (
-                        <li key={idx}>{err}</li>
+                {result.warnings && result.warnings.length > 0 && (
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-left">
+                    <p className="text-sm font-semibold text-blue-900 mb-1">Notes:</p>
+                    <ul className="text-xs text-blue-800 list-disc list-inside space-y-1">
+                      {result.warnings.map((warn, idx) => (
+                        <li key={idx}>{warn}</li>
                       ))}
                     </ul>
                   </div>
