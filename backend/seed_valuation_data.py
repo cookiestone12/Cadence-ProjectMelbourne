@@ -131,8 +131,8 @@ def seed_valuation_data():
                 )
                 db.add(territory)
             
-            ICARUS_STREAM_RATE = 0.0012
-            monthly_revenue_cents = int(total_streams * ICARUS_STREAM_RATE * ownership * 100)
+            stream_rate = 0.0012  # Icarus methodology
+            monthly_revenue_cents = int(total_streams * stream_rate * ownership * 100)
             annual_revenue_cents = monthly_revenue_cents * 12
             thirty_day_revenue_cents = monthly_revenue_cents
             ninety_day_revenue_cents = monthly_revenue_cents * 3
