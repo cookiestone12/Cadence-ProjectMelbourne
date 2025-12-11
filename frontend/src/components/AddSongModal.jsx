@@ -20,6 +20,7 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
     payment_status: 'PENDING',
     contract_location: '',
     notes: '',
+    media_url: '',
     has_contract_executed: false,
     is_registered_with_pro: false,
     is_registered_with_dsp: false
@@ -61,6 +62,7 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
         payment_status: formData.payment_status,
         contract_location: formData.contract_location || null,
         notes: formData.notes || null,
+        media_url: formData.media_url || null,
         has_contract_executed: formData.has_contract_executed,
         is_registered_with_pro: formData.is_registered_with_pro,
         is_registered_with_dsp: formData.is_registered_with_dsp
@@ -207,6 +209,17 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
                   onChange={(e) => handleChange('recording_code', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   placeholder="Enter recording code"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Audio File URL</label>
+                <input
+                  type="url"
+                  value={formData.media_url}
+                  onChange={(e) => handleChange('media_url', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Drive, Dropbox, or Disco link"
                 />
               </div>
               

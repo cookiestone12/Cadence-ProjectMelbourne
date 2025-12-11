@@ -38,6 +38,15 @@ def decode_access_token(token: str):
     except JWTError:
         return None
 
+def verify_token(token: str) -> Optional[str]:
+    payload = decode_access_token(token)
+    if payload is None:
+        return None
+    username = payload.get("sub")
+    if username is None or not isinstance(username, str):
+        return None
+    return username
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)

@@ -6,7 +6,8 @@ from .models import Base, engine
 from .routes import (
     auth, catalog, settings,
     organizations, creators, songs, credits,
-    checklist, exports, valuations, valuation_reports, schedule_a
+    checklist, exports, valuations, valuation_reports, schedule_a,
+    contracts, account_links
 )
 import os
 from pathlib import Path
@@ -36,6 +37,8 @@ app.include_router(exports.router)
 app.include_router(valuations.router)
 app.include_router(valuation_reports.router)
 app.include_router(schedule_a.router)
+app.include_router(contracts.router)
+app.include_router(account_links.router)
 
 @app.get("/api/health")
 def health_check():

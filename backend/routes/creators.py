@@ -12,11 +12,13 @@ class CreatorResponse(BaseModel):
     id: int
     display_name: str
     legal_name: Optional[str]
+    email: Optional[str]
     roles: List[str]
     primary_territory: Optional[str]
     primary_pro: Optional[str]
     primary_ipi: Optional[str]
     hero_image_url: Optional[str]
+    linked_user_id: Optional[int]
     song_count: Optional[int] = 0
     avg_health_score: Optional[float] = 0.0
     
@@ -26,6 +28,7 @@ class CreatorResponse(BaseModel):
 class CreatorCreateRequest(BaseModel):
     display_name: str
     legal_name: Optional[str] = None
+    email: Optional[str] = None
     roles: List[str]
     primary_territory: Optional[str] = None
     primary_pro: Optional[str] = None
@@ -36,11 +39,13 @@ class CreatorDetailResponse(BaseModel):
     id: int
     display_name: str
     legal_name: Optional[str]
+    email: Optional[str]
     roles: List[str]
     primary_territory: Optional[str]
     primary_pro: Optional[str]
     primary_ipi: Optional[str]
     hero_image_url: Optional[str]
+    linked_user_id: Optional[int]
     song_count: int
     avg_health_score: float
     placement_count: int
@@ -80,11 +85,13 @@ def get_organization_creators(
             "id": creator.id,
             "display_name": creator.display_name,
             "legal_name": creator.legal_name,
+            "email": creator.email,
             "roles": creator.roles,
             "primary_territory": creator.primary_territory,
             "primary_pro": creator.primary_pro,
             "primary_ipi": creator.primary_ipi,
             "hero_image_url": creator.hero_image_url,
+            "linked_user_id": creator.linked_user_id,
             "song_count": song_count,
             "avg_health_score": float(avg_health) if avg_health else 0.0
         })
@@ -110,6 +117,7 @@ def create_creator(
         organization_id=org_id,
         display_name=request.display_name,
         legal_name=request.legal_name,
+        email=request.email,
         roles=request.roles,
         primary_territory=request.primary_territory,
         primary_pro=request.primary_pro,
@@ -124,11 +132,13 @@ def create_creator(
         "id": creator.id,
         "display_name": creator.display_name,
         "legal_name": creator.legal_name,
+        "email": creator.email,
         "roles": creator.roles,
         "primary_territory": creator.primary_territory,
         "primary_pro": creator.primary_pro,
         "primary_ipi": creator.primary_ipi,
         "hero_image_url": creator.hero_image_url,
+        "linked_user_id": creator.linked_user_id,
         "song_count": 0,
         "avg_health_score": 0.0
     }
@@ -173,11 +183,13 @@ def get_creator(
         "id": creator.id,
         "display_name": creator.display_name,
         "legal_name": creator.legal_name,
+        "email": creator.email,
         "roles": creator.roles,
         "primary_territory": creator.primary_territory,
         "primary_pro": creator.primary_pro,
         "primary_ipi": creator.primary_ipi,
         "hero_image_url": creator.hero_image_url,
+        "linked_user_id": creator.linked_user_id,
         "song_count": song_count,
         "avg_health_score": float(avg_health) if avg_health else 0.0,
         "placement_count": placement_count

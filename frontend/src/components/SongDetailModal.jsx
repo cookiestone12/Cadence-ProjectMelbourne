@@ -1,17 +1,22 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import {
   XMarkIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon,
-  MusicalNoteIcon, ChartBarIcon, DocumentTextIcon, LinkIcon
+  MusicalNoteIcon, ChartBarIcon, DocumentTextIcon, LinkIcon,
+  DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon
 } from '@heroicons/react/24/outline'
 
 export default function SongDetailModal({ song, onClose }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [songDetails, setSongDetails] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [contracts, setContracts] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef(null)
   
   useEffect(() => {
     loadSongDetails()
+    loadContracts()
   }, [song.id])
   
   async function loadSongDetails() {
@@ -26,6 +31,74 @@ export default function SongDetailModal({ song, onClose }) {
     } finally {
       setLoading(false)
     }
+  }
+  
+  async function loadContracts() {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get(`/api/contracts/song/${song.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setContracts(response.data)
+    } catch (error) {
+      console.error('Failed to load contracts:', error)
+    }
+  }
+  
+  async function handleContractUpload(event) {
+    const file = event.target.files[0]
+    if (!file) return
+    
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      alert('Only PDF files are allowed')
+      return
+    }
+    
+    setUploading(true)
+    try {
+      const token = localStorage.getItem('token')
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('contract_type', 'Agreement')
+      
+      await axios.post(`/api/contracts/upload/${song.id}`, formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      
+      await loadContracts()
+      await loadSongDetails()
+    } catch (error) {
+      console.error('Failed to upload contract:', error)
+      alert('Failed to upload contract')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+  
+  async function handleDeleteContract(contractId) {
+    if (!confirm('Are you sure you want to delete this contract?')) return
+    
+    try {
+      const token = localStorage.getItem('token')
+      await axios.delete(`/api/contracts/${contractId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      await loadContracts()
+      await loadSongDetails()
+    } catch (error) {
+      console.error('Failed to delete contract:', error)
+    }
+  }
+  
+  function downloadContract(contractId) {
+    const token = localStorage.getItem('token')
+    window.open(`/api/contracts/download/${contractId}?token=${token}`, '_blank')
   }
   
   const getStatusIcon = (value) => {
@@ -154,6 +227,20 @@ export default function SongDetailModal({ song, onClose }) {
                   <label className="text-sm font-medium text-gray-500">Release Date</label>
                   <p className="text-gray-900">{songDetails.release_date || 'N/A'}</p>
                 </div>
+                {songDetails.media_url && (
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Audio File</label>
+                    <a 
+                      href={songDetails.media_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center space-x-2 text-purple-600 hover:text-purple-800 mt-1"
+                    >
+                      <PlayIcon className="w-5 h-5" />
+                      <span className="underline">Listen / Download</span>
+                    </a>
+                  </div>
+                )}
               </div>
               
               <div className="space-y-4">
@@ -272,6 +359,70 @@ export default function SongDetailModal({ song, onClose }) {
                     </div>
                   </div>
                 </div>
+              </div>
+              
+              {/* Contracts Section */}
+              <div className="mt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Contracts & Agreements</h3>
+                  <div>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleContractUpload}
+                      accept=".pdf"
+                      className="hidden"
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50"
+                    >
+                      <DocumentArrowUpIcon className="w-5 h-5" />
+                      <span>{uploading ? 'Uploading...' : 'Upload Contract'}</span>
+                    </button>
+                  </div>
+                </div>
+                
+                {contracts.length > 0 ? (
+                  <div className="space-y-2">
+                    {contracts.map((contract) => (
+                      <div key={contract.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-center space-x-3">
+                          <DocumentTextIcon className="w-8 h-8 text-purple-500" />
+                          <div>
+                            <p className="font-medium text-gray-900">{contract.file_name}</p>
+                            <p className="text-sm text-gray-500">
+                              {contract.contract_type || 'Contract'} • {new Date(contract.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => downloadContract(contract.id)}
+                            className="p-2 text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                            title="Download"
+                          >
+                            <ArrowDownTrayIcon className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteContract(contract.id)}
+                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete"
+                          >
+                            <TrashIcon className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                    <DocumentTextIcon className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-500">No contracts uploaded yet</p>
+                    <p className="text-sm text-gray-400">Upload a PDF to attach it to this song</p>
+                  </div>
+                )}
               </div>
             </div>
           )}

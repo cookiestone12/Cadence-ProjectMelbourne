@@ -38,6 +38,7 @@ class SongResponse(BaseModel):
     payment_status: Optional[str]
     contract_location: Optional[str]
     notes: Optional[str]
+    media_url: Optional[str]
     
     class Config:
         from_attributes = True
@@ -98,6 +99,7 @@ class SongDetailResponse(BaseModel):
     payment_status: Optional[str]
     contract_location: Optional[str]
     notes: Optional[str]
+    media_url: Optional[str]
     credits: List[CreditResponse]
     dsp_links: List[DSPLinkResponse]
     checklist_statuses: List[ChecklistStatusResponse]
@@ -115,13 +117,14 @@ class SongCreateRequest(BaseModel):
     label: Optional[str] = None
     publishing_percentage: Optional[float] = None
     master_percentage: Optional[float] = None
-    advance_amount: Optional[int] = None  # Already in cents from frontend
+    advance_amount: Optional[int] = None
     recording_code: Optional[str] = None
     master_paid: Optional[str] = None
     soundexchange_registered: Optional[str] = None
     payment_status: Optional[str] = None
     contract_location: Optional[str] = None
     notes: Optional[str] = None
+    media_url: Optional[str] = None
     has_contract_executed: Optional[bool] = None
     is_registered_with_pro: Optional[bool] = None
     is_registered_with_dsp: Optional[bool] = None
@@ -147,6 +150,7 @@ class SongUpdateRequest(BaseModel):
     payment_status: Optional[str] = None
     contract_location: Optional[str] = None
     notes: Optional[str] = None
+    media_url: Optional[str] = None
 
 @router.get("/org/{org_id}", response_model=List[SongResponse])
 def get_organization_songs(
@@ -224,7 +228,8 @@ def get_organization_songs(
             "soundexchange_registered": song.soundexchange_registered,
             "payment_status": song.payment_status,
             "contract_location": song.contract_location,
-            "notes": song.notes
+            "notes": song.notes,
+            "media_url": song.media_url
         }
         for song in songs
     ]
@@ -284,6 +289,7 @@ def get_song(
         "payment_status": song.payment_status,
         "contract_location": song.contract_location,
         "notes": song.notes,
+        "media_url": song.media_url,
         "credits": [
             {
                 "id": credit.id,
@@ -350,6 +356,7 @@ def create_song(
         payment_status=request.payment_status,
         contract_location=request.contract_location,
         notes=request.notes,
+        media_url=request.media_url,
         has_contract_executed=request.has_contract_executed or False,
         is_registered_with_pro=request.is_registered_with_pro or False,
         is_registered_with_dsp=request.is_registered_with_dsp or False
@@ -394,7 +401,8 @@ def create_song(
         "soundexchange_registered": song.soundexchange_registered,
         "payment_status": song.payment_status,
         "contract_location": song.contract_location,
-        "notes": song.notes
+        "notes": song.notes,
+        "media_url": song.media_url
     }
 
 @router.patch("/{song_id}", response_model=SongResponse)
@@ -453,5 +461,6 @@ def update_song(
         "soundexchange_registered": song.soundexchange_registered,
         "payment_status": song.payment_status,
         "contract_location": song.contract_location,
-        "notes": song.notes
+        "notes": song.notes,
+        "media_url": song.media_url
     }

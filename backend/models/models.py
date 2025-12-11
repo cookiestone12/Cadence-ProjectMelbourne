@@ -61,6 +61,21 @@ class PRO(str, enum.Enum):
     SESAC = "SESAC"
     OTHER = "OTHER"
 
+class AccountType(str, enum.Enum):
+    INDIVIDUAL = "INDIVIDUAL"
+    ENTERPRISE = "ENTERPRISE"
+
+class AccountLinkStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    ACTIVE = "ACTIVE"
+    EXPIRED = "EXPIRED"
+    REVOKED = "REVOKED"
+
+class AccountLinkPermission(str, enum.Enum):
+    VIEW_ONLY = "VIEW_ONLY"
+    EDIT = "EDIT"
+    FULL_ACCESS = "FULL_ACCESS"
+
 class User(Base):
     __tablename__ = "users"
     
@@ -79,6 +94,7 @@ class Organization(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     type = Column(String)
+    account_type = Column(String, default="ENTERPRISE")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -108,16 +124,19 @@ class Creator(Base):
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
     display_name = Column(String, index=True, nullable=False)
     legal_name = Column(String, nullable=True)
+    email = Column(String, nullable=True, index=True)
     roles = Column(JSON, default=list)
     primary_territory = Column(String, nullable=True)
     primary_pro = Column(String, nullable=True)
     primary_ipi = Column(String, nullable=True)
     hero_image_url = Column(String, nullable=True)
+    linked_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     organization = relationship("Organization", back_populates="creators")
     song_credits = relationship("SongCredit", back_populates="creator")
+    linked_user = relationship("User", foreign_keys=[linked_user_id])
 
 class Song(Base):
     __tablename__ = "songs"
@@ -156,6 +175,8 @@ class Song(Base):
     contract_location = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
     
+    media_url = Column(String, nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -168,6 +189,7 @@ class Song(Base):
     streaming_metrics = relationship("SongStreamingMetrics", back_populates="song", cascade="all, delete-orphan")
     territory_revenues = relationship("TerritoryRevenue", back_populates="song", cascade="all, delete-orphan")
     valuation_calculations = relationship("ValuationCalculation", back_populates="song", cascade="all, delete-orphan")
+    contracts = relationship("SongContract", back_populates="song", cascade="all, delete-orphan")
 
 class SongCredit(Base):
     __tablename__ = "song_credits"
@@ -371,3 +393,58 @@ class ValuationCalculation(Base):
     
     song = relationship("Song", back_populates="valuation_calculations")
     organization = relationship("Organization")
+
+class AccountLink(Base):
+    __tablename__ = "account_links"
+    __table_args__ = (
+        Index('ix_account_links_individual', 'individual_org_id'),
+        Index('ix_account_links_enterprise', 'enterprise_org_id'),
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    individual_org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    enterprise_org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    
+    status = Column(String, default="PENDING")
+    permission_level = Column(String, default="VIEW_ONLY")
+    
+    initiated_by = Column(String, nullable=False)
+    individual_consent = Column(Boolean, default=False)
+    enterprise_consent = Column(Boolean, default=False)
+    
+    agreement_terms = Column(Text, nullable=True)
+    start_date = Column(DateTime, nullable=True)
+    expiration_date = Column(DateTime, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    individual_org = relationship("Organization", foreign_keys=[individual_org_id])
+    enterprise_org = relationship("Organization", foreign_keys=[enterprise_org_id])
+
+class SongContract(Base):
+    __tablename__ = "song_contracts"
+    __table_args__ = (
+        Index('ix_song_contracts_song_id', 'song_id'),
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    
+    file_name = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    file_size_bytes = Column(Integer, nullable=True)
+    mime_type = Column(String, default="application/pdf")
+    
+    contract_type = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    song = relationship("Song", back_populates="contracts")
+    organization = relationship("Organization")
+    uploaded_by = relationship("User")
