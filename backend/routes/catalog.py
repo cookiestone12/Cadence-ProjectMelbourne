@@ -68,6 +68,8 @@ class SongDetailResponse(BaseModel):
     id: int
     title: str
     artist_name: str
+    client_name: str | None
+    client_id: int | None
     publishing_percentage: float
     master_percentage: float
     spotify_link: str | None
@@ -494,10 +496,21 @@ def get_song(
     collectible_publishing_value = publishing_revenue * decay_factor
     black_box_loss = publishing_revenue * (1 - decay_factor)
     
+    client_name = None
+    client_id = None
+    credit = db.query(SongCredit).filter(SongCredit.song_id == song.id).first()
+    if credit:
+        creator = db.query(Creator).filter(Creator.id == credit.creator_id).first()
+        if creator:
+            client_name = creator.name
+            client_id = creator.id
+    
     return {
         "id": song.id,
         "title": song.title,
         "artist_name": song.artist_name,
+        "client_name": client_name,
+        "client_id": client_id,
         "publishing_percentage": song.publishing_percentage,
         "master_percentage": song.master_percentage,
         "spotify_link": song.spotify_link,

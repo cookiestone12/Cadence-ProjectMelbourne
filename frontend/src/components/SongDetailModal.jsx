@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import axios from 'axios'
 import {
   XMarkIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon,
   MusicalNoteIcon, ChartBarIcon, DocumentTextIcon, LinkIcon,
-  DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon
+  DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon, UserIcon
 } from '@heroicons/react/24/outline'
 
 export default function SongDetailModal({ song, onClose }) {
@@ -214,6 +215,21 @@ export default function SongDetailModal({ song, onClose }) {
                 <div>
                   <label className="text-sm font-medium text-gray-500">Primary Artist</label>
                   <p className="text-gray-900">{songDetails.primary_artist}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Client</label>
+                  {songDetails.client_name ? (
+                    <Link 
+                      to={`/creators/${songDetails.client_id}`}
+                      onClick={onClose}
+                      className="flex items-center space-x-2 text-purple-600 hover:text-purple-800"
+                    >
+                      <UserIcon className="w-4 h-4" />
+                      <span className="font-medium">{songDetails.client_name}</span>
+                    </Link>
+                  ) : (
+                    <p className="text-gray-400">Not assigned</p>
+                  )}
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Project/Album</label>
