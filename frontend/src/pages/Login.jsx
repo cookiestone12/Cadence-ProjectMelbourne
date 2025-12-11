@@ -28,25 +28,25 @@ export default function Login({ onLogin }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-pink-500 to-purple-900 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+    <div className="min-h-screen bg-gradient-to-br from-[#A020F0] via-[#E540AC] to-[#7D7AFF] flex items-center justify-center p-4">
+      <div className="bg-white rounded-[24px] shadow-[0px_20px_60px_rgba(0,0,0,0.15)] p-8 w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <img 
               src="/logo-medium.png" 
               alt="Ampersound Intelligence" 
-              className="h-24 w-auto"
+              className="h-20 w-auto"
             />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800 mb-1">
+          <h1 className="text-[28px] font-semibold text-[#1D1D1F] mb-1">
             Ampersound Intelligence
           </h1>
-          <p className="text-gray-600">Catalog Manager</p>
+          <p className="text-[17px] text-[#86868B]">Catalog Manager</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="username" className="block text-[15px] font-medium text-[#1D1D1F] mb-2">
               Username
             </label>
             <input
@@ -54,7 +54,7 @@ export default function Login({ onLogin }) {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 bg-white"
+              className="w-full px-4 py-3 border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] bg-white text-[17px] transition-all duration-200"
               required
               disabled={loading}
               autoComplete="username"
@@ -62,7 +62,7 @@ export default function Login({ onLogin }) {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="password" className="block text-[15px] font-medium text-[#1D1D1F] mb-2">
               Password
             </label>
             <input
@@ -70,7 +70,7 @@ export default function Login({ onLogin }) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 bg-white"
+              className="w-full px-4 py-3 border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] bg-white text-[17px] transition-all duration-200"
               autoComplete="current-password"
               required
               disabled={loading}
@@ -78,7 +78,7 @@ export default function Login({ onLogin }) {
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+            <div className="bg-[rgba(255,59,48,0.1)] border border-[rgba(255,59,48,0.2)] text-[#FF3B30] px-4 py-3 rounded-xl text-[15px]">
               {error}
             </div>
           )}
@@ -86,15 +86,15 @@ export default function Login({ onLogin }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-purple-600 to-pink-500 text-white py-3 rounded-lg font-medium hover:from-purple-700 hover:to-pink-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-gradient-to-r from-[#A020F0] to-[#E540AC] text-white py-3.5 rounded-xl font-semibold text-[17px] hover:shadow-lg hover:shadow-purple-500/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-          <p className="text-xs text-gray-600 text-center mb-2">Demo Credentials</p>
-          <div className="text-xs text-gray-700 space-y-1">
+        <div className="mt-6 p-4 bg-[#F2F2F5] rounded-xl">
+          <p className="text-[13px] text-[#86868B] text-center mb-2">Demo Credentials</p>
+          <div className="text-[13px] text-[#1D1D1F] space-y-1 text-center">
             <p><span className="font-medium">Username:</span> admin</p>
             <p><span className="font-medium">Password:</span> demo123</p>
           </div>

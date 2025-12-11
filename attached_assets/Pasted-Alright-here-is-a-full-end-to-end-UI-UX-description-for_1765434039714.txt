@@ -1,0 +1,284 @@
+Alright — here is a full, end-to-end UI/UX description for updating Ampersound to an Apple-Music-inspired LIGHT MODE.
+This gives your developer and designer everything they need to rebuild the interface clean, premium, and Apple-native.
+
+Nothing vague — this is a system.
+
+⸻
+
+⭐️ AMPERSOUND — FULL UI/UX DESIGN SPEC (LIGHT VERSION)
+
+Inspired by Apple Music (iOS + macOS) visual language
+
+Purpose: Refresh the entire app to a premium, modern, industry-level UI
+
+⸻
+
+1️⃣ FOUNDATIONS
+
+1. Color System (Light Mode)
+
+Apple’s light interfaces rely on warm neutrals and soft depth.
+Use this exact palette:
+
+Backgrounds
+	•	Primary App Background: #F7F7F9 (Apple off-white)
+	•	Content Panels / Cards: #FFFFFF
+	•	Subtle Contrast Panels: #F2F2F5 (for table rows, sections)
+
+Accents
+
+Use your brand’s purple/pink gradient subtly, Apple-style:
+	•	Primary Gradient: #A020F0 → #E540AC
+	•	Secondary Purple: #7D7AFF
+	•	Highlight Pink: #FF2F71
+
+Functional Colors
+	•	Success: #34C759
+	•	Warning: #FF9500
+	•	Error: #FF3B30
+	•	Info: #007AFF (iOS blue)
+
+Shadows
+	•	Very soft, almost invisible:
+0px 4px 12px rgba(0,0,0,0.08) for cards
+0px 1px 3px rgba(0,0,0,0.06) for buttons
+
+⸻
+
+2️⃣ TYPOGRAPHY (Apple System Type)
+
+Use SF Pro only.
+
+Title 1 — 34px, semibold
+
+Used for page headers (Roster, Dashboard)
+
+Title 2 — 28px, semibold
+
+Used for section headers (Creator Profiles)
+
+Title 3 — 22px, medium
+
+Used for card headers (Performance, Financials)
+
+Body — 17px regular
+
+Used everywhere text is meant to be read.
+
+Caption — 13px regular
+
+Used for labels, stat descriptions, table headers.
+
+Spacing rule:
+Every block of content breathes — use 24–32px vertical space.
+
+⸻
+
+3️⃣ LAYOUT SYSTEM
+
+Global Layout
+	•	Full-width background remains pure white/very light grey.
+	•	Content lives inside cards with rounded corners & soft shadows.
+	•	Spacing:
+	•	Horizontal margin: 20–24px mobile, 40–60px desktop
+	•	Vertical rhythm: consistent 24–32px
+
+Card Style
+	•	Background: #FFFFFF
+	•	Radius: 18px
+	•	Shadow: subtle
+	•	Padding inside card: 20–28px
+
+Tables (Songs, Placements) appear inside elevated cards, not full width.
+
+⸻
+
+4️⃣ COMPONENT REDESIGN
+
+🔹 A. NAVIGATION
+
+Mobile Nav
+
+Apple rules:
+	•	Clean header bar
+	•	Left-aligned title
+	•	“Back” arrow identical to Apple Music
+	•	No borders — just subtle shadow
+
+Desktop Sidebar
+
+Light mode version:
+	•	White sidebar
+	•	Soft separators (1px, rgba(0,0,0,0.07))
+	•	Active item gets:
+	•	Purple text
+	•	6px rounded highlight pill behind it
+	•	Medium weight
+
+Logo at top:
+Use your teal Ampersound logo, centered on white.
+
+⸻
+
+🔹 B. DASHBOARD (Light Mode)
+
+Hero Greeting
+
+Large friendly header:
+“Welcome back, Demo Label Co.” — 34px semibold
+Subtext: 17px light grey
+
+Metrics Tiles
+
+Apple-style stat cards:
+	•	White card
+	•	Light shadow
+	•	Bold metric (40px)
+	•	Label (caption grey)
+	•	Accent strip at top using your gradient
+
+Example:
+147 (big, semibold)
+Total Songs (caption)
+
+Spacing: 20px internal padding, 24px external.
+
+⸻
+
+🔹 C. ROSTER PAGE
+
+Cards look like Apple Music artist cards:
+
+Artist Card
+	•	Gradient circle with letter initial
+	•	White rounded card
+	•	Name 17px medium
+	•	Subtitle 13px grey
+	•	Stats aligned to right in caption text
+	•	Shadow very soft
+	•	Tap opens Creator Profile
+
+Grid layout:
+	•	Mobile: 1-column full width
+	•	Tablet: 2-column
+	•	Desktop: 3-column grid with 40px gap
+
+⸻
+
+🔹 D. CREATOR PROFILE (Light Mode)
+
+Header Section
+
+Follow Apple Music artist profile design:
+	•	Large gradient banner (your purple/pink gradient)
+	•	Creator name: 34px bold
+	•	Metadata row (Producer, Songwriter, Songs count) in 15px grey
+	•	Back arrow top-left
+	•	Tabs centered:
+	•	Overview
+	•	Songs
+	•	Placements
+Active tab uses purple underline + medium weight.
+
+Overview Cards
+
+White cards with:
+	•	Songs count
+	•	Placements
+	•	PRO registered
+	•	DSP registered
+Use color-coded numbers (success green, info purple).
+
+Financial card uses:
+	•	Minimal line chart
+	•	Big green revenue number
+	•	Rounded white card
+
+⸻
+
+🔹 E. TABLES (Songs & Placements)
+
+Apple-style clean tables:
+	•	White card container
+	•	Table rows alternating:
+	•	#FFFFFF
+	•	#F8F8FB
+	•	Header row: 13px uppercase grey
+	•	Data rows: 15px
+	•	Status pills:
+	•	Rounded
+	•	Soft pastel colors
+	•	Light border (not heavy)
+
+Example pill:
+“YES” inside soft green pill rgba(52,199,89,0.15).
+
+Rows have 24px vertical padding for readability.
+
+⸻
+
+🔹 F. SONG DETAIL PANEL
+
+Slide-over panel style (Apple Music):
+	•	White surface
+	•	Soft shadow
+	•	Rounded corners
+	•	Large title
+	•	Artist + metadata grey
+	•	Section dividers with very light lines
+	•	Buttons in soft gradient or primary purple
+
+⸻
+
+5️⃣ INTERACTIONS & UX RULES
+
+Movement
+	•	Smooth iOS-style transitions
+	•	Slide from right for detail views
+	•	Fade + scale for dialogs
+
+Hit Targets
+
+Minimum 44px touch targets.
+
+Hierarchy
+	1.	Big title
+	2.	Subtitle
+	3.	Cards/tables
+	4.	Captions
+
+State Indicators
+	•	PRO/DSP/SoundExchange status uses color-coded pills
+	•	Missing information uses grey pill “N/A”
+
+Responsiveness
+	•	Mobile-first
+	•	Cards stack vertically
+	•	Tables scroll horizontally on mobile
+
+⸻
+
+6️⃣ THE FEELING YOU’RE TARGETING
+
+Ampersound should feel like:
+
+Apple Music + Spotify for Artists + a label management tool
+
+But with:
+	•	Friendly energy
+	•	Premium simplicity
+	•	Zero clutter
+	•	Fast readability
+	•	Warm light mode personality
+
+⸻
+
+✅ If you want, I can now generate:
+
+A full visual redesign in mockup images
+
+based on the spec above — light mode, Apple style.
+
+Just say:
+
+“Generate the light mode mockups.”
