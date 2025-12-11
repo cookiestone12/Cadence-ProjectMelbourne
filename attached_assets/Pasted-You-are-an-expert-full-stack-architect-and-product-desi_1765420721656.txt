@@ -1,0 +1,198 @@
+You are an expert full-stack architect and product designer helping me plan the next version of my web app, **Ampersound**.
+
+## High-level vision
+
+Ampersound is a **catalog management tool for music creators, managers, and companies**, designed to look and feel aesthetically similar to **Apple Music** when you log in.
+
+Think:
+- Clean, minimal, dark/light theme similar to Apple Music
+- Left sidebar navigation, main content pane, rich tables and detail views
+- Fluid browsing between creators, catalogs, and songs
+
+The core idea:
+- Users upload a spreadsheet of their catalog (songs, metadata, revenue data)
+- Ampersound turns that into a structured, browsable catalog
+- Users can **view, edit, and manage their catalog**, track **revenue** and **catalog “health”**
+
+## Current MVP (assume this already exists)
+
+Right now, the app already has a basic MVP:
+
+- There is a **catalog view** and a **roster view**
+- You can click into a catalog and see its **songs**
+- You can manually add/edit songs
+- There is a basic **revenue summary** / **catalog health** component that:
+  - Sums up revenue for a catalog
+  - Shows some health metrics at a simple level
+- You can upload data (e.g. a spreadsheet) to populate the catalog
+
+You should **assume the existing code is rough but functional**. Your job is to design how to properly evolve this into a robust product.
+
+## New requirements / features to plan
+
+I want you to plan the next version of Ampersound with the following features and structure.
+
+### 1. Account types & multi-tenancy
+
+There should be two main account types:
+
+1. **Individual User Account**
+   - Intended for a **single producer, songwriter, or artist**
+   - Manages only their **own catalog**
+   - Can upload, view, and edit their own songs and revenue data
+
+2. **Enterprise Account**
+   - Intended for **managers, labels, publishers, or companies with a roster**
+   - Can manage **multiple creators/clients** under one account:
+     - e.g. “Client Profiles” for each producer, songwriter, artist
+   - Each client profile has its own catalog, metadata, and stats
+   - Enterprise users can switch between clients or view a combined overview
+
+### 2. Linking individual accounts to enterprise
+
+Add a linking system so that:
+
+- A **producer/songwriter with their own Individual account** can link their catalog to an **Enterprise account** (e.g. their manager, label, or publisher).
+- Once linked:
+  - The **creator keeps ownership** of their individual account and catalog view.
+  - The **enterprise account** gets **real-time access** to that catalog (view/edit permissions as defined).
+- There should be a clear **permission model**, for example:
+  - View-only access vs. edit access
+  - Ability for the creator to revoke access
+- This should be designed as a **robust, multi-tenant architecture**:
+  - Clean separation of users, accounts, and client profiles
+  - A single user can belong to multiple “organizations” (enterprise accounts) if needed.
+
+### 3. Catalog upload & editing (refine and formalize)
+
+Refine the catalog flow into a proper system:
+
+- Support upload of CSV / spreadsheet to create or update a catalog:
+  - Map spreadsheet columns to internal fields (title, artist, collaborators, PRO, ISRC, splits, release date, revenue data, etc.).
+- Each **song record** should support:
+  - Core metadata (title, artist, role, writers, producers, etc.)
+  - Ownership/split info
+  - Release information
+  - Revenue data over time (e.g. by period/platform)
+- Enterprise accounts should be able to:
+  - Filter and sort catalog by client, revenue, usage, etc.
+  - View **per-client** and **portfolio-wide** stats.
+
+### 4. Revenue & “health” dashboard
+
+Expand the existing “revenue + health” idea:
+
+- Per **song**:
+  - Total revenue
+  - Revenue trend (e.g. by month)
+  - Basic health indicators (e.g. growing / declining / steady)
+- Per **catalog/client**:
+  - Total catalog revenue
+  - Top songs by revenue
+  - Recently added songs
+  - “Health score” or simple visual indicator based on:
+    - Recency of releases
+    - Revenue trends
+    - Number of active songs
+- Per **enterprise account**:
+  - Aggregated stats across all linked clients
+  - Top clients, top songs, etc.
+
+You should plan a structure that makes it easy later to add more advanced analytics.
+
+### 5. UI / UX requirements (Apple Music style)
+
+Plan the layout to be inspired by Apple Music’s web/desktop interface:
+
+- **Global layout**
+  - Left sidebar:
+    - For individuals: `Overview`, `Catalog`, `Analytics`, `Settings`
+    - For enterprise: `Overview`, `Roster`, `Catalogs`, `Analytics`, `Settings`
+  - Top bar:
+    - Account switcher (for enterprise)
+    - Search across songs / clients
+    - User profile / logout
+  - Main content area:
+    - Apple Music–style cards, lists, and detail views
+
+- **Roster view (enterprise)**
+  - Grid or list of clients (with avatar, name, key stats)
+  - Clicking a client opens their catalog & analytics
+
+- **Catalog view**
+  - Table-style list of songs with filters/sorting
+  - Clicking a song opens a detail panel with full metadata and revenue/health
+
+- **Linking screen**
+  - A simple UI for:
+    - Creators to generate “access invitations” for managers/enterprises
+    - Enterprises to request access from creators
+    - Viewing current links + permission levels
+
+### 6. Authentication & authorization
+
+Plan out:
+
+- Role-based access:
+  - Individual user
+  - Enterprise admin
+  - Enterprise team member (optional, but design for it)
+- Linking/permissions between individual and enterprise accounts:
+  - How to model these relationships in the database
+  - How to enforce them in the API layer
+
+### 7. Tech stack & architecture planning
+
+Choose a standard, modern stack suitable for Replit, such as:
+
+- Frontend: React (or Next.js if appropriate)
+- Backend: Node.js / Express (or similar)
+- Database: PostgreSQL
+- ORM: Prisma or similar
+
+Then:
+
+1. Propose a **data model** (tables/entities + relationships) for:
+   - Users
+   - Accounts (individual vs enterprise)
+   - Client profiles (under enterprise)
+   - Catalogs
+   - Songs
+   - Revenue entries / metrics
+   - Linking relationships between individual and enterprise accounts
+   - Permissions/roles
+
+2. Design the **API layer**:
+   - Auth endpoints
+   - CRUD endpoints for catalogs, songs, clients
+   - Linking endpoints (invite, accept, revoke)
+   - Analytics/summary endpoints (for revenue & health)
+
+3. Outline the **frontend component structure**:
+   - High-level page/components list
+   - Notes on state management and how data flows from API → UI
+
+4. Plan **migrations**:
+   - Assume there is already a basic catalog + roster schema.
+   - Show how we evolve the schema to support:
+     - Multiple account types
+     - Linked accounts
+     - Per-client catalogs
+     - Revenue/health enhancements
+
+## What I want from you
+
+Please output a **detailed planning document** that includes:
+
+1. A short **product summary** in your own words.
+2. A **diagram-style description** (even in text) of the architecture: frontend, backend, database, and how they talk.
+3. A clear **data model** section describing tables/entities and relationships.
+4. A set of **API endpoint definitions** (just routes + purpose + basic request/response shapes).
+5. A **UI/UX layout plan** explaining the main screens and navigation, referencing the Apple Music look/feel.
+6. A **phased implementation plan**, e.g.:
+   - Phase 1: Separate account types + basic enterprise roster
+   - Phase 2: Linking individual ↔ enterprise accounts
+   - Phase 3: Improved revenue/health analytics
+   - Phase 4: UI polish to match Apple Music aesthetic more closely
+
+Keep everything concrete and implementation-oriented so I can immediately start building this in Replit based on your plan.
