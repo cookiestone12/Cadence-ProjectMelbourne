@@ -57,17 +57,6 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
       ...prev,
       [field]: value
     }))
-    
-    if (field === 'creator_id' && value) {
-      const selectedCreator = creators.find(c => c.id === parseInt(value))
-      if (selectedCreator) {
-        setFormData(prev => ({
-          ...prev,
-          creator_id: value,
-          primary_artist: selectedCreator.name
-        }))
-      }
-    }
   }
   
   const handleSubmit = async (e) => {
@@ -197,6 +186,20 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
                     No clients in roster. Add a client first.
                   </div>
                 )}
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Primary Artist <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.primary_artist}
+                  onChange={(e) => handleChange('primary_artist', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Enter artist name"
+                />
               </div>
               
               <div>

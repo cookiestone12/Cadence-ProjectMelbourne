@@ -515,6 +515,7 @@ export default function CatalogView() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-tech-grey uppercase tracking-wider">Song Title</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-tech-grey uppercase tracking-wider">Artist(s)</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-purple-400 uppercase tracking-wider">Client</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-tech-grey uppercase tracking-wider">Streams</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-tech-grey uppercase tracking-wider">Publishing %</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-tech-grey uppercase tracking-wider">Master %</th>
@@ -531,6 +532,15 @@ export default function CatalogView() {
                   <tr key={song.id} className="hover:bg-black hover:bg-opacity-30 transition-colors duration-150">
                     <td className="px-6 py-4 whitespace-nowrap font-medium">{song.title}</td>
                     <td className="px-6 py-4 whitespace-nowrap">{song.artist_name}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {song.client_name ? (
+                        <Link to={`/creators/${song.client_id}`} className="text-purple-400 hover:underline">
+                          {song.client_name}
+                        </Link>
+                      ) : (
+                        <span className="text-tech-grey">—</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-tech-grey">
                       {song.spotify_streams ? formatNumber(song.spotify_streams) : 'N/A'}
                     </td>

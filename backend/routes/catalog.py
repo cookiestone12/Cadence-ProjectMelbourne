@@ -5,7 +5,7 @@ from sqlalchemy import or_
 from typing import List
 from pydantic import BaseModel
 from datetime import datetime, timedelta
-from ..models import get_db, Song, Songwriter, Analytics, User, Catalog
+from ..models import get_db, Song, Songwriter, Analytics, User, Catalog, SongCredit, Creator
 from ..utils.auth import get_current_user
 from ..services import chartmetric_service, spotify_service, luminate_service
 from ..services import valuation_engine, scoring_engine
@@ -40,6 +40,8 @@ class SongResponse(BaseModel):
     id: int
     title: str
     artist_name: str
+    client_name: str | None
+    client_id: int | None
     publishing_percentage: float
     master_percentage: float
     spotify_link: str | None
@@ -368,16 +370,13 @@ def get_songs(
             pub_pct = song.publishing_percentage / 100.0
             master_pct = song.master_percentage / 100.0
             
-            # Calculate revenue across ALL platforms with correct rates
             for platform, stream_data in streams_by_type.items():
                 premium_streams = stream_data.get('premium', 0)
                 ad_supported_streams = stream_data.get('ad_supported', 0)
                 
-                # Publishing uses consistent rates
                 pub_premium_rate = get_publishing_rate('premium')
                 pub_ad_rate = get_publishing_rate('ad_supported')
                 
-                # Master uses platform-specific rates
                 master_premium_rate = get_master_rate(platform, 'premium')
                 master_ad_rate = get_master_rate(platform, 'ad_supported')
                 
@@ -386,10 +385,21 @@ def get_songs(
                 master_revenue += (premium_streams * master_premium_rate * master_pct) + \
                                  (ad_supported_streams * master_ad_rate * master_pct)
         
+        client_name = None
+        client_id = None
+        credit = db.query(SongCredit).filter(SongCredit.song_id == song.id).first()
+        if credit:
+            creator = db.query(Creator).filter(Creator.id == credit.creator_id).first()
+            if creator:
+                client_name = creator.name
+                client_id = creator.id
+        
         result.append({
             "id": song.id,
             "title": song.title,
             "artist_name": song.artist_name,
+            "client_name": client_name,
+            "client_id": client_id,
             "publishing_percentage": song.publishing_percentage,
             "master_percentage": song.master_percentage,
             "spotify_link": song.spotify_link,
