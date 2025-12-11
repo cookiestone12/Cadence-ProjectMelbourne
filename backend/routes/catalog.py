@@ -393,7 +393,7 @@ def get_songs(
         if credit:
             creator = db.query(Creator).filter(Creator.id == credit.creator_id).first()
             if creator:
-                client_name = creator.name
+                client_name = creator.display_name
                 client_id = creator.id
         
         result.append({
@@ -502,7 +502,7 @@ def get_song(
     if credit:
         creator = db.query(Creator).filter(Creator.id == credit.creator_id).first()
         if creator:
-            client_name = creator.name
+            client_name = creator.display_name
             client_id = creator.id
     
     return {

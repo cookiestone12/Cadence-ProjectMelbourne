@@ -64,6 +64,12 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
     setLoading(true)
     setError(null)
     
+    if (!formData.creator_id) {
+      setError('Please select a client. Every song must be assigned to a client in your roster.')
+      setLoading(false)
+      return
+    }
+    
     try {
       const token = localStorage.getItem('token')
       
@@ -175,11 +181,16 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   >
                     <option value="">Select a client...</option>
-                    {creators.map(creator => (
-                      <option key={creator.id} value={creator.id}>
-                        {creator.name} ({creator.role})
-                      </option>
-                    ))}
+                    {creators.map(creator => {
+                      const roleDisplay = Array.isArray(creator.roles) && creator.roles.length > 0 
+                        ? creator.roles[0] 
+                        : (typeof creator.roles === 'string' && creator.roles ? creator.roles.split(',')[0].trim() : '')
+                      return (
+                        <option key={creator.id} value={creator.id}>
+                          {creator.display_name}{roleDisplay ? ` (${roleDisplay})` : ''}
+                        </option>
+                      )
+                    })}
                   </select>
                 ) : (
                   <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-yellow-50 text-yellow-700 text-sm">
