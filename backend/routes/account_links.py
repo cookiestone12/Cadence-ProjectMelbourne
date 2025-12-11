@@ -54,9 +54,15 @@ def request_link(
     if not individual_org:
         raise HTTPException(status_code=404, detail="Individual organization not found")
     
+    if individual_org.account_type and individual_org.account_type != "INDIVIDUAL":
+        raise HTTPException(status_code=400, detail="The individual_org must have account_type INDIVIDUAL")
+    
     enterprise_org = db.query(Organization).filter(Organization.id == request.enterprise_org_id).first()
     if not enterprise_org:
         raise HTTPException(status_code=404, detail="Enterprise organization not found")
+    
+    if enterprise_org.account_type and enterprise_org.account_type != "ENTERPRISE":
+        raise HTTPException(status_code=400, detail="The enterprise_org must have account_type ENTERPRISE")
     
     requester_org_id = request.individual_org_id if request.initiated_by == "INDIVIDUAL" else request.enterprise_org_id
     membership = db.query(OrganizationMember).filter(

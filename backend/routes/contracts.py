@@ -8,8 +8,41 @@ import os
 import uuid
 from pathlib import Path
 
-from ..models import get_db, Song, SongContract, Organization, OrganizationMember, User
+from ..models import get_db, Song, SongContract, Organization, OrganizationMember, User, AccountLink
 from ..utils.auth import get_current_user, verify_token
+
+def check_linked_access(db: Session, user_id: int, target_org_id: int, permission_level: str = "VIEW") -> bool:
+    """Check if user has access to target org via an active, non-expired account link."""
+    user_memberships = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == user_id
+    ).all()
+    user_org_ids = [m.organization_id for m in user_memberships]
+    
+    now = datetime.utcnow()
+    
+    for org_id in user_org_ids:
+        link = db.query(AccountLink).filter(
+            AccountLink.status == "ACTIVE",
+            (
+                (AccountLink.individual_org_id == org_id) & (AccountLink.enterprise_org_id == target_org_id) |
+                (AccountLink.enterprise_org_id == org_id) & (AccountLink.individual_org_id == target_org_id)
+            )
+        ).first()
+        
+        if link:
+            if link.expiration_date and link.expiration_date < now:
+                link.status = "EXPIRED"
+                db.commit()
+                continue
+            
+            if permission_level == "VIEW":
+                return True
+            elif permission_level == "MANAGE" and link.permission_level in ["MANAGE", "FULL"]:
+                return True
+            elif permission_level == "FULL" and link.permission_level == "FULL":
+                return True
+    
+    return False
 
 router = APIRouter(prefix="/api/contracts", tags=["contracts"])
 
@@ -103,7 +136,9 @@ def get_contracts_for_song(
         OrganizationMember.organization_id == song.organization_id
     ).first()
     
-    if not membership:
+    has_linked_access = check_linked_access(db, current_user.id, song.organization_id, "VIEW")
+    
+    if not membership and not has_linked_access:
         raise HTTPException(status_code=403, detail="Not authorized to view contracts for this song")
     
     contracts = db.query(SongContract).filter(SongContract.song_id == song_id).all()
@@ -135,7 +170,9 @@ def download_contract(
         OrganizationMember.organization_id == contract.organization_id
     ).first()
     
-    if not membership:
+    has_linked_access = check_linked_access(db, user.id, contract.organization_id, "VIEW")
+    
+    if not membership and not has_linked_access:
         raise HTTPException(status_code=403, detail="Not authorized to download this contract")
     
     file_path = Path(contract.file_path)

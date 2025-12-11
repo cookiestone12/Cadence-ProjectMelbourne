@@ -46,9 +46,23 @@ A comprehensive multi-tenant catalog management platform for labels, publishers,
 - **ValuationCalculation**: Computed valuations using 4 methodologies (streaming multiple, revenue multiple, market comps, black box) with revenue projections, growth rates, risk scores
 
 ### Key Fields
-- **Song**: isrc, iswc, project_title, release_date, status_health_score, has_paid, has_pro_registration, has_dsp_registration, has_contract
-- **Organization**: type (label, publisher, production_company, individual)
-- **Creator**: role (Writer, Producer, Performer, Manager, Other)
+- **Song**: isrc, iswc, project_title, release_date, status_health_score, has_paid, has_pro_registration, has_dsp_registration, has_contract, media_url
+- **Organization**: type (label, publisher, production_company, individual), account_type (INDIVIDUAL, ENTERPRISE)
+- **Creator**: role (Writer, Producer, Performer, Manager, Other), email, linked_user_id
+
+### Account Types & Linking (New)
+- **AccountLink**: Links Individual and Enterprise organizations with mutual consent
+  - Fields: individual_org_id, enterprise_org_id, status (PENDING/ACTIVE/REVOKED/EXPIRED), permission_level (VIEW/MANAGE/FULL)
+  - Requires both individual_consent and enterprise_consent for activation
+  - Supports time-limited agreements via expiration_date
+  - Account type validation enforced during creation
+
+### Contract Management (New)
+- **SongContract**: PDF contract storage attached to songs
+  - Fields: song_id, organization_id, file_name, file_path, contract_type, description
+  - Supports linked account access (partners can view contracts based on permission_level)
+  - Upload/download/delete with authentication
+  - Auto-updates song has_contract_executed and has_contract_sent flags
 
 ## API Architecture
 
@@ -93,6 +107,20 @@ All endpoints enforce multi-tenant isolation:
 
 #### Export
 - `GET /api/schedule-a/creator/{creator_id}` - CSV export of creator catalog
+
+#### Contracts (New)
+- `POST /api/contracts/upload/{song_id}` - Upload PDF contract (org members only)
+- `GET /api/contracts/song/{song_id}` - List contracts for song (org members + linked accounts)
+- `GET /api/contracts/download/{contract_id}` - Download contract PDF (org members + linked accounts)
+- `DELETE /api/contracts/{contract_id}` - Delete contract (org members only)
+
+#### Account Links (New)
+- `POST /api/account-links/request` - Create link request between Individual and Enterprise orgs
+- `POST /api/account-links/{id}/consent` - Give consent for pending link
+- `POST /api/account-links/{id}/revoke` - Revoke active link
+- `GET /api/account-links/organization/{org_id}` - List all links for org
+- `GET /api/account-links/active/{org_id}` - List active links (auto-expires stale links)
+- `PUT /api/account-links/{id}` - Update link settings
 
 #### Valuation Reports
 - `GET /api/valuation/catalog/summary` - Full catalog summary with stats, top songs, territory breakdown
