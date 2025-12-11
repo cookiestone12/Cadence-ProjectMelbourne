@@ -39,6 +39,8 @@ class SongResponse(BaseModel):
     contract_location: Optional[str]
     notes: Optional[str]
     media_url: Optional[str]
+    client_name: Optional[str] = None
+    client_id: Optional[int] = None
     
     class Config:
         from_attributes = True
@@ -100,6 +102,8 @@ class SongDetailResponse(BaseModel):
     contract_location: Optional[str]
     notes: Optional[str]
     media_url: Optional[str]
+    client_name: Optional[str] = None
+    client_id: Optional[int] = None
     credits: List[CreditResponse]
     dsp_links: List[DSPLinkResponse]
     checklist_statuses: List[ChecklistStatusResponse]
@@ -202,8 +206,18 @@ def get_organization_songs(
     
     songs = query.distinct().offset(offset).limit(limit).all()
     
-    return [
-        {
+    result = []
+    for song in songs:
+        client_name = None
+        client_id = None
+        credit = db.query(SongCredit).filter(SongCredit.song_id == song.id).first()
+        if credit:
+            creator = db.query(Creator).filter(Creator.id == credit.creator_id).first()
+            if creator:
+                client_name = creator.display_name
+                client_id = creator.id
+        
+        result.append({
             "id": song.id,
             "title": song.title,
             "primary_artist": song.primary_artist,
@@ -229,10 +243,11 @@ def get_organization_songs(
             "payment_status": song.payment_status,
             "contract_location": song.contract_location,
             "notes": song.notes,
-            "media_url": song.media_url
-        }
-        for song in songs
-    ]
+            "media_url": song.media_url,
+            "client_name": client_name,
+            "client_id": client_id
+        })
+    return result
 
 @router.get("/{song_id}", response_model=SongDetailResponse)
 def get_song(
@@ -263,6 +278,15 @@ def get_song(
         ChecklistItem, SongChecklistStatus.checklist_item_id == ChecklistItem.id
     ).filter(SongChecklistStatus.song_id == song.id).all()
     
+    client_name = None
+    client_id = None
+    first_credit = db.query(SongCredit).filter(SongCredit.song_id == song.id).first()
+    if first_credit:
+        creator = db.query(Creator).filter(Creator.id == first_credit.creator_id).first()
+        if creator:
+            client_name = creator.display_name
+            client_id = creator.id
+    
     return {
         "id": song.id,
         "title": song.title,
@@ -290,6 +314,8 @@ def get_song(
         "contract_location": song.contract_location,
         "notes": song.notes,
         "media_url": song.media_url,
+        "client_name": client_name,
+        "client_id": client_id,
         "credits": [
             {
                 "id": credit.id,
