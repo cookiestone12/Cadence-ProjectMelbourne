@@ -210,7 +210,7 @@ def get_organization_songs(
     for song in songs:
         client_name = None
         client_id = None
-        credit = db.query(SongCredit).filter(SongCredit.song_id == song.id).first()
+        credit = db.query(SongCredit).filter(SongCredit.song_id == song.id).order_by(SongCredit.id).first()
         if credit:
             creator = db.query(Creator).filter(Creator.id == credit.creator_id).first()
             if creator:
@@ -270,7 +270,7 @@ def get_song(
     
     credits = db.query(SongCredit, Creator).join(
         Creator, SongCredit.creator_id == Creator.id
-    ).filter(SongCredit.song_id == song.id).all()
+    ).filter(SongCredit.song_id == song.id).order_by(SongCredit.id).all()
     
     dsp_links = db.query(SongDSPLink).filter(SongDSPLink.song_id == song.id).all()
     
@@ -280,12 +280,10 @@ def get_song(
     
     client_name = None
     client_id = None
-    first_credit = db.query(SongCredit).filter(SongCredit.song_id == song.id).first()
-    if first_credit:
-        creator = db.query(Creator).filter(Creator.id == first_credit.creator_id).first()
-        if creator:
-            client_name = creator.display_name
-            client_id = creator.id
+    if credits:
+        first_credit, first_creator = credits[0]
+        client_name = first_creator.display_name
+        client_id = first_creator.id
     
     return {
         "id": song.id,
