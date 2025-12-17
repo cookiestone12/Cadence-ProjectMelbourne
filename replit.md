@@ -16,6 +16,19 @@ The platform is built on a modern web stack featuring React 18 with Tailwind CSS
 ### UI/UX Decisions
 The frontend adopts an Apple Music-style aesthetic, characterized by a collapsible sidebar, gradient headers, rounded cards, and smooth transitions, ensuring mobile responsiveness. Key pages include a dashboard, creator roster, detailed creator profiles, a spreadsheet-style catalog view with advanced filters, a placement tracking timeline, and comprehensive reports with Recharts visualizations. The Catalog Valuation dashboard provides detailed financial insights and download functionality for branded Excel reports.
 
+### Color Palette (Sage-Green Theme)
+The app uses a soothing, eye-friendly sage-green color palette optimized for productivity work in light mode:
+- **Primary**: #5B8A72 (sage green) - Main actions, active states
+- **Secondary**: #7BA594 (light sage) - Secondary elements, gradients
+- **Background**: #F5F7F4 (warm off-white) - Page backgrounds
+- **Surface**: #FAFBF9 (off-white) - Cards and panels
+- **Text Primary**: #3D4A44 (charcoal green) - Headings, important text
+- **Text Secondary**: #7A8580 (muted sage) - Supporting text
+- **Success**: #5B9A6E (green) - Positive states
+- **Info**: #5A8A9A (teal) - Informational elements
+- **Warning**: #C4956B (warm amber) - Warnings
+- **Error**: #C47068 (muted coral) - Errors
+
 ### Technical Implementations
 - **Multi-Tenant Architecture**: Ensures secure data isolation and organization-scoped access control.
 - **Authentication**: Utilizes JWT for token-based authentication and bcrypt for secure password hashing.
