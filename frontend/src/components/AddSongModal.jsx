@@ -129,12 +129,12 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
         className="bg-[#FFFFFF] rounded-[18px] shadow-[0px_4px_24px_rgba(0,0,0,0.12)] max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6 border-b border-[rgba(0,0,0,0.07)] bg-[#FFFFFF]">
+        <div className="p-6 border-b border-[rgba(59,77,67,0.08)] bg-[#FFFFFF]">
           <div className="flex items-center justify-between">
-            <h2 className="text-2xl font-semibold text-[#1D1D1F]">Add New Song</h2>
+            <h2 className="text-2xl font-semibold text-[#3D4A44]">Add New Song</h2>
             <button
               onClick={onClose}
-              className="text-[#86868B] hover:text-[#1D1D1F] transition-colors"
+              className="text-[#7A8580] hover:text-[#3D4A44] transition-colors"
             >
               <XMarkIcon className="w-6 h-6" />
             </button>
@@ -143,34 +143,34 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
         
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 bg-[#FFFFFF]">
           {error && (
-            <div className="mb-6 p-4 bg-[rgba(255,59,48,0.1)] rounded-xl text-[#FF3B30]">
+            <div className="mb-6 p-4 bg-[rgba(196,112,104,0.1)] rounded-xl text-[#C47068]">
               {error}
             </div>
           )}
           
           <div className="mb-8">
-            <h3 className="text-lg font-semibold text-[#1D1D1F] mb-4">Basic Information</h3>
+            <h3 className="text-lg font-semibold text-[#3D4A44] mb-4">Basic Information</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">
-                  Song Title <span className="text-[#FF3B30]">*</span>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">
+                  Song Title <span className="text-[#C47068]">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.title}
                   onChange={(e) => handleChange('title', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="Enter song title"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">
-                  Client / Creator <span className="text-[#FF3B30]">*</span>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">
+                  Client / Creator <span className="text-[#C47068]">*</span>
                 </label>
                 {loadingCreators ? (
-                  <div className="w-full px-4 py-3 border border-[rgba(0,0,0,0.1)] rounded-xl bg-[#F2F2F5] text-[#86868B]">
+                  <div className="w-full px-4 py-3 border border-[rgba(59,77,67,0.08)] rounded-xl bg-[#EEF1EC] text-[#7A8580]">
                     Loading clients...
                   </div>
                 ) : creators.length > 0 ? (
@@ -178,7 +178,7 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
                     required
                     value={formData.creator_id}
                     onChange={(e) => handleChange('creator_id', e.target.value)}
-                    className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F]"
+                    className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
                   >
                     <option value="">Select a client...</option>
                     {creators.map(creator => {
@@ -193,32 +193,32 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
                     })}
                   </select>
                 ) : (
-                  <div className="w-full px-4 py-3 border border-[rgba(0,0,0,0.1)] rounded-xl bg-[rgba(255,149,0,0.1)] text-[#CC7700] text-sm">
+                  <div className="w-full px-4 py-3 border border-[rgba(59,77,67,0.08)] rounded-xl bg-[rgba(196,149,107,0.1)] text-[#C4956B] text-sm">
                     No clients in roster. Add a client first.
                   </div>
                 )}
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">
-                  Primary Artist <span className="text-[#FF3B30]">*</span>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">
+                  Primary Artist <span className="text-[#C47068]">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.primary_artist}
                   onChange={(e) => handleChange('primary_artist', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="Enter artist name"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Credit Role</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Credit Role</label>
                 <select
                   value={formData.creator_role}
                   onChange={(e) => handleChange('creator_role', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
                 >
                   <option value="Writer">Writer</option>
                   <option value="Producer">Producer</option>
@@ -229,7 +229,7 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Split %</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Split %</label>
                 <input
                   type="number"
                   step="0.01"
@@ -237,109 +237,109 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
                   max="100"
                   value={formData.creator_split}
                   onChange={(e) => handleChange('creator_split', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="100"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">ISRC</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">ISRC</label>
                 <input
                   type="text"
                   value={formData.isrc}
                   onChange={(e) => handleChange('isrc', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="US-XXX-XX-XXXXX"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">ISWC</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">ISWC</label>
                 <input
                   type="text"
                   value={formData.iswc}
                   onChange={(e) => handleChange('iswc', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="T-XXX.XXX.XXX-X"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Project/Album Title</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Project/Album Title</label>
                 <input
                   type="text"
                   value={formData.project_title}
                   onChange={(e) => handleChange('project_title', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="Enter project or album title"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Release Date</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Release Date</label>
                 <input
                   type="date"
                   value={formData.release_date}
                   onChange={(e) => handleChange('release_date', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
                 />
               </div>
             </div>
           </div>
           
           <div className="mb-8">
-            <h3 className="text-lg font-semibold text-[#1D1D1F] mb-4">Placement & Contract</h3>
+            <h3 className="text-lg font-semibold text-[#3D4A44] mb-4">Placement & Contract</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Label</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Label</label>
                 <input
                   type="text"
                   value={formData.label}
                   onChange={(e) => handleChange('label', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="Enter label name"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Recording Code</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Recording Code</label>
                 <input
                   type="text"
                   value={formData.recording_code}
                   onChange={(e) => handleChange('recording_code', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="Enter recording code"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Audio File URL</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Audio File URL</label>
                 <input
                   type="url"
                   value={formData.media_url}
                   onChange={(e) => handleChange('media_url', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="Drive, Dropbox, or Disco link"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Contract Location</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Contract Location</label>
                 <input
                   type="text"
                   value={formData.contract_location}
                   onChange={(e) => handleChange('contract_location', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="e.g., Dropbox/Contracts/2024"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Payment Status</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Payment Status</label>
                 <select
                   value={formData.payment_status}
                   onChange={(e) => handleChange('payment_status', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
                 >
                   <option value="PENDING">Pending</option>
                   <option value="PAID">Paid</option>
@@ -349,11 +349,11 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Master Paid</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Master Paid</label>
                 <select
                   value={formData.master_paid}
                   onChange={(e) => handleChange('master_paid', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
                 >
                   <option value="Yes">Yes</option>
                   <option value="No">No</option>
@@ -362,11 +362,11 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">SoundExchange Registered</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">SoundExchange Registered</label>
                 <select
                   value={formData.soundexchange_registered}
                   onChange={(e) => handleChange('soundexchange_registered', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
                 >
                   <option value="Yes">Yes</option>
                   <option value="No">No</option>
@@ -377,10 +377,10 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
           </div>
           
           <div className="mb-8">
-            <h3 className="text-lg font-semibold text-[#1D1D1F] mb-4">Ownership & Financial</h3>
+            <h3 className="text-lg font-semibold text-[#3D4A44] mb-4">Ownership & Financial</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Publishing %</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Publishing %</label>
                 <input
                   type="number"
                   step="0.01"
@@ -388,13 +388,13 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
                   max="100"
                   value={formData.publishing_percentage}
                   onChange={(e) => handleChange('publishing_percentage', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="0.00"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Master %</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Master %</label>
                 <input
                   type="number"
                   step="0.01"
@@ -402,20 +402,20 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
                   max="100"
                   value={formData.master_percentage}
                   onChange={(e) => handleChange('master_percentage', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="0.00"
                 />
               </div>
               
               <div>
-                <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Advance Amount ($)</label>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Advance Amount ($)</label>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
                   value={formData.advance_amount}
                   onChange={(e) => handleChange('advance_amount', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
                   placeholder="0.00"
                 />
               </div>
@@ -423,16 +423,16 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
           </div>
           
           <div className="mb-8">
-            <h3 className="text-lg font-semibold text-[#1D1D1F] mb-4">Registration Status</h3>
+            <h3 className="text-lg font-semibold text-[#3D4A44] mb-4">Registration Status</h3>
             <div className="space-y-3">
               <label className="flex items-center">
                 <input
                   type="checkbox"
                   checked={formData.has_contract_executed}
                   onChange={(e) => handleChange('has_contract_executed', e.target.checked)}
-                  className="w-4 h-4 text-[#A020F0] border-[rgba(0,0,0,0.1)] rounded focus:ring-[#A020F0]"
+                  className="w-4 h-4 text-[#5B8A72] border-[rgba(59,77,67,0.08)] rounded focus:ring-[#5B8A72]"
                 />
-                <span className="ml-2 text-[15px] text-[#1D1D1F]">Contract Executed</span>
+                <span className="ml-2 text-[15px] text-[#3D4A44]">Contract Executed</span>
               </label>
               
               <label className="flex items-center">
@@ -440,9 +440,9 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
                   type="checkbox"
                   checked={formData.is_registered_with_pro}
                   onChange={(e) => handleChange('is_registered_with_pro', e.target.checked)}
-                  className="w-4 h-4 text-[#A020F0] border-[rgba(0,0,0,0.1)] rounded focus:ring-[#A020F0]"
+                  className="w-4 h-4 text-[#5B8A72] border-[rgba(59,77,67,0.08)] rounded focus:ring-[#5B8A72]"
                 />
-                <span className="ml-2 text-[15px] text-[#1D1D1F]">Registered with PRO</span>
+                <span className="ml-2 text-[15px] text-[#3D4A44]">Registered with PRO</span>
               </label>
               
               <label className="flex items-center">
@@ -450,29 +450,29 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
                   type="checkbox"
                   checked={formData.is_registered_with_dsp}
                   onChange={(e) => handleChange('is_registered_with_dsp', e.target.checked)}
-                  className="w-4 h-4 text-[#A020F0] border-[rgba(0,0,0,0.1)] rounded focus:ring-[#A020F0]"
+                  className="w-4 h-4 text-[#5B8A72] border-[rgba(59,77,67,0.08)] rounded focus:ring-[#5B8A72]"
                 />
-                <span className="ml-2 text-[15px] text-[#1D1D1F]">Registered with DSP</span>
+                <span className="ml-2 text-[15px] text-[#3D4A44]">Registered with DSP</span>
               </label>
             </div>
           </div>
           
           <div className="mb-6">
-            <label className="block text-[15px] font-medium text-[#1D1D1F] mb-1">Notes</label>
+            <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Notes</label>
             <textarea
               value={formData.notes}
               onChange={(e) => handleChange('notes', e.target.value)}
               rows={3}
-              className="w-full px-4 py-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-xl focus:ring-2 focus:ring-[#A020F0] focus:border-transparent text-[#1D1D1F] placeholder-[#86868B]"
+              className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
               placeholder="Add any additional notes..."
             />
           </div>
           
-          <div className="flex justify-end space-x-3 pt-4 border-t border-[rgba(0,0,0,0.07)]">
+          <div className="flex justify-end space-x-3 pt-4 border-t border-[rgba(59,77,67,0.08)]">
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-3 bg-[#F2F2F5] rounded-xl text-[#1D1D1F] font-medium hover:bg-[#E5E5EA] transition-colors"
+              className="px-6 py-3 bg-[#EEF1EC] rounded-xl text-[#3D4A44] font-medium hover:bg-[#E5E5EA] transition-colors"
               disabled={loading}
             >
               Cancel
@@ -480,7 +480,7 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
             <button
               type="submit"
               disabled={loading || (creators.length > 0 && !formData.creator_id)}
-              className="px-6 py-3 bg-gradient-to-r from-[#A020F0] to-[#E540AC] text-white rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-3 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Creating...' : 'Create Song'}
             </button>

@@ -67,7 +67,6 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
       
       setResult(response.data)
       
-      // Wait 2 seconds then close and refresh
       setTimeout(() => {
         onSuccess()
         onClose()
@@ -89,37 +88,34 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div 
-        className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-[#FAFBF9] rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
+        <div className="p-6 border-b border-[rgba(59,77,67,0.08)] bg-gradient-to-r from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)]">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Upload Schedule A</h2>
-              <p className="text-sm text-gray-600 mt-1">Import songs from CSV or Excel file</p>
+              <h2 className="text-2xl font-bold text-[#3D4A44]">Upload Schedule A</h2>
+              <p className="text-sm text-[#7A8580] mt-1">Import songs from CSV or Excel file</p>
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-[#7A8580] hover:text-[#3D4A44] transition-colors"
             >
               <XMarkIcon className="w-6 h-6" />
             </button>
           </div>
         </div>
         
-        {/* Content */}
         <div className="flex-1 overflow-y-auto p-6">
           {!result && (
             <>
-              {/* File Upload Area */}
               <div
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                   dragActive
-                    ? 'border-purple-500 bg-purple-50'
+                    ? 'border-[#5B8A72] bg-[rgba(91,138,114,0.08)]'
                     : file
-                    ? 'border-green-500 bg-green-50'
-                    : 'border-gray-300 hover:border-gray-400'
+                    ? 'border-[#5B9A6E] bg-[rgba(91,154,110,0.08)]'
+                    : 'border-[rgba(59,77,67,0.2)] hover:border-[rgba(59,77,67,0.3)]'
                 }`}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
@@ -128,25 +124,25 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
               >
                 {file ? (
                   <div className="space-y-2">
-                    <CheckCircleIcon className="w-12 h-12 mx-auto text-green-500" />
-                    <p className="text-lg font-medium text-gray-900">{file.name}</p>
-                    <p className="text-sm text-gray-500">
+                    <CheckCircleIcon className="w-12 h-12 mx-auto text-[#5B9A6E]" />
+                    <p className="text-lg font-medium text-[#3D4A44]">{file.name}</p>
+                    <p className="text-sm text-[#7A8580]">
                       {(file.size / 1024).toFixed(2)} KB
                     </p>
                     <button
                       onClick={() => setFile(null)}
-                      className="text-sm text-purple-600 hover:text-purple-700"
+                      className="text-sm text-[#5B8A72] hover:text-[#7BA594]"
                     >
                       Choose different file
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <ArrowUpTrayIcon className="w-12 h-12 mx-auto text-gray-400" />
-                    <p className="text-lg font-medium text-gray-900">
+                    <ArrowUpTrayIcon className="w-12 h-12 mx-auto text-[#7A8580]" />
+                    <p className="text-lg font-medium text-[#3D4A44]">
                       Drag and drop your file here
                     </p>
-                    <p className="text-sm text-gray-500">or</p>
+                    <p className="text-sm text-[#7A8580]">or</p>
                     <label className="inline-block">
                       <input
                         type="file"
@@ -154,11 +150,11 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                         accept=".csv,.xlsx,.xls"
                         onChange={handleFileChange}
                       />
-                      <span className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 cursor-pointer inline-block transition-colors">
+                      <span className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] cursor-pointer inline-block transition-colors">
                         Browse Files
                       </span>
                     </label>
-                    <p className="text-xs text-gray-400 mt-2">
+                    <p className="text-xs text-[#7A8580] mt-2">
                       Supported formats: CSV, Excel (.xlsx, .xls)
                     </p>
                   </div>
@@ -166,78 +162,75 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
               </div>
               
               {error && (
-                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-3">
-                  <XCircleIcon className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-red-700">{error}</p>
+                <div className="mt-4 p-4 bg-[rgba(196,112,104,0.08)] border border-[rgba(196,112,104,0.2)] rounded-lg flex items-start space-x-3">
+                  <XCircleIcon className="w-5 h-5 text-[#C47068] flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-[#A45850]">{error}</p>
                 </div>
               )}
               
-              {/* File Format Guide */}
-              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <h3 className="text-sm font-semibold text-blue-900 mb-2">File Naming</h3>
-                <p className="text-xs text-blue-800 mb-3">
+              <div className="mt-6 p-4 bg-[rgba(90,138,154,0.08)] border border-[rgba(90,138,154,0.15)] rounded-lg">
+                <h3 className="text-sm font-semibold text-[#4A7A8A] mb-2">File Naming</h3>
+                <p className="text-xs text-[#5A8A9A] mb-3">
                   Name your file: <strong>CREATOR NAME - Placement Sheet.xlsx</strong><br/>
                   Example: "JACK LOMASTRO - Placement Status Sheet.xlsx"
                 </p>
-                <h3 className="text-sm font-semibold text-blue-900 mb-2">Expected Columns</h3>
-                <div className="text-xs text-blue-800 space-y-1">
+                <h3 className="text-sm font-semibold text-[#4A7A8A] mb-2">Expected Columns</h3>
+                <div className="text-xs text-[#5A8A9A] space-y-1">
                   <p><strong>Required:</strong> Song Title, Artist Name</p>
                   <p><strong>Financial:</strong> Publishing %, Royalty/Master %, Advance ($)</p>
                   <p><strong>Status:</strong> Credited, Received Paperwork, Agreement, BMI Registration, Kobalt Reg, SoundExchange, Payment Received, Invoice Sent</p>
                   <p><strong>Details:</strong> Label, Date Released, Notes</p>
                 </div>
-                <p className="text-xs text-blue-700 mt-3">
+                <p className="text-xs text-[#5A8A9A] mt-3">
                   The system will create the creator if they don't exist, then import all songs and link them to that creator.
                 </p>
               </div>
             </>
           )}
           
-          {/* Success Result */}
           {result && (
             <div className="space-y-4">
               <div className="flex items-center justify-center">
-                <CheckCircleIcon className="w-16 h-16 text-green-500" />
+                <CheckCircleIcon className="w-16 h-16 text-[#5B9A6E]" />
               </div>
               <div className="text-center">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Upload Successful!</h3>
+                <h3 className="text-xl font-bold text-[#3D4A44] mb-2">Upload Successful!</h3>
                 {result.creator_name && (
-                  <p className="text-purple-600 font-medium mb-3">
+                  <p className="text-[#5B8A72] font-medium mb-3">
                     Creator: {result.creator_name}
                   </p>
                 )}
-                <div className="space-y-2 text-sm text-gray-600">
-                  <p><strong className="text-green-600">{result.songs_created}</strong> songs created</p>
-                  <p><strong className="text-blue-600">{result.songs_updated}</strong> songs updated</p>
+                <div className="space-y-2 text-sm text-[#7A8580]">
+                  <p><strong className="text-[#5B9A6E]">{result.songs_created}</strong> songs created</p>
+                  <p><strong className="text-[#5A8A9A]">{result.songs_updated}</strong> songs updated</p>
                   {result.songs_skipped > 0 && (
-                    <p><strong className="text-yellow-600">{result.songs_skipped}</strong> songs skipped</p>
+                    <p><strong className="text-[#C4956B]">{result.songs_skipped}</strong> songs skipped</p>
                   )}
                   {result.credits_created > 0 && (
-                    <p><strong className="text-purple-600">{result.credits_created}</strong> credits linked</p>
+                    <p><strong className="text-[#5B8A72]">{result.credits_created}</strong> credits linked</p>
                   )}
                 </div>
                 {result.warnings && result.warnings.length > 0 && (
-                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-left">
-                    <p className="text-sm font-semibold text-blue-900 mb-1">Notes:</p>
-                    <ul className="text-xs text-blue-800 list-disc list-inside space-y-1">
+                  <div className="mt-4 p-3 bg-[rgba(90,138,154,0.08)] border border-[rgba(90,138,154,0.15)] rounded-lg text-left">
+                    <p className="text-sm font-semibold text-[#4A7A8A] mb-1">Notes:</p>
+                    <ul className="text-xs text-[#5A8A9A] list-disc list-inside space-y-1">
                       {result.warnings.map((warn, idx) => (
                         <li key={idx}>{warn}</li>
                       ))}
                     </ul>
                   </div>
                 )}
-                <p className="text-sm text-gray-500 mt-4">Refreshing catalog...</p>
+                <p className="text-sm text-[#7A8580] mt-4">Refreshing catalog...</p>
               </div>
             </div>
           )}
         </div>
         
-        {/* Actions */}
         {!result && (
-          <div className="flex justify-end space-x-3 p-6 border-t border-gray-200">
+          <div className="flex justify-end space-x-3 p-6 border-t border-[rgba(59,77,67,0.08)]">
             <button
               onClick={onClose}
-              className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              className="px-6 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
               disabled={uploading}
             >
               Cancel
@@ -245,7 +238,7 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
             <button
               onClick={handleUpload}
               disabled={!isValidFile || uploading}
-              className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-6 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {uploading ? 'Uploading...' : 'Upload File'}
             </button>

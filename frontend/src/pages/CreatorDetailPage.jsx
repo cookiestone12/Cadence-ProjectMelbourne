@@ -148,21 +148,21 @@ export default function CreatorDetailPage() {
   const StatusBadge = ({ value, label }) => {
     if (value === true || value === 'Yes') {
       return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(52, 199, 89, 0.15)', color: '#34C759' }}>
+        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(52, 199, 89, 0.15)', color: '#5B9A6E' }}>
           <CheckCircleIcon className="w-3 h-3" />
           {label || 'Yes'}
         </span>
       )
     } else if (value === false || value === 'No') {
       return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(255, 59, 48, 0.15)', color: '#FF3B30' }}>
+        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(255, 59, 48, 0.15)', color: '#C47068' }}>
           <XCircleIcon className="w-3 h-3" />
           {label || 'No'}
         </span>
       )
     } else {
       return (
-        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(0, 0, 0, 0.05)', color: '#86868B' }}>
+        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(0, 0, 0, 0.05)', color: '#7A8580' }}>
           <MinusCircleIcon className="w-3 h-3" />
           N/A
         </span>
@@ -172,12 +172,12 @@ export default function CreatorDetailPage() {
   
   const PlacementStatusBadge = ({ status }) => {
     const colors = {
-      'Paid': { bg: 'rgba(52, 199, 89, 0.15)', color: '#34C759' },
-      'Invoiced': { bg: 'rgba(0, 122, 255, 0.15)', color: '#007AFF' },
-      'Contracted': { bg: 'rgba(160, 32, 240, 0.15)', color: '#A020F0' },
-      'Contract Sent': { bg: 'rgba(88, 86, 214, 0.15)', color: '#5856D6' },
-      'Released - Awaiting Contract': { bg: 'rgba(255, 149, 0, 0.15)', color: '#FF9500' },
-      'In Pipeline': { bg: 'rgba(0, 0, 0, 0.05)', color: '#86868B' }
+      'Paid': { bg: 'rgba(52, 199, 89, 0.15)', color: '#5B9A6E' },
+      'Invoiced': { bg: 'rgba(0, 122, 255, 0.15)', color: '#5A8A9A' },
+      'Contracted': { bg: 'rgba(160, 32, 240, 0.15)', color: '#5B8A72' },
+      'Contract Sent': { bg: 'rgba(88, 86, 214, 0.15)', color: '#6B9A84' },
+      'Released - Awaiting Contract': { bg: 'rgba(255, 149, 0, 0.15)', color: '#C4956B' },
+      'In Pipeline': { bg: 'rgba(0, 0, 0, 0.05)', color: '#7A8580' }
     }
     const style = colors[status] || colors['In Pipeline']
     return (
@@ -192,16 +192,16 @@ export default function CreatorDetailPage() {
   
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full bg-[#F7F7F9]">
-        <div className="text-[#86868B]">Loading creator...</div>
+      <div className="flex items-center justify-center h-full bg-[#F5F7F4]">
+        <div className="text-[#7A8580]">Loading creator...</div>
       </div>
     )
   }
   
   if (!creator) {
     return (
-      <div className="flex items-center justify-center h-full bg-[#F7F7F9]">
-        <div className="text-[#86868B]">Creator not found</div>
+      <div className="flex items-center justify-center h-full bg-[#F5F7F4]">
+        <div className="text-[#7A8580]">Creator not found</div>
       </div>
     )
   }
@@ -219,8 +219,8 @@ export default function CreatorDetailPage() {
   ]
   
   return (
-    <div className="min-h-screen bg-[#F7F7F9]">
-      <div className="relative h-80" style={{ background: 'linear-gradient(135deg, #A020F0 0%, #E540AC 100%)' }}>
+    <div className="min-h-screen bg-[#F5F7F4]">
+      <div className="relative h-80" style={{ background: 'linear-gradient(135deg, #5B8A72 0%, #7BA594 100%)' }}>
         {creator.hero_image_url && (
           <img 
             src={creator.hero_image_url} 
@@ -253,7 +253,7 @@ export default function CreatorDetailPage() {
         </div>
       </div>
       
-      <div className="bg-white border-b border-[rgba(0,0,0,0.07)] sticky top-0 z-10">
+      <div className="bg-white border-b border-[rgba(59,77,67,0.08)] sticky top-0 z-10">
         <div className="px-8">
           <div className="flex space-x-8">
             {tabs.map((tab) => (
@@ -262,8 +262,8 @@ export default function CreatorDetailPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`py-4 px-2 border-b-2 font-medium transition-colors ${
                   activeTab === tab.id
-                    ? 'border-[#A020F0] text-[#A020F0]'
-                    : 'border-transparent text-[#86868B] hover:text-[#1D1D1F]'
+                    ? 'border-[#5B8A72] text-[#5B8A72]'
+                    : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
                 }`}
               >
                 {tab.label}
@@ -278,57 +278,57 @@ export default function CreatorDetailPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
               <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                <h2 className="text-xl font-semibold text-[#1D1D1F] mb-5">Performance</h2>
+                <h2 className="text-xl font-semibold text-[#3D4A44] mb-5">Performance</h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <p className="text-sm text-[#86868B] mb-1">Total Songs</p>
-                    <p className="text-2xl font-semibold text-[#1D1D1F]">{songs.length}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">Total Songs</p>
+                    <p className="text-2xl font-semibold text-[#3D4A44]">{songs.length}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-[#86868B] mb-1">Paid Placements</p>
-                    <p className="text-2xl font-semibold text-[#34C759]">{placedSongs.length}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">Paid Placements</p>
+                    <p className="text-2xl font-semibold text-[#5B9A6E]">{placedSongs.length}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-[#86868B] mb-1">PRO Registered</p>
-                    <p className="text-2xl font-semibold text-[#007AFF]">{registeredPro}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">PRO Registered</p>
+                    <p className="text-2xl font-semibold text-[#5A8A9A]">{registeredPro}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-[#86868B] mb-1">DSP Registered</p>
-                    <p className="text-2xl font-semibold text-[#A020F0]">{registeredDsp}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">DSP Registered</p>
+                    <p className="text-2xl font-semibold text-[#5B8A72]">{registeredDsp}</p>
                   </div>
                 </div>
               </div>
               
               <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                <h2 className="text-xl font-semibold text-[#1D1D1F] mb-5">Financials</h2>
+                <h2 className="text-xl font-semibold text-[#3D4A44] mb-5">Financials</h2>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
-                    <p className="text-sm text-[#86868B] mb-1">Total Advances</p>
-                    <p className="text-2xl font-semibold text-[#34C759]">${totalAdvance.toLocaleString()}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">Total Advances</p>
+                    <p className="text-2xl font-semibold text-[#5B9A6E]">${totalAdvance.toLocaleString()}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-[#86868B] mb-1">Avg Publishing %</p>
-                    <p className="text-2xl font-semibold text-[#1D1D1F]">
+                    <p className="text-sm text-[#7A8580] mb-1">Avg Publishing %</p>
+                    <p className="text-2xl font-semibold text-[#3D4A44]">
                       {songs.filter(s => s.publishing_percentage).length > 0 
                         ? (songs.reduce((sum, s) => sum + (s.publishing_percentage || 0), 0) / songs.filter(s => s.publishing_percentage).length).toFixed(1)
                         : 0}%
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-[#86868B] mb-1">Avg Health Score</p>
-                    <p className="text-2xl font-semibold text-[#1D1D1F]">{creator.avg_health_score?.toFixed(0) || 0}%</p>
+                    <p className="text-sm text-[#7A8580] mb-1">Avg Health Score</p>
+                    <p className="text-2xl font-semibold text-[#3D4A44]">{creator.avg_health_score?.toFixed(0) || 0}%</p>
                   </div>
                 </div>
               </div>
               
               <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                <h2 className="text-xl font-semibold text-[#1D1D1F] mb-5">Recent Songs</h2>
+                <h2 className="text-xl font-semibold text-[#3D4A44] mb-5">Recent Songs</h2>
                 <div className="space-y-3">
                   {songs.slice(0, 5).map((song) => (
                     <div key={song.id} className="flex items-center justify-between p-4 bg-[#F8F8FB] rounded-xl">
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-[#1D1D1F] truncate">{song.title}</p>
-                        <p className="text-sm text-[#86868B]">{song.primary_artist}</p>
+                        <p className="font-medium text-[#3D4A44] truncate">{song.title}</p>
+                        <p className="text-sm text-[#7A8580]">{song.primary_artist}</p>
                       </div>
                       <div className="flex items-center gap-2 ml-4">
                         <StatusBadge value={song.is_paid} label="Paid" />
@@ -342,57 +342,57 @@ export default function CreatorDetailPage() {
             
             <div className="space-y-6">
               <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                <h2 className="text-xl font-semibold text-[#1D1D1F] mb-5">Details</h2>
+                <h2 className="text-xl font-semibold text-[#3D4A44] mb-5">Details</h2>
                 <div className="space-y-4 text-sm">
                   {creator.legal_name && (
                     <div>
-                      <p className="text-[#86868B]">Legal Name</p>
-                      <p className="font-medium text-[#1D1D1F]">{creator.legal_name}</p>
+                      <p className="text-[#7A8580]">Legal Name</p>
+                      <p className="font-medium text-[#3D4A44]">{creator.legal_name}</p>
                     </div>
                   )}
                   {creator.primary_territory && (
                     <div>
-                      <p className="text-[#86868B]">Territory</p>
-                      <p className="font-medium text-[#1D1D1F]">{creator.primary_territory}</p>
+                      <p className="text-[#7A8580]">Territory</p>
+                      <p className="font-medium text-[#3D4A44]">{creator.primary_territory}</p>
                     </div>
                   )}
                   {creator.primary_pro && (
                     <div>
-                      <p className="text-[#86868B]">PRO</p>
-                      <p className="font-medium text-[#1D1D1F]">{creator.primary_pro}</p>
+                      <p className="text-[#7A8580]">PRO</p>
+                      <p className="font-medium text-[#3D4A44]">{creator.primary_pro}</p>
                     </div>
                   )}
                   {creator.primary_ipi && (
                     <div>
-                      <p className="text-[#86868B]">IPI</p>
-                      <p className="font-medium text-[#1D1D1F]">{creator.primary_ipi}</p>
+                      <p className="text-[#7A8580]">IPI</p>
+                      <p className="font-medium text-[#3D4A44]">{creator.primary_ipi}</p>
                     </div>
                   )}
                 </div>
               </div>
               
               <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                <h2 className="text-xl font-semibold text-[#1D1D1F] mb-5">Registration Status</h2>
+                <h2 className="text-xl font-semibold text-[#3D4A44] mb-5">Registration Status</h2>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-[#86868B]">PRO Registered</span>
-                    <span className="font-medium text-[#1D1D1F]">{registeredPro} / {songs.length}</span>
+                    <span className="text-[#7A8580]">PRO Registered</span>
+                    <span className="font-medium text-[#3D4A44]">{registeredPro} / {songs.length}</span>
                   </div>
-                  <div className="w-full bg-[#F2F2F5] rounded-full h-2">
+                  <div className="w-full bg-[#EEF1EC] rounded-full h-2">
                     <div 
                       className="h-2 rounded-full" 
-                      style={{ width: `${songs.length > 0 ? (registeredPro / songs.length) * 100 : 0}%`, background: '#007AFF' }}
+                      style={{ width: `${songs.length > 0 ? (registeredPro / songs.length) * 100 : 0}%`, background: '#5A8A9A' }}
                     />
                   </div>
                   
                   <div className="flex justify-between items-center mt-4">
-                    <span className="text-[#86868B]">DSP Registered</span>
-                    <span className="font-medium text-[#1D1D1F]">{registeredDsp} / {songs.length}</span>
+                    <span className="text-[#7A8580]">DSP Registered</span>
+                    <span className="font-medium text-[#3D4A44]">{registeredDsp} / {songs.length}</span>
                   </div>
-                  <div className="w-full bg-[#F2F2F5] rounded-full h-2">
+                  <div className="w-full bg-[#EEF1EC] rounded-full h-2">
                     <div 
                       className="h-2 rounded-full" 
-                      style={{ width: `${songs.length > 0 ? (registeredDsp / songs.length) * 100 : 0}%`, background: '#A020F0' }}
+                      style={{ width: `${songs.length > 0 ? (registeredDsp / songs.length) * 100 : 0}%`, background: '#5B8A72' }}
                     />
                   </div>
                 </div>
@@ -403,25 +403,25 @@ export default function CreatorDetailPage() {
         
         {activeTab === 'songs' && (
           <div className="bg-white rounded-[18px] overflow-hidden" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-            <div className="p-5 border-b border-[rgba(0,0,0,0.07)] bg-[#F8F8FB]">
-              <p className="text-sm text-[#86868B]">
+            <div className="p-5 border-b border-[rgba(59,77,67,0.08)] bg-[#F8F8FB]">
+              <p className="text-sm text-[#7A8580]">
                 Showing all {songs.length} songs. Click the edit button to update placement status.
               </p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-[#F8F8FB] border-b border-[rgba(0,0,0,0.07)]">
+                <thead className="bg-[#F8F8FB] border-b border-[rgba(59,77,67,0.08)]">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F] sticky left-0 bg-[#F8F8FB]">Title / Artist</th>
-                    <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Label</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Pub %</th>
-                    <th className="px-4 py-3 text-right font-semibold text-[#1D1D1F]">Advance</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">PRO</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">DSP</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Sound Ex.</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Contract</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Paid</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Actions</th>
+                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44] sticky left-0 bg-[#F8F8FB]">Title / Artist</th>
+                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Label</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Pub %</th>
+                    <th className="px-4 py-3 text-right font-semibold text-[#3D4A44]">Advance</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">PRO</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">DSP</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Sound Ex.</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Contract</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Paid</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -430,15 +430,15 @@ export default function CreatorDetailPage() {
                       {editingSong === song.id ? (
                         <>
                           <td className={`px-4 py-3 sticky left-0 ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'}`}>
-                            <div className="font-medium text-[#1D1D1F]">{song.title}</div>
-                            <div className="text-xs text-[#86868B]">{song.primary_artist}</div>
+                            <div className="font-medium text-[#3D4A44]">{song.title}</div>
+                            <div className="text-xs text-[#7A8580]">{song.primary_artist}</div>
                           </td>
                           <td className="px-4 py-2">
                             <input 
                               type="text" 
                               value={editForm.label}
                               onChange={(e) => setEditForm({...editForm, label: e.target.value})}
-                              className="w-full px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#A020F0] focus:ring-2 focus:ring-[rgba(160,32,240,0.1)]"
+                              className="w-full px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[rgba(160,32,240,0.1)]"
                               placeholder="Label"
                             />
                           </td>
@@ -447,7 +447,7 @@ export default function CreatorDetailPage() {
                               type="number" 
                               value={editForm.publishing_percentage}
                               onChange={(e) => setEditForm({...editForm, publishing_percentage: e.target.value})}
-                              className="w-16 px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm text-center bg-white focus:outline-none focus:border-[#A020F0] focus:ring-2 focus:ring-[rgba(160,32,240,0.1)]"
+                              className="w-16 px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm text-center bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[rgba(160,32,240,0.1)]"
                               placeholder="%"
                               step="0.01"
                               max="100"
@@ -458,7 +458,7 @@ export default function CreatorDetailPage() {
                               type="number" 
                               value={editForm.advance_amount}
                               onChange={(e) => setEditForm({...editForm, advance_amount: e.target.value})}
-                              className="w-24 px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm text-right bg-white focus:outline-none focus:border-[#A020F0] focus:ring-2 focus:ring-[rgba(160,32,240,0.1)]"
+                              className="w-24 px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm text-right bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[rgba(160,32,240,0.1)]"
                               placeholder="$"
                               step="0.01"
                             />
@@ -468,7 +468,7 @@ export default function CreatorDetailPage() {
                               type="checkbox" 
                               checked={editForm.is_registered_with_pro}
                               onChange={(e) => setEditForm({...editForm, is_registered_with_pro: e.target.checked})}
-                              className="w-4 h-4 text-[#A020F0] rounded accent-[#A020F0]"
+                              className="w-4 h-4 text-[#5B8A72] rounded accent-[#5B8A72]"
                             />
                           </td>
                           <td className="px-4 py-2 text-center">
@@ -476,14 +476,14 @@ export default function CreatorDetailPage() {
                               type="checkbox" 
                               checked={editForm.is_registered_with_dsp}
                               onChange={(e) => setEditForm({...editForm, is_registered_with_dsp: e.target.checked})}
-                              className="w-4 h-4 text-[#A020F0] rounded accent-[#A020F0]"
+                              className="w-4 h-4 text-[#5B8A72] rounded accent-[#5B8A72]"
                             />
                           </td>
                           <td className="px-4 py-2 text-center">
                             <select 
                               value={editForm.soundexchange_registered}
                               onChange={(e) => setEditForm({...editForm, soundexchange_registered: e.target.value})}
-                              className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#A020F0]"
+                              className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72]"
                             >
                               <option value="N/A">N/A</option>
                               <option value="Yes">Yes</option>
@@ -495,7 +495,7 @@ export default function CreatorDetailPage() {
                               type="checkbox" 
                               checked={editForm.has_contract_executed}
                               onChange={(e) => setEditForm({...editForm, has_contract_executed: e.target.checked})}
-                              className="w-4 h-4 text-[#A020F0] rounded accent-[#A020F0]"
+                              className="w-4 h-4 text-[#5B8A72] rounded accent-[#5B8A72]"
                             />
                           </td>
                           <td className="px-4 py-2 text-center">
@@ -503,7 +503,7 @@ export default function CreatorDetailPage() {
                               type="checkbox" 
                               checked={editForm.is_paid}
                               onChange={(e) => setEditForm({...editForm, is_paid: e.target.checked})}
-                              className="w-4 h-4 text-[#A020F0] rounded accent-[#A020F0]"
+                              className="w-4 h-4 text-[#5B8A72] rounded accent-[#5B8A72]"
                             />
                           </td>
                           <td className="px-4 py-2">
@@ -511,14 +511,14 @@ export default function CreatorDetailPage() {
                               <button 
                                 onClick={() => saveEdit(song.id)}
                                 disabled={saving}
-                                className="p-2 rounded-lg transition-colors" style={{ background: 'rgba(52, 199, 89, 0.15)', color: '#34C759' }}
+                                className="p-2 rounded-lg transition-colors" style={{ background: 'rgba(52, 199, 89, 0.15)', color: '#5B9A6E' }}
                               >
                                 <CheckIcon className="w-5 h-5" />
                               </button>
                               <button 
                                 onClick={cancelEdit}
                                 disabled={saving}
-                                className="p-2 rounded-lg transition-colors" style={{ background: 'rgba(255, 59, 48, 0.15)', color: '#FF3B30' }}
+                                className="p-2 rounded-lg transition-colors" style={{ background: 'rgba(255, 59, 48, 0.15)', color: '#C47068' }}
                               >
                                 <XMarkIcon className="w-5 h-5" />
                               </button>
@@ -528,16 +528,16 @@ export default function CreatorDetailPage() {
                       ) : (
                         <>
                           <td className={`px-4 py-3 sticky left-0 ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'}`}>
-                            <div className="font-medium text-[#1D1D1F]">{song.title}</div>
-                            <div className="text-xs text-[#86868B]">{song.primary_artist}</div>
+                            <div className="font-medium text-[#3D4A44]">{song.title}</div>
+                            <div className="text-xs text-[#7A8580]">{song.primary_artist}</div>
                           </td>
-                          <td className="px-4 py-3 text-[#86868B] max-w-32 truncate" title={song.label}>
+                          <td className="px-4 py-3 text-[#7A8580] max-w-32 truncate" title={song.label}>
                             {song.label || '-'}
                           </td>
-                          <td className="px-4 py-3 text-center text-[#86868B]">
+                          <td className="px-4 py-3 text-center text-[#7A8580]">
                             {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
                           </td>
-                          <td className="px-4 py-3 text-right text-[#86868B]">
+                          <td className="px-4 py-3 text-right text-[#7A8580]">
                             {song.advance_amount ? `$${(song.advance_amount / 100).toLocaleString()}` : '-'}
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -558,7 +558,7 @@ export default function CreatorDetailPage() {
                           <td className="px-4 py-3 text-center">
                             <button 
                               onClick={() => startEdit(song)}
-                              className="p-2 text-[#86868B] hover:text-[#A020F0] rounded-lg transition-colors" style={{ background: 'rgba(0,0,0,0.03)' }}
+                              className="p-2 text-[#7A8580] hover:text-[#5B8A72] rounded-lg transition-colors" style={{ background: 'rgba(0,0,0,0.03)' }}
                             >
                               <PencilIcon className="w-4 h-4" />
                             </button>
@@ -575,41 +575,41 @@ export default function CreatorDetailPage() {
         
         {activeTab === 'placements' && (
           <div className="bg-white rounded-[18px] overflow-hidden" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-            <div className="p-5 border-b border-[rgba(0,0,0,0.07)] bg-[#F8F8FB]">
-              <p className="text-sm text-[#86868B]">
+            <div className="p-5 border-b border-[rgba(59,77,67,0.08)] bg-[#F8F8FB]">
+              <p className="text-sm text-[#7A8580]">
                 {placedSongs.length} paid placements totaling ${totalAdvance.toLocaleString()} in advances
               </p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-[#F8F8FB] border-b border-[rgba(0,0,0,0.07)]">
+                <thead className="bg-[#F8F8FB] border-b border-[rgba(59,77,67,0.08)]">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Song</th>
-                    <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Artist</th>
-                    <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Label</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Pub %</th>
-                    <th className="px-4 py-3 text-right font-semibold text-[#1D1D1F]">Advance</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">PRO</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">DSP</th>
-                    <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Release</th>
+                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Song</th>
+                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Artist</th>
+                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Label</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Pub %</th>
+                    <th className="px-4 py-3 text-right font-semibold text-[#3D4A44]">Advance</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">PRO</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">DSP</th>
+                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Release</th>
                   </tr>
                 </thead>
                 <tbody>
                   {placedSongs.map((song, index) => (
                     <tr key={song.id} className={`hover:bg-[#F8F8FB] transition-colors border-b border-[rgba(0,0,0,0.05)] ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'}`}>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-[#1D1D1F]">{song.title}</div>
+                        <div className="font-medium text-[#3D4A44]">{song.title}</div>
                       </td>
-                      <td className="px-4 py-3 text-[#86868B]">
+                      <td className="px-4 py-3 text-[#7A8580]">
                         {song.primary_artist}
                       </td>
-                      <td className="px-4 py-3 text-[#86868B] max-w-40 truncate" title={song.label}>
+                      <td className="px-4 py-3 text-[#7A8580] max-w-40 truncate" title={song.label}>
                         {song.label || '-'}
                       </td>
-                      <td className="px-4 py-3 text-center text-[#86868B]">
+                      <td className="px-4 py-3 text-center text-[#7A8580]">
                         {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
                       </td>
-                      <td className="px-4 py-3 text-right font-medium text-[#34C759]">
+                      <td className="px-4 py-3 text-right font-medium text-[#5B9A6E]">
                         ${song.advance_amount ? (song.advance_amount / 100).toLocaleString() : 0}
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -618,7 +618,7 @@ export default function CreatorDetailPage() {
                       <td className="px-4 py-3 text-center">
                         <StatusBadge value={song.is_registered_with_dsp} />
                       </td>
-                      <td className="px-4 py-3 text-[#86868B]">
+                      <td className="px-4 py-3 text-[#7A8580]">
                         {song.release_date || '-'}
                       </td>
                     </tr>
@@ -626,7 +626,7 @@ export default function CreatorDetailPage() {
                   
                   {placedSongs.length === 0 && (
                     <tr>
-                      <td colSpan="8" className="px-6 py-12 text-center text-[#86868B]">
+                      <td colSpan="8" className="px-6 py-12 text-center text-[#7A8580]">
                         No paid placements yet
                       </td>
                     </tr>
@@ -639,7 +639,7 @@ export default function CreatorDetailPage() {
         
         {activeTab === 'schedule-a' && (
           <div className="space-y-6">
-            <div className="rounded-[18px] p-8 text-white" style={{ background: 'linear-gradient(135deg, #A020F0 0%, #E540AC 100%)', boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+            <div className="rounded-[18px] p-8 text-white" style={{ background: 'linear-gradient(135deg, #5B8A72 0%, #7BA594 100%)', boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <h2 className="text-2xl font-semibold mb-2">Schedule A - Catalog of Compositions</h2>
@@ -650,7 +650,7 @@ export default function CreatorDetailPage() {
                 <div className="flex gap-3">
                   <button
                     onClick={handleScheduleAExportPDF}
-                    className="inline-flex items-center space-x-2 bg-white text-[#A020F0] px-5 py-2.5 rounded-xl font-medium hover:bg-white/90 transition-all duration-200"
+                    className="inline-flex items-center space-x-2 bg-white text-[#5B8A72] px-5 py-2.5 rounded-xl font-medium hover:bg-white/90 transition-all duration-200"
                     style={{ boxShadow: '0px 2px 8px rgba(0,0,0,0.1)' }}
                   >
                     <DocumentTextIcon className="w-5 h-5" />
@@ -671,63 +671,63 @@ export default function CreatorDetailPage() {
               <>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                   <div className="bg-white rounded-[18px] p-5" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                    <p className="text-sm text-[#86868B] mb-1">Total Compositions</p>
-                    <p className="text-2xl font-semibold text-[#1D1D1F]">{scheduleAData.summary.total_songs}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">Total Compositions</p>
+                    <p className="text-2xl font-semibold text-[#3D4A44]">{scheduleAData.summary.total_songs}</p>
                   </div>
                   <div className="bg-white rounded-[18px] p-5" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                    <p className="text-sm text-[#86868B] mb-1">Released</p>
-                    <p className="text-2xl font-semibold text-[#A020F0]">{scheduleAData.summary.released_count}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">Released</p>
+                    <p className="text-2xl font-semibold text-[#5B8A72]">{scheduleAData.summary.released_count}</p>
                   </div>
                   <div className="bg-white rounded-[18px] p-5" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                    <p className="text-sm text-[#86868B] mb-1">Pipeline</p>
-                    <p className="text-2xl font-semibold text-[#E540AC]">{scheduleAData.summary.pipeline_count}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">Pipeline</p>
+                    <p className="text-2xl font-semibold text-[#7BA594]">{scheduleAData.summary.pipeline_count}</p>
                   </div>
                   <div className="bg-white rounded-[18px] p-5" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                    <p className="text-sm text-[#86868B] mb-1">Paid</p>
-                    <p className="text-2xl font-semibold text-[#34C759]">{scheduleAData.summary.paid_count}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">Paid</p>
+                    <p className="text-2xl font-semibold text-[#5B9A6E]">{scheduleAData.summary.paid_count}</p>
                   </div>
                   <div className="bg-white rounded-[18px] p-5" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                    <p className="text-sm text-[#86868B] mb-1">Contracted</p>
-                    <p className="text-2xl font-semibold text-[#007AFF]">{scheduleAData.summary.contracted_count}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">Contracted</p>
+                    <p className="text-2xl font-semibold text-[#5A8A9A]">{scheduleAData.summary.contracted_count}</p>
                   </div>
                   <div className="bg-white rounded-[18px] p-5" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                    <p className="text-sm text-[#86868B] mb-1">Total Advances</p>
-                    <p className="text-2xl font-semibold text-[#34C759]">{scheduleAData.summary.total_advance_display}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">Total Advances</p>
+                    <p className="text-2xl font-semibold text-[#5B9A6E]">{scheduleAData.summary.total_advance_display}</p>
                   </div>
                 </div>
                 
                 {scheduleAData.released.length > 0 && (
                   <div className="bg-white rounded-[18px] overflow-hidden" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                    <div className="p-5 border-b border-[rgba(0,0,0,0.07)]" style={{ background: 'rgba(160, 32, 240, 0.08)' }}>
-                      <h3 className="text-lg font-semibold text-[#A020F0]">Released Catalog ({scheduleAData.released.length})</h3>
-                      <p className="text-sm text-[#86868B]">Songs that have been officially released</p>
+                    <div className="p-5 border-b border-[rgba(59,77,67,0.08)]" style={{ background: 'rgba(160, 32, 240, 0.08)' }}>
+                      <h3 className="text-lg font-semibold text-[#5B8A72]">Released Catalog ({scheduleAData.released.length})</h3>
+                      <p className="text-sm text-[#7A8580]">Songs that have been officially released</p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
-                        <thead className="bg-[#F8F8FB] border-b border-[rgba(0,0,0,0.07)]">
+                        <thead className="bg-[#F8F8FB] border-b border-[rgba(59,77,67,0.08)]">
                           <tr>
-                            <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Title</th>
-                            <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Artist</th>
-                            <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Release</th>
-                            <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Label</th>
-                            <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Pub %</th>
-                            <th className="px-4 py-3 text-right font-semibold text-[#1D1D1F]">Advance</th>
-                            <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Status</th>
-                            <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">PRO</th>
-                            <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">DSP</th>
+                            <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Title</th>
+                            <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Artist</th>
+                            <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Release</th>
+                            <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Label</th>
+                            <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Pub %</th>
+                            <th className="px-4 py-3 text-right font-semibold text-[#3D4A44]">Advance</th>
+                            <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Status</th>
+                            <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">PRO</th>
+                            <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">DSP</th>
                           </tr>
                         </thead>
                         <tbody>
                           {scheduleAData.released.map((song, index) => (
                             <tr key={song.id} className={`hover:bg-[#F8F8FB] border-b border-[rgba(0,0,0,0.05)] ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'}`}>
-                              <td className="px-4 py-3 font-medium text-[#1D1D1F]">{song.title}</td>
-                              <td className="px-4 py-3 text-[#86868B]">{song.primary_artist}</td>
-                              <td className="px-4 py-3 text-[#86868B]">{song.release_date || '-'}</td>
-                              <td className="px-4 py-3 text-[#86868B] max-w-32 truncate">{song.label || '-'}</td>
-                              <td className="px-4 py-3 text-center text-[#86868B]">
+                              <td className="px-4 py-3 font-medium text-[#3D4A44]">{song.title}</td>
+                              <td className="px-4 py-3 text-[#7A8580]">{song.primary_artist}</td>
+                              <td className="px-4 py-3 text-[#7A8580]">{song.release_date || '-'}</td>
+                              <td className="px-4 py-3 text-[#7A8580] max-w-32 truncate">{song.label || '-'}</td>
+                              <td className="px-4 py-3 text-center text-[#7A8580]">
                                 {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
                               </td>
-                              <td className="px-4 py-3 text-right text-[#86868B]">{song.advance_display || '-'}</td>
+                              <td className="px-4 py-3 text-right text-[#7A8580]">{song.advance_display || '-'}</td>
                               <td className="px-4 py-3 text-center">
                                 <PlacementStatusBadge status={song.status} />
                               </td>
@@ -747,34 +747,34 @@ export default function CreatorDetailPage() {
                 
                 {scheduleAData.pipeline.length > 0 && (
                   <div className="bg-white rounded-[18px] overflow-hidden" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                    <div className="p-5 border-b border-[rgba(0,0,0,0.07)]" style={{ background: 'rgba(229, 64, 172, 0.08)' }}>
-                      <h3 className="text-lg font-semibold text-[#E540AC]">Pipeline ({scheduleAData.pipeline.length})</h3>
-                      <p className="text-sm text-[#86868B]">Unreleased songs in various stages of the placement process</p>
+                    <div className="p-5 border-b border-[rgba(59,77,67,0.08)]" style={{ background: 'rgba(229, 64, 172, 0.08)' }}>
+                      <h3 className="text-lg font-semibold text-[#7BA594]">Pipeline ({scheduleAData.pipeline.length})</h3>
+                      <p className="text-sm text-[#7A8580]">Unreleased songs in various stages of the placement process</p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
-                        <thead className="bg-[#F8F8FB] border-b border-[rgba(0,0,0,0.07)]">
+                        <thead className="bg-[#F8F8FB] border-b border-[rgba(59,77,67,0.08)]">
                           <tr>
-                            <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Title</th>
-                            <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Artist</th>
-                            <th className="px-4 py-3 text-left font-semibold text-[#1D1D1F]">Label</th>
-                            <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Pub %</th>
-                            <th className="px-4 py-3 text-right font-semibold text-[#1D1D1F]">Advance</th>
-                            <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Status</th>
-                            <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Contract</th>
-                            <th className="px-4 py-3 text-center font-semibold text-[#1D1D1F]">Paid</th>
+                            <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Title</th>
+                            <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Artist</th>
+                            <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Label</th>
+                            <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Pub %</th>
+                            <th className="px-4 py-3 text-right font-semibold text-[#3D4A44]">Advance</th>
+                            <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Status</th>
+                            <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Contract</th>
+                            <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Paid</th>
                           </tr>
                         </thead>
                         <tbody>
                           {scheduleAData.pipeline.map((song, index) => (
                             <tr key={song.id} className={`hover:bg-[#F8F8FB] border-b border-[rgba(0,0,0,0.05)] ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'}`}>
-                              <td className="px-4 py-3 font-medium text-[#1D1D1F]">{song.title}</td>
-                              <td className="px-4 py-3 text-[#86868B]">{song.primary_artist}</td>
-                              <td className="px-4 py-3 text-[#86868B] max-w-32 truncate">{song.label || '-'}</td>
-                              <td className="px-4 py-3 text-center text-[#86868B]">
+                              <td className="px-4 py-3 font-medium text-[#3D4A44]">{song.title}</td>
+                              <td className="px-4 py-3 text-[#7A8580]">{song.primary_artist}</td>
+                              <td className="px-4 py-3 text-[#7A8580] max-w-32 truncate">{song.label || '-'}</td>
+                              <td className="px-4 py-3 text-center text-[#7A8580]">
                                 {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
                               </td>
-                              <td className="px-4 py-3 text-right text-[#86868B]">{song.advance_display || '-'}</td>
+                              <td className="px-4 py-3 text-right text-[#7A8580]">{song.advance_display || '-'}</td>
                               <td className="px-4 py-3 text-center">
                                 <PlacementStatusBadge status={song.status} />
                               </td>
@@ -795,8 +795,8 @@ export default function CreatorDetailPage() {
                 {scheduleAData.released.length === 0 && scheduleAData.pipeline.length === 0 && (
                   <div className="bg-white rounded-[18px] p-12 text-center" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
                     <DocumentTextIcon className="w-12 h-12 text-[#C7C7CC] mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-[#1D1D1F] mb-2">No compositions yet</h3>
-                    <p className="text-[#86868B]">Add songs to this creator's catalog to generate a Schedule A.</p>
+                    <h3 className="text-lg font-medium text-[#3D4A44] mb-2">No compositions yet</h3>
+                    <p className="text-[#7A8580]">Add songs to this creator's catalog to generate a Schedule A.</p>
                   </div>
                 )}
               </>
@@ -804,7 +804,7 @@ export default function CreatorDetailPage() {
             
             {!scheduleAData && (
               <div className="bg-white rounded-[18px] p-12 text-center" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-                <div className="text-[#86868B]">Loading Schedule A data...</div>
+                <div className="text-[#7A8580]">Loading Schedule A data...</div>
               </div>
             )}
           </div>

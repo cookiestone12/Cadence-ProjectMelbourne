@@ -28,17 +28,17 @@ export default function PlacementsPage() {
   }, [])
   
   const getPlacementStage = (song) => {
-    if (song.is_paid) return { label: 'Paid', color: 'bg-green-500', progress: 100 }
-    if (song.is_registered_with_pro || song.is_registered_with_dsp) return { label: 'Registered', color: 'bg-blue-500', progress: 75 }
-    if (song.has_contract_executed) return { label: 'Executed', color: 'bg-purple-500', progress: 50 }
-    if (song.has_contract_sent) return { label: 'Contract Sent', color: 'bg-yellow-500', progress: 25 }
-    return { label: 'Offer', color: 'bg-gray-400', progress: 10 }
+    if (song.is_paid) return { label: 'Paid', color: 'bg-[#5B9A6E]', progress: 100 }
+    if (song.is_registered_with_pro || song.is_registered_with_dsp) return { label: 'Registered', color: 'bg-[#5A8A9A]', progress: 75 }
+    if (song.has_contract_executed) return { label: 'Executed', color: 'bg-[#5B8A72]', progress: 50 }
+    if (song.has_contract_sent) return { label: 'Contract Sent', color: 'bg-[#C4956B]', progress: 25 }
+    return { label: 'Offer', color: 'bg-[#7A8580]', progress: 10 }
   }
   
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-gray-400">Loading placements...</div>
+        <div className="text-[#7A8580]">Loading placements...</div>
       </div>
     )
   }
@@ -46,39 +46,39 @@ export default function PlacementsPage() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">Placements</h1>
-        <p className="text-gray-600">Track your placement pipeline from offer to payment</p>
+        <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Placements</h1>
+        <p className="text-[#7A8580]">Track your placement pipeline from offer to payment</p>
       </div>
       
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Song</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Artist</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Project</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Release Date</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Stage</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Progress</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Song</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Artist</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Project</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Release Date</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Stage</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Progress</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
               {songs.map((song) => {
                 const stage = getPlacementStage(song)
                 
                 return (
-                  <tr key={song.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={song.id} className="hover:bg-[#EEF1EC] transition-colors">
                     <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">{song.title}</div>
+                      <div className="font-medium text-[#3D4A44]">{song.title}</div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-6 py-4 text-sm text-[#7A8580]">
                       {song.primary_artist}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-6 py-4 text-sm text-[#7A8580]">
                       {song.project_title || '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-6 py-4 text-sm text-[#7A8580]">
                       {song.release_date || '-'}
                     </td>
                     <td className="px-6 py-4">
@@ -88,13 +88,13 @@ export default function PlacementsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
-                        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden">
                           <div 
                             className={`h-full ${stage.color}`}
                             style={{ width: `${stage.progress}%` }}
                           ></div>
                         </div>
-                        <span className="text-sm font-medium text-gray-600">{stage.progress}%</span>
+                        <span className="text-sm font-medium text-[#7A8580]">{stage.progress}%</span>
                       </div>
                     </td>
                   </tr>
@@ -103,7 +103,7 @@ export default function PlacementsPage() {
               
               {songs.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center text-gray-400">
+                  <td colSpan="6" className="px-6 py-12 text-center text-[#7A8580]">
                     No placements found
                   </td>
                 </tr>

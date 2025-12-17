@@ -28,32 +28,32 @@ export default function RosterPage() {
   
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F7F7F9] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F5F7F4] flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#A020F0] border-t-transparent"></div>
-          <p className="mt-4 text-[#86868B]">Loading roster...</p>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#5B8A72] border-t-transparent"></div>
+          <p className="mt-4 text-[#7A8580]">Loading roster...</p>
         </div>
       </div>
     )
   }
   
   return (
-    <div className="min-h-screen bg-[#F7F7F9] p-6 lg:p-8">
+    <div className="min-h-screen bg-[#F5F7F4] p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-[34px] font-semibold text-[#1D1D1F] leading-tight">Roster</h1>
-          <p className="text-[17px] text-[#86868B] mt-1">Manage your creators and view their catalog performance</p>
+          <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Roster</h1>
+          <p className="text-[17px] text-[#7A8580] mt-1">Manage your creators and view their catalog performance</p>
         </div>
         
         {creators.length === 0 ? (
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-12 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#F2F2F5] flex items-center justify-center">
-              <svg className="w-8 h-8 text-[#86868B]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#EEF1EC] flex items-center justify-center">
+              <svg className="w-8 h-8 text-[#7A8580]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
-            <p className="text-[#86868B] mb-4 text-[17px]">No creators in your roster yet</p>
-            <p className="text-[#A020F0] font-medium">Upload a Schedule A to add creators</p>
+            <p className="text-[#7A8580] mb-4 text-[17px]">No creators in your roster yet</p>
+            <p className="text-[#5B8A72] font-medium">Upload a Schedule A to add creators</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -63,7 +63,7 @@ export default function RosterPage() {
                 to={`/roster/${creator.id}`}
                 className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] hover:shadow-[0px_8px_24px_rgba(0,0,0,0.12)] transition-all duration-300 overflow-hidden group"
               >
-                <div className="aspect-square bg-gradient-to-br from-[#A020F0] to-[#E540AC] relative overflow-hidden">
+                <div className="aspect-square bg-gradient-to-br from-[#5B8A72] to-[#7BA594] relative overflow-hidden">
                   {creator.hero_image_url ? (
                     <img 
                       src={creator.hero_image_url} 
@@ -81,24 +81,24 @@ export default function RosterPage() {
                 </div>
                 
                 <div className="p-5">
-                  <h3 className="font-semibold text-[17px] text-[#1D1D1F] mb-1 truncate">
+                  <h3 className="font-semibold text-[17px] text-[#3D4A44] mb-1 truncate">
                     {creator.display_name}
                   </h3>
-                  <p className="text-[13px] text-[#86868B] mb-4">
+                  <p className="text-[13px] text-[#7A8580] mb-4">
                     {Array.isArray(creator.roles) ? creator.roles.join(', ') : creator.roles}
                   </p>
                   
                   <div className="flex justify-between items-center">
                     <div>
-                      <p className="text-[13px] text-[#86868B]">Songs</p>
-                      <p className="font-semibold text-[17px] text-[#1D1D1F]">{creator.song_count}</p>
+                      <p className="text-[13px] text-[#7A8580]">Songs</p>
+                      <p className="font-semibold text-[17px] text-[#3D4A44]">{creator.song_count}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[13px] text-[#86868B]">Health</p>
+                      <p className="text-[13px] text-[#7A8580]">Health</p>
                       <p className={`font-semibold text-[17px] ${
-                        creator.avg_health_score >= 80 ? 'text-[#34C759]' :
-                        creator.avg_health_score >= 60 ? 'text-[#FF9500]' :
-                        'text-[#FF3B30]'
+                        creator.avg_health_score >= 80 ? 'text-[#5B9A6E]' :
+                        creator.avg_health_score >= 60 ? 'text-[#C4956B]' :
+                        'text-[#C47068]'
                       }`}>
                         {creator.avg_health_score?.toFixed(0) || 0}%
                       </p>

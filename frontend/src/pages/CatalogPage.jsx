@@ -76,7 +76,7 @@ export default function CatalogPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-gray-400">Loading catalog...</div>
+        <div className="text-[#7A8580]">Loading catalog...</div>
       </div>
     )
   }
@@ -84,20 +84,20 @@ export default function CatalogPage() {
   return (
     <div className="p-8">
       <div className="mb-6">
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">Catalog</h1>
-        <p className="text-gray-600">{songs.length} songs in your catalog</p>
+        <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Catalog</h1>
+        <p className="text-[#7A8580]">{songs.length} songs in your catalog</p>
       </div>
       
-      <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
+      <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
         <div className="flex items-center space-x-4">
           <div className="flex-1 relative">
-            <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7A8580]" />
             <input
               type="text"
               placeholder="Search songs, artists, or projects..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
             />
           </div>
           
@@ -105,14 +105,14 @@ export default function CatalogPage() {
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
               hasActiveFilters 
-                ? 'bg-purple-600 text-white' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-[#5B8A72] text-white' 
+                : 'bg-[#EEF1EC] text-[#3D4A44] hover:bg-[#E4E8E2]'
             }`}
           >
             <FunnelIcon className="w-5 h-5" />
             <span>Filters</span>
             {hasActiveFilters && (
-              <span className="bg-white text-purple-600 px-2 py-0.5 rounded-full text-xs font-bold">
+              <span className="bg-white text-[#5B8A72] px-2 py-0.5 rounded-full text-xs font-bold">
                 {Object.values(filters).filter(v => v !== '').length}
               </span>
             )}
@@ -120,13 +120,13 @@ export default function CatalogPage() {
         </div>
         
         {showFilters && (
-          <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Creator</label>
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">Creator</label>
               <select
                 value={filters.creator_id}
                 onChange={(e) => handleFilterChange('creator_id', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
               >
                 <option value="">All Creators</option>
                 {creators.map((creator) => (
@@ -138,11 +138,11 @@ export default function CatalogPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">Role</label>
               <select
                 value={filters.role}
                 onChange={(e) => handleFilterChange('role', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
               >
                 <option value="">All Roles</option>
                 <option value="WRITER">Writer</option>
@@ -153,11 +153,11 @@ export default function CatalogPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Health Score</label>
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">Health Score</label>
               <select
                 value={filters.min_health}
                 onChange={(e) => handleFilterChange('min_health', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
               >
                 <option value="">Any Health</option>
                 <option value="75">Excellent (75%+)</option>
@@ -168,11 +168,11 @@ export default function CatalogPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">Status</label>
               <select
                 value={filters.status}
                 onChange={(e) => handleFilterChange('status', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
               >
                 <option value="">All Statuses</option>
                 <option value="paid">Paid</option>
@@ -187,7 +187,7 @@ export default function CatalogPage() {
               <div className="flex items-end">
                 <button
                   onClick={clearFilters}
-                  className="w-full px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="w-full px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] border border-[rgba(59,77,67,0.12)] rounded-lg hover:bg-[#EEF1EC] transition-colors"
                 >
                   Clear Filters
                 </button>
@@ -197,53 +197,53 @@ export default function CatalogPage() {
         )}
       </div>
       
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Title</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Artist</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Project</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">ISRC</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Release Date</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Health</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-gray-900">Status</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Title</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Artist</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Project</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">ISRC</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Release Date</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Health</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-[#3D4A44]">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
               {filteredSongs.map((song) => (
-                <tr key={song.id} className="hover:bg-gray-50 transition-colors cursor-pointer">
+                <tr key={song.id} className="hover:bg-[#EEF1EC] transition-colors cursor-pointer">
                   <td className="px-6 py-4">
-                    <div className="font-medium text-gray-900">{song.title}</div>
-                    <div className="text-sm text-gray-500">{song.iswc || 'No ISWC'}</div>
+                    <div className="font-medium text-[#3D4A44]">{song.title}</div>
+                    <div className="text-sm text-[#7A8580]">{song.iswc || 'No ISWC'}</div>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
+                  <td className="px-6 py-4 text-sm text-[#7A8580]">
                     {song.primary_artist}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
+                  <td className="px-6 py-4 text-sm text-[#7A8580]">
                     {song.project_title || '-'}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600 font-mono">
+                  <td className="px-6 py-4 text-sm text-[#7A8580] font-mono">
                     {song.isrc || '-'}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-600">
+                  <td className="px-6 py-4 text-sm text-[#7A8580]">
                     {song.release_date || '-'}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center">
-                      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden mr-3 max-w-[100px]">
+                      <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden mr-3 max-w-[100px]">
                         <div 
                           className={`h-full ${
-                            song.status_health_score >= 75 ? 'bg-green-500' :
-                            song.status_health_score >= 50 ? 'bg-blue-500' :
-                            song.status_health_score >= 25 ? 'bg-yellow-500' :
-                            'bg-red-500'
+                            song.status_health_score >= 75 ? 'bg-[#5B9A6E]' :
+                            song.status_health_score >= 50 ? 'bg-[#5A8A9A]' :
+                            song.status_health_score >= 25 ? 'bg-[#C4956B]' :
+                            'bg-[#C47068]'
                           }`}
                           style={{ width: `${song.status_health_score}%` }}
                         ></div>
                       </div>
-                      <span className="text-sm font-medium text-gray-600 w-12">
+                      <span className="text-sm font-medium text-[#7A8580] w-12">
                         {song.status_health_score.toFixed(0)}%
                       </span>
                     </div>
@@ -251,22 +251,22 @@ export default function CatalogPage() {
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1">
                       {song.is_paid && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[rgba(91,154,110,0.12)] text-[#5B9A6E]">
                           Paid
                         </span>
                       )}
                       {song.is_registered_with_pro && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[rgba(90,138,154,0.12)] text-[#5A8A9A]">
                           PRO
                         </span>
                       )}
                       {song.is_registered_with_dsp && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[rgba(91,138,114,0.12)] text-[#5B8A72]">
                           DSP
                         </span>
                       )}
                       {song.has_contract_executed && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-indigo-100 text-indigo-700">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[rgba(107,154,132,0.12)] text-[#6B9A84]">
                           Contract
                         </span>
                       )}
@@ -277,7 +277,7 @@ export default function CatalogPage() {
               
               {filteredSongs.length === 0 && (
                 <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center text-gray-400">
+                  <td colSpan="7" className="px-6 py-12 text-center text-[#7A8580]">
                     No songs found
                   </td>
                 </tr>

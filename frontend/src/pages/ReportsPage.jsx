@@ -34,10 +34,10 @@ export default function ReportsPage() {
         })
         
         const distribution = [
-          { name: 'Critical (0-25%)', value: songs.filter(s => s.status_health_score < 25).length, color: '#FF3B30' },
-          { name: 'Needs Work (25-50%)', value: songs.filter(s => s.status_health_score >= 25 && s.status_health_score < 50).length, color: '#FF9500' },
-          { name: 'Good (50-75%)', value: songs.filter(s => s.status_health_score >= 50 && s.status_health_score < 75).length, color: '#007AFF' },
-          { name: 'Excellent (75-100%)', value: songs.filter(s => s.status_health_score >= 75).length, color: '#34C759' }
+          { name: 'Critical (0-25%)', value: songs.filter(s => s.status_health_score < 25).length, color: '#C47068' },
+          { name: 'Needs Work (25-50%)', value: songs.filter(s => s.status_health_score >= 25 && s.status_health_score < 50).length, color: '#C4956B' },
+          { name: 'Good (50-75%)', value: songs.filter(s => s.status_health_score >= 50 && s.status_health_score < 75).length, color: '#5A8A9A' },
+          { name: 'Excellent (75-100%)', value: songs.filter(s => s.status_health_score >= 75).length, color: '#5B9A6E' }
         ]
         
         setHealthDistribution(distribution)
@@ -53,51 +53,51 @@ export default function ReportsPage() {
   
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F7F7F9] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F5F7F4] flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#A020F0] border-t-transparent"></div>
-          <p className="mt-4 text-[#86868B]">Loading reports...</p>
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#5B8A72] border-t-transparent"></div>
+          <p className="mt-4 text-[#7A8580]">Loading reports...</p>
         </div>
       </div>
     )
   }
   
   return (
-    <div className="min-h-screen bg-[#F7F7F9] p-6 lg:p-8">
+    <div className="min-h-screen bg-[#F5F7F4] p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-[34px] font-semibold text-[#1D1D1F] leading-tight">Reports</h1>
-          <p className="text-[17px] text-[#86868B] mt-1">Catalog health and performance insights</p>
+          <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Reports</h1>
+          <p className="text-[17px] text-[#7A8580] mt-1">Catalog health and performance insights</p>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#A020F0] to-[#E540AC]"></div>
-            <p className="text-[13px] text-[#86868B] mb-1">Total Songs</p>
-            <p className="text-[40px] font-semibold text-[#1D1D1F]">{stats.totalSongs}</p>
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#5B8A72] to-[#7BA594]"></div>
+            <p className="text-[13px] text-[#7A8580] mb-1">Total Songs</p>
+            <p className="text-[40px] font-semibold text-[#3D4A44]">{stats.totalSongs}</p>
           </div>
           
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#007AFF] to-[#5AC8FA]"></div>
-            <p className="text-[13px] text-[#86868B] mb-1">Avg Health Score</p>
-            <p className="text-[40px] font-semibold text-[#1D1D1F]">{stats.avgHealthScore.toFixed(1)}%</p>
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#5A8A9A] to-[#7BA5B4]"></div>
+            <p className="text-[13px] text-[#7A8580] mb-1">Avg Health Score</p>
+            <p className="text-[40px] font-semibold text-[#3D4A44]">{stats.avgHealthScore.toFixed(1)}%</p>
           </div>
           
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#34C759] to-[#30D158]"></div>
-            <p className="text-[13px] text-[#86868B] mb-1">Placement Rate</p>
-            <p className="text-[40px] font-semibold text-[#1D1D1F]">{stats.placementRate.toFixed(1)}%</p>
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#5B9A6E] to-[#6BAA7E]"></div>
+            <p className="text-[13px] text-[#7A8580] mb-1">Placement Rate</p>
+            <p className="text-[40px] font-semibold text-[#3D4A44]">{stats.placementRate.toFixed(1)}%</p>
           </div>
           
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#FF9500] to-[#FF9F0A]"></div>
-            <p className="text-[13px] text-[#86868B] mb-1">Registered Songs</p>
-            <p className="text-[40px] font-semibold text-[#1D1D1F]">{stats.registeredCount}</p>
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#C4956B] to-[#D4A57B]"></div>
+            <p className="text-[13px] text-[#7A8580] mb-1">Registered Songs</p>
+            <p className="text-[40px] font-semibold text-[#3D4A44]">{stats.registeredCount}</p>
           </div>
         </div>
         
         <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
-          <h2 className="text-[22px] font-medium text-[#1D1D1F] mb-6">Health Score Distribution</h2>
+          <h2 className="text-[22px] font-medium text-[#3D4A44] mb-6">Health Score Distribution</h2>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie

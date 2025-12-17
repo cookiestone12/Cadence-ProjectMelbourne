@@ -13,7 +13,7 @@ export default function NewCatalogPage() {
   const [creators, setCreators] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [activeTab, setActiveTab] = useState('all') // 'all', 'released', 'unreleased'
+  const [activeTab, setActiveTab] = useState('all')
   const [selectedSong, setSelectedSong] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
@@ -88,9 +88,9 @@ export default function NewCatalogPage() {
   }
   
   const getStatusIcon = (value) => {
-    if (value === 'Yes') return <CheckCircleIcon className="w-5 h-5 text-green-500" />
-    if (value === 'No') return <XCircleIcon className="w-5 h-5 text-red-500" />
-    return <MinusCircleIcon className="w-5 h-5 text-gray-400" />
+    if (value === 'Yes') return <CheckCircleIcon className="w-5 h-5 text-[#5B9A6E]" />
+    if (value === 'No') return <XCircleIcon className="w-5 h-5 text-[#C47068]" />
+    return <MinusCircleIcon className="w-5 h-5 text-[#7A8580]" />
   }
   
   const hasActiveFilters = Object.values(filters).some(v => v !== '')
@@ -101,7 +101,7 @@ export default function NewCatalogPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-gray-400">Loading catalog...</div>
+        <div className="text-[#7A8580]">Loading catalog...</div>
       </div>
     )
   }
@@ -110,19 +110,19 @@ export default function NewCatalogPage() {
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Catalog</h1>
-          <p className="text-gray-600">{songs.length} total songs</p>
+          <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Catalog</h1>
+          <p className="text-[#7A8580]">{songs.length} total songs</p>
         </div>
         <div className="flex items-center space-x-3">
           <button 
-            className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            className="flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
             onClick={() => setShowAddModal(true)}
           >
             <PlusIcon className="w-5 h-5" />
             <span>Add Song</span>
           </button>
           <button 
-            className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all"
+            className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all"
             onClick={() => setShowUploadModal(true)}
           >
             <ArrowUpTrayIcon className="w-5 h-5" />
@@ -131,15 +131,14 @@ export default function NewCatalogPage() {
         </div>
       </div>
       
-      {/* Tabs */}
-      <div className="mb-6 border-b border-gray-200">
+      <div className="mb-6 border-b border-[rgba(59,77,67,0.08)]">
         <div className="flex space-x-8">
           <button
             onClick={() => setActiveTab('all')}
             className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
               activeTab === 'all'
-                ? 'border-purple-600 text-purple-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-[#5B8A72] text-[#5B8A72]'
+                : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
           >
             All Songs ({songs.length})
@@ -148,8 +147,8 @@ export default function NewCatalogPage() {
             onClick={() => setActiveTab('released')}
             className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
               activeTab === 'released'
-                ? 'border-purple-600 text-purple-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-[#5B8A72] text-[#5B8A72]'
+                : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
           >
             Released ({releasedCount})
@@ -158,8 +157,8 @@ export default function NewCatalogPage() {
             onClick={() => setActiveTab('unreleased')}
             className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
               activeTab === 'unreleased'
-                ? 'border-purple-600 text-purple-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-[#5B8A72] text-[#5B8A72]'
+                : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
           >
             Unreleased ({unreleasedCount})
@@ -167,17 +166,16 @@ export default function NewCatalogPage() {
         </div>
       </div>
       
-      {/* Search and Filters */}
-      <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
+      <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
         <div className="flex items-center space-x-4">
           <div className="flex-1 relative">
-            <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7A8580]" />
             <input
               type="text"
               placeholder="Search songs, artists, or projects..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
             />
           </div>
           
@@ -185,14 +183,14 @@ export default function NewCatalogPage() {
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
               hasActiveFilters 
-                ? 'bg-purple-600 text-white' 
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                ? 'bg-[#5B8A72] text-white' 
+                : 'bg-[#EEF1EC] text-[#3D4A44] hover:bg-[#E4E8E2]'
             }`}
           >
             <FunnelIcon className="w-5 h-5" />
             <span>Filters</span>
             {hasActiveFilters && (
-              <span className="bg-white text-purple-600 px-2 py-0.5 rounded-full text-xs font-bold">
+              <span className="bg-white text-[#5B8A72] px-2 py-0.5 rounded-full text-xs font-bold">
                 {Object.values(filters).filter(v => v !== '').length}
               </span>
             )}
@@ -200,13 +198,13 @@ export default function NewCatalogPage() {
         </div>
         
         {showFilters && (
-          <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)] grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Creator</label>
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">Creator</label>
               <select
                 value={filters.creator_id}
                 onChange={(e) => handleFilterChange('creator_id', e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
               >
                 <option value="">All Creators</option>
                 {creators.map(creator => (
@@ -216,7 +214,7 @@ export default function NewCatalogPage() {
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Min Health</label>
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">Min Health</label>
               <input
                 type="number"
                 value={filters.min_health}
@@ -224,12 +222,12 @@ export default function NewCatalogPage() {
                 placeholder="0"
                 min="0"
                 max="100"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
               />
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Max Health</label>
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">Max Health</label>
               <input
                 type="number"
                 value={filters.max_health}
@@ -237,14 +235,14 @@ export default function NewCatalogPage() {
                 placeholder="100"
                 min="0"
                 max="100"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
               />
             </div>
             
             <div className="flex items-end">
               <button
                 onClick={clearFilters}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
               >
                 Clear Filters
               </button>
@@ -253,52 +251,51 @@ export default function NewCatalogPage() {
         )}
       </div>
       
-      {/* Catalog Table */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Song</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Artist</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Label</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Pub %</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Health</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Contract</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">PRO</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">DSP</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-900">Paid</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Song</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Artist</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Label</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Pub %</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Health</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Contract</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">PRO</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">DSP</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Paid</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
               {filteredSongs.map((song) => (
                 <tr 
                   key={song.id} 
                   onClick={() => setSelectedSong(song)}
-                  className="hover:bg-purple-50 cursor-pointer transition-colors"
+                  className="hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
                 >
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{song.title}</div>
-                    <div className="text-xs text-gray-500">{song.project_title || '-'}</div>
+                    <div className="font-medium text-[#3D4A44]">{song.title}</div>
+                    <div className="text-xs text-[#7A8580]">{song.project_title || '-'}</div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
+                  <td className="px-4 py-3 text-sm text-[#7A8580]">
                     {song.primary_artist}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
+                  <td className="px-4 py-3 text-sm text-[#7A8580]">
                     {song.label || '-'}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">
+                  <td className="px-4 py-3 text-sm text-[#7A8580]">
                     {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center space-x-2">
-                      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
+                          className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594]"
                           style={{ width: `${song.status_health_score || 0}%` }}
                         ></div>
                       </div>
-                      <span className="text-xs font-medium text-gray-600 w-10">
+                      <span className="text-xs font-medium text-[#7A8580] w-10">
                         {Math.round(song.status_health_score || 0)}%
                       </span>
                     </div>
@@ -308,11 +305,11 @@ export default function NewCatalogPage() {
                   <td className="px-4 py-3">{getStatusIcon(song.is_registered_with_dsp ? 'Yes' : 'No')}</td>
                   <td className="px-4 py-3">
                     {song.payment_status === 'PAID' ? (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-[rgba(91,154,110,0.12)] text-[#5B9A6E]">
                         PAID
                       </span>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-[rgba(59,77,67,0.06)] text-[#7A8580]">
                         {song.payment_status || 'N/A'}
                       </span>
                     )}
@@ -322,7 +319,7 @@ export default function NewCatalogPage() {
               
               {filteredSongs.length === 0 && (
                 <tr>
-                  <td colSpan="9" className="px-6 py-12 text-center text-gray-400">
+                  <td colSpan="9" className="px-6 py-12 text-center text-[#7A8580]">
                     No songs found
                   </td>
                 </tr>
@@ -332,12 +329,10 @@ export default function NewCatalogPage() {
         </div>
       </div>
       
-      {/* Song Detail Modal */}
       {selectedSong && (
         <SongDetailModal song={selectedSong} onClose={() => setSelectedSong(null)} />
       )}
       
-      {/* Add Song Modal */}
       {showAddModal && organizationId && (
         <AddSongModal 
           onClose={() => setShowAddModal(false)}
@@ -346,7 +341,6 @@ export default function NewCatalogPage() {
         />
       )}
       
-      {/* Schedule A Upload Modal */}
       {showUploadModal && organizationId && (
         <ScheduleAUploadModal 
           onClose={() => setShowUploadModal(false)}
