@@ -595,8 +595,176 @@ def export_schedule_a_pdf(
     
     buffer.seek(0)
     
-    filename = f"Schedule_A_{data['creator']['display_name'].replace(' ', '_')}_{datetime.utcnow().strftime('%Y-%m-%d')}.pdf"
+    filename = f"Catalog_Doc_{data['creator']['display_name'].replace(' ', '_')}_{datetime.utcnow().strftime('%Y-%m-%d')}.pdf"
     
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@router.get("/creator/{creator_id}/schedule-a-pdf")
+def export_simplified_schedule_a_pdf(
+    creator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Export simplified Schedule A PDF for external sharing"""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    import os
+
+    sage_primary = colors.HexColor('#5B8A72')
+    sage_dark = colors.HexColor('#3D4A44')
+    sage_light = colors.HexColor('#E8F0EC')
+    sage_border = colors.HexColor('#A3C4B5')
+
+    data = get_schedule_a_data(creator_id, db, current_user)
+
+    all_songs = sorted(
+        data['released'] + data['pipeline'],
+        key=lambda s: (s['title'] or '').lower()
+    )
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=0.6*inch,
+        leftMargin=0.6*inch,
+        topMargin=0.5*inch,
+        bottomMargin=0.6*inch
+    )
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'SATitle',
+        parent=styles['Heading1'],
+        fontSize=22,
+        textColor=sage_primary,
+        alignment=TA_CENTER,
+        spaceAfter=4
+    )
+
+    subtitle_style = ParagraphStyle(
+        'SASubtitle',
+        parent=styles['Normal'],
+        fontSize=13,
+        textColor=sage_dark,
+        alignment=TA_CENTER,
+        spaceAfter=16
+    )
+
+    info_style = ParagraphStyle(
+        'SAInfo',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=sage_dark,
+        leading=16
+    )
+
+    cell_style = ParagraphStyle(
+        'SACell',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=sage_dark
+    )
+
+    footer_style = ParagraphStyle(
+        'SAFooter',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.HexColor('#7A8580'),
+        alignment=TA_CENTER
+    )
+
+    elements = []
+
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo.png')
+    if os.path.exists(logo_path):
+        logo = Image(logo_path, width=0.7*inch, height=0.7*inch)
+        logo.hAlign = 'CENTER'
+        elements.append(logo)
+        elements.append(Spacer(1, 4))
+
+    elements.append(Paragraph("AMPERSOUND INTELLIGENCE", title_style))
+    elements.append(Paragraph("Schedule A", subtitle_style))
+
+    creator_name = data['creator']['display_name']
+    legal_name = data['creator'].get('legal_name') or 'N/A'
+    pro = data['creator'].get('primary_pro') or 'N/A'
+    gen_date = datetime.utcnow().strftime('%B %d, %Y')
+
+    info_text = f"""
+    <b>Creator:</b> {creator_name}<br/>
+    <b>Legal Name:</b> {legal_name}<br/>
+    <b>PRO:</b> {pro}<br/>
+    <b>Generated:</b> {gen_date}
+    """
+    elements.append(Paragraph(info_text, info_style))
+    elements.append(Spacer(1, 16))
+
+    table_headers = ["Title", "Artist", "Released", "Label", "Pub %", "Status"]
+
+    table_data = [table_headers]
+    for song in all_songs:
+        is_released = "Yes" if (song.get('release_date') or song.get('is_released_flag', False)) else "No"
+        for s_data in data['released']:
+            if s_data['id'] == song['id']:
+                is_released = "Yes"
+                break
+
+        pub_pct = format_percentage(song['publishing_percentage'])[:8] if song['publishing_percentage'] else "-"
+
+        table_data.append([
+            Paragraph(song['title'][:40], cell_style),
+            Paragraph((song['primary_artist'] or '')[:25], cell_style),
+            is_released,
+            Paragraph((song['label'] or '-')[:20], cell_style),
+            pub_pct,
+            song['status']
+        ])
+
+    col_widths = [2.0*inch, 1.4*inch, 0.7*inch, 1.2*inch, 0.6*inch, 1.2*inch]
+
+    song_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    song_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), sage_primary),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('ALIGN', (2, 0), (2, -1), 'CENTER'),
+        ('ALIGN', (4, 0), (4, -1), 'CENTER'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('TOPPADDING', (0, 0), (-1, 0), 8),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
+        ('TOPPADDING', (0, 1), (-1, -1), 5),
+        ('GRID', (0, 0), (-1, -1), 0.5, sage_border),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, sage_light]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+    ]))
+    elements.append(song_table)
+
+    elements.append(Spacer(1, 30))
+    footer_text = f"""
+    <i>Generated by Ampersound Intelligence on {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</i>
+    """
+    elements.append(Paragraph(footer_text, footer_style))
+
+    doc.build(elements)
+
+    buffer.seek(0)
+
+    filename = f"Schedule_A_{data['creator']['display_name'].replace(' ', '_')}_{datetime.utcnow().strftime('%Y-%m-%d')}.pdf"
+
     return StreamingResponse(
         buffer,
         media_type="application/pdf",

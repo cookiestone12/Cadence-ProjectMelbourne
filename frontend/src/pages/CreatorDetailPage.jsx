@@ -108,7 +108,7 @@ export default function CreatorDetailPage() {
   
   const handleScheduleAExportPDF = async () => {
     try {
-      const response = await axios.get(`/api/schedule-a/creator/${id}/pdf`, {
+      const response = await axios.get(`/api/schedule-a/creator/${id}/schedule-a-pdf`, {
         responseType: 'blob'
       })
       
@@ -121,6 +121,24 @@ export default function CreatorDetailPage() {
       link.remove()
     } catch (error) {
       console.error('Failed to export Schedule A PDF:', error)
+    }
+  }
+
+  const handleCatalogDocExportPDF = async () => {
+    try {
+      const response = await axios.get(`/api/schedule-a/creator/${id}/pdf`, {
+        responseType: 'blob'
+      })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `Catalog_Doc_${creator.display_name.replace(/ /g, '_')}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (error) {
+      console.error('Failed to export Catalog Doc PDF:', error)
     }
   }
   
@@ -820,21 +838,28 @@ export default function CreatorDetailPage() {
                     Official export document for {creator.display_name}'s catalog with industry-standard fields.
                   </p>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-3 flex-wrap">
                   <button
                     onClick={handleScheduleAExportPDF}
                     className="inline-flex items-center space-x-2 bg-white text-[#5B8A72] px-5 py-2.5 rounded-xl font-medium hover:bg-white/90 transition-all duration-200"
                     style={{ boxShadow: '0px 2px 8px rgba(0,0,0,0.1)' }}
                   >
                     <DocumentTextIcon className="w-5 h-5" />
-                    <span>Download PDF</span>
+                    <span>Schedule A</span>
+                  </button>
+                  <button
+                    onClick={handleCatalogDocExportPDF}
+                    className="inline-flex items-center space-x-2 bg-white/20 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-white/30 transition-all duration-200 border border-white/30"
+                  >
+                    <DocumentArrowDownIcon className="w-5 h-5" />
+                    <span>Catalog Doc</span>
                   </button>
                   <button
                     onClick={handleScheduleAExportCSV}
                     className="inline-flex items-center space-x-2 bg-white/20 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-white/30 transition-all duration-200 border border-white/30"
                   >
-                    <DocumentArrowDownIcon className="w-5 h-5" />
-                    <span>Download CSV</span>
+                    <ArrowDownTrayIcon className="w-5 h-5" />
+                    <span>CSV</span>
                   </button>
                 </div>
               </div>
