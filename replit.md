@@ -44,6 +44,7 @@ The app uses a soothing, eye-friendly sage-green color palette optimized for pro
 - **Manual Song Addition**: Add individual songs to creator catalogs with full metadata fields (title, artist, ISRC, ISWC, release date, label, percentages, advance).
 - **CSV Catalog Upload**: Bulk import songs via CSV with AI-powered column mapping that automatically detects and maps headers to standard fields.
 - **Placement Tracking**: Visual pipeline from offer to payment.
+- **Released Status & Spotify Links**: Mark songs as released directly in catalog view with checkbox. When marking released, prompts for Spotify link via modal. Spotify links open directly to Spotify.
 - **Reports & Analytics**: Health distribution charts, placement rates, and actionable insights.
 - **Schedule A Export**: CSV generation of creator catalogs.
 - **Contract Management**: Secure upload, download, and deletion of PDF contracts linked to songs, with controlled access for linked accounts.
