@@ -33,6 +33,10 @@ export default function CreatorDetailPage() {
   })
   const [showEditCreatorModal, setShowEditCreatorModal] = useState(false)
   const [editingCreator, setEditingCreator] = useState(false)
+  const [showSpotifyModal, setShowSpotifyModal] = useState(false)
+  const [spotifyModalSong, setSpotifyModalSong] = useState(null)
+  const [spotifyLinkInput, setSpotifyLinkInput] = useState('')
+  const [savingSpotifyLink, setSavingSpotifyLink] = useState(false)
   const [creatorForm, setCreatorForm] = useState({
     display_name: '',
     legal_name: '',
@@ -133,6 +137,8 @@ export default function CreatorDetailPage() {
       is_paid: song.is_paid || false,
       is_invoiced: song.is_invoiced || false,
       has_contract_executed: song.has_contract_executed || false,
+      is_released: song.is_released || false,
+      spotify_link: song.spotify_link || '',
       notes: song.notes || ''
     })
   }
@@ -156,6 +162,8 @@ export default function CreatorDetailPage() {
         is_paid: editForm.is_paid,
         is_invoiced: editForm.is_invoiced,
         has_contract_executed: editForm.has_contract_executed,
+        is_released: editForm.is_released,
+        spotify_link: editForm.spotify_link || null,
         notes: editForm.notes || null
       }
       
@@ -171,6 +179,43 @@ export default function CreatorDetailPage() {
       alert('Failed to save changes')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleReleasedToggle = async (song) => {
+    const newReleasedStatus = !song.is_released
+    if (newReleasedStatus && !song.spotify_link) {
+      setSpotifyModalSong(song)
+      setSpotifyLinkInput('')
+      setShowSpotifyModal(true)
+    } else {
+      try {
+        await axios.patch(`/api/songs/${song.id}`, { is_released: newReleasedStatus })
+        const orgResponse = await axios.get('/api/organizations/current')
+        await loadSongs(orgResponse.data.id)
+      } catch (error) {
+        console.error('Failed to update released status:', error)
+      }
+    }
+  }
+
+  const handleSpotifyModalSave = async () => {
+    if (!spotifyModalSong) return
+    setSavingSpotifyLink(true)
+    try {
+      await axios.patch(`/api/songs/${spotifyModalSong.id}`, { 
+        is_released: true,
+        spotify_link: spotifyLinkInput || null
+      })
+      const orgResponse = await axios.get('/api/organizations/current')
+      await loadSongs(orgResponse.data.id)
+      setShowSpotifyModal(false)
+      setSpotifyModalSong(null)
+      setSpotifyLinkInput('')
+    } catch (error) {
+      console.error('Failed to save Spotify link:', error)
+    } finally {
+      setSavingSpotifyLink(false)
     }
   }
 
@@ -560,6 +605,8 @@ export default function CreatorDetailPage() {
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Sound Ex.</th>
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Contract</th>
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Paid</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Released</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Spotify</th>
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Actions</th>
                   </tr>
                 </thead>
@@ -645,6 +692,24 @@ export default function CreatorDetailPage() {
                               className="w-4 h-4 text-[#5B8A72] rounded accent-[#5B8A72]"
                             />
                           </td>
+                          <td className="px-4 py-2 text-center">
+                            <input 
+                              type="checkbox" 
+                              checked={editForm.is_released}
+                              onChange={(e) => setEditForm({...editForm, is_released: e.target.checked})}
+                              className="w-4 h-4 text-[#5B8A72] rounded accent-[#5B8A72]"
+                            />
+                          </td>
+                          <td className="px-4 py-2">
+                            <input 
+                              type="text" 
+                              value={editForm.spotify_link}
+                              onChange={(e) => setEditForm({...editForm, spotify_link: e.target.value})}
+                              disabled={!editForm.is_released}
+                              placeholder={editForm.is_released ? "Spotify URL" : "-"}
+                              className={`w-24 px-2 py-1 border border-[rgba(0,0,0,0.1)] rounded-lg text-xs ${!editForm.is_released ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white focus:outline-none focus:border-[#5B8A72]'}`}
+                            />
+                          </td>
                           <td className="px-4 py-2">
                             <div className="flex items-center gap-2 justify-center">
                               <button 
@@ -693,6 +758,31 @@ export default function CreatorDetailPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <StatusBadge value={song.is_paid} />
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <input 
+                              type="checkbox" 
+                              checked={song.is_released || false}
+                              onChange={() => handleReleasedToggle(song)}
+                              className="w-4 h-4 text-[#5B8A72] rounded accent-[#5B8A72] cursor-pointer"
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {song.is_released && song.spotify_link ? (
+                              <a
+                                href={song.spotify_link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-1 text-xs font-medium rounded-lg transition-colors"
+                                style={{ background: 'rgba(30, 215, 96, 0.15)', color: '#1DB954' }}
+                              >
+                                Open
+                              </a>
+                            ) : (
+                              <span className={`text-xs ${song.is_released ? 'text-[#7A8580]' : 'text-gray-300'}`}>
+                                {song.is_released ? 'Add link' : '-'}
+                              </span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <button 
@@ -893,6 +983,65 @@ export default function CreatorDetailPage() {
           </div>
         )}
       </div>
+
+      {showSpotifyModal && spotifyModalSong && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-[18px] w-full max-w-md">
+            <div className="p-6 border-b border-[rgba(59,77,67,0.12)]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'rgba(30, 215, 96, 0.15)' }}>
+                    <svg className="w-5 h-5" style={{ color: '#1DB954' }} viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                    </svg>
+                  </div>
+                  <h2 className="text-[22px] font-semibold text-[#3D4A44]">Add Spotify Link</h2>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowSpotifyModal(false)
+                    setSpotifyModalSong(null)
+                  }}
+                  className="p-2 hover:bg-[#EEF1EC] rounded-lg transition-colors"
+                >
+                  <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-[#7A8580] mb-4">
+                Add a Spotify link for <span className="font-medium text-[#3D4A44]">{spotifyModalSong.title}</span>
+              </p>
+              <input
+                type="text"
+                value={spotifyLinkInput}
+                onChange={(e) => setSpotifyLinkInput(e.target.value)}
+                placeholder="https://open.spotify.com/track/..."
+                className="w-full px-4 py-3 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[rgba(91,138,114,0.1)]"
+              />
+              <p className="text-xs text-[#7A8580] mt-2">Optional - you can skip this and add the link later</p>
+            </div>
+            <div className="p-6 border-t border-[rgba(59,77,67,0.08)] flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowSpotifyModal(false)
+                  setSpotifyModalSong(null)
+                }}
+                className="px-4 py-2 text-[#7A8580] hover:bg-[#EEF1EC] rounded-xl transition-colors text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSpotifyModalSave}
+                disabled={savingSpotifyLink}
+                className="px-4 py-2 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors text-sm disabled:opacity-50"
+              >
+                {savingSpotifyLink ? 'Saving...' : 'Mark as Released'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddSongModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
