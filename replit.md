@@ -39,14 +39,39 @@ The app uses a soothing, eye-friendly sage-green color palette optimized for pro
 - **Frontend State Management**: JWT tokens are stored in localStorage, with organization context loaded on mount. API calls are managed via Axios.
 
 ### Feature Specifications
-- **Creator Roster Management**: Visual creator cards with stats and detailed profiles.
+- **Creator Roster Management**: Visual creator cards with stats and detailed profiles. Includes manual creator addition with roles, territory, PRO, and IPI fields.
 - **Advanced Catalog View**: Spreadsheet-style table with robust filtering capabilities.
+- **Manual Song Addition**: Add individual songs to creator catalogs with full metadata fields (title, artist, ISRC, ISWC, release date, label, percentages, advance).
+- **CSV Catalog Upload**: Bulk import songs via CSV with AI-powered column mapping that automatically detects and maps headers to standard fields.
 - **Placement Tracking**: Visual pipeline from offer to payment.
 - **Reports & Analytics**: Health distribution charts, placement rates, and actionable insights.
 - **Schedule A Export**: CSV generation of creator catalogs.
 - **Contract Management**: Secure upload, download, and deletion of PDF contracts linked to songs, with controlled access for linked accounts.
 - **Account Linking**: Allows secure linking between Individual and Enterprise organizations with mutual consent and configurable permission levels.
 - **Master Admin System**: Super admin role with elevated privileges for platform-wide management, including user activation/deactivation, organization impersonation, and system-wide statistics.
+
+### Catalog Import System
+The platform includes an AI-powered CSV import system for bulk catalog management:
+
+**CSV Upload API Routes (`/api/csv/*`):**
+- `POST /preview/{org_id}`: Upload CSV file and get AI-suggested column mapping with preview rows
+- `POST /import/{org_id}`: Import songs from CSV with mapping, creator attribution, and auto health scoring
+
+**AI Column Mapping:**
+- Uses OpenAI (via Replit AI Integrations) to intelligently map CSV headers to standard fields
+- Supports flexible naming (e.g., "Song Name" → "title", "Artist" → "primary_artist")
+- Maps percentages, dates, and identifiers automatically
+
+**Supported Import Fields:**
+- title, primary_artist, isrc, iswc, project_title, release_date
+- label, publishing_percentage, master_percentage, advance_amount
+- recording_code, notes
+
+**Import Features:**
+- Assign songs to existing creator or create new creator during import
+- Auto-calculate health scores based on field completeness
+- Validation for ISRC/ISWC formats and percentage ranges
+- Bulk song creation with automatic checklist initialization
 
 ### Master Admin System
 The platform includes a comprehensive master admin system for managing multiple tenant accounts:

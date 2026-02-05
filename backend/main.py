@@ -7,7 +7,7 @@ from .routes import (
     auth, catalog, settings,
     organizations, creators, songs, credits,
     checklist, exports, valuations, valuation_reports, schedule_a,
-    contracts, account_links, admin, notifications, actions
+    contracts, account_links, admin, notifications, actions, csv_upload
 )
 import os
 from pathlib import Path
@@ -42,6 +42,7 @@ app.include_router(account_links.router)
 app.include_router(admin.router)
 app.include_router(notifications.router)
 app.include_router(actions.router)
+app.include_router(csv_upload.router)
 
 @app.get("/api/health")
 def health_check():
