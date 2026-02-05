@@ -53,14 +53,22 @@ The app uses a soothing, eye-friendly sage-green color palette optimized for pro
 ### Catalog Import System
 The platform includes an AI-powered CSV import system for bulk catalog management:
 
-**CSV Upload API Routes (`/api/csv/*`):**
-- `POST /preview/{org_id}`: Upload CSV file and get AI-suggested column mapping with preview rows
-- `POST /import/{org_id}`: Import songs from CSV with mapping, creator attribution, and auto health scoring
+**CSV/Excel Upload API Routes (`/api/csv/*`):**
+- `POST /preview/{org_id}`: Upload CSV or Excel file and get AI-suggested column mapping with preview rows
+- `POST /import/{org_id}`: Import songs with mapping, creator attribution, and auto health scoring
 
 **AI Column Mapping:**
-- Uses OpenAI (via Replit AI Integrations) to intelligently map CSV headers to standard fields
-- Supports flexible naming (e.g., "Song Name" → "title", "Artist" → "primary_artist")
-- Maps percentages, dates, and identifiers automatically
+- Uses OpenAI (via Replit AI Integrations) to intelligently map headers to standard fields
+- Recognizes flexible naming from any manager format:
+  - "Track" / "Song" / "Title" → maps to Song Title
+  - "Writer" / "Artist" / "Performer" → maps to Artist Name
+  - "%" / "Share" / "Split" / "Pub" → maps to percentages
+- Fallback pattern matching when AI is unavailable
+- Manual override capability in UI for all mappings
+
+**Supported File Formats:**
+- CSV (.csv)
+- Excel (.xlsx, .xls) with automatic date conversion to YYYY-MM-DD
 
 **Supported Import Fields:**
 - title, primary_artist, isrc, iswc, project_title, release_date
@@ -68,10 +76,12 @@ The platform includes an AI-powered CSV import system for bulk catalog managemen
 - recording_code, notes
 
 **Import Features:**
+- Multi-step wizard: Upload → Map Columns → Select Creator → Import
 - Assign songs to existing creator or create new creator during import
 - Auto-calculate health scores based on field completeness
 - Validation for ISRC/ISWC formats and percentage ranges
 - Bulk song creation with automatic checklist initialization
+- Unmapped fields are left blank (not required)
 
 ### Master Admin System
 The platform includes a comprehensive master admin system for managing multiple tenant accounts:
