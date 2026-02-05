@@ -492,6 +492,46 @@ class NotificationPreference(Base):
     user = relationship("User")
 
 
+class ActionItem(Base):
+    __tablename__ = "action_items"
+    __table_args__ = (
+        Index('ix_action_items_org_creator', 'organization_id', 'creator_id'),
+        Index('ix_action_items_priority', 'organization_id', 'priority', 'deadline'),
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    
+    action_type = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    
+    priority = Column(Integer, default=2)
+    status = Column(String, default="PENDING")
+    
+    deadline = Column(DateTime, nullable=True)
+    reminder_days_before = Column(Integer, default=3)
+    last_reminder_sent = Column(DateTime, nullable=True)
+    
+    assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    completed_at = Column(DateTime, nullable=True)
+    completed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    organization = relationship("Organization")
+    creator = relationship("Creator")
+    song = relationship("Song")
+    assigned_to = relationship("User", foreign_keys=[assigned_to_user_id])
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    completed_by = relationship("User", foreign_keys=[completed_by_user_id])
+
+
 class Notification(Base):
     __tablename__ = "notifications"
     __table_args__ = (
