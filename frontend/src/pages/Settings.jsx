@@ -56,9 +56,14 @@ export default function Settings() {
     
     try {
       await axios.put('/api/notifications/preferences', updated)
-      setPreferences(prev => prev.map(p => 
-        p.notification_type === type ? { ...p, [field]: value } : p
-      ))
+      const existingIdx = preferences.findIndex(p => p.notification_type === type)
+      if (existingIdx >= 0) {
+        setPreferences(prev => prev.map(p => 
+          p.notification_type === type ? { ...p, [field]: value } : p
+        ))
+      } else {
+        setPreferences(prev => [...prev, { ...updated, id: 0 }])
+      }
       setMessage('Preference saved')
       setTimeout(() => setMessage(''), 2000)
     } catch (error) {

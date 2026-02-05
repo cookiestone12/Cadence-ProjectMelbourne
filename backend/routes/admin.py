@@ -467,3 +467,17 @@ def impersonate_organization(
         "organization_id": org.id,
         "organization_name": org.name
     }
+
+@router.post("/run-reminders")
+def trigger_reminders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
+):
+    from ..utils.reminders import run_all_reminders
+    
+    results = run_all_reminders(db)
+    
+    return {
+        "message": "Reminders processed successfully",
+        "notifications_created": results
+    }

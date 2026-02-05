@@ -85,6 +85,40 @@ The platform includes a comprehensive master admin system for managing multiple 
 - Global 7 Ent
 - Xansational Music
 
+### Notification System
+The platform includes a comprehensive notification system with customizable preferences:
+
+**Database Models:**
+- `Notification`: Stores individual notifications with type, title, message, read status
+- `NotificationPreference`: User preferences for each notification type (in-app, email, frequency)
+
+**Notification Types:**
+- `MISSING_ISRC`: Alert when songs are missing ISRC codes
+- `MISSING_ISWC`: Alert when songs are missing ISWC codes
+- `CONTRACT_PENDING`: Reminder for pending contract uploads
+- `PRO_INCOMPLETE`: Alert for incomplete PRO registrations
+- `WEEKLY_HEALTH_SUMMARY`: Weekly catalog health report
+- `CUSTOM_DEADLINE`: Reminders for custom-set deadlines
+- `SYSTEM_ANNOUNCEMENT`: Platform updates and news
+- `CATALOG_UPDATE`: Changes to catalog
+- `PLACEMENT_UPDATE`: Placement status changes
+
+**API Routes (`/api/notifications/*`):**
+- `GET /`: List notifications (with optional unread_only filter)
+- `GET /unread-count`: Get count of unread notifications
+- `PUT /{id}/read`: Mark notification as read
+- `PUT /read-all`: Mark all notifications as read
+- `DELETE /{id}`: Delete notification
+- `GET /preferences`: Get user's notification preferences
+- `PUT /preferences`: Update notification preference
+
+**Admin Route:**
+- `POST /api/admin/run-reminders`: Trigger automated reminders (super admin only)
+
+**Frontend Components:**
+- `NotificationBell`: Bell icon with unread count badge and dropdown
+- `Settings` page with Notifications tab for preference management
+
 ## External Dependencies
 - **PostgreSQL**: Primary database.
 - **React**: Frontend UI library.
