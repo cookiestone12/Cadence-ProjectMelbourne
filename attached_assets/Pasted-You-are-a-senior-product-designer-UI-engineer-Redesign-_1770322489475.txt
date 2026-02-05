@@ -1,0 +1,72 @@
+You are a senior product designer + UI engineer. Redesign my app’s UI to match the aesthetics and interaction polish of Apple Music — but DO NOT change any functionality, features, user flows, navigation structure, button count/placement, labels, or logic. No new screens. No removed screens. No moved buttons. No extra filters. No rearranging. Purely a visual + styling pass.
+
+GOAL
+Make the UI feel premium, calm, “soft-glass” modern, and music-app polished: clean typography, generous spacing, subtle depth, tasteful motion, and high-contrast readability. Everything should look intentionally designed with Apple-like restraint.
+
+DESIGN LANGUAGE (Apple Music-inspired)
+- Overall vibe: minimal, airy, luxurious, high fidelity.
+- Color: near-white / off-white backgrounds with subtle gray separation; deep near-black for text; small pops of a single accent color (use my existing primary color; do not introduce multiple new accent colors).
+- Surfaces: cards and panels have very subtle elevation (soft shadow) and/or faint border; avoid harsh outlines.
+- Corners: consistent rounded corners (e.g., 12–16px for cards, 10–12px for controls).
+- Dividers: very light hairline separators; prefer spacing over lines where possible.
+- Typography: system font stack; clear hierarchy:
+  - Large titles (bold) for screen headers
+  - Medium semibold for section titles
+  - Regular for body
+  - Smaller, lighter secondary text for metadata
+- Iconography: thin, clean, consistent stroke weight. No mismatched icon sets.
+- Imagery: if album/cover art exists, ensure it’s crisp with rounded corners and a subtle shadow; never pixelated.
+
+LAYOUT & SPACING RULES
+- Use an 8pt spacing system across the entire app (8/16/24/32).
+- Increase whitespace around primary content; reduce clutter.
+- Maintain alignment rigor: consistent left edges, consistent padding within cards.
+- Touch targets: minimum 44px height for tap elements; keep existing buttons but adjust padding to hit this.
+
+COMPONENT STYLING (DO NOT MOVE OR CHANGE THEM)
+Apply these styles to the existing components exactly where they already appear:
+1) Top navigation / headers
+   - Sticky header with subtle blur or translucent background (if available) and soft bottom divider.
+   - Title left-aligned; actions on right; keep current actions.
+
+2) Buttons
+   - Primary: pill or rounded-rect, filled, high contrast; subtle pressed state (slight darken + scale 0.98).
+   - Secondary: translucent/outlined with faint border; same shape as primary.
+   - Icon buttons: circular hit area with soft background on hover/press.
+   - DO NOT rename, reposition, or add buttons.
+
+3) Lists / rows
+   - Rows have comfortable vertical padding; subtle hover highlight.
+   - Secondary text (artist/date/status) in muted gray.
+   - Optional: use faint separators only if needed; prefer spacing.
+
+4) Cards / tiles
+   - Slight elevation, soft shadow, faint border.
+   - Consistent padding (16–20px).
+   - Title + metadata hierarchy.
+
+5) Inputs
+   - Rounded, soft background fill; subtle inner shadow or 1px border.
+   - Focus state: accent-colored ring (soft) with no layout shift.
+
+6) Modals / sheets
+   - Rounded top corners; dimmed backdrop; smooth open/close.
+   - Keep existing content and controls.
+
+INTERACTION / MOTION (SUBTLE ONLY)
+- Add microinteractions: hover fades, pressed states, smooth transitions (150–220ms).
+- Use easing that feels natural (ease-out).
+- No flashy animations. Motion must clarify interaction, not distract.
+
+ACCESSIBILITY / QUALITY BAR
+- Ensure strong contrast for text.
+- Dark mode: if my app has it, implement a true Apple Music-like dark palette (not pure black everywhere; use layered dark grays).
+- Consistency: every screen should look like it belongs to the same design system.
+
+OUTPUT REQUIREMENTS
+- Provide ONLY styling/UI changes: CSS/Tailwind styles/theme tokens/component classes.
+- Do NOT change component structure, routing, data, handlers, or business logic.
+- If you must touch markup, only add class names/wrappers that do not affect layout or element order.
+- Return a short “design tokens” section (colors, spacing, radius, shadow, typography scale) + the exact code changes needed to apply them.
+
+Now apply this visual redesign to my existing codebase.
