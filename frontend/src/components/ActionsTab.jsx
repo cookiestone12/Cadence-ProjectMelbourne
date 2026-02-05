@@ -10,7 +10,9 @@ import {
   FlagIcon,
   XMarkIcon,
   SparklesIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  FunnelIcon,
+  ArrowsUpDownIcon
 } from '@heroicons/react/24/outline'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 
@@ -59,6 +61,10 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [gapsCount, setGapsCount] = useState(0)
+  const [filterType, setFilterType] = useState('')
+  const [filterSong, setFilterSong] = useState('')
+  const [filterPriority, setFilterPriority] = useState('')
+  const [sortBy, setSortBy] = useState('priority')
 
   const loadActions = async () => {
     try {
@@ -175,6 +181,44 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
   const overdueActions = pendingActions.filter(a => a.is_overdue)
   const upcomingActions = pendingActions.filter(a => !a.is_overdue && a.days_until_deadline !== null && a.days_until_deadline <= 7)
 
+  const uniqueSongs = [...new Set(actions.filter(a => a.song_title).map(a => a.song_title))].sort()
+  const uniqueTypes = [...new Set(actions.map(a => a.action_type))]
+
+  const filteredActions = actions.filter(action => {
+    if (filterType && action.action_type !== filterType) return false
+    if (filterSong && action.song_title !== filterSong) return false
+    if (filterPriority && action.priority !== parseInt(filterPriority)) return false
+    return true
+  })
+
+  const sortedActions = [...filteredActions].sort((a, b) => {
+    switch (sortBy) {
+      case 'priority':
+        return a.priority - b.priority
+      case 'deadline':
+        if (!a.deadline && !b.deadline) return 0
+        if (!a.deadline) return 1
+        if (!b.deadline) return -1
+        return new Date(a.deadline) - new Date(b.deadline)
+      case 'song':
+        return (a.song_title || '').localeCompare(b.song_title || '')
+      case 'type':
+        return a.action_type.localeCompare(b.action_type)
+      case 'created':
+        return new Date(b.created_at) - new Date(a.created_at)
+      default:
+        return 0
+    }
+  })
+
+  const hasActiveFilters = filterType || filterSong || filterPriority
+
+  const clearFilters = () => {
+    setFilterType('')
+    setFilterSong('')
+    setFilterPriority('')
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -215,41 +259,117 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <h3 className="text-lg font-semibold text-[#3D4A44]">Action Items for {creatorName}</h3>
-          <label className="flex items-center space-x-2 text-sm text-[#7A8580]">
-            <input
-              type="checkbox"
-              checked={includeCompleted}
-              onChange={(e) => setIncludeCompleted(e.target.checked)}
-              className="rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
-            />
-            <span>Show Completed</span>
-          </label>
-        </div>
-        <div className="flex items-center space-x-2">
-          {gapsCount > 0 && (
+      <div className="flex flex-col space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <h3 className="text-lg font-semibold text-[#3D4A44]">Action Items for {creatorName}</h3>
+            <label className="flex items-center space-x-2 text-sm text-[#7A8580]">
+              <input
+                type="checkbox"
+                checked={includeCompleted}
+                onChange={(e) => setIncludeCompleted(e.target.checked)}
+                className="rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
+              />
+              <span>Show Completed</span>
+            </label>
+          </div>
+          <div className="flex items-center space-x-2">
+            {gapsCount > 0 && (
+              <button
+                onClick={handleGenerateActions}
+                disabled={generating}
+                className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg hover:from-[#4A7862] hover:to-[#6A9484] transition-all disabled:opacity-50"
+              >
+                {generating ? (
+                  <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                ) : (
+                  <SparklesIcon className="w-4 h-4" />
+                )}
+                <span>{generating ? 'Generating...' : `Generate Actions (${gapsCount})`}</span>
+              </button>
+            )}
             <button
-              onClick={handleGenerateActions}
-              disabled={generating}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg hover:from-[#4A7862] hover:to-[#6A9484] transition-all disabled:opacity-50"
+              onClick={() => setShowAddForm(true)}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7862] transition-colors"
             >
-              {generating ? (
-                <ArrowPathIcon className="w-4 h-4 animate-spin" />
-              ) : (
-                <SparklesIcon className="w-4 h-4" />
-              )}
-              <span>{generating ? 'Generating...' : `Generate Actions (${gapsCount})`}</span>
+              <PlusIcon className="w-4 h-4" />
+              <span>Add Action</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 bg-white rounded-xl p-4 border border-[rgba(59,77,67,0.08)]">
+          <div className="flex items-center space-x-2 text-[#7A8580]">
+            <FunnelIcon className="w-4 h-4" />
+            <span className="text-sm font-medium">Filter:</span>
+          </div>
+          
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="text-sm px-3 py-1.5 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
+          >
+            <option value="">All Types</option>
+            {uniqueTypes.map(type => (
+              <option key={type} value={type}>{formatActionType(type)}</option>
+            ))}
+          </select>
+          
+          <select
+            value={filterSong}
+            onChange={(e) => setFilterSong(e.target.value)}
+            className="text-sm px-3 py-1.5 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white max-w-[200px]"
+          >
+            <option value="">All Songs</option>
+            {uniqueSongs.map(song => (
+              <option key={song} value={song}>{song}</option>
+            ))}
+          </select>
+          
+          <select
+            value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value)}
+            className="text-sm px-3 py-1.5 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
+          >
+            <option value="">All Priorities</option>
+            {PRIORITY_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="text-sm px-3 py-1.5 text-[#C47068] hover:bg-[rgba(196,112,104,0.1)] rounded-lg transition-colors"
+            >
+              Clear Filters
             </button>
           )}
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7862] transition-colors"
+          
+          <div className="flex-1" />
+          
+          <div className="flex items-center space-x-2 text-[#7A8580]">
+            <ArrowsUpDownIcon className="w-4 h-4" />
+            <span className="text-sm font-medium">Sort:</span>
+          </div>
+          
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="text-sm px-3 py-1.5 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
           >
-            <PlusIcon className="w-4 h-4" />
-            <span>Add Action</span>
-          </button>
+            <option value="priority">Priority</option>
+            <option value="deadline">Deadline</option>
+            <option value="song">Song</option>
+            <option value="type">Type</option>
+            <option value="created">Recently Added</option>
+          </select>
+          
+          {hasActiveFilters && (
+            <span className="text-sm text-[#7A8580]">
+              Showing {sortedActions.length} of {actions.length}
+            </span>
+          )}
         </div>
       </div>
 
@@ -352,14 +472,25 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
       )}
 
       <div className="space-y-3">
-        {actions.length === 0 ? (
+        {sortedActions.length === 0 ? (
           <div className="bg-white rounded-xl p-12 text-center border border-[rgba(59,77,67,0.08)]">
             <ClockIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-4" />
-            <p className="text-[#7A8580]">No action items yet</p>
-            <p className="text-sm text-[#7A8580] mt-1">Click "Add Action" to create your first action item</p>
+            {hasActiveFilters ? (
+              <>
+                <p className="text-[#7A8580]">No actions match your filters</p>
+                <button onClick={clearFilters} className="text-sm text-[#5B8A72] hover:underline mt-2">
+                  Clear filters
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-[#7A8580]">No action items yet</p>
+                <p className="text-sm text-[#7A8580] mt-1">Click "Add Action" to create your first action item</p>
+              </>
+            )}
           </div>
         ) : (
-          actions.map((action) => {
+          sortedActions.map((action) => {
             const priorityStyle = getPriorityStyle(action.priority)
             const isCompleted = action.status === 'COMPLETED'
             
