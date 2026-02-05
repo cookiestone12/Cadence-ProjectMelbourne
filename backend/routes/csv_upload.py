@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -9,6 +9,12 @@ import io
 from ..models import get_db, Song, SongCredit, Creator, OrganizationMember, User, SongChecklistStatus, ChecklistItem
 from ..utils.auth import get_current_user
 from ..utils.csv_parser import parse_csv_with_ai, apply_mapping_to_rows, validate_mapped_data
+
+try:
+    import openpyxl
+    EXCEL_SUPPORT = True
+except ImportError:
+    EXCEL_SUPPORT = False
 
 router = APIRouter(prefix="/api/csv", tags=["csv"])
 
@@ -57,25 +63,55 @@ class ImportResult(BaseModel):
     errors: List[str]
 
 
-@router.post("/preview/{org_id}", response_model=CSVPreviewResponse)
-async def preview_csv(
-    org_id: int,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id,
-        OrganizationMember.organization_id == org_id
-    ).first()
+def format_excel_cell(cell_value) -> str:
+    """Format Excel cell value to string, handling dates specially."""
+    if cell_value is None:
+        return ""
     
-    if not membership:
-        raise HTTPException(status_code=403, detail="Not authorized to access this organization")
+    from datetime import datetime, date as date_type
     
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(status_code=400, detail="File must be a CSV")
+    if isinstance(cell_value, (datetime, date_type)):
+        return cell_value.strftime("%Y-%m-%d")
     
-    content = await file.read()
+    if isinstance(cell_value, (int, float)):
+        if cell_value == int(cell_value):
+            return str(int(cell_value))
+        return str(cell_value)
+    
+    return str(cell_value).strip()
+
+
+def parse_excel_file(content: bytes) -> tuple[list, list]:
+    """Parse Excel file and return headers and rows."""
+    if not EXCEL_SUPPORT:
+        raise HTTPException(status_code=400, detail="Excel support not available. Please upload a CSV file.")
+    
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    
+    rows_iter = ws.iter_rows(values_only=True)
+    header_row = next(rows_iter, None)
+    
+    if not header_row:
+        raise HTTPException(status_code=400, detail="Excel file has no data")
+    
+    headers = [str(h).strip() if h else f"Column_{i}" for i, h in enumerate(header_row)]
+    
+    rows = []
+    for row in rows_iter:
+        if any(cell is not None for cell in row):
+            row_dict = {}
+            for i, cell in enumerate(row):
+                if i < len(headers):
+                    row_dict[headers[i]] = format_excel_cell(cell)
+            rows.append(row_dict)
+    
+    wb.close()
+    return headers, rows
+
+
+def parse_csv_file(content: bytes) -> tuple[list, list]:
+    """Parse CSV file and return headers and rows."""
     try:
         text_content = content.decode('utf-8')
     except UnicodeDecodeError:
@@ -91,10 +127,42 @@ async def preview_csv(
         raise HTTPException(status_code=400, detail="CSV file has no headers")
     
     rows = list(reader)
+    return headers, rows
+
+
+@router.post("/preview/{org_id}", response_model=CSVPreviewResponse)
+async def preview_csv(
+    org_id: int,
+    file: UploadFile = File(...),
+    all_rows: bool = Query(False, description="Return all rows instead of just preview"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
     
-    ai_result = parse_csv_with_ai(text_content, headers)
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized to access this organization")
     
-    preview_rows = rows[:5]
+    filename = file.filename.lower() if file.filename else ""
+    is_excel = filename.endswith('.xlsx') or filename.endswith('.xls')
+    is_csv = filename.endswith('.csv')
+    
+    if not is_excel and not is_csv:
+        raise HTTPException(status_code=400, detail="File must be a CSV or Excel file (.csv, .xlsx, .xls)")
+    
+    content = await file.read()
+    
+    if is_excel:
+        headers, rows = parse_excel_file(content)
+    else:
+        headers, rows = parse_csv_file(content)
+    
+    ai_result = parse_csv_with_ai("", headers)
+    
+    preview_rows = rows if all_rows else rows[:5]
     
     return CSVPreviewResponse(
         headers=headers,

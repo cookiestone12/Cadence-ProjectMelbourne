@@ -79,7 +79,47 @@ Respond ONLY with the JSON mapping object, no other text."""
         mapping = json.loads(mapping_text)
         return {"mapping": mapping, "success": True}
     except json.JSONDecodeError as e:
-        return {"mapping": {}, "success": False, "error": f"Failed to parse AI response: {str(e)}"}
+        fallback = create_fallback_mapping(headers)
+        return {"mapping": fallback, "success": False, "error": f"AI mapping failed, using fallback: {str(e)}"}
+    except Exception as e:
+        fallback = create_fallback_mapping(headers)
+        return {"mapping": fallback, "success": False, "error": f"AI mapping unavailable, using fallback: {str(e)}"}
+
+
+def create_fallback_mapping(headers: List[str]) -> Dict[str, Optional[str]]:
+    """Create basic column mapping based on common header patterns."""
+    mapping = {}
+    
+    common_patterns = {
+        "title": ["title", "song", "track", "song title", "track name", "song name"],
+        "primary_artist": ["artist", "writer", "performer", "main artist", "artist name"],
+        "isrc": ["isrc", "isrc code"],
+        "iswc": ["iswc", "iswc code"],
+        "project_title": ["album", "project", "release", "project title", "album name"],
+        "release_date": ["date", "release date", "released", "release", "date released"],
+        "label": ["label", "record label", "label name"],
+        "publishing_percentage": ["publishing", "pub %", "pub", "publishing %", "pub share", "publishing share"],
+        "master_percentage": ["master", "master %", "master share", "royalty %", "royalty"],
+        "advance_amount": ["advance", "advance $", "advance amount", "payment"],
+        "recording_code": ["code", "recording code", "catalog", "catalog number"],
+        "notes": ["notes", "comments", "note", "comment"],
+    }
+    
+    header_lower_map = {h.lower().strip(): h for h in headers}
+    
+    for field, patterns in common_patterns.items():
+        for pattern in patterns:
+            if pattern in header_lower_map:
+                original_header = header_lower_map[pattern]
+                if original_header not in mapping:
+                    mapping[original_header] = field
+                break
+    
+    for header in headers:
+        if header not in mapping:
+            mapping[header] = None
+    
+    return mapping
 
 
 def apply_mapping_to_rows(rows: List[Dict[str, str]], mapping: Dict[str, Optional[str]]) -> List[Dict[str, Any]]:
