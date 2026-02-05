@@ -46,6 +46,44 @@ The app uses a soothing, eye-friendly sage-green color palette optimized for pro
 - **Schedule A Export**: CSV generation of creator catalogs.
 - **Contract Management**: Secure upload, download, and deletion of PDF contracts linked to songs, with controlled access for linked accounts.
 - **Account Linking**: Allows secure linking between Individual and Enterprise organizations with mutual consent and configurable permission levels.
+- **Master Admin System**: Super admin role with elevated privileges for platform-wide management, including user activation/deactivation, organization impersonation, and system-wide statistics.
+
+### Master Admin System
+The platform includes a comprehensive master admin system for managing multiple tenant accounts:
+
+**User Model Enhancements:**
+- `is_super_admin`: Boolean flag for super admin access
+- `is_active`: Boolean flag for account activation status
+- `last_login_at`: Timestamp of last login
+
+**Organization Model Enhancements:**
+- `display_name`: Custom display name for the organization
+- `logo_url`: URL to organization logo
+- `logo_orientation`: Logo display format (square, horizontal, vertical)
+- `primary_color`: Custom brand color
+
+**Admin API Routes (`/api/admin/*`):**
+- `GET /stats`: System-wide statistics (users, organizations, songs, creators)
+- `GET/POST /users`: List and create users
+- `GET/PUT/DELETE /users/{id}`: Manage individual users
+- `GET/POST /organizations`: List and create organizations
+- `PUT /organizations/{id}`: Update organization details
+- `POST /organizations/{id}/members`: Add members to organizations
+- `DELETE /organizations/{id}/members/{user_id}`: Remove members
+- `POST /impersonate/{org_id}`: Access any organization for support
+
+**Admin Dashboard Features:**
+- Overview tab with system statistics
+- Users tab with activation/deactivation, role management
+- Organizations tab with branding configuration
+- Organization impersonation for support access
+
+**Beta Company Accounts:**
+- Art Never Dies Music
+- Co5
+- Rolling Loud
+- Global 7 Ent
+- Xansational Music
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.

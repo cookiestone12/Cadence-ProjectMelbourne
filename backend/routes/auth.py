@@ -60,6 +60,8 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(request: LoginRequest, db: Session = Depends(get_db)):
+    from datetime import datetime
+    
     user = db.query(User).filter(User.username == request.username).first()
     
     if not user or not verify_password(request.password, user.hashed_password):
@@ -67,6 +69,15 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password"
         )
+    
+    if hasattr(user, 'is_active') and not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled. Contact your administrator."
+        )
+    
+    user.last_login_at = datetime.utcnow()
+    db.commit()
     
     access_token = create_access_token(data={"sub": user.username})
     
@@ -77,6 +88,7 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
             "id": user.id,
             "username": user.username,
             "email": user.email,
-            "is_admin": user.is_admin
+            "is_admin": user.is_admin,
+            "is_super_admin": getattr(user, 'is_super_admin', False)
         }
     }

@@ -10,6 +10,7 @@ import ReportsPage from './pages/ReportsPage'
 import ValuationPage from './pages/ValuationPage'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
+import AdminDashboard from './pages/AdminDashboard'
 import Sidebar from './components/Sidebar'
 
 function App() {
@@ -20,10 +21,19 @@ function App() {
 
   useEffect(() => {
     const token = localStorage.getItem('token')
+    const storedUser = localStorage.getItem('user')
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
       setIsAuthenticated(true)
-      setUser({ username: 'Demo User', role: 'Admin' })
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser))
+        } catch {
+          setUser({ username: 'User', is_admin: false, is_super_admin: false })
+        }
+      } else {
+        setUser({ username: 'User', is_admin: false, is_super_admin: false })
+      }
     }
     setLoading(false)
 
@@ -49,6 +59,7 @@ function App() {
 
   const handleLogin = (token, userData) => {
     localStorage.setItem('token', token)
+    localStorage.setItem('user', JSON.stringify(userData))
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
     setIsAuthenticated(true)
     setUser(userData)
@@ -56,6 +67,7 @@ function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('token')
+    localStorage.removeItem('user')
     delete axios.defaults.headers.common['Authorization']
     setIsAuthenticated(false)
     setUser(null)
@@ -108,6 +120,9 @@ function App() {
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/valuation" element={<ValuationPage />} />
             <Route path="/settings" element={<Settings />} />
+            {user?.is_super_admin && (
+              <Route path="/admin" element={<AdminDashboard />} />
+            )}
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </main>

@@ -84,7 +84,10 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     is_admin = Column(Boolean, default=False)
+    is_super_admin = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    last_login_at = Column(DateTime, nullable=True)
     
     organization_memberships = relationship("OrganizationMember", back_populates="user")
 
@@ -95,6 +98,12 @@ class Organization(Base):
     name = Column(String, index=True)
     type = Column(String)
     account_type = Column(String, default="ENTERPRISE")
+    
+    display_name = Column(String, nullable=True)
+    logo_url = Column(String, nullable=True)
+    logo_orientation = Column(String, default="square")
+    primary_color = Column(String, nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

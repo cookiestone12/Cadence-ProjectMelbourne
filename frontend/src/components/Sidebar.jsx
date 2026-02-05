@@ -8,7 +8,8 @@ import {
   ChartBarIcon,
   CurrencyDollarIcon,
   Cog6ToothIcon,
-  XMarkIcon
+  XMarkIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline'
 
 export default function Sidebar({ user, onLogout, isOpen, onClose }) {
@@ -101,6 +102,21 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
             <p className="text-xs text-[#7A8580]">{user?.role || 'Admin'}</p>
           </div>
         </div>
+        
+        {user?.is_super_admin && (
+          <Link
+            to="/admin"
+            onClick={() => window.innerWidth < 1024 && onClose()}
+            className={`flex items-center space-x-3 px-3 py-2 rounded-xl transition-all duration-200 ${
+              isActive('/admin')
+                ? 'bg-gradient-to-r from-[#5A8A9A] to-[#7BA594] text-white font-medium shadow-md'
+                : 'text-[#7A8580] hover:bg-[#EEF1EC] hover:text-[#3D4A44]'
+            }`}
+          >
+            <ShieldCheckIcon className="w-5 h-5" />
+            <span className="text-sm">Admin</span>
+          </Link>
+        )}
         
         <Link
           to="/settings"
