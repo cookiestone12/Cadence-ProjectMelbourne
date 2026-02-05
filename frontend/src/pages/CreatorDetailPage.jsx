@@ -336,8 +336,7 @@ export default function CreatorDetailPage() {
   
   const tabs = [
     { id: 'overview', label: 'Overview' },
-    { id: 'songs', label: `Songs (${songs.length})` },
-    { id: 'placements', label: `Placements (${placedSongs.length})` },
+    { id: 'records', label: `Records (${songs.length})` },
     { id: 'actions', label: 'Actions' },
     { id: 'schedule-a', label: 'Schedule A' }
   ]
@@ -534,11 +533,11 @@ export default function CreatorDetailPage() {
           </div>
         )}
         
-        {activeTab === 'songs' && (
+        {activeTab === 'records' && (
           <div className="bg-white rounded-[18px] overflow-hidden" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
             <div className="p-5 border-b border-[rgba(59,77,67,0.08)] bg-[#F8F8FB] flex items-center justify-between">
               <p className="text-sm text-[#7A8580]">
-                Showing all {songs.length} songs. Click the edit button to update placement status.
+                Showing all {songs.length} records. Click the edit button to update details.
               </p>
               <button
                 onClick={() => setShowAddSongModal(true)}
@@ -707,70 +706,6 @@ export default function CreatorDetailPage() {
                       )}
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-        
-        {activeTab === 'placements' && (
-          <div className="bg-white rounded-[18px] overflow-hidden" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
-            <div className="p-5 border-b border-[rgba(59,77,67,0.08)] bg-[#F8F8FB]">
-              <p className="text-sm text-[#7A8580]">
-                {placedSongs.length} paid placements totaling ${totalAdvance.toLocaleString()} in advances
-              </p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-[#F8F8FB] border-b border-[rgba(59,77,67,0.08)]">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Song</th>
-                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Artist</th>
-                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Label</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Pub %</th>
-                    <th className="px-4 py-3 text-right font-semibold text-[#3D4A44]">Advance</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">PRO</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">DSP</th>
-                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Release</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {placedSongs.map((song, index) => (
-                    <tr key={song.id} className={`hover:bg-[#F8F8FB] transition-colors border-b border-[rgba(0,0,0,0.05)] ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'}`}>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-[#3D4A44]">{song.title}</div>
-                      </td>
-                      <td className="px-4 py-3 text-[#7A8580]">
-                        {song.primary_artist}
-                      </td>
-                      <td className="px-4 py-3 text-[#7A8580] max-w-40 truncate" title={song.label}>
-                        {song.label || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-center text-[#7A8580]">
-                        {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium text-[#5B9A6E]">
-                        ${song.advance_amount ? (song.advance_amount / 100).toLocaleString() : 0}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <StatusBadge value={song.is_registered_with_pro} />
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <StatusBadge value={song.is_registered_with_dsp} />
-                      </td>
-                      <td className="px-4 py-3 text-[#7A8580]">
-                        {song.release_date || '-'}
-                      </td>
-                    </tr>
-                  ))}
-                  
-                  {placedSongs.length === 0 && (
-                    <tr>
-                      <td colSpan="8" className="px-6 py-12 text-center text-[#7A8580]">
-                        No paid placements yet
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
