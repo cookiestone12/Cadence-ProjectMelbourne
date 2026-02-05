@@ -155,8 +155,12 @@ The platform includes a proactive action item management system with deadline tr
 - 2: Medium priority (amber)
 - 3: Low priority (green)
 
+**Auto-Generation:**
+- `GET /api/actions/gaps/{creator_id}`: Analyze catalog and return list of missing items (ISRC, ISWC, contracts, PRO, DSP)
+- `POST /api/actions/generate/{creator_id}`: Create action items from detected gaps (avoids duplicates)
+
 **Frontend Components:**
-- `ActionsTab`: Full-featured Actions tab in creator profile with deadline management, priority filtering, and inline editing
+- `ActionsTab`: Full-featured Actions tab in creator profile with deadline management, priority filtering, inline editing, and "Generate Actions" button that auto-creates tasks based on catalog gaps
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.
