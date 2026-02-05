@@ -91,18 +91,46 @@ def create_fallback_mapping(headers: List[str]) -> Dict[str, Optional[str]]:
     mapping = {}
     
     common_patterns = {
-        "title": ["title", "song", "track", "song title", "track name", "song name"],
-        "primary_artist": ["artist", "writer", "performer", "main artist", "artist name"],
-        "isrc": ["isrc", "isrc code"],
-        "iswc": ["iswc", "iswc code"],
-        "project_title": ["album", "project", "release", "project title", "album name"],
-        "release_date": ["date", "release date", "released", "release", "date released"],
-        "label": ["label", "record label", "label name"],
-        "publishing_percentage": ["publishing", "pub %", "pub", "publishing %", "pub share", "publishing share"],
-        "master_percentage": ["master", "master %", "master share", "royalty %", "royalty"],
-        "advance_amount": ["advance", "advance $", "advance amount", "payment"],
-        "recording_code": ["code", "recording code", "catalog", "catalog number"],
-        "notes": ["notes", "comments", "note", "comment"],
+        "title": [
+            "title", "song", "track", "song title", "track name", "song name",
+            "work title", "work", "composition", "music title", "track title",
+            "song/track", "name", "work name", "comp", "composition title",
+            "musical work", "original title", "recording title"
+        ],
+        "primary_artist": [
+            "artist", "writer", "performer", "main artist", "artist name",
+            "primary artist", "featured artist", "lead artist", "singer",
+            "recording artist", "artists", "performers", "creator", "author"
+        ],
+        "isrc": ["isrc", "isrc code", "isrc #", "isrc number"],
+        "iswc": ["iswc", "iswc code", "iswc #", "iswc number"],
+        "project_title": [
+            "album", "project", "release", "project title", "album name",
+            "album title", "ep", "lp", "mixtape", "collection", "release title"
+        ],
+        "release_date": [
+            "date", "release date", "released", "release", "date released",
+            "release_date", "rel date", "original release", "first release"
+        ],
+        "label": ["label", "record label", "label name", "distributor", "publisher"],
+        "publishing_percentage": [
+            "publishing", "pub %", "pub", "publishing %", "pub share", 
+            "publishing share", "pub pct", "publishing pct", "writer share",
+            "songwriter share", "controlled", "ownership", "ownership %"
+        ],
+        "master_percentage": [
+            "master", "master %", "master share", "royalty %", "royalty",
+            "master pct", "recording share", "sound recording"
+        ],
+        "advance_amount": [
+            "advance", "advance $", "advance amount", "payment", "advance amt",
+            "recoupable", "advance paid"
+        ],
+        "recording_code": [
+            "code", "recording code", "catalog", "catalog number", "catalog #",
+            "internal code", "ref", "reference", "id", "song id", "track id"
+        ],
+        "notes": ["notes", "comments", "note", "comment", "remarks", "memo"],
     }
     
     header_lower_map = {h.lower().strip(): h for h in headers}
@@ -114,6 +142,18 @@ def create_fallback_mapping(headers: List[str]) -> Dict[str, Optional[str]]:
                 if original_header not in mapping:
                     mapping[original_header] = field
                 break
+    
+    for header in headers:
+        if header not in mapping:
+            header_lower = header.lower().strip()
+            for field, patterns in common_patterns.items():
+                for pattern in patterns:
+                    if pattern in header_lower or header_lower in pattern:
+                        if header not in mapping:
+                            mapping[header] = field
+                        break
+                if header in mapping:
+                    break
     
     for header in headers:
         if header not in mapping:
