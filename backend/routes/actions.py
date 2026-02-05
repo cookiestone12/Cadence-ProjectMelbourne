@@ -216,7 +216,8 @@ def get_creator_actions(
             "updated_at": action.updated_at,
             "song_title": song_title,
             "days_until_deadline": days_until,
-            "is_overdue": is_overdue
+            "is_overdue": is_overdue,
+            "is_auto_generated": getattr(action, 'is_auto_generated', False)
         })
     
     return result
@@ -342,6 +343,63 @@ def complete_action_item(
     db.commit()
     
     return {"message": "Action item completed"}
+
+
+@router.post("/generate/{creator_id}")
+def generate_suggested_actions(
+    creator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..utils.catalog_gaps import generate_actions_from_gaps
+    
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == creator.organization_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    created_count = generate_actions_from_gaps(
+        db, 
+        creator_id, 
+        creator.organization_id,
+        current_user.id
+    )
+    
+    return {
+        "message": f"Generated {created_count} action items",
+        "created_count": created_count
+    }
+
+
+@router.get("/gaps/{creator_id}")
+def get_catalog_gaps(
+    creator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..utils.catalog_gaps import analyze_creator_catalog_gaps
+    
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == creator.organization_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    gaps = analyze_creator_catalog_gaps(db, creator_id)
+    return {"gaps": gaps, "total_gaps": len(gaps)}
 
 
 @router.get("/summary/org/{org_id}")

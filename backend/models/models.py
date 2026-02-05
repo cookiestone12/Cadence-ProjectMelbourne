@@ -545,6 +545,8 @@ class ActionItem(Base):
     completed_at = Column(DateTime, nullable=True)
     completed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     
+    is_auto_generated = Column(Boolean, default=False)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

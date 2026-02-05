@@ -8,7 +8,9 @@ import {
   ExclamationTriangleIcon,
   CalendarIcon,
   FlagIcon,
-  XMarkIcon
+  XMarkIcon,
+  SparklesIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 
@@ -55,6 +57,8 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
     reminder_days_before: 3
   })
   const [saving, setSaving] = useState(false)
+  const [generating, setGenerating] = useState(false)
+  const [gapsCount, setGapsCount] = useState(0)
 
   const loadActions = async () => {
     try {
@@ -67,8 +71,18 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
     }
   }
 
+  const loadGapsCount = async () => {
+    try {
+      const response = await axios.get(`/api/actions/gaps/${creatorId}`)
+      setGapsCount(response.data.total_gaps || 0)
+    } catch (error) {
+      console.error('Failed to load gaps:', error)
+    }
+  }
+
   useEffect(() => {
     loadActions()
+    loadGapsCount()
   }, [creatorId, includeCompleted])
 
   const handleAddAction = async () => {
@@ -122,6 +136,19 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
       loadActions()
     } catch (error) {
       console.error('Failed to update deadline:', error)
+    }
+  }
+
+  const handleGenerateActions = async () => {
+    setGenerating(true)
+    try {
+      const response = await axios.post(`/api/actions/generate/${creatorId}`)
+      loadActions()
+      loadGapsCount()
+    } catch (error) {
+      console.error('Failed to generate actions:', error)
+    } finally {
+      setGenerating(false)
     }
   }
 
@@ -201,13 +228,29 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
             <span>Show Completed</span>
           </label>
         </div>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="inline-flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7862] transition-colors"
-        >
-          <PlusIcon className="w-4 h-4" />
-          <span>Add Action</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          {gapsCount > 0 && (
+            <button
+              onClick={handleGenerateActions}
+              disabled={generating}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg hover:from-[#4A7862] hover:to-[#6A9484] transition-all disabled:opacity-50"
+            >
+              {generating ? (
+                <ArrowPathIcon className="w-4 h-4 animate-spin" />
+              ) : (
+                <SparklesIcon className="w-4 h-4" />
+              )}
+              <span>{generating ? 'Generating...' : `Generate Actions (${gapsCount})`}</span>
+            </button>
+          )}
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="inline-flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7862] transition-colors"
+          >
+            <PlusIcon className="w-4 h-4" />
+            <span>Add Action</span>
+          </button>
+        </div>
       </div>
 
       {showAddForm && (
@@ -374,6 +417,13 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
                         <span className="inline-flex items-center px-2 py-1 rounded-full bg-[rgba(91,138,114,0.1)] text-[#5B8A72] font-medium">
                           {formatActionType(action.action_type)}
                         </span>
+                        
+                        {action.is_auto_generated && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full bg-[rgba(123,165,148,0.15)] text-[#7BA594] text-xs">
+                            <SparklesIcon className="w-3 h-3 mr-1" />
+                            Auto
+                          </span>
+                        )}
                         
                         {action.song_title && (
                           <span className="text-[#7A8580]">Song: {action.song_title}</span>
