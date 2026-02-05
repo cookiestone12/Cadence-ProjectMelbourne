@@ -546,3 +546,37 @@ def send_organization_digest(
     return {
         "message": f"Digest sent for organization {org_id}"
     }
+
+@router.get("/integrations")
+def get_integration_status(
+    current_user: User = Depends(get_current_super_admin)
+):
+    import os
+    
+    integrations = []
+    
+    openai_key = os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", "")
+    integrations.append({
+        "id": "openai",
+        "name": "OpenAI",
+        "description": "AI-powered features like CSV column mapping and intelligent parsing",
+        "status": "connected" if openai_key else "not_configured",
+        "managed_by": "replit_integration",
+        "features": ["CSV Column Mapping", "AI Parsing"]
+    })
+    
+    db_url = os.environ.get("DATABASE_URL", "")
+    integrations.append({
+        "id": "postgresql",
+        "name": "PostgreSQL Database",
+        "description": "Primary database for all application data",
+        "status": "connected" if db_url else "not_configured",
+        "managed_by": "replit_integration",
+        "features": ["Data Storage", "User Management", "Catalog Management"]
+    })
+    
+    return {
+        "integrations": integrations,
+        "total": len(integrations),
+        "connected": len([i for i in integrations if i["status"] == "connected"])
+    }

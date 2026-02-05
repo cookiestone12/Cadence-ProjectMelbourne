@@ -11,7 +11,10 @@ import {
   XMarkIcon,
   CheckIcon,
   EyeIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  Cog6ToothIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon
 } from '@heroicons/react/24/outline'
 
 export default function AdminDashboard() {
@@ -26,6 +29,7 @@ export default function AdminDashboard() {
   const [showOrgModal, setShowOrgModal] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [editingOrg, setEditingOrg] = useState(null)
+  const [integrations, setIntegrations] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -35,14 +39,16 @@ export default function AdminDashboard() {
     try {
       setLoading(true)
       setError(null)
-      const [statsRes, usersRes, orgsRes] = await Promise.all([
+      const [statsRes, usersRes, orgsRes, integrationsRes] = await Promise.all([
         axios.get('/api/admin/stats'),
         axios.get('/api/admin/users'),
-        axios.get('/api/admin/organizations')
+        axios.get('/api/admin/organizations'),
+        axios.get('/api/admin/integrations')
       ])
       setStats(statsRes.data)
       setUsers(usersRes.data)
       setOrganizations(orgsRes.data)
+      setIntegrations(integrationsRes.data)
     } catch (err) {
       console.error('Failed to load admin data:', err)
       if (err.response?.status === 403) {
@@ -121,7 +127,7 @@ export default function AdminDashboard() {
 
       <div className="mb-6 border-b border-[rgba(59,77,67,0.08)]">
         <div className="flex space-x-8">
-          {['overview', 'users', 'organizations'].map((tab) => (
+          {['overview', 'users', 'organizations', 'api-config'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -392,6 +398,101 @@ export default function AdminDashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'api-config' && integrations && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-bold text-[#3D4A44]">API Configuration</h2>
+              <p className="text-[#7A8580] text-sm mt-1">
+                Platform integrations are managed securely through Replit. No API keys are exposed in the UI.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2 bg-[#5B8A72]/10 rounded-lg">
+              <CheckCircleIcon className="w-5 h-5 text-[#5B8A72]" />
+              <span className="text-[#5B8A72] font-medium">
+                {integrations.connected}/{integrations.total} Connected
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {integrations.integrations.map((integration) => (
+              <div key={integration.id} className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${
+                      integration.status === 'connected' 
+                        ? 'bg-[#5B9A6E]/20' 
+                        : 'bg-[#C47068]/20'
+                    }`}>
+                      <Cog6ToothIcon className={`w-6 h-6 ${
+                        integration.status === 'connected'
+                          ? 'text-[#5B9A6E]'
+                          : 'text-[#C47068]'
+                      }`} />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-[#3D4A44]">{integration.name}</h3>
+                      <p className="text-sm text-[#7A8580]">{integration.description}</p>
+                    </div>
+                  </div>
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                    integration.status === 'connected'
+                      ? 'bg-[#5B9A6E]/20 text-[#5B9A6E]'
+                      : 'bg-[#C47068]/20 text-[#C47068]'
+                  }`}>
+                    {integration.status === 'connected' ? (
+                      <>
+                        <CheckCircleIcon className="w-3.5 h-3.5" />
+                        Connected
+                      </>
+                    ) : (
+                      <>
+                        <ExclamationCircleIcon className="w-3.5 h-3.5" />
+                        Not Configured
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border-t border-[rgba(59,77,67,0.08)] pt-4">
+                  <p className="text-xs text-[#7A8580] mb-2">Features Enabled:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {integration.features.map((feature, idx) => (
+                      <span 
+                        key={idx}
+                        className="px-2 py-1 bg-[#EEF1EC] text-[#3D4A44] text-xs rounded-md"
+                      >
+                        {feature}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)]">
+                  <p className="text-xs text-[#7A8580]">
+                    <span className="font-medium">Managed by:</span> {
+                      integration.managed_by === 'replit_integration'
+                        ? 'Replit Integration (Secure)'
+                        : 'Environment Variables'
+                    }
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-[#5A8A9A]/10 rounded-xl p-6">
+            <h3 className="font-semibold text-[#3D4A44] mb-2">Security Note</h3>
+            <p className="text-sm text-[#7A8580]">
+              API keys and secrets are managed securely through Replit's integration system. 
+              They are never exposed in the dashboard or stored in plain text. 
+              To modify integrations, use the Replit Secrets panel or contact your system administrator.
+            </p>
           </div>
         </div>
       )}
