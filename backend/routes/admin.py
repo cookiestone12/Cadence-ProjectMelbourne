@@ -481,3 +481,32 @@ def trigger_reminders(
         "message": "Reminders processed successfully",
         "notifications_created": results
     }
+
+@router.post("/sync-health-scores")
+def sync_all_health_scores(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
+):
+    from ..utils.health_sync import sync_all_songs
+    
+    synced_count = sync_all_songs(db)
+    
+    return {
+        "message": "Health scores synced successfully",
+        "songs_synced": synced_count
+    }
+
+@router.post("/sync-health-scores/{org_id}")
+def sync_org_health_scores(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
+):
+    from ..utils.health_sync import sync_organization_songs
+    
+    synced_count = sync_organization_songs(db, org_id)
+    
+    return {
+        "message": f"Health scores synced for organization {org_id}",
+        "songs_synced": synced_count
+    }
