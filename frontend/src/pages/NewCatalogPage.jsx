@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { 
   FunnelIcon, MagnifyingGlassIcon, PlusIcon, ArrowUpTrayIcon,
-  CheckCircleIcon, XCircleIcon, MinusCircleIcon
+  CheckCircleIcon, XCircleIcon, MinusCircleIcon, LinkIcon
 } from '@heroicons/react/24/outline'
 import SongDetailModal from '../components/SongDetailModal'
 import AddSongModal from '../components/AddSongModal'
@@ -18,6 +18,7 @@ export default function NewCatalogPage() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [organizationId, setOrganizationId] = useState(null)
+  const [spotifyModal, setSpotifyModal] = useState({ open: false, song: null, link: '' })
   const [filters, setFilters] = useState({
     creator_id: '',
     role: '',
@@ -97,6 +98,50 @@ export default function NewCatalogPage() {
   
   const releasedCount = songs.filter(s => s.is_released).length
   const unreleasedCount = songs.filter(s => !s.is_released).length
+  
+  const handleReleasedToggle = async (e, song) => {
+    e.stopPropagation()
+    const newReleasedState = !song.is_released
+    
+    if (newReleasedState && !song.spotify_link) {
+      setSpotifyModal({ open: true, song, link: '' })
+    } else {
+      try {
+        await axios.put(`/api/songs/${song.id}`, { is_released: newReleasedState })
+        setSongs(prev => prev.map(s => 
+          s.id === song.id ? { ...s, is_released: newReleasedState } : s
+        ))
+      } catch (error) {
+        console.error('Failed to update released status:', error)
+      }
+    }
+  }
+  
+  const handleSpotifyLinkSave = async () => {
+    if (!spotifyModal.song) return
+    
+    try {
+      await axios.put(`/api/songs/${spotifyModal.song.id}`, { 
+        is_released: true,
+        spotify_link: spotifyModal.link || null 
+      })
+      setSongs(prev => prev.map(s => 
+        s.id === spotifyModal.song.id 
+          ? { ...s, is_released: true, spotify_link: spotifyModal.link || null } 
+          : s
+      ))
+      setSpotifyModal({ open: false, song: null, link: '' })
+    } catch (error) {
+      console.error('Failed to save Spotify link:', error)
+    }
+  }
+  
+  const openSpotifyLink = (e, link) => {
+    e.stopPropagation()
+    if (link) {
+      window.open(link, '_blank')
+    }
+  }
   
   if (loading) {
     return (
@@ -261,10 +306,10 @@ export default function NewCatalogPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Label</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Pub %</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Health</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Released</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Spotify</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Contract</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">PRO</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">DSP</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Paid</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
@@ -300,20 +345,50 @@ export default function NewCatalogPage() {
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-3">{getStatusIcon(song.has_contract_executed ? 'Yes' : 'No')}</td>
-                  <td className="px-4 py-3">{getStatusIcon(song.is_registered_with_pro ? 'Yes' : 'No')}</td>
-                  <td className="px-4 py-3">{getStatusIcon(song.is_registered_with_dsp ? 'Yes' : 'No')}</td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={(e) => handleReleasedToggle(e, song)}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                        song.is_released 
+                          ? 'bg-[#5B8A72] border-[#5B8A72] text-white' 
+                          : 'border-[#7A8580] hover:border-[#5B8A72]'
+                      }`}
+                    >
+                      {song.is_released && (
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </button>
+                  </td>
                   <td className="px-4 py-3">
-                    {song.payment_status === 'PAID' ? (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-[rgba(91,154,110,0.12)] text-[#5B9A6E]">
-                        PAID
-                      </span>
+                    {song.spotify_link ? (
+                      <button
+                        onClick={(e) => openSpotifyLink(e, song.spotify_link)}
+                        className="flex items-center space-x-1 text-[#1DB954] hover:underline text-sm"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                        </svg>
+                        <span>Open</span>
+                      </button>
+                    ) : song.is_released ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSpotifyModal({ open: true, song, link: '' })
+                        }}
+                        className="flex items-center space-x-1 text-[#7A8580] hover:text-[#5B8A72] text-sm"
+                      >
+                        <LinkIcon className="w-4 h-4" />
+                        <span>Add Link</span>
+                      </button>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-[rgba(59,77,67,0.06)] text-[#7A8580]">
-                        {song.payment_status || 'N/A'}
-                      </span>
+                      <span className="text-xs text-[#7A8580]">-</span>
                     )}
                   </td>
+                  <td className="px-4 py-3">{getStatusIcon(song.has_contract_executed ? 'Yes' : 'No')}</td>
+                  <td className="px-4 py-3">{getStatusIcon(song.is_registered_with_pro ? 'Yes' : 'No')}</td>
                 </tr>
               ))}
               
@@ -347,6 +422,46 @@ export default function NewCatalogPage() {
           onSuccess={loadData}
           organizationId={organizationId}
         />
+      )}
+      
+      {spotifyModal.open && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-[#3D4A44] mb-2">Add Spotify Link</h3>
+            <p className="text-sm text-[#7A8580] mb-4">
+              Add the Spotify link for "<span className="font-medium text-[#3D4A44]">{spotifyModal.song?.title}</span>"
+            </p>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">Spotify URL</label>
+              <input
+                type="url"
+                value={spotifyModal.link}
+                onChange={(e) => setSpotifyModal(prev => ({ ...prev, link: e.target.value }))}
+                placeholder="https://open.spotify.com/track/..."
+                className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
+              />
+            </div>
+            
+            <div className="flex items-center justify-end space-x-3">
+              <button
+                onClick={() => setSpotifyModal({ open: false, song: null, link: '' })}
+                className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSpotifyLinkSave}
+                className="px-4 py-2 bg-[#1DB954] text-white rounded-lg hover:bg-[#1aa34a] transition-colors flex items-center space-x-2"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                </svg>
+                <span>Save & Mark Released</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
