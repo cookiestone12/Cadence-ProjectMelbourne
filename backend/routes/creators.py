@@ -35,6 +35,16 @@ class CreatorCreateRequest(BaseModel):
     primary_ipi: Optional[str] = None
     hero_image_url: Optional[str] = None
 
+class CreatorUpdateRequest(BaseModel):
+    display_name: Optional[str] = None
+    legal_name: Optional[str] = None
+    email: Optional[str] = None
+    roles: Optional[List[str]] = None
+    primary_territory: Optional[str] = None
+    primary_pro: Optional[str] = None
+    primary_ipi: Optional[str] = None
+    hero_image_url: Optional[str] = None
+
 class CreatorDetailResponse(BaseModel):
     id: int
     display_name: str
@@ -193,4 +203,69 @@ def get_creator(
         "song_count": song_count,
         "avg_health_score": float(avg_health) if avg_health else 0.0,
         "placement_count": placement_count
+    }
+
+@router.put("/{creator_id}", response_model=CreatorResponse)
+def update_creator(
+    creator_id: int,
+    request: CreatorUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == creator.organization_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized to update this creator")
+    
+    if request.display_name is not None:
+        creator.display_name = request.display_name
+    if request.legal_name is not None:
+        creator.legal_name = request.legal_name
+    if request.email is not None:
+        creator.email = request.email
+    if request.roles is not None:
+        creator.roles = request.roles
+    if request.primary_territory is not None:
+        creator.primary_territory = request.primary_territory
+    if request.primary_pro is not None:
+        creator.primary_pro = request.primary_pro
+    if request.primary_ipi is not None:
+        creator.primary_ipi = request.primary_ipi
+    if request.hero_image_url is not None:
+        creator.hero_image_url = request.hero_image_url
+    
+    db.commit()
+    db.refresh(creator)
+    
+    song_count = db.query(func.count(SongCredit.id)).filter(
+        SongCredit.creator_id == creator.id
+    ).scalar() or 0
+    
+    avg_health = db.query(func.avg(Song.status_health_score)).join(
+        SongCredit, Song.id == SongCredit.song_id
+    ).filter(
+        SongCredit.creator_id == creator.id
+    ).scalar() or 0.0
+    
+    return {
+        "id": creator.id,
+        "display_name": creator.display_name,
+        "legal_name": creator.legal_name,
+        "email": creator.email,
+        "roles": creator.roles,
+        "primary_territory": creator.primary_territory,
+        "primary_pro": creator.primary_pro,
+        "primary_ipi": creator.primary_ipi,
+        "hero_image_url": creator.hero_image_url,
+        "linked_user_id": creator.linked_user_id,
+        "song_count": song_count,
+        "avg_health_score": float(avg_health) if avg_health else 0.0
     }

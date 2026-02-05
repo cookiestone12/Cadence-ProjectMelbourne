@@ -31,6 +31,17 @@ export default function CreatorDetailPage() {
     advance_amount: '',
     notes: ''
   })
+  const [showEditCreatorModal, setShowEditCreatorModal] = useState(false)
+  const [editingCreator, setEditingCreator] = useState(false)
+  const [creatorForm, setCreatorForm] = useState({
+    display_name: '',
+    legal_name: '',
+    email: '',
+    roles: [],
+    primary_territory: '',
+    primary_pro: '',
+    primary_ipi: ''
+  })
   
   const loadSongs = async (orgId) => {
     const songsResponse = await axios.get(`/api/songs/org/${orgId}?creator_id=${id}&limit=1000`)
@@ -214,6 +225,48 @@ export default function CreatorDetailPage() {
       setAddingSong(false)
     }
   }
+
+  const ROLE_OPTIONS = ['ARTIST', 'SONGWRITER', 'PRODUCER']
+  const PRO_OPTIONS = ['ASCAP', 'BMI', 'PRS', 'SESAC', 'OTHER']
+
+  const openEditCreatorModal = () => {
+    setCreatorForm({
+      display_name: creator.display_name || '',
+      legal_name: creator.legal_name || '',
+      email: creator.email || '',
+      roles: creator.roles || [],
+      primary_territory: creator.primary_territory || '',
+      primary_pro: creator.primary_pro || '',
+      primary_ipi: creator.primary_ipi || ''
+    })
+    setShowEditCreatorModal(true)
+  }
+
+  const handleCreatorRoleToggle = (role) => {
+    setCreatorForm(prev => ({
+      ...prev,
+      roles: prev.roles.includes(role)
+        ? prev.roles.filter(r => r !== role)
+        : [...prev.roles, role]
+    }))
+  }
+
+  const handleUpdateCreator = async (e) => {
+    e.preventDefault()
+    if (!creatorForm.display_name.trim()) return
+    
+    setEditingCreator(true)
+    try {
+      const response = await axios.put(`/api/creators/${id}`, creatorForm)
+      setCreator(prev => ({ ...prev, ...response.data }))
+      setShowEditCreatorModal(false)
+    } catch (error) {
+      console.error('Failed to update creator:', error)
+      alert(error.response?.data?.detail || 'Failed to update creator')
+    } finally {
+      setEditingCreator(false)
+    }
+  }
   
   const StatusBadge = ({ value, label }) => {
     if (value === true || value === 'Yes') {
@@ -311,7 +364,16 @@ export default function CreatorDetailPage() {
             <span>Back to Roster</span>
           </Link>
           
-          <h1 className="text-5xl font-semibold text-white mb-2">{creator.display_name}</h1>
+          <div className="flex items-center gap-4 mb-2">
+            <h1 className="text-5xl font-semibold text-white">{creator.display_name}</h1>
+            <button
+              onClick={openEditCreatorModal}
+              className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+              title="Edit Creator"
+            >
+              <PencilIcon className="w-5 h-5 text-white" />
+            </button>
+          </div>
           <div className="flex items-center space-x-4 text-white/90">
             <span className="text-lg">{creator.roles?.join(', ') || 'Producer'}</span>
             <span>•</span>
@@ -1068,6 +1130,129 @@ export default function CreatorDetailPage() {
                   className="flex-1 px-4 py-3 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50"
                 >
                   {addingSong ? 'Adding...' : 'Add Song'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEditCreatorModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-semibold text-[#3D4A44]">Edit Creator</h2>
+              <button onClick={() => setShowEditCreatorModal(false)} className="p-2 hover:bg-[#EEF1EC] rounded-lg">
+                <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCreator} className="space-y-4">
+              <div>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Display Name *</label>
+                <input
+                  type="text"
+                  value={creatorForm.display_name}
+                  onChange={(e) => setCreatorForm({...creatorForm, display_name: e.target.value})}
+                  required
+                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  placeholder="Stage name or brand"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Legal Name</label>
+                <input
+                  type="text"
+                  value={creatorForm.legal_name}
+                  onChange={(e) => setCreatorForm({...creatorForm, legal_name: e.target.value})}
+                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  placeholder="Full legal name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Email</label>
+                <input
+                  type="email"
+                  value={creatorForm.email}
+                  onChange={(e) => setCreatorForm({...creatorForm, email: e.target.value})}
+                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  placeholder="creator@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Roles</label>
+                <div className="flex flex-wrap gap-2">
+                  {ROLE_OPTIONS.map(role => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => handleCreatorRoleToggle(role)}
+                      className={`px-4 py-2 rounded-lg border font-medium transition-colors ${
+                        creatorForm.roles.includes(role)
+                          ? 'bg-[#5B8A72] text-white border-[#5B8A72]'
+                          : 'border-[rgba(59,77,67,0.2)] text-[#3D4A44] hover:bg-[#EEF1EC]'
+                      }`}
+                    >
+                      {role}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Primary Territory</label>
+                  <input
+                    type="text"
+                    value={creatorForm.primary_territory}
+                    onChange={(e) => setCreatorForm({...creatorForm, primary_territory: e.target.value})}
+                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    placeholder="e.g., US, UK, WW"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Primary PRO</label>
+                  <select
+                    value={creatorForm.primary_pro}
+                    onChange={(e) => setCreatorForm({...creatorForm, primary_pro: e.target.value})}
+                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  >
+                    <option value="">Select PRO</option>
+                    {PRO_OPTIONS.map(pro => (
+                      <option key={pro} value={pro}>{pro}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">IPI Number</label>
+                <input
+                  type="text"
+                  value={creatorForm.primary_ipi}
+                  onChange={(e) => setCreatorForm({...creatorForm, primary_ipi: e.target.value})}
+                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  placeholder="IPI/CAE Number"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCreatorModal(false)}
+                  className="flex-1 px-4 py-3 border border-[rgba(59,77,67,0.2)] text-[#3D4A44] rounded-xl font-medium hover:bg-[#EEF1EC] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editingCreator || !creatorForm.display_name.trim()}
+                  className="flex-1 px-4 py-3 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50"
+                >
+                  {editingCreator ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>
