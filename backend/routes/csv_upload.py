@@ -8,7 +8,7 @@ import io
 
 from ..models import get_db, Song, SongCredit, Creator, OrganizationMember, User, SongChecklistStatus, ChecklistItem
 from ..utils.auth import get_current_user
-from ..utils.csv_parser import parse_csv_with_ai, apply_mapping_to_rows, validate_mapped_data
+from ..utils.csv_parser import parse_csv_with_ai, apply_mapping_to_rows, validate_mapped_data, infer_mapping_from_data
 
 try:
     import openpyxl
@@ -81,6 +81,23 @@ def format_excel_cell(cell_value) -> str:
     return str(cell_value).strip()
 
 
+def is_valid_header_row(row: tuple) -> bool:
+    """Check if a row looks like a header row (has meaningful text in multiple cells)."""
+    if not row:
+        return False
+    
+    non_empty_count = 0
+    text_count = 0
+    
+    for cell in row:
+        if cell is not None and str(cell).strip():
+            non_empty_count += 1
+            if isinstance(cell, str) and not cell.replace('.', '').replace('-', '').isdigit():
+                text_count += 1
+    
+    return non_empty_count >= 2 and text_count >= 1
+
+
 def parse_excel_file(content: bytes) -> tuple[list, list]:
     """Parse Excel file and return headers and rows."""
     if not EXCEL_SUPPORT:
@@ -89,16 +106,32 @@ def parse_excel_file(content: bytes) -> tuple[list, list]:
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     ws = wb.active
     
-    rows_iter = ws.iter_rows(values_only=True)
-    header_row = next(rows_iter, None)
+    all_rows = list(ws.iter_rows(values_only=True))
     
-    if not header_row:
+    if not all_rows:
+        wb.close()
         raise HTTPException(status_code=400, detail="Excel file has no data")
+    
+    header_row_idx = 0
+    for idx, row in enumerate(all_rows[:10]):
+        if is_valid_header_row(row):
+            header_row_idx = idx
+            break
+    
+    header_row = all_rows[header_row_idx]
+    data_rows = all_rows[header_row_idx + 1:]
     
     headers = [str(h).strip() if h else f"Column_{i}" for i, h in enumerate(header_row)]
     
+    generic_header_count = sum(1 for h in headers if h.startswith("Column_"))
+    if generic_header_count > len(headers) // 2 and data_rows:
+        first_data = data_rows[0] if data_rows else None
+        if first_data and is_valid_header_row(first_data):
+            headers = [str(h).strip() if h else f"Column_{i}" for i, h in enumerate(first_data)]
+            data_rows = data_rows[1:]
+    
     rows = []
-    for row in rows_iter:
+    for row in data_rows:
         if any(cell is not None for cell in row):
             row_dict = {}
             for i, cell in enumerate(row):
@@ -161,12 +194,17 @@ async def preview_csv(
         headers, rows = parse_csv_file(content)
     
     ai_result = parse_csv_with_ai("", headers)
+    initial_mapping = ai_result.get("mapping", {})
+    
+    generic_count = sum(1 for h in headers if h.startswith("Column_"))
+    if generic_count > 0 and rows:
+        initial_mapping = infer_mapping_from_data(headers, rows, initial_mapping)
     
     preview_rows = rows if all_rows else rows[:5]
     
     return CSVPreviewResponse(
         headers=headers,
-        mapping=ai_result.get("mapping", {}),
+        mapping=initial_mapping,
         preview_rows=preview_rows,
         row_count=len(rows),
         success=ai_result.get("success", False),

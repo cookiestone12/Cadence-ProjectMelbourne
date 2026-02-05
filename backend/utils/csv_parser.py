@@ -162,6 +162,95 @@ def create_fallback_mapping(headers: List[str]) -> Dict[str, Optional[str]]:
     return mapping
 
 
+def infer_field_from_sample_data(sample_values: List[str]) -> Optional[str]:
+    """Infer the field type based on sample data values."""
+    import re
+    
+    non_empty = [v for v in sample_values if v and v.strip()]
+    if not non_empty:
+        return None
+    
+    for val in non_empty[:5]:
+        if re.match(r'^[A-Z]{2}[A-Z0-9]{3}\d{7}$', val.replace('-', '')):
+            return "isrc"
+        if re.match(r'^T-?\d{9,10}-?\d?$', val):
+            return "iswc"
+    
+    for val in non_empty[:5]:
+        if re.match(r'^\d{4}-\d{2}-\d{2}$', val):
+            return "release_date"
+        if re.match(r'^\d{1,2}/\d{1,2}/\d{2,4}$', val):
+            return "release_date"
+    
+    for val in non_empty[:5]:
+        cleaned = val.replace('%', '').replace('$', '').replace(',', '').strip()
+        try:
+            num = float(cleaned)
+            if 0 <= num <= 100 and '%' in val:
+                return "publishing_percentage"
+        except:
+            pass
+    
+    return None
+
+
+def infer_mapping_from_data(headers: List[str], rows: List[Dict[str, str]], existing_mapping: Dict[str, Optional[str]]) -> Dict[str, Optional[str]]:
+    """Improve mapping by inferring field types from sample data when headers are generic."""
+    improved_mapping = existing_mapping.copy()
+    
+    generic_headers = [h for h in headers if h.startswith("Column_") and existing_mapping.get(h) is None]
+    
+    if not generic_headers:
+        return improved_mapping
+    
+    sample_rows = rows[:10] if len(rows) >= 10 else rows
+    
+    title_candidates = []
+    for header in generic_headers:
+        samples = [row.get(header, "") for row in sample_rows]
+        non_empty = [s for s in samples if s and s.strip()]
+        
+        if non_empty:
+            avg_len = sum(len(s) for s in non_empty) / len(non_empty)
+            all_text = all(isinstance(s, str) and not s.replace('.', '').replace('-', '').isdigit() for s in non_empty)
+            if all_text and 3 < avg_len < 100:
+                title_candidates.append((header, avg_len, len(non_empty)))
+    
+    mapped_fields = set(v for v in improved_mapping.values() if v)
+    
+    for header in generic_headers:
+        if improved_mapping.get(header) is not None:
+            continue
+            
+        samples = [row.get(header, "") for row in sample_rows]
+        inferred = infer_field_from_sample_data(samples)
+        
+        if inferred and inferred not in mapped_fields:
+            improved_mapping[header] = inferred
+            mapped_fields.add(inferred)
+    
+    if "title" not in mapped_fields and title_candidates:
+        title_candidates.sort(key=lambda x: (-x[2], x[1]))
+        best_candidate = title_candidates[0][0]
+        improved_mapping[best_candidate] = "title"
+        mapped_fields.add("title")
+    
+    if "primary_artist" not in mapped_fields:
+        for header in generic_headers:
+            if improved_mapping.get(header) is not None:
+                continue
+            samples = [row.get(header, "") for row in sample_rows]
+            non_empty = [s for s in samples if s and s.strip()]
+            if non_empty:
+                avg_len = sum(len(s) for s in non_empty) / len(non_empty)
+                all_text = all(isinstance(s, str) and not s.replace('.', '').replace('-', '').isdigit() for s in non_empty)
+                if all_text and 2 < avg_len < 50:
+                    improved_mapping[header] = "primary_artist"
+                    break
+    
+    return improved_mapping
+
+
 def apply_mapping_to_rows(rows: List[Dict[str, str]], mapping: Dict[str, Optional[str]]) -> List[Dict[str, Any]]:
     mapped_rows = []
     
