@@ -457,3 +457,65 @@ class SongContract(Base):
     song = relationship("Song", back_populates="contracts")
     organization = relationship("Organization")
     uploaded_by = relationship("User")
+
+
+class NotificationType(str, enum.Enum):
+    MISSING_ISRC = "MISSING_ISRC"
+    MISSING_ISWC = "MISSING_ISWC"
+    CONTRACT_PENDING = "CONTRACT_PENDING"
+    PRO_INCOMPLETE = "PRO_INCOMPLETE"
+    WEEKLY_HEALTH_SUMMARY = "WEEKLY_HEALTH_SUMMARY"
+    CUSTOM_DEADLINE = "CUSTOM_DEADLINE"
+    SYSTEM_ANNOUNCEMENT = "SYSTEM_ANNOUNCEMENT"
+    CATALOG_UPDATE = "CATALOG_UPDATE"
+    PLACEMENT_UPDATE = "PLACEMENT_UPDATE"
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+    __table_args__ = (
+        UniqueConstraint('user_id', 'notification_type', name='uq_user_notification_type'),
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    notification_type = Column(String, nullable=False)
+    
+    in_app_enabled = Column(Boolean, default=True)
+    email_enabled = Column(Boolean, default=False)
+    
+    frequency = Column(String, default="immediate")
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = relationship("User")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index('ix_notifications_user_read', 'user_id', 'is_read'),
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    
+    notification_type = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    
+    link = Column(String, nullable=True)
+    metadata = Column(JSON, nullable=True)
+    
+    is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime, nullable=True)
+    
+    email_sent = Column(Boolean, default=False)
+    email_sent_at = Column(DateTime, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    user = relationship("User")
+    organization = relationship("Organization")
