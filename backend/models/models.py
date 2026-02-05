@@ -507,7 +507,7 @@ class Notification(Base):
     message = Column(Text, nullable=False)
     
     link = Column(String, nullable=True)
-    metadata = Column(JSON, nullable=True)
+    extra_data = Column(JSON, nullable=True)
     
     is_read = Column(Boolean, default=False)
     read_at = Column(DateTime, nullable=True)

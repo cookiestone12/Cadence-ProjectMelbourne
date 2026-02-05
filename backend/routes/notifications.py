@@ -206,7 +206,7 @@ def create_notification(
     message: str,
     link: str = None,
     organization_id: int = None,
-    metadata: dict = None
+    extra_data: dict = None
 ):
     pref = db.query(NotificationPreference).filter(
         NotificationPreference.user_id == user_id,
@@ -223,7 +223,7 @@ def create_notification(
         title=title,
         message=message,
         link=link,
-        metadata=metadata
+        extra_data=extra_data
     )
     db.add(notification)
     db.commit()
