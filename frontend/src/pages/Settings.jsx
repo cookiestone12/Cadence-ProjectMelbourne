@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon } from '@heroicons/react/24/outline'
+import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 
 const NOTIFICATION_TYPES = {
   MISSING_ISRC: { label: 'Missing ISRC', description: 'Alert when songs are missing ISRC codes' },
@@ -23,6 +23,14 @@ export default function Settings() {
   const [isOrgAdmin, setIsOrgAdmin] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  })
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordSuccess, setPasswordSuccess] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
 
   useEffect(() => {
     fetchApiStatus()
@@ -149,6 +157,36 @@ export default function Settings() {
     }
   }
 
+  const handleChangePassword = async (e) => {
+    e.preventDefault()
+    setPasswordError('')
+    setPasswordSuccess('')
+    
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('New passwords do not match')
+      return
+    }
+    
+    if (passwordForm.newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters')
+      return
+    }
+    
+    setChangingPassword(true)
+    try {
+      await axios.put('/api/auth/change-password', {
+        current_password: passwordForm.currentPassword,
+        new_password: passwordForm.newPassword
+      })
+      setPasswordSuccess('Password changed successfully')
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+    } catch (error) {
+      setPasswordError(error.response?.data?.detail || 'Failed to change password')
+    } finally {
+      setChangingPassword(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F7F4] p-6 lg:p-8">
       <div className="max-w-4xl mx-auto">
@@ -180,6 +218,17 @@ export default function Settings() {
             >
               <BellIcon className="w-5 h-5" />
               <span>Notifications</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('password')}
+              className={`flex items-center space-x-2 pb-3 px-1 border-b-2 font-medium transition-colors ${
+                activeTab === 'password'
+                  ? 'border-[#5B8A72] text-[#5B8A72]'
+                  : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
+              }`}
+            >
+              <LockClosedIcon className="w-5 h-5" />
+              <span>Password</span>
             </button>
             {isOrgAdmin && (
               <button
@@ -327,6 +376,94 @@ export default function Settings() {
                     Email notifications will be sent to your registered email address. 
                     Make sure your email is verified in your account settings.
                   </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'password' && (
+          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+            <h2 className="text-[22px] font-medium text-[#3D4A44] mb-2">Change Password</h2>
+            <p className="text-[15px] text-[#7A8580] mb-6">
+              Update your password to keep your account secure
+            </p>
+
+            {passwordError && (
+              <div className="mb-4 p-4 rounded-xl bg-[rgba(196,112,104,0.1)] text-[#C47068] text-[15px]">
+                {passwordError}
+              </div>
+            )}
+
+            {passwordSuccess && (
+              <div className="mb-4 p-4 rounded-xl bg-[rgba(91,154,110,0.1)] text-[#5B9A6E] text-[15px]">
+                {passwordSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="max-w-md space-y-4">
+              <div>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.currentPassword}
+                  onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                  required
+                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[15px]"
+                  placeholder="Enter current password"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.newPassword}
+                  onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                  required
+                  minLength={6}
+                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[15px]"
+                  placeholder="Enter new password (min 6 characters)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={passwordForm.confirmPassword}
+                  onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                  required
+                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[15px]"
+                  placeholder="Confirm new password"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={changingPassword}
+                className="w-full px-6 py-3 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50"
+              >
+                {changingPassword ? 'Changing Password...' : 'Change Password'}
+              </button>
+            </form>
+
+            <div className="mt-6 p-4 bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] rounded-xl border-l-4 border-[#5B8A72]">
+              <div className="flex items-start space-x-3">
+                <LockClosedIcon className="w-5 h-5 text-[#5B8A72] mt-0.5" />
+                <div>
+                  <h4 className="text-[15px] font-medium text-[#3D4A44]">Password Security Tips</h4>
+                  <ul className="text-[13px] text-[#7A8580] mt-1 list-disc list-inside space-y-1">
+                    <li>Use at least 6 characters</li>
+                    <li>Include a mix of letters, numbers, and symbols</li>
+                    <li>Avoid using easily guessable information</li>
+                  </ul>
                 </div>
               </div>
             </div>
