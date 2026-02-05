@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
-from ..models import get_db, User, Organization
+from ..models import get_db, User, Organization, OrganizationMember, OrgNotificationSetting
 from ..models.models import Notification, NotificationPreference, NotificationType
 from ..utils.auth import get_current_user
 
@@ -43,6 +43,29 @@ class CreateNotificationRequest(BaseModel):
     message: str
     link: Optional[str] = None
     organization_id: Optional[int] = None
+
+class OrgNotificationSettingRequest(BaseModel):
+    notification_type: str
+    default_frequency: str = "immediate"
+    allow_user_override: bool = True
+    rollup_digest_enabled: bool = False
+    digest_frequency: str = "weekly"
+    digest_day: int = 1
+    digest_hour: int = 9
+
+class OrgNotificationSettingResponse(BaseModel):
+    id: int
+    organization_id: int
+    notification_type: str
+    default_frequency: str
+    allow_user_override: bool
+    rollup_digest_enabled: bool
+    digest_frequency: str
+    digest_day: int
+    digest_hour: int
+    
+    class Config:
+        from_attributes = True
 
 @router.get("", response_model=List[NotificationResponse])
 def get_notifications(
@@ -230,3 +253,102 @@ def create_notification(
     db.refresh(notification)
     
     return notification
+
+
+@router.get("/org/{org_id}/settings", response_model=List[OrgNotificationSettingResponse])
+def get_org_notification_settings(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    settings = db.query(OrgNotificationSetting).filter(
+        OrgNotificationSetting.organization_id == org_id
+    ).all()
+    
+    existing_types = {s.notification_type for s in settings}
+    all_types = [t.value for t in NotificationType]
+    
+    result = []
+    for setting in settings:
+        result.append(OrgNotificationSettingResponse(
+            id=setting.id,
+            organization_id=setting.organization_id,
+            notification_type=setting.notification_type,
+            default_frequency=setting.default_frequency,
+            allow_user_override=setting.allow_user_override,
+            rollup_digest_enabled=setting.rollup_digest_enabled,
+            digest_frequency=setting.digest_frequency,
+            digest_day=setting.digest_day,
+            digest_hour=setting.digest_hour
+        ))
+    
+    for ntype in all_types:
+        if ntype not in existing_types:
+            result.append(OrgNotificationSettingResponse(
+                id=0,
+                organization_id=org_id,
+                notification_type=ntype,
+                default_frequency="immediate",
+                allow_user_override=True,
+                rollup_digest_enabled=False,
+                digest_frequency="weekly",
+                digest_day=1,
+                digest_hour=9
+            ))
+    
+    return result
+
+
+@router.put("/org/{org_id}/settings")
+def update_org_notification_setting(
+    org_id: int,
+    request: OrgNotificationSettingRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id,
+        OrganizationMember.role.in_(["OWNER", "ADMIN"])
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    setting = db.query(OrgNotificationSetting).filter(
+        OrgNotificationSetting.organization_id == org_id,
+        OrgNotificationSetting.notification_type == request.notification_type
+    ).first()
+    
+    if setting:
+        setting.default_frequency = request.default_frequency
+        setting.allow_user_override = request.allow_user_override
+        setting.rollup_digest_enabled = request.rollup_digest_enabled
+        setting.digest_frequency = request.digest_frequency
+        setting.digest_day = request.digest_day
+        setting.digest_hour = request.digest_hour
+        setting.updated_at = datetime.utcnow()
+    else:
+        setting = OrgNotificationSetting(
+            organization_id=org_id,
+            notification_type=request.notification_type,
+            default_frequency=request.default_frequency,
+            allow_user_override=request.allow_user_override,
+            rollup_digest_enabled=request.rollup_digest_enabled,
+            digest_frequency=request.digest_frequency,
+            digest_day=request.digest_day,
+            digest_hour=request.digest_hour
+        )
+        db.add(setting)
+    
+    db.commit()
+    
+    return {"message": "Organization notification setting updated"}

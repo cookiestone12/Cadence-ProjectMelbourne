@@ -62,6 +62,24 @@ def get_current_organization(
         "created_at": org.created_at.isoformat() if org.created_at else ""
     }
 
+@router.get("/current/membership")
+def get_current_membership(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=404, detail="User is not a member of any organization")
+    
+    return {
+        "organization_id": membership.organization_id,
+        "user_id": membership.user_id,
+        "role": membership.role
+    }
+
 @router.get("/{org_id}", response_model=OrganizationResponse)
 def get_organization(
     org_id: int,

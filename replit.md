@@ -112,12 +112,51 @@ The platform includes a comprehensive notification system with customizable pref
 - `GET /preferences`: Get user's notification preferences
 - `PUT /preferences`: Update notification preference
 
-**Admin Route:**
+**Admin Routes:**
 - `POST /api/admin/run-reminders`: Trigger automated reminders (super admin only)
+- `POST /api/admin/run-action-reminders`: Process action item deadline reminders
+- `POST /api/admin/send-org-digest/{org_id}`: Send organization action item digest
+
+**Organization Notification Settings:**
+- `GET /api/notifications/org/{org_id}/settings`: Get org-level notification settings
+- `PUT /api/notifications/org/{org_id}/settings`: Update org-level notification settings (admin only)
 
 **Frontend Components:**
 - `NotificationBell`: Bell icon with unread count badge and dropdown
 - `Settings` page with Notifications tab for preference management
+- `Settings` page with Organization tab for org admins to configure notification defaults and digest settings
+
+### Action Items System
+The platform includes a proactive action item management system with deadline tracking:
+
+**Database Model:**
+- `ActionItem`: Tracks action items with priority, deadline, status, and reminders
+
+**API Routes (`/api/actions/*`):**
+- `GET /org/{org_id}`: List all action items for organization
+- `GET /creator/{creator_id}`: List action items for a specific creator
+- `POST /org/{org_id}`: Create new action item
+- `PUT /{action_id}`: Update action item (deadline, priority, status)
+- `DELETE /{action_id}`: Delete action item
+- `POST /{action_id}/complete`: Mark action item as completed
+- `GET /summary/org/{org_id}`: Get summary stats (pending, overdue, due this week, high priority)
+
+**Action Item Types:**
+- `MISSING_ISRC`: Need to register ISRC
+- `MISSING_ISWC`: Need to register ISWC
+- `CONTRACT_PENDING`: Contract needs upload
+- `PRO_INCOMPLETE`: PRO registration incomplete
+- `DSP_REGISTRATION`: DSP registration needed
+- `CUSTOM_DEADLINE`: User-defined deadline
+- `GENERAL`: General action item
+
+**Priority Levels:**
+- 1: High priority (red)
+- 2: Medium priority (amber)
+- 3: Low priority (green)
+
+**Frontend Components:**
+- `ActionsTab`: Full-featured Actions tab in creator profile with deadline management, priority filtering, and inline editing
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.

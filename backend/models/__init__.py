@@ -6,7 +6,7 @@ from .models import (
     OrganizationType, OrganizationMemberRole, CreatorRole, CreditRole,
     DSPPlatform, ChecklistStatus, ChecklistCategory, ValuationSource, PRO,
     AccountType, AccountLinkStatus, AccountLinkPermission,
-    AccountLink, SongContract, ActionItem, Notification, NotificationPreference
+    AccountLink, SongContract, ActionItem, Notification, NotificationPreference, OrgNotificationSetting
 )
 
 __all__ = [
@@ -17,5 +17,5 @@ __all__ = [
     "OrganizationType", "OrganizationMemberRole", "CreatorRole", "CreditRole",
     "DSPPlatform", "ChecklistStatus", "ChecklistCategory", "ValuationSource", "PRO",
     "AccountType", "AccountLinkStatus", "AccountLinkPermission",
-    "AccountLink", "SongContract", "ActionItem", "Notification", "NotificationPreference"
+    "AccountLink", "SongContract", "ActionItem", "Notification", "NotificationPreference", "OrgNotificationSetting"
 ]

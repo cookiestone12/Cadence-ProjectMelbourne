@@ -492,6 +492,30 @@ class NotificationPreference(Base):
     user = relationship("User")
 
 
+class OrgNotificationSetting(Base):
+    __tablename__ = "org_notification_settings"
+    __table_args__ = (
+        UniqueConstraint('organization_id', 'notification_type', name='uq_org_notification_type'),
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    notification_type = Column(String, nullable=False)
+    
+    default_frequency = Column(String, default="immediate")
+    allow_user_override = Column(Boolean, default=True)
+    
+    rollup_digest_enabled = Column(Boolean, default=False)
+    digest_frequency = Column(String, default="weekly")
+    digest_day = Column(Integer, default=1)
+    digest_hour = Column(Integer, default=9)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    organization = relationship("Organization")
+
+
 class ActionItem(Base):
     __tablename__ = "action_items"
     __table_args__ = (

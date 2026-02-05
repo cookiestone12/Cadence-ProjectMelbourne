@@ -510,3 +510,39 @@ def sync_org_health_scores(
         "message": f"Health scores synced for organization {org_id}",
         "songs_synced": synced_count
     }
+
+
+@router.post("/run-action-reminders")
+def trigger_action_reminders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
+):
+    from ..utils.action_notifications import check_upcoming_deadlines, check_overdue_actions
+    
+    upcoming = check_upcoming_deadlines(db)
+    overdue = check_overdue_actions(db)
+    
+    return {
+        "message": "Action item reminders processed",
+        "upcoming_reminders": len(upcoming),
+        "overdue_notifications": len(overdue),
+        "details": {
+            "upcoming": upcoming,
+            "overdue": overdue
+        }
+    }
+
+
+@router.post("/send-org-digest/{org_id}")
+def send_organization_digest(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
+):
+    from ..utils.action_notifications import send_org_digest_notifications
+    
+    send_org_digest_notifications(db, org_id)
+    
+    return {
+        "message": f"Digest sent for organization {org_id}"
+    }

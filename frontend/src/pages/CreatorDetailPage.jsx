@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import axios from 'axios'
 import { ArrowLeftIcon, ArrowDownTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline'
 import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/24/solid'
+import ActionsTab from '../components/ActionsTab'
 
 export default function CreatorDetailPage() {
   const { id } = useParams()
@@ -14,6 +15,7 @@ export default function CreatorDetailPage() {
   const [editingSong, setEditingSong] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
+  const [organizationId, setOrganizationId] = useState(null)
   
   const loadSongs = async (orgId) => {
     const songsResponse = await axios.get(`/api/songs/org/${orgId}?creator_id=${id}&limit=1000`)
@@ -37,6 +39,7 @@ export default function CreatorDetailPage() {
         
         const orgResponse = await axios.get('/api/organizations/current')
         const orgId = orgResponse.data.id
+        setOrganizationId(orgId)
         
         await loadSongs(orgId)
       } catch (error) {
@@ -215,6 +218,7 @@ export default function CreatorDetailPage() {
     { id: 'overview', label: 'Overview' },
     { id: 'songs', label: `Songs (${songs.length})` },
     { id: 'placements', label: `Placements (${placedSongs.length})` },
+    { id: 'actions', label: 'Actions' },
     { id: 'schedule-a', label: 'Schedule A' }
   ]
   
@@ -635,6 +639,14 @@ export default function CreatorDetailPage() {
               </table>
             </div>
           </div>
+        )}
+        
+        {activeTab === 'actions' && organizationId && (
+          <ActionsTab 
+            creatorId={parseInt(id)} 
+            organizationId={organizationId}
+            creatorName={creator.display_name}
+          />
         )}
         
         {activeTab === 'schedule-a' && (
