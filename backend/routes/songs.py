@@ -28,6 +28,7 @@ class SongResponse(BaseModel):
     is_invoiced: bool
     is_paid: bool
     is_released: bool
+    spotify_link: Optional[str] = None
     label: Optional[str]
     publishing_percentage: Optional[float]
     master_percentage: Optional[float]
@@ -91,6 +92,7 @@ class SongDetailResponse(BaseModel):
     is_invoiced: bool
     is_paid: bool
     is_released: bool
+    spotify_link: Optional[str] = None
     label: Optional[str]
     publishing_percentage: Optional[float]
     master_percentage: Optional[float]
@@ -146,6 +148,8 @@ class SongUpdateRequest(BaseModel):
     is_registered_with_dsp: Optional[bool] = None
     is_invoiced: Optional[bool] = None
     is_paid: Optional[bool] = None
+    is_released: Optional[bool] = None
+    spotify_link: Optional[str] = None
     label: Optional[str] = None
     publishing_percentage: Optional[float] = None
     master_percentage: Optional[float] = None

@@ -1,7 +1,7 @@
 modules = ["nodejs-20", "python-3.11", "postgresql-16"]
 [agent]
 expertMode = true
-integrations = ["python_database:1.0.0", "python_openai_ai_integrations:1.0.0"]
+integrations = ["python_database:1.0.0", "python_openai_ai_integrations:1.0.0", "spotify:1.0.0"]
 
 [workflows]
 runButton = "Project"

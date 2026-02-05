@@ -172,6 +172,7 @@ class Song(Base):
     is_paid = Column(Boolean, default=False)
     
     is_released = Column(Boolean, default=False)
+    spotify_link = Column(String, nullable=True)
     label = Column(String, nullable=True)
     publishing_percentage = Column(Float, nullable=True)
     master_percentage = Column(Float, nullable=True)
