@@ -11,6 +11,7 @@ import {
   XMarkIcon,
   ShieldCheckIcon
 } from '@heroicons/react/24/outline'
+import NotificationBell from './NotificationBell'
 
 export default function Sidebar({ user, onLogout, isOpen, onClose }) {
   const location = useLocation()
@@ -99,8 +100,9 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-[#3D4A44] truncate">{user?.username || 'User'}</p>
-            <p className="text-xs text-[#7A8580]">{user?.role || 'Admin'}</p>
+            <p className="text-xs text-[#7A8580]">{user?.is_super_admin ? 'Super Admin' : user?.is_admin ? 'Admin' : 'Member'}</p>
           </div>
+          <NotificationBell />
         </div>
         
         {user?.is_super_admin && (
