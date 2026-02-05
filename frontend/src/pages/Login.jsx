@@ -18,8 +18,8 @@ export default function Login({ onLogin }) {
         password
       })
 
-      const { access_token } = response.data
-      onLogin(access_token, { username, role: 'Admin' })
+      const { access_token, user } = response.data
+      onLogin(access_token, user)
     } catch (err) {
       setError(err.response?.data?.detail || 'Login failed. Please try again.')
     } finally {
