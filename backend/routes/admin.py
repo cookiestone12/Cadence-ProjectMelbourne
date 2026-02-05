@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+import os
 from ..models import get_db, User, Organization, OrganizationMember
 from ..utils.auth import get_current_super_admin, get_password_hash
+
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -551,8 +553,6 @@ def send_organization_digest(
 def get_integration_status(
     current_user: User = Depends(get_current_super_admin)
 ):
-    import os
-    
     integrations = []
     
     openai_key = os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", "")
@@ -562,6 +562,7 @@ def get_integration_status(
         "description": "AI-powered features like CSV column mapping and intelligent parsing",
         "status": "connected" if openai_key else "not_configured",
         "managed_by": "replit_integration",
+        "configurable": False,
         "features": ["CSV Column Mapping", "AI Parsing"]
     })
     
@@ -572,7 +573,57 @@ def get_integration_status(
         "description": "Primary database for all application data",
         "status": "connected" if db_url else "not_configured",
         "managed_by": "replit_integration",
+        "configurable": False,
         "features": ["Data Storage", "User Management", "Catalog Management"]
+    })
+    
+    spotify_client_id = os.environ.get("SPOTIFY_CLIENT_ID", "")
+    spotify_client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+    integrations.append({
+        "id": "spotify",
+        "name": "Spotify API",
+        "description": "Access streaming data, playlist info, and artist metrics from Spotify",
+        "status": "connected" if (spotify_client_id and spotify_client_secret) else "not_configured",
+        "managed_by": "replit_secrets",
+        "configurable": True,
+        "features": ["Streaming Data", "Playlist Analytics", "Artist Metrics"],
+        "secret_keys": ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"],
+        "fields": [
+            {"key": "SPOTIFY_CLIENT_ID", "label": "Client ID", "type": "text", "has_value": bool(spotify_client_id)},
+            {"key": "SPOTIFY_CLIENT_SECRET", "label": "Client Secret", "type": "password", "has_value": bool(spotify_client_secret)}
+        ]
+    })
+    
+    chartmetric_api_key = os.environ.get("CHARTMETRIC_API_KEY", "")
+    integrations.append({
+        "id": "chartmetric",
+        "name": "Chartmetric API",
+        "description": "Comprehensive music analytics including chart rankings, social metrics, and audience data",
+        "status": "connected" if chartmetric_api_key else "not_configured",
+        "managed_by": "replit_secrets",
+        "configurable": True,
+        "features": ["Chart Rankings", "Social Metrics", "Audience Analytics", "Playlist Tracking"],
+        "secret_keys": ["CHARTMETRIC_API_KEY"],
+        "fields": [
+            {"key": "CHARTMETRIC_API_KEY", "label": "Refresh Token", "type": "password", "has_value": bool(chartmetric_api_key)}
+        ]
+    })
+    
+    luminate_api_key = os.environ.get("LUMINATE_API_KEY", "")
+    luminate_api_secret = os.environ.get("LUMINATE_API_SECRET", "")
+    integrations.append({
+        "id": "luminate",
+        "name": "Luminate (formerly Nielsen)",
+        "description": "Industry-standard sales, streaming, and airplay data for music rights analysis",
+        "status": "connected" if (luminate_api_key and luminate_api_secret) else "not_configured",
+        "managed_by": "replit_secrets",
+        "configurable": True,
+        "features": ["Sales Data", "Streaming Reports", "Airplay Tracking", "Market Share"],
+        "secret_keys": ["LUMINATE_API_KEY", "LUMINATE_API_SECRET"],
+        "fields": [
+            {"key": "LUMINATE_API_KEY", "label": "API Key", "type": "text", "has_value": bool(luminate_api_key)},
+            {"key": "LUMINATE_API_SECRET", "label": "API Secret", "type": "password", "has_value": bool(luminate_api_secret)}
+        ]
     })
     
     return {
@@ -580,3 +631,66 @@ def get_integration_status(
         "total": len(integrations),
         "connected": len([i for i in integrations if i["status"] == "connected"])
     }
+
+@router.post("/integrations/{integration_id}/test")
+def test_integration_connection(
+    integration_id: str,
+    current_user: User = Depends(get_current_super_admin)
+):
+    import requests
+    
+    if integration_id == "spotify":
+        client_id = os.environ.get("SPOTIFY_CLIENT_ID", "")
+        client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+        
+        if not client_id or not client_secret:
+            return {"success": False, "message": "Spotify credentials not configured"}
+        
+        try:
+            response = requests.post(
+                "https://accounts.spotify.com/api/token",
+                data={"grant_type": "client_credentials"},
+                auth=(client_id, client_secret),
+                timeout=10
+            )
+            if response.status_code == 200:
+                return {"success": True, "message": "Successfully authenticated with Spotify API"}
+            else:
+                return {"success": False, "message": f"Authentication failed: {response.status_code}"}
+        except Exception as e:
+            return {"success": False, "message": f"Connection error: {str(e)}"}
+    
+    elif integration_id == "chartmetric":
+        refresh_token = os.environ.get("CHARTMETRIC_API_KEY", "")
+        
+        if not refresh_token:
+            return {"success": False, "message": "Chartmetric refresh token not configured. Add CHARTMETRIC_API_KEY to Replit Secrets."}
+        
+        try:
+            response = requests.post(
+                "https://api.chartmetric.com/api/token",
+                json={"refreshtoken": refresh_token},
+                headers={"Content-Type": "application/json"},
+                timeout=10
+            )
+            if response.status_code == 200:
+                return {"success": True, "message": "Successfully authenticated with Chartmetric API"}
+            else:
+                return {"success": False, "message": "Authentication failed: Invalid refresh token"}
+        except Exception as e:
+            return {"success": False, "message": f"Connection error: {str(e)}"}
+    
+    elif integration_id == "luminate":
+        api_key = os.environ.get("LUMINATE_API_KEY", "")
+        api_secret = os.environ.get("LUMINATE_API_SECRET", "")
+        
+        if not api_key or not api_secret:
+            return {"success": False, "message": "Luminate credentials not configured. Add LUMINATE_API_KEY and LUMINATE_API_SECRET to Replit Secrets."}
+        
+        return {
+            "success": True,
+            "message": "Luminate credentials configured. API validation requires active subscription."
+        }
+    
+    else:
+        raise HTTPException(status_code=400, detail=f"Integration '{integration_id}' does not support testing")

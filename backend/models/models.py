@@ -585,3 +585,19 @@ class Notification(Base):
     
     user = relationship("User")
     organization = relationship("Organization")
+
+class PlatformIntegration(Base):
+    __tablename__ = "platform_integrations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    integration_id = Column(String(50), unique=True, nullable=False)
+    credentials_encrypted = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    last_tested_at = Column(DateTime, nullable=True)
+    last_test_success = Column(Boolean, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    
+    created_by = relationship("User")

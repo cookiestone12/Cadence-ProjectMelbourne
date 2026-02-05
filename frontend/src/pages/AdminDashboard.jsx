@@ -30,6 +30,8 @@ export default function AdminDashboard() {
   const [editingUser, setEditingUser] = useState(null)
   const [editingOrg, setEditingOrg] = useState(null)
   const [integrations, setIntegrations] = useState(null)
+  const [showIntegrationModal, setShowIntegrationModal] = useState(false)
+  const [configuringIntegration, setConfiguringIntegration] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -473,14 +475,25 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)]">
+                <div className="mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)] flex items-center justify-between">
                   <p className="text-xs text-[#7A8580]">
                     <span className="font-medium">Managed by:</span> {
                       integration.managed_by === 'replit_integration'
                         ? 'Replit Integration (Secure)'
-                        : 'Environment Variables'
+                        : 'Platform Secrets'
                     }
                   </p>
+                  {integration.configurable && (
+                    <button
+                      onClick={() => {
+                        setConfiguringIntegration(integration)
+                        setShowIntegrationModal(true)
+                      }}
+                      className="px-3 py-1.5 text-xs font-medium bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+                    >
+                      Configure
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -489,12 +502,26 @@ export default function AdminDashboard() {
           <div className="bg-[#5A8A9A]/10 rounded-xl p-6">
             <h3 className="font-semibold text-[#3D4A44] mb-2">Security Note</h3>
             <p className="text-sm text-[#7A8580]">
-              API keys and secrets are managed securely through Replit's integration system. 
-              They are never exposed in the dashboard or stored in plain text. 
-              To modify integrations, use the Replit Secrets panel or contact your system administrator.
+              API credentials are stored as platform-wide secrets. They apply to all users and organizations.
+              For permanent storage, credentials should also be added to Replit Secrets.
             </p>
           </div>
         </div>
+      )}
+
+      {showIntegrationModal && configuringIntegration && (
+        <IntegrationModal
+          integration={configuringIntegration}
+          onClose={() => {
+            setShowIntegrationModal(false)
+            setConfiguringIntegration(null)
+          }}
+          onSave={() => {
+            setShowIntegrationModal(false)
+            setConfiguringIntegration(null)
+            loadData()
+          }}
+        />
       )}
 
       {showUserModal && (
@@ -818,6 +845,108 @@ function OrgModal({ org, onClose, onSave }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+function IntegrationModal({ integration, onClose, onSave }) {
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState(null)
+
+  const handleTest = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res = await axios.post(`/api/admin/integrations/${integration.id}/test`)
+      setTestResult(res.data)
+    } catch (err) {
+      setTestResult({ success: false, message: err.response?.data?.detail || 'Test failed' })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-[#FAFBF9] rounded-xl shadow-xl w-full max-w-lg p-6 mx-4">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-bold text-[#3D4A44]">Configure {integration.name}</h2>
+            <p className="text-sm text-[#7A8580] mt-1">{integration.description}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-[#EEF1EC] rounded-lg">
+            <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="bg-[#5A8A9A]/10 rounded-lg p-4">
+            <h3 className="font-medium text-[#3D4A44] mb-2">Setup Instructions</h3>
+            <p className="text-sm text-[#7A8580] mb-3">
+              Add the following secrets to the Replit Secrets panel (Tools &gt; Secrets):
+            </p>
+            <div className="space-y-2">
+              {integration.fields?.map(field => (
+                <div key={field.key} className="flex items-center justify-between bg-white rounded-lg p-3 border border-[rgba(59,77,67,0.12)]">
+                  <div>
+                    <code className="text-sm font-mono text-[#5B8A72]">{field.key}</code>
+                    <p className="text-xs text-[#7A8580] mt-0.5">{field.label}</p>
+                  </div>
+                  {field.has_value ? (
+                    <span className="flex items-center gap-1 text-xs text-[#5B9A6E]">
+                      <CheckCircleIcon className="w-4 h-4" />
+                      Configured
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs text-[#C47068]">
+                      <ExclamationCircleIcon className="w-4 h-4" />
+                      Missing
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {testResult && (
+            <div className={`p-3 rounded-lg ${testResult.success ? 'bg-[#5B9A6E]/10 text-[#5B9A6E]' : 'bg-[#C47068]/10 text-[#C47068]'}`}>
+              <div className="flex items-center gap-2">
+                {testResult.success ? (
+                  <CheckCircleIcon className="w-5 h-5" />
+                ) : (
+                  <ExclamationCircleIcon className="w-5 h-5" />
+                )}
+                <span className="text-sm font-medium">{testResult.message}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-between pt-4">
+            <button
+              type="button"
+              onClick={handleTest}
+              disabled={testing}
+              className="px-4 py-2 border border-[#5B8A72] text-[#5B8A72] rounded-lg hover:bg-[#5B8A72]/10 disabled:opacity-50"
+            >
+              {testing ? 'Testing...' : 'Test Connection'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC]"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)]">
+          <p className="text-xs text-[#7A8580]">
+            Secrets are stored securely in Replit and apply to all users across the platform.
+            After adding secrets, restart the app for changes to take effect.
+          </p>
+        </div>
       </div>
     </div>
   )
