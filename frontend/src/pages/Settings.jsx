@@ -15,12 +15,13 @@ const NOTIFICATION_TYPES = {
 }
 
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState('api')
+  const [activeTab, setActiveTab] = useState('notifications')
   const [apiStatus, setApiStatus] = useState({})
   const [preferences, setPreferences] = useState([])
   const [orgSettings, setOrgSettings] = useState([])
   const [organizationId, setOrganizationId] = useState(null)
   const [isOrgAdmin, setIsOrgAdmin] = useState(false)
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [passwordForm, setPasswordForm] = useState({
@@ -33,10 +34,22 @@ export default function Settings() {
   const [changingPassword, setChangingPassword] = useState(false)
 
   useEffect(() => {
-    fetchApiStatus()
+    fetchUserInfo()
     fetchPreferences()
     fetchOrgData()
   }, [])
+
+  const fetchUserInfo = async () => {
+    try {
+      const response = await axios.get('/api/auth/me')
+      setIsSuperAdmin(response.data.is_super_admin || false)
+      if (response.data.is_super_admin) {
+        fetchApiStatus()
+      }
+    } catch (error) {
+      console.error('Error fetching user info:', error)
+    }
+  }
 
   const fetchApiStatus = async () => {
     try {
@@ -197,17 +210,19 @@ export default function Settings() {
 
         <div className="mb-6 border-b border-[rgba(59,77,67,0.08)]">
           <div className="flex space-x-8">
-            <button
-              onClick={() => setActiveTab('api')}
-              className={`flex items-center space-x-2 pb-3 px-1 border-b-2 font-medium transition-colors ${
-                activeTab === 'api'
-                  ? 'border-[#5B8A72] text-[#5B8A72]'
-                  : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
-              }`}
-            >
-              <KeyIcon className="w-5 h-5" />
-              <span>API Integrations</span>
-            </button>
+            {isSuperAdmin && (
+              <button
+                onClick={() => setActiveTab('api')}
+                className={`flex items-center space-x-2 pb-3 px-1 border-b-2 font-medium transition-colors ${
+                  activeTab === 'api'
+                    ? 'border-[#5B8A72] text-[#5B8A72]'
+                    : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
+                }`}
+              >
+                <KeyIcon className="w-5 h-5" />
+                <span>API Integrations</span>
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('notifications')}
               className={`flex items-center space-x-2 pb-3 px-1 border-b-2 font-medium transition-colors ${
@@ -256,7 +271,7 @@ export default function Settings() {
           </div>
         )}
 
-        {activeTab === 'api' && (
+        {activeTab === 'api' && isSuperAdmin && (
           <>
             <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 mb-6">
               <h2 className="text-[22px] font-medium text-[#3D4A44] mb-5">API Configuration Status</h2>
