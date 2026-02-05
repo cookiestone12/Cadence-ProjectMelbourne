@@ -91,14 +91,6 @@ export default function Login({ onLogin }) {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-
-        <div className="mt-6 p-4 bg-[#EEF1EC] rounded-xl">
-          <p className="text-[13px] text-[#7A8580] text-center mb-2">Demo Credentials</p>
-          <div className="text-[13px] text-[#3D4A44] space-y-1 text-center">
-            <p><span className="font-medium">Username:</span> admin</p>
-            <p><span className="font-medium">Password:</span> demo123</p>
-          </div>
-        </div>
       </div>
     </div>
   )
