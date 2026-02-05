@@ -33,117 +33,125 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     <>
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-200"
           onClick={onClose}
         />
       )}
       
       <div className={`
         fixed lg:relative inset-y-0 left-0 z-50
-        h-screen w-64 bg-white 
-        flex flex-col border-r border-[rgba(59,77,67,0.08)]
-        shadow-apple-nav
-        transform transition-transform duration-300 ease-in-out
+        h-screen w-64 bg-white/95 backdrop-blur-xl
+        flex flex-col border-r border-am-separator
+        transform transition-transform duration-200 ease-am
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-      <div className="p-5 border-b border-[rgba(59,77,67,0.08)]">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <img 
-              src="/logo-small.png" 
-              alt="Ampersound" 
-              className="h-10 w-10"
-            />
-            <div>
-              <h1 className="text-lg font-semibold text-[#3D4A44]">
-                Ampersound
-              </h1>
-              <p className="text-xs text-[#7A8580]">Catalog Manager</p>
+        <div className="p-5 border-b border-am-separator">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <img 
+                src="/logo-small.png" 
+                alt="Ampersound" 
+                className="h-10 w-10 rounded-xl shadow-am-sm"
+              />
+              <div>
+                <h1 className="text-[17px] font-semibold text-am-text tracking-tight">
+                  Ampersound
+                </h1>
+                <p className="text-[12px] text-am-text-secondary">Catalog Manager</p>
+              </div>
             </div>
+            <button
+              onClick={onClose}
+              className="lg:hidden w-9 h-9 flex items-center justify-center rounded-full text-am-text-secondary hover:text-am-text hover:bg-am-subtle transition-all duration-150"
+            >
+              <XMarkIcon className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="lg:hidden text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+        </div>
+      
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const active = isActive(item.path)
+            
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => window.innerWidth < 1024 && onClose()}
+                className={`
+                  flex items-center gap-3 px-3 py-2.5 rounded-xl
+                  transition-all duration-150 ease-am
+                  ${active 
+                    ? 'bg-gradient-to-r from-am-accent to-am-accent-light text-white shadow-am-button' 
+                    : 'text-am-text hover:bg-am-subtle'
+                  }
+                `}
+              >
+                <Icon className={`w-[22px] h-[22px] ${active ? 'stroke-[1.8]' : 'stroke-[1.5]'}`} />
+                <span className={`text-[15px] ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+              </Link>
+            )
+          })}
+        </nav>
+      
+        <div className="p-3 border-t border-am-separator space-y-1">
+          <div className="flex items-center gap-3 px-3 py-2.5">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-am-accent to-am-accent-light flex items-center justify-center text-[14px] font-semibold text-white shadow-am-sm">
+              {user?.username?.charAt(0).toUpperCase() || 'U'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[14px] font-medium text-am-text truncate">{user?.username || 'User'}</p>
+              <p className="text-[12px] text-am-text-secondary">{user?.is_super_admin ? 'Super Admin' : user?.is_admin ? 'Admin' : 'Member'}</p>
+            </div>
+            <NotificationBell />
+          </div>
+          
+          {user?.is_super_admin && (
+            <Link
+              to="/admin"
+              onClick={() => window.innerWidth < 1024 && onClose()}
+              className={`
+                flex items-center gap-3 px-3 py-2.5 rounded-xl
+                transition-all duration-150 ease-am
+                ${isActive('/admin')
+                  ? 'bg-am-info/10 text-am-info font-medium'
+                  : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
+                }
+              `}
+            >
+              <ShieldCheckIcon className="w-[20px] h-[20px] stroke-[1.5]" />
+              <span className="text-[14px]">Admin</span>
+            </Link>
+          )}
+          
+          <Link
+            to="/settings"
+            onClick={() => window.innerWidth < 1024 && onClose()}
+            className={`
+              flex items-center gap-3 px-3 py-2.5 rounded-xl
+              transition-all duration-150 ease-am
+              ${isActive('/settings')
+                ? 'bg-am-subtle text-am-accent font-medium'
+                : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
+              }
+            `}
           >
-            <XMarkIcon className="w-6 h-6" />
+            <Cog6ToothIcon className="w-[20px] h-[20px] stroke-[1.5]" />
+            <span className="text-[14px]">Settings</span>
+          </Link>
+          
+          <button 
+            onClick={onLogout}
+            className="w-full px-3 py-2.5 text-am-text-secondary hover:text-am-error hover:bg-red-50 rounded-xl transition-all duration-150 text-left flex items-center gap-3 group"
+          >
+            <svg className="w-[20px] h-[20px] stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+            </svg>
+            <span className="text-[14px]">Sign Out</span>
           </button>
         </div>
       </div>
-      
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map((item) => {
-          const Icon = item.icon
-          const active = isActive(item.path)
-          
-          return (
-            <Link
-              key={item.path}
-              to={item.path}
-              onClick={() => window.innerWidth < 1024 && onClose()}
-              className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-200 ${
-                active 
-                  ? 'bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white shadow-lg shadow-[rgba(91,138,114,0.25)]' 
-                  : 'text-[#3D4A44] hover:bg-[#EEF1EC]'
-              }`}
-            >
-              <Icon className="w-5 h-5" />
-              <span className={`${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
-            </Link>
-          )
-        })}
-      </nav>
-      
-      <div className="p-4 border-t border-[rgba(59,77,67,0.08)] space-y-3">
-        <div className="flex items-center space-x-3 px-3 py-2">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] flex items-center justify-center text-sm font-bold text-white shadow-md">
-            {user?.username?.charAt(0).toUpperCase() || 'U'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-[#3D4A44] truncate">{user?.username || 'User'}</p>
-            <p className="text-xs text-[#7A8580]">{user?.is_super_admin ? 'Super Admin' : user?.is_admin ? 'Admin' : 'Member'}</p>
-          </div>
-          <NotificationBell />
-        </div>
-        
-        {user?.is_super_admin && (
-          <Link
-            to="/admin"
-            onClick={() => window.innerWidth < 1024 && onClose()}
-            className={`flex items-center space-x-3 px-3 py-2 rounded-xl transition-all duration-200 ${
-              isActive('/admin')
-                ? 'bg-gradient-to-r from-[#5A8A9A] to-[#7BA594] text-white font-medium shadow-md'
-                : 'text-[#7A8580] hover:bg-[#EEF1EC] hover:text-[#3D4A44]'
-            }`}
-          >
-            <ShieldCheckIcon className="w-5 h-5" />
-            <span className="text-sm">Admin</span>
-          </Link>
-        )}
-        
-        <Link
-          to="/settings"
-          onClick={() => window.innerWidth < 1024 && onClose()}
-          className={`flex items-center space-x-3 px-3 py-2 rounded-xl transition-all duration-200 ${
-            isActive('/settings')
-              ? 'bg-[#EEF1EC] text-[#5B8A72] font-medium'
-              : 'text-[#7A8580] hover:bg-[#EEF1EC] hover:text-[#3D4A44]'
-          }`}
-        >
-          <Cog6ToothIcon className="w-5 h-5" />
-          <span className="text-sm">Settings</span>
-        </Link>
-        
-        <button 
-          onClick={onLogout}
-          className="w-full px-3 py-2 text-sm text-[#7A8580] hover:text-[#C47068] hover:bg-red-50 rounded-xl transition-all duration-200 text-left flex items-center space-x-3"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-          </svg>
-          <span>Sign Out</span>
-        </button>
-      </div>
-    </div>
     </>
   )
 }

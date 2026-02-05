@@ -29,24 +29,24 @@ export default function Login({ onLogin }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#5B8A72] via-[#7BA594] to-[#6B9A84] flex items-center justify-center p-4">
-      <div className="bg-white rounded-[24px] shadow-[0px_20px_60px_rgba(0,0,0,0.15)] p-8 w-full max-w-md">
+      <div className="bg-white/95 backdrop-blur-xl rounded-[24px] shadow-am-xl p-8 w-full max-w-md animate-am-scale-in">
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
+          <div className="flex justify-center mb-5">
             <img 
               src="/logo-medium.png" 
               alt="Ampersound Intelligence" 
-              className="h-20 w-auto"
+              className="h-20 w-auto drop-shadow-md"
             />
           </div>
-          <h1 className="text-[28px] font-semibold text-[#3D4A44] mb-1">
+          <h1 className="text-[28px] font-bold text-am-text tracking-tight mb-1">
             Ampersound Intelligence
           </h1>
-          <p className="text-[17px] text-[#7A8580]">Catalog Manager</p>
+          <p className="text-[15px] text-am-text-secondary">Catalog Manager</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="username" className="block text-[15px] font-medium text-[#3D4A44] mb-2">
+            <label htmlFor="username" className="block text-[14px] font-medium text-am-text mb-2">
               Username
             </label>
             <input
@@ -54,7 +54,7 @@ export default function Login({ onLogin }) {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-3 border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] bg-white text-[17px] transition-all duration-200"
+              className="am-input"
               required
               disabled={loading}
               autoComplete="username"
@@ -62,7 +62,7 @@ export default function Login({ onLogin }) {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-[15px] font-medium text-[#3D4A44] mb-2">
+            <label htmlFor="password" className="block text-[14px] font-medium text-am-text mb-2">
               Password
             </label>
             <input
@@ -70,7 +70,7 @@ export default function Login({ onLogin }) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] bg-white text-[17px] transition-all duration-200"
+              className="am-input"
               autoComplete="current-password"
               required
               disabled={loading}
@@ -78,7 +78,10 @@ export default function Login({ onLogin }) {
           </div>
 
           {error && (
-            <div className="bg-[rgba(196,112,104,0.1)] border border-[rgba(196,112,104,0.2)] text-[#C47068] px-4 py-3 rounded-xl text-[15px]">
+            <div className="bg-red-50 border border-red-100 text-am-error px-4 py-3 rounded-xl text-[14px] flex items-center gap-2">
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
               {error}
             </div>
           )}
@@ -86,9 +89,17 @@ export default function Login({ onLogin }) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white py-3.5 rounded-xl font-semibold text-[17px] hover:shadow-lg hover:shadow-[rgba(91,138,114,0.25)] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full am-btn am-btn-primary am-btn-pill text-[17px] font-semibold py-3.5"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Signing in...
+              </span>
+            ) : 'Sign In'}
           </button>
         </form>
       </div>
