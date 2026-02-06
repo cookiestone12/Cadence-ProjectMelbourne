@@ -269,46 +269,46 @@ export default function RosterPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {creators.map((creator) => (
               <Link
                 key={creator.id}
                 to={`/roster/${creator.id}`}
-                className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] hover:shadow-[0px_8px_24px_rgba(0,0,0,0.12)] transition-all duration-300 overflow-hidden group"
+                className="bg-white rounded-xl shadow-[0px_2px_8px_rgba(0,0,0,0.07)] hover:shadow-[0px_6px_16px_rgba(0,0,0,0.1)] transition-all duration-200 overflow-hidden group"
               >
                 <div className="aspect-square bg-gradient-to-br from-[#5B8A72] to-[#7BA594] relative overflow-hidden">
                   {creator.hero_image_url ? (
                     <img 
                       src={creator.hero_image_url} 
                       alt={creator.display_name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <div className="text-white text-6xl font-bold opacity-90">
+                      <div className="text-white text-3xl font-bold opacity-90">
                         {creator.display_name.charAt(0).toUpperCase()}
                       </div>
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-10 transition-opacity duration-200"></div>
+                  <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-10 transition-opacity duration-150"></div>
                 </div>
                 
-                <div className="p-5">
-                  <h3 className="font-semibold text-[17px] text-[#3D4A44] mb-1 truncate">
+                <div className="p-3">
+                  <h3 className="font-semibold text-[14px] text-[#3D4A44] mb-0.5 truncate">
                     {creator.display_name}
                   </h3>
-                  <p className="text-[13px] text-[#7A8580] mb-4">
+                  <p className="text-[11px] text-[#7A8580] mb-2 truncate">
                     {Array.isArray(creator.roles) ? creator.roles.join(', ') : creator.roles}
                   </p>
                   
                   <div className="flex justify-between items-center">
                     <div>
-                      <p className="text-[13px] text-[#7A8580]">Songs</p>
-                      <p className="font-semibold text-[17px] text-[#3D4A44]">{creator.song_count}</p>
+                      <p className="text-[11px] text-[#7A8580]">Songs</p>
+                      <p className="font-semibold text-[14px] text-[#3D4A44]">{creator.song_count}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[13px] text-[#7A8580]">Health</p>
-                      <p className={`font-semibold text-[17px] ${
+                      <p className="text-[11px] text-[#7A8580]">Health</p>
+                      <p className={`font-semibold text-[14px] ${
                         creator.avg_health_score >= 80 ? 'text-[#5B9A6E]' :
                         creator.avg_health_score >= 60 ? 'text-[#C4956B]' :
                         'text-[#C47068]'
