@@ -18,7 +18,7 @@ export default function ReportsPage() {
         const orgResponse = await axios.get('/api/organizations/current')
         const orgId = orgResponse.data.id
         
-        const songsResponse = await axios.get(`/api/songs/org/${orgId}`)
+        const songsResponse = await axios.get(`/api/songs/org/${orgId}?limit=1000`)
         const songs = songsResponse.data
         
         const totalSongs = songs.length
