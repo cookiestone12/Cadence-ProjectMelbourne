@@ -6,7 +6,7 @@ export default function ReportsPage() {
   const [stats, setStats] = useState({
     totalSongs: 0,
     avgHealthScore: 0,
-    placementRate: 0,
+    releaseRate: 0,
     registeredCount: 0
   })
   const [healthDistribution, setHealthDistribution] = useState([])
@@ -23,13 +23,13 @@ export default function ReportsPage() {
         
         const totalSongs = songs.length
         const avgHealth = songs.reduce((sum, s) => sum + (s.status_health_score || 0), 0) / (totalSongs || 1)
-        const placedSongs = songs.filter(s => s.is_paid).length
+        const releasedSongs = songs.filter(s => s.is_released).length
         const registeredSongs = songs.filter(s => s.is_registered_with_pro || s.is_registered_with_dsp).length
         
         setStats({
           totalSongs,
           avgHealthScore: avgHealth,
-          placementRate: (placedSongs / totalSongs * 100) || 0,
+          releaseRate: (releasedSongs / totalSongs * 100) || 0,
           registeredCount: registeredSongs
         })
         
@@ -85,8 +85,8 @@ export default function ReportsPage() {
           
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#5B9A6E] to-[#6BAA7E]"></div>
-            <p className="text-[13px] text-[#7A8580] mb-1">Placement Rate</p>
-            <p className="text-[40px] font-semibold text-[#3D4A44]">{stats.placementRate.toFixed(1)}%</p>
+            <p className="text-[13px] text-[#7A8580] mb-1">Release Rate</p>
+            <p className="text-[40px] font-semibold text-[#3D4A44]">{stats.releaseRate.toFixed(1)}%</p>
           </div>
           
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 relative overflow-hidden">
