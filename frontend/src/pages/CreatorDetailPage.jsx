@@ -406,16 +406,20 @@ export default function CreatorDetailPage() {
   
   return (
     <div className="min-h-screen bg-[#F5F7F4]">
-      <div className="relative h-80" style={{ background: 'linear-gradient(135deg, #5B8A72 0%, #7BA594 100%)' }}>
-        {creator.hero_image_url && (
-          <img 
-            src={creator.hero_image_url} 
-            alt={creator.display_name}
-            className="absolute inset-0 w-full h-full object-cover mix-blend-overlay opacity-40"
-          />
+      <div className="relative h-72 overflow-hidden">
+        {creator.hero_image_url ? (
+          <>
+            <img 
+              src={creator.hero_image_url} 
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl brightness-75"
+            />
+            <div className="absolute inset-0 bg-black/30"></div>
+          </>
+        ) : (
+          <div className="absolute inset-0" style={{ background: 'linear-gradient(135deg, #5B8A72 0%, #7BA594 100%)' }}></div>
         )}
-        
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
         
         <div className="relative h-full flex flex-col justify-end p-8">
           <Link 
@@ -426,24 +430,35 @@ export default function CreatorDetailPage() {
             <span>Back to Roster</span>
           </Link>
           
-          <div className="flex items-center gap-4 mb-2">
-            <h1 className="text-5xl font-semibold text-white">{creator.display_name}</h1>
-            <button
-              onClick={openEditCreatorModal}
-              className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
-              title="Edit Creator"
-            >
-              <PencilIcon className="w-5 h-5 text-white" />
-            </button>
-          </div>
-          <div className="flex items-center space-x-4 text-white/90">
-            <span className="text-lg">{creator.roles?.join(', ') || 'Producer'}</span>
-            <span>•</span>
-            <span>{songs.length} songs</span>
-            <span>•</span>
-            <span>{placedSongs.length} paid placements</span>
-            <span>•</span>
-            <span>${totalAdvance.toLocaleString()} advances</span>
+          <div className="flex items-center gap-5 mb-2">
+            {creator.hero_image_url && (
+              <img 
+                src={creator.hero_image_url} 
+                alt={creator.display_name}
+                className="w-20 h-20 rounded-xl object-cover border-2 border-white/30 shadow-lg flex-shrink-0"
+              />
+            )}
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <h1 className="text-5xl font-semibold text-white">{creator.display_name}</h1>
+                <button
+                  onClick={openEditCreatorModal}
+                  className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                  title="Edit Creator"
+                >
+                  <PencilIcon className="w-5 h-5 text-white" />
+                </button>
+              </div>
+              <div className="flex items-center space-x-4 text-white/90">
+                <span className="text-lg">{creator.roles?.join(', ') || 'Producer'}</span>
+                <span>·</span>
+                <span>{songs.length} songs</span>
+                <span>·</span>
+                <span>{placedSongs.length} paid placements</span>
+                <span>·</span>
+                <span>${totalAdvance.toLocaleString()} advances</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -488,7 +503,7 @@ export default function CreatorDetailPage() {
                     <p className="text-2xl font-semibold text-[#5A8A9A]">{registeredPro}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-[#7A8580] mb-1">DSP Registered</p>
+                    <p className="text-sm text-[#7A8580] mb-1">DSP Released</p>
                     <p className="text-2xl font-semibold text-[#5B8A72]">{registeredDsp}</p>
                   </div>
                 </div>
@@ -581,7 +596,7 @@ export default function CreatorDetailPage() {
                   </div>
                   
                   <div className="flex justify-between items-center mt-4">
-                    <span className="text-[#7A8580]">DSP Registered</span>
+                    <span className="text-[#7A8580]">DSP Released</span>
                     <span className="font-medium text-[#3D4A44]">{registeredDsp} / {songs.length}</span>
                   </div>
                   <div className="w-full bg-[#EEF1EC] rounded-full h-2">
