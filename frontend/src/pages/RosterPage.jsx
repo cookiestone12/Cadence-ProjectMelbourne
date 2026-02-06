@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
-import { PlusIcon, XMarkIcon, ArrowUpTrayIcon, UserPlusIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, XMarkIcon, ArrowUpTrayIcon, UserPlusIcon, CameraIcon } from '@heroicons/react/24/outline'
 
 const ROLE_OPTIONS = ['ARTIST', 'SONGWRITER', 'PRODUCER']
 const PRO_OPTIONS = ['ASCAP', 'BMI', 'PRS', 'SESAC', 'OTHER']
@@ -22,6 +22,26 @@ export default function RosterPage() {
     primary_pro: '',
     primary_ipi: ''
   })
+
+  const [uploadingImageId, setUploadingImageId] = useState(null)
+
+  const handleImageUpload = async (creatorId, file) => {
+    if (!file) return
+    setUploadingImageId(creatorId)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      await axios.post(`/api/creators/${creatorId}/image`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      await loadData()
+    } catch (error) {
+      console.error('Failed to upload image:', error)
+      alert(error.response?.data?.detail || 'Failed to upload image')
+    } finally {
+      setUploadingImageId(null)
+    }
+  }
 
   const [csvFile, setCsvFile] = useState(null)
   const [csvPreview, setCsvPreview] = useState(null)
@@ -271,29 +291,50 @@ export default function RosterPage() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {creators.map((creator) => (
-              <Link
-                key={creator.id}
-                to={`/roster/${creator.id}`}
-                className="bg-white rounded-xl shadow-[0px_2px_8px_rgba(0,0,0,0.07)] hover:shadow-[0px_6px_16px_rgba(0,0,0,0.1)] transition-all duration-200 overflow-hidden group"
-              >
+              <div key={creator.id} className="bg-white rounded-xl shadow-[0px_2px_8px_rgba(0,0,0,0.07)] hover:shadow-[0px_6px_16px_rgba(0,0,0,0.1)] transition-all duration-200 overflow-hidden group">
                 <div className="aspect-square bg-gradient-to-br from-[#5B8A72] to-[#7BA594] relative overflow-hidden">
-                  {creator.hero_image_url ? (
-                    <img 
-                      src={creator.hero_image_url} 
-                      alt={creator.display_name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="text-white text-3xl font-bold opacity-90">
-                        {creator.display_name.charAt(0).toUpperCase()}
+                  <Link to={`/roster/${creator.id}`} className="block w-full h-full">
+                    {creator.hero_image_url ? (
+                      <img 
+                        src={creator.hero_image_url} 
+                        alt={creator.display_name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <div className="text-white text-3xl font-bold opacity-90">
+                          {creator.display_name.charAt(0).toUpperCase()}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-10 transition-opacity duration-150"></div>
+                    )}
+                  </Link>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    id={`creator-image-${creator.id}`}
+                    onChange={(e) => {
+                      handleImageUpload(creator.id, e.target.files[0])
+                      e.target.value = ''
+                    }}
+                  />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      document.getElementById(`creator-image-${creator.id}`).click()
+                    }}
+                    className="absolute bottom-2 right-2 w-7 h-7 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 hover:bg-white z-10"
+                    title="Upload photo"
+                  >
+                    {uploadingImageId === creator.id ? (
+                      <div className="w-3.5 h-3.5 border-2 border-[#5B8A72] border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <CameraIcon className="w-3.5 h-3.5 text-[#3D4A44]" />
+                    )}
+                  </button>
                 </div>
                 
-                <div className="p-3">
+                <Link to={`/roster/${creator.id}`} className="block p-3">
                   <h3 className="font-semibold text-[14px] text-[#3D4A44] mb-0.5 truncate">
                     {creator.display_name}
                   </h3>
@@ -317,8 +358,8 @@ export default function RosterPage() {
                       </p>
                     </div>
                   </div>
-                </div>
-              </Link>
+                </Link>
+              </div>
             ))}
           </div>
         )}

@@ -48,6 +48,10 @@ app.include_router(csv_upload.router)
 def health_check():
     return {"status": "healthy", "service": "Gotcha Catalog Manager"}
 
+uploads_dir = Path(__file__).parent / "uploads"
+uploads_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+
 # Serve static files from frontend build (production)
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():
