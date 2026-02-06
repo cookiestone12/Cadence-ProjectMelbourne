@@ -63,8 +63,8 @@ class ImportResult(BaseModel):
     errors: List[str]
 
 
-def format_excel_cell(cell_value) -> str:
-    """Format Excel cell value to string, handling dates specially."""
+def format_excel_cell(cell_value, number_format=None) -> str:
+    """Format Excel cell value to string, handling dates and percentages specially."""
     if cell_value is None:
         return ""
     
@@ -74,6 +74,11 @@ def format_excel_cell(cell_value) -> str:
         return cell_value.strftime("%Y-%m-%d")
     
     if isinstance(cell_value, (int, float)):
+        if number_format and '%' in str(number_format):
+            converted = cell_value * 100
+            if converted == int(converted):
+                return str(int(converted))
+            return str(round(converted, 4))
         if cell_value == int(cell_value):
             return str(int(cell_value))
         return str(cell_value)
@@ -103,40 +108,42 @@ def parse_excel_file(content: bytes) -> tuple[list, list]:
     if not EXCEL_SUPPORT:
         raise HTTPException(status_code=400, detail="Excel support not available. Please upload a CSV file.")
     
-    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
     ws = wb.active
     
-    all_rows = list(ws.iter_rows(values_only=True))
+    all_rows_values = list(ws.iter_rows(values_only=True))
+    all_rows_cells = list(ws.iter_rows(values_only=False))
     
-    if not all_rows:
+    if not all_rows_values:
         wb.close()
         raise HTTPException(status_code=400, detail="Excel file has no data")
     
     header_row_idx = 0
-    for idx, row in enumerate(all_rows[:10]):
+    for idx, row in enumerate(all_rows_values[:10]):
         if is_valid_header_row(row):
             header_row_idx = idx
             break
     
-    header_row = all_rows[header_row_idx]
-    data_rows = all_rows[header_row_idx + 1:]
+    header_row = all_rows_values[header_row_idx]
+    data_rows_cells = all_rows_cells[header_row_idx + 1:]
+    data_rows_values = all_rows_values[header_row_idx + 1:]
     
     headers = [str(h).strip() if h else f"Column_{i}" for i, h in enumerate(header_row)]
     
     generic_header_count = sum(1 for h in headers if h.startswith("Column_"))
-    if generic_header_count > len(headers) // 2 and data_rows:
-        first_data = data_rows[0] if data_rows else None
+    if generic_header_count > len(headers) // 2 and data_rows_values:
+        first_data = data_rows_values[0] if data_rows_values else None
         if first_data and is_valid_header_row(first_data):
             headers = [str(h).strip() if h else f"Column_{i}" for i, h in enumerate(first_data)]
-            data_rows = data_rows[1:]
+            data_rows_cells = data_rows_cells[1:]
     
     rows = []
-    for row in data_rows:
-        if any(cell is not None for cell in row):
+    for row_cells in data_rows_cells:
+        if any(cell.value is not None for cell in row_cells):
             row_dict = {}
-            for i, cell in enumerate(row):
+            for i, cell in enumerate(row_cells):
                 if i < len(headers):
-                    row_dict[headers[i]] = format_excel_cell(cell)
+                    row_dict[headers[i]] = format_excel_cell(cell.value, cell.number_format)
             rows.append(row_dict)
     
     wb.close()
