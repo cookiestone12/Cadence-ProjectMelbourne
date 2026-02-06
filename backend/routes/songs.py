@@ -352,6 +352,40 @@ def get_song(
         ]
     }
 
+class BulkDeleteRequest(BaseModel):
+    song_ids: List[int]
+
+@router.post("/bulk-delete")
+def bulk_delete_songs(
+    request: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not request.song_ids:
+        raise HTTPException(status_code=400, detail="No song IDs provided")
+
+    songs = db.query(Song).filter(Song.id.in_(request.song_ids)).all()
+
+    if not songs:
+        raise HTTPException(status_code=404, detail="No songs found")
+
+    org_ids = set(s.organization_id for s in songs)
+    for org_id in org_ids:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == org_id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Not authorized to delete songs from this organization")
+
+    deleted_count = 0
+    for song in songs:
+        db.delete(song)
+        deleted_count += 1
+
+    db.commit()
+    return {"deleted": deleted_count}
+
 @router.post("/org/{org_id}", response_model=SongResponse)
 def create_song(
     org_id: int,

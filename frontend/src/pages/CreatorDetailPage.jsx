@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import axios from 'axios'
-import { ArrowLeftIcon, ArrowDownTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, ArrowDownTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/24/solid'
 import ActionsTab from '../components/ActionsTab'
 
@@ -31,6 +31,9 @@ export default function CreatorDetailPage() {
     advance_amount: '',
     notes: ''
   })
+  const [selectedSongs, setSelectedSongs] = useState(new Set())
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [showEditCreatorModal, setShowEditCreatorModal] = useState(false)
   const [editingCreator, setEditingCreator] = useState(false)
   const [showSpotifyModal, setShowSpotifyModal] = useState(false)
@@ -397,6 +400,38 @@ export default function CreatorDetailPage() {
   const registeredDsp = songs.filter(s => s.is_registered_with_dsp).length
   const totalAdvance = songs.reduce((sum, s) => sum + (s.advance_amount || 0), 0) / 100
   
+  const toggleSongSelection = (songId) => {
+    setSelectedSongs(prev => {
+      const next = new Set(prev)
+      if (next.has(songId)) next.delete(songId)
+      else next.add(songId)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedSongs.size === songs.length) {
+      setSelectedSongs(new Set())
+    } else {
+      setSelectedSongs(new Set(songs.map(s => s.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedSongs.size === 0) return
+    setDeleting(true)
+    try {
+      await axios.post('/api/songs/bulk-delete', { song_ids: Array.from(selectedSongs) })
+      setSelectedSongs(new Set())
+      setShowDeleteConfirm(false)
+      if (organizationId) await loadSongs(organizationId)
+    } catch (err) {
+      alert('Failed to delete songs: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'records', label: `Records (${songs.length})` },
@@ -615,20 +650,42 @@ export default function CreatorDetailPage() {
           <div className="bg-white rounded-[18px] overflow-hidden" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
             <div className="p-5 border-b border-[rgba(59,77,67,0.08)] bg-[#F8F8FB] flex items-center justify-between">
               <p className="text-sm text-[#7A8580]">
-                Showing all {songs.length} records. Click the edit button to update details.
+                {selectedSongs.size > 0 
+                  ? `${selectedSongs.size} song${selectedSongs.size > 1 ? 's' : ''} selected`
+                  : `Showing all ${songs.length} records. Click the edit button to update details.`
+                }
               </p>
-              <button
-                onClick={() => setShowAddSongModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors text-sm"
-              >
-                <PlusIcon className="w-4 h-4" />
-                Add Song
-              </button>
+              <div className="flex items-center gap-2">
+                {selectedSongs.size > 0 && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#C47068] text-white rounded-xl font-medium hover:bg-[#B05E56] transition-colors text-sm"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                    Delete Selected ({selectedSongs.size})
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowAddSongModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors text-sm"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  Add Song
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-[#F8F8FB] border-b border-[rgba(59,77,67,0.08)]">
                   <tr>
+                    <th className="px-3 py-3 text-center w-10">
+                      <input
+                        type="checkbox"
+                        checked={songs.length > 0 && selectedSongs.size === songs.length}
+                        onChange={toggleSelectAll}
+                        className="w-4 h-4 rounded accent-[#5B8A72]"
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left font-semibold text-[#3D4A44] sticky left-0 bg-[#F8F8FB]">Title / Artist</th>
                     <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Label</th>
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Pub %</th>
@@ -645,7 +702,15 @@ export default function CreatorDetailPage() {
                 </thead>
                 <tbody>
                   {songs.map((song, index) => (
-                    <tr key={song.id} className={`hover:bg-[#F8F8FB] transition-colors border-b border-[rgba(0,0,0,0.05)] ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'}`}>
+                    <tr key={song.id} className={`hover:bg-[#F8F8FB] transition-colors border-b border-[rgba(0,0,0,0.05)] ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'} ${selectedSongs.has(song.id) ? 'bg-[#EDF5F0] hover:bg-[#E0EDE5]' : ''}`}>
+                      <td className="px-3 py-3 text-center w-10">
+                        <input
+                          type="checkbox"
+                          checked={selectedSongs.has(song.id)}
+                          onChange={() => toggleSongSelection(song.id)}
+                          className="w-4 h-4 rounded accent-[#5B8A72]"
+                        />
+                      </td>
                       {editingSong === song.id ? (
                         <>
                           <td className={`px-4 py-3 sticky left-0 ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'}`}>
@@ -1380,6 +1445,33 @@ export default function CreatorDetailPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <h3 className="text-xl font-semibold text-[#3D4A44] mb-3">Delete {selectedSongs.size} Song{selectedSongs.size > 1 ? 's' : ''}?</h3>
+            <p className="text-[#7A8580] mb-6">
+              This will permanently remove the selected song{selectedSongs.size > 1 ? 's' : ''} and all associated data (credits, contracts, checklist items). This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+                className="flex-1 px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl text-[#3D4A44] font-medium hover:bg-[#F5F7F4] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                disabled={deleting}
+                className="flex-1 px-4 py-3 bg-[#C47068] text-white rounded-xl font-medium hover:bg-[#B05E56] transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
