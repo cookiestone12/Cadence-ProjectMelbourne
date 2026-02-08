@@ -73,3 +73,8 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **OpenAI**: Used for AI-powered CSV column mapping.
 - **Alembic**: Database migration tool for SQLAlchemy.
 - **Gunicorn**: Production WSGI/ASGI server with Uvicorn workers.
+
+## User Guide
+- **User Guide Page**: Accessible at `/guide` without authentication, covering all 17 sections of the platform with table of contents, feature documentation, step-by-step instructions, tips, and glossary.
+- **PDF Export**: "Save as PDF" button triggers browser print dialog with print-optimized CSS for clean A4 PDF output.
+- **Updateable**: Guide content lives in `frontend/src/pages/UserGuidePage.jsx` — update VERSION and LAST_UPDATED constants at the top of the file when making changes.
