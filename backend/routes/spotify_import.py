@@ -52,11 +52,25 @@ def preview_playlist_import(
 ):
     verify_org_access(current_user, org_id, db)
 
-    tracks = spotify_service.get_playlist_tracks(data.playlist_url)
+    try:
+        tracks = spotify_service.get_playlist_tracks(data.playlist_url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Spotify error: {str(e)}")
+
     if tracks is None or (isinstance(tracks, list) and len(tracks) == 0):
         token = spotify_service._get_access_token()
         if not token:
             raise HTTPException(status_code=400, detail="Spotify is not connected. Please set up the Spotify integration in your project settings, or provide SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables.")
+
+        import requests
+        test = requests.get(
+            "https://api.spotify.com/v1/browse/new-releases?limit=1",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=10,
+        )
+        if test.status_code == 403:
+            raise HTTPException(status_code=400, detail="Spotify API access is restricted. The Spotify app may be in development mode. Please go to developer.spotify.com/dashboard, select your app, go to Settings > User Management, and add your Spotify email address. Then reconnect the Spotify integration.")
+
         raise HTTPException(status_code=400, detail="Could not fetch playlist tracks. Please check that the playlist URL is correct and the playlist is public or accessible.")
 
     existing_isrcs = set()

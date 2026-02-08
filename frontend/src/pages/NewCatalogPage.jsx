@@ -233,6 +233,8 @@ export default function NewCatalogPage() {
       setSpotifySelectedTracks(selected)
     } catch (error) {
       console.error('Spotify preview failed:', error)
+      const message = error?.response?.data?.detail || error?.message || 'Failed to load playlist. Please check the URL and try again.'
+      setSpotifyImportResult({ error: true, message })
     } finally {
       setSpotifyPreviewLoading(false)
     }
@@ -792,18 +794,38 @@ export default function NewCatalogPage() {
 
             {spotifyImportResult ? (
               <div className="flex-1 flex flex-col items-center justify-center py-8">
-                <div className="w-16 h-16 bg-[#EEF1EC] rounded-full flex items-center justify-center mb-4">
-                  <CheckCircleIcon className="w-8 h-8 text-[#5B8A72]" />
-                </div>
-                <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Import Complete</h4>
-                <p className="text-sm text-[#7A8580] mb-1">{spotifyImportResult.imported} track{spotifyImportResult.imported !== 1 ? 's' : ''} imported</p>
-                <p className="text-sm text-[#7A8580]">{spotifyImportResult.skipped} track{spotifyImportResult.skipped !== 1 ? 's' : ''} skipped (already exist)</p>
-                <button
-                  onClick={closeSpotifyImportModal}
-                  className="mt-6 px-6 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
-                >
-                  Done
-                </button>
+                {spotifyImportResult.error ? (
+                  <>
+                    <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                      <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                      </svg>
+                    </div>
+                    <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Spotify Error</h4>
+                    <p className="text-sm text-[#7A8580] text-center max-w-md mb-4">{spotifyImportResult.message}</p>
+                    <button
+                      onClick={() => setSpotifyImportResult(null)}
+                      className="mt-2 px-6 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+                    >
+                      Try Again
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 bg-[#EEF1EC] rounded-full flex items-center justify-center mb-4">
+                      <CheckCircleIcon className="w-8 h-8 text-[#5B8A72]" />
+                    </div>
+                    <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Import Complete</h4>
+                    <p className="text-sm text-[#7A8580] mb-1">{spotifyImportResult.imported} track{spotifyImportResult.imported !== 1 ? 's' : ''} imported</p>
+                    <p className="text-sm text-[#7A8580]">{spotifyImportResult.skipped} track{spotifyImportResult.skipped !== 1 ? 's' : ''} skipped (already exist)</p>
+                    <button
+                      onClick={closeSpotifyImportModal}
+                      className="mt-6 px-6 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+                    >
+                      Done
+                    </button>
+                  </>
+                )}
               </div>
             ) : (
               <>

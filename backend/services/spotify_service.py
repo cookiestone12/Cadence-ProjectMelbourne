@@ -7,19 +7,23 @@ SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
 
-def _get_replit_access_token() -> Optional[str]:
-    hostname = os.getenv("REPLIT_CONNECTORS_HOSTNAME")
+def _get_replit_connector_header() -> Optional[str]:
     repl_identity = os.getenv("REPL_IDENTITY")
     web_repl_renewal = os.getenv("WEB_REPL_RENEWAL")
-
     if repl_identity:
-        x_replit_token = f"repl {repl_identity}"
+        return f"repl {repl_identity}"
     elif web_repl_renewal:
-        x_replit_token = f"depl {web_repl_renewal}"
-    else:
-        return None
+        return f"depl {web_repl_renewal}"
+    return None
 
-    if not hostname:
+
+def _get_replit_access_token() -> Optional[str]:
+    import logging
+    logger = logging.getLogger("ampersound")
+    hostname = os.getenv("REPLIT_CONNECTORS_HOSTNAME")
+    x_replit_token = _get_replit_connector_header()
+
+    if not hostname or not x_replit_token:
         return None
 
     try:
@@ -35,17 +39,78 @@ def _get_replit_access_token() -> Optional[str]:
         data = resp.json()
         item = data.get("items", [None])[0] if data.get("items") else None
         if not item:
+            logger.warning("Spotify connector: no connection items found")
             return None
 
         settings = item.get("settings", {})
-        access_token = settings.get("access_token")
-        if not access_token:
-            oauth = settings.get("oauth", {})
-            creds = oauth.get("credentials", {})
-            access_token = creds.get("access_token")
+        oauth = settings.get("oauth", {})
+        creds = oauth.get("credentials", {})
+
+        access_token = settings.get("access_token") or creds.get("access_token")
+        refresh_token = creds.get("refresh_token")
+        client_id = creds.get("client_id")
+        expires_at = creds.get("expires_at")
+
+        if expires_at:
+            from datetime import datetime, timezone
+            try:
+                exp_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                if exp_time.timestamp() < datetime.now(timezone.utc).timestamp():
+                    logger.info("Spotify token expired, attempting refresh")
+                    access_token = None
+            except (ValueError, TypeError):
+                pass
+
+        if not access_token and refresh_token and client_id:
+            refreshed = _refresh_spotify_token(refresh_token, client_id)
+            if refreshed:
+                return refreshed
+
+        if access_token:
+            test_resp = requests.get(
+                "https://api.spotify.com/v1/browse/new-releases?limit=1",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10,
+            )
+            if test_resp.status_code == 401 and refresh_token and client_id:
+                logger.info("Spotify token invalid (401), refreshing")
+                refreshed = _refresh_spotify_token(refresh_token, client_id)
+                if refreshed:
+                    return refreshed
+            elif test_resp.status_code == 403 and refresh_token and client_id:
+                logger.info("Spotify token forbidden (403), trying refresh")
+                refreshed = _refresh_spotify_token(refresh_token, client_id)
+                if refreshed:
+                    return refreshed
 
         return access_token
-    except Exception:
+    except Exception as e:
+        logger.error(f"Spotify connector error: {e}")
+        return None
+
+
+def _refresh_spotify_token(refresh_token: str, client_id: str) -> Optional[str]:
+    import logging
+    logger = logging.getLogger("ampersound")
+    try:
+        resp = requests.post(
+            "https://accounts.spotify.com/api/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": client_id,
+            },
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            new_token = resp.json().get("access_token")
+            logger.info("Spotify token refreshed successfully")
+            return new_token
+        else:
+            logger.error(f"Spotify token refresh failed: {resp.status_code} {resp.text[:200]}")
+            return None
+    except Exception as e:
+        logger.error(f"Spotify token refresh exception: {e}")
         return None
 
 
@@ -73,16 +138,23 @@ def _get_access_token() -> Optional[str]:
 
 
 def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dict]:
+    import logging
+    logger = logging.getLogger("ampersound")
     try:
+        url = f"https://api.spotify.com/v1/{endpoint}"
+        logger.info(f"Spotify API GET: {url} params={params}")
         resp = requests.get(
-            f"https://api.spotify.com/v1/{endpoint}",
+            url,
             headers={"Authorization": f"Bearer {token}"},
             params=params,
             timeout=15,
         )
+        if resp.status_code != 200:
+            logger.error(f"Spotify API error: status={resp.status_code} body={resp.text[:500]}")
         resp.raise_for_status()
         return resp.json()
-    except Exception:
+    except Exception as e:
+        logger.error(f"Spotify API exception: {e}")
         return None
 
 
@@ -119,20 +191,26 @@ def get_track_data(spotify_link: str = None) -> Dict[str, Any]:
 
 
 def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
+    import logging
+    logger = logging.getLogger("ampersound")
     token = _get_access_token()
     if not token:
+        logger.error("Spotify: No access token available")
         return []
 
     playlist_id = None
     if "spotify.com/playlist/" in playlist_url:
-        playlist_id = playlist_url.split("spotify.com/playlist/")[-1].split("?")[0]
+        playlist_id = playlist_url.split("spotify.com/playlist/")[-1].split("?")[0].split("/")[0]
     elif playlist_url.startswith("spotify:playlist:"):
         playlist_id = playlist_url.split("spotify:playlist:")[-1]
     else:
-        playlist_id = playlist_url
+        playlist_id = playlist_url.strip()
 
     if not playlist_id:
+        logger.error(f"Spotify: Could not extract playlist ID from URL: {playlist_url}")
         return []
+
+    logger.info(f"Spotify: Fetching playlist {playlist_id} from URL: {playlist_url}")
 
     tracks = []
     offset = 0
