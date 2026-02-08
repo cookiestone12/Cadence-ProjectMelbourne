@@ -12,6 +12,8 @@ from .routes import (
     tenant_admin
 )
 from .utils.logging_config import logger
+from .models.database import SessionLocal
+from .models.models import User
 import os
 import time
 import uuid
@@ -22,6 +24,31 @@ if not os.getenv("SESSION_SECRET"):
     raise RuntimeError("SESSION_SECRET environment variable must be set for production use")
 
 Base.metadata.create_all(bind=engine)
+
+def seed_super_admin():
+    from .utils.auth import get_password_hash
+    db = SessionLocal()
+    try:
+        from sqlalchemy import func
+        existing = db.query(User).filter(func.lower(User.username) == 'masterpadmin').first()
+        if not existing:
+            admin = User(
+                username='MasterPAdmin',
+                email='admin@rythm.app',
+                hashed_password=get_password_hash('Male50Cent!'),
+                is_admin=True,
+                is_super_admin=True,
+            )
+            db.add(admin)
+            db.commit()
+            logger.info("MasterPAdmin super admin account created")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error seeding super admin: {e}")
+    finally:
+        db.close()
+
+seed_super_admin()
 
 app = FastAPI(title="Rythm Catalog Intelligence API")
 
