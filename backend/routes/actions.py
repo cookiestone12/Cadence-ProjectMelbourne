@@ -402,6 +402,40 @@ def get_catalog_gaps(
     return {"gaps": gaps, "total_gaps": len(gaps)}
 
 
+@router.post("/generate-org/{org_id}")
+def generate_org_actions(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..utils.catalog_gaps import generate_actions_from_gaps
+    
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
+    
+    total_created = 0
+    for creator in creators:
+        created_count = generate_actions_from_gaps(
+            db,
+            creator.id,
+            org_id,
+            current_user.id
+        )
+        total_created += created_count
+    
+    return {
+        "message": f"Generated {total_created} action items across {len(creators)} creators",
+        "created_count": total_created
+    }
+
+
 @router.get("/summary/org/{org_id}")
 def get_action_summary(
     org_id: int,

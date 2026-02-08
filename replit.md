@@ -40,11 +40,14 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Reports & Analytics**: Health distribution charts, placement rates, and insights.
 - **Schedule A Export**: CSV generation of creator catalogs.
 - **Contract Management**: Secure PDF upload, download, and deletion linked to songs with access control. Full deal-level contract tracking with parties, assets, rights splits, territory, and advance management via Contracts page.
-- **Rights & Splits**: Per-asset rights splits with percentage validation. Rights query by asset or rights holder. Rights & Splits tab in song detail modal.
+- **Rights & Splits**: Per-asset rights splits with percentage validation. Rights query by asset or rights holder. Rights & Splits tab in song detail modal and works detail panel.
 - **Account Linking**: Secure linking between Individual and Enterprise organizations with mutual consent.
 - **Master Admin System**: Super admin role for platform-wide management (user/organization management, impersonation, system statistics).
 - **Global Search**: Unified search across songs, works, releases, and creators.
 - **Bulk Operations**: Bulk update songs and assign credits.
+- **Notification Center**: In-app notification bell with unread count badge, dropdown panel with read/unread states, mark-all-read, and per-notification delete. User and org-level notification preferences in Settings.
+- **Action Items Dashboard**: Standalone org-wide Action Items page with summary cards (pending, overdue, due this week, high priority), filterable/sortable list, inline creation form, complete/delete actions, and org-wide auto-generation from catalog gaps.
+- **Enhanced Home Dashboard**: Homepage shows urgent action items widget, recent notifications summary, action item summary cards with overdue/priority badges, alongside existing needs-attention songs and top creators.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.
