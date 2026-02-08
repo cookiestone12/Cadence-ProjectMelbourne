@@ -1,4 +1,4 @@
-# Rythm - Catalog Manager - Multi-Tenant Rights & Catalog Administration
+# Rythm - Catalog Intelligence - Multi-Tenant Rights & Catalog Administration
 
 ## Overview
 Rythm is a multi-tenant platform for music labels, publishers, production companies, and creators to manage music catalogs and rights. It features an Apple Music-inspired UI, creator-centric views, health scoring, placement tracking, and robust rights administration. The platform includes a comprehensive catalog valuation tool with multiple methodologies and detailed reporting, providing actionable insights into catalog performance and value.
@@ -18,7 +18,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 
 ### Technical Implementations
 - **Multi-Tenant Architecture**: Ensures secure data isolation and organization-scoped access control. Tenant-level admin panel (`/org-admin`) for OWNER/ADMIN role users to manage team members, reset passwords, assign clients/creators to users, and customize organization branding (logo, display name, primary color).
-- **Authentication**: JWT for token-based authentication and bcrypt for password hashing.
+- **Authentication**: JWT for token-based authentication and bcrypt for password hashing. Case-insensitive username login enforced via `func.lower()` queries and a unique index on `LOWER(username)`. Master Admin account (super admin) has platform-wide access via `/admin`.
 - **Database Schema**: Core models manage `Organization`, `User`, `Creator`, `Song`, `SongCredit`, `SongDSPLink`, `ChecklistItem`, `SongChecklistStatus`, `SongStreamingMetrics`, `TerritoryRevenue`, `ValuationCalculation`, `AccountLink`, `SongContract`, `Notification`, `NotificationPreference`, `ActionItem`, `Work`, `WorkTrack`, `WorkCredit`, `Release`, `ReleaseTrack`, `Contract`, `ContractParty`, `ContractAsset`, `RightsSplit`, `RoyaltyStatement`, `RoyaltyTransaction`, `RoyaltyAllocation`, `Payment`, and `Placement`.
 - **Rights & Contract Tracking**: Deal-level contracts with parties, territory, advance tracking. Asset-to-contract linking (songs and works). Per-asset rights splits with percentage validation (max 100% per rights type). Query rights by asset or by rights holder.
 - **Health Score System**: Dynamically calculates song health based on weighted checklist completion.

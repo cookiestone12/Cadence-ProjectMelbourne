@@ -5,6 +5,7 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+from sqlalchemy import func as sa_func
 from ..models import get_db, User
 import os
 
@@ -67,7 +68,7 @@ def get_current_user(
     if username is None or not isinstance(username, str):
         raise credentials_exception
     
-    user = db.query(User).filter(User.username == username).first()
+    user = db.query(User).filter(sa_func.lower(User.username) == username.lower()).first()
     if user is None:
         raise credentials_exception
     

@@ -666,7 +666,7 @@ function BrandingTab({ branding, onSave, onError }) {
             )}
             <div>
               <p className="text-[15px] font-semibold" style={{ color: '#3D4A44' }}>{form.display_name || branding?.name || 'Organization'}</p>
-              <p className="text-[12px] text-[#7A8580]">Catalog Manager</p>
+              <p className="text-[12px] text-[#7A8580]">Catalog Intelligence</p>
             </div>
           </div>
         </div>

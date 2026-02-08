@@ -23,7 +23,7 @@ if not os.getenv("SESSION_SECRET"):
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Gotcha Catalog Manager API")
+app = FastAPI(title="Rythm Catalog Intelligence API")
 
 allowed_origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
@@ -79,7 +79,7 @@ app.include_router(tenant_admin.router)
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "healthy", "service": "Gotcha Catalog Manager"}
+    return {"status": "healthy", "service": "Rythm Catalog Intelligence"}
 
 uploads_dir = Path(__file__).parent / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)

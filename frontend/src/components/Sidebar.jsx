@@ -96,7 +96,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
                 <h1 className="text-[17px] font-semibold text-am-text tracking-tight">
                   {orgBranding?.display_name || orgBranding?.name || 'Rythm'}
                 </h1>
-                <p className="text-[12px] text-am-text-secondary">Catalog Manager</p>
+                <p className="text-[12px] text-am-text-secondary">Catalog Intelligence</p>
               </div>
             </div>
             <button
@@ -146,7 +146,23 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
             <NotificationBell />
           </div>
           
-          {(isOrgAdmin || user?.is_super_admin) && (
+          {user?.is_super_admin ? (
+            <Link
+              to="/admin"
+              onClick={() => window.innerWidth < 1024 && onClose()}
+              className={`
+                flex items-center gap-3 px-3 py-2.5 rounded-xl
+                transition-all duration-150 ease-am
+                ${isActive('/admin')
+                  ? 'bg-am-info/10 text-am-info font-medium'
+                  : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
+                }
+              `}
+            >
+              <ShieldCheckIcon className="w-[20px] h-[20px] stroke-[1.5]" />
+              <span className="text-[14px]">Master Admin</span>
+            </Link>
+          ) : isOrgAdmin ? (
             <Link
               to="/org-admin"
               onClick={() => window.innerWidth < 1024 && onClose()}
@@ -162,25 +178,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
               <BuildingOfficeIcon className="w-[20px] h-[20px] stroke-[1.5]" />
               <span className="text-[14px]">Org Admin</span>
             </Link>
-          )}
-          
-          {user?.is_super_admin && (
-            <Link
-              to="/admin"
-              onClick={() => window.innerWidth < 1024 && onClose()}
-              className={`
-                flex items-center gap-3 px-3 py-2.5 rounded-xl
-                transition-all duration-150 ease-am
-                ${isActive('/admin')
-                  ? 'bg-am-info/10 text-am-info font-medium'
-                  : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
-                }
-              `}
-            >
-              <ShieldCheckIcon className="w-[20px] h-[20px] stroke-[1.5]" />
-              <span className="text-[14px]">Platform Admin</span>
-            </Link>
-          )}
+          ) : null}
           
           <Link
             to="/settings"

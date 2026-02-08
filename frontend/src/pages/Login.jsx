@@ -33,15 +33,15 @@ export default function Login({ onLogin }) {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-5">
             <img 
-              src="/logo-medium.png" 
+              src="/rythm-logo.png" 
               alt="Rythm" 
-              className="h-20 w-auto drop-shadow-md"
+              className="h-24 w-auto drop-shadow-md"
             />
           </div>
           <h1 className="text-[28px] font-bold text-am-text tracking-tight mb-1">
             Rythm
           </h1>
-          <p className="text-[15px] text-am-text-secondary">Catalog Manager</p>
+          <p className="text-[15px] text-am-text-secondary">Catalog Intelligence</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from pydantic import BaseModel
 from ..models import get_db, User
 from ..utils.auth import verify_password, get_password_hash, create_access_token, get_current_user
@@ -27,7 +28,7 @@ class TokenResponse(BaseModel):
 @router.post("/register", response_model=TokenResponse)
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
     # Check if user exists
-    if db.query(User).filter(User.username == request.username).first():
+    if db.query(User).filter(func.lower(User.username) == request.username.lower()).first():
         raise HTTPException(status_code=400, detail="Username already registered")
     
     if db.query(User).filter(User.email == request.email).first():
@@ -66,7 +67,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     from datetime import datetime
     
-    user = db.query(User).filter(User.username == request.username).first()
+    user = db.query(User).filter(func.lower(User.username) == request.username.lower()).first()
     
     if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(
