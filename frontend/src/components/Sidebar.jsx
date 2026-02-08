@@ -87,9 +87,9 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
                 />
               ) : (
                 <img 
-                  src="/logo-small.png" 
+                  src="/rythm-logo.png" 
                   alt="Rythm" 
-                  className="h-10 w-10 rounded-xl shadow-am-sm"
+                  className="h-10 w-auto max-h-10 object-contain"
                 />
               )}
               <div>
