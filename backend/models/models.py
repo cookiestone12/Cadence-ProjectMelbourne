@@ -123,6 +123,30 @@ class OrganizationMember(Base):
     organization = relationship("Organization", back_populates="members")
     user = relationship("User", back_populates="organization_memberships")
 
+class ContributorType(str, enum.Enum):
+    ARTIST = "ARTIST"
+    SONGWRITER = "SONGWRITER"
+    PRODUCER = "PRODUCER"
+    PUBLISHER = "PUBLISHER"
+    LABEL = "LABEL"
+    MANAGER = "MANAGER"
+    ENGINEER = "ENGINEER"
+    OTHER = "OTHER"
+
+class ReleaseType(str, enum.Enum):
+    SINGLE = "SINGLE"
+    EP = "EP"
+    ALBUM = "ALBUM"
+    COMPILATION = "COMPILATION"
+    MIXTAPE = "MIXTAPE"
+    OTHER = "OTHER"
+
+class ReleaseStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    READY = "READY"
+    SUBMITTED = "SUBMITTED"
+    RELEASED = "RELEASED"
+
 class Creator(Base):
     __tablename__ = "creators"
     __table_args__ = (
@@ -140,11 +164,20 @@ class Creator(Base):
     primary_ipi = Column(String, nullable=True)
     hero_image_url = Column(String, nullable=True)
     linked_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    contributor_type = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    publisher_name = Column(String, nullable=True)
+    label_affiliation = Column(String, nullable=True)
+    bio = Column(Text, nullable=True)
+    website_url = Column(String, nullable=True)
+    spotify_artist_id = Column(String, nullable=True)
+    apple_music_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     organization = relationship("Organization", back_populates="creators")
     song_credits = relationship("SongCredit", back_populates="creator")
+    work_credits = relationship("WorkCredit", back_populates="creator")
     linked_user = relationship("User", foreign_keys=[linked_user_id])
 
 class Song(Base):
@@ -200,6 +233,130 @@ class Song(Base):
     territory_revenues = relationship("TerritoryRevenue", back_populates="song", cascade="all, delete-orphan")
     valuation_calculations = relationship("ValuationCalculation", back_populates="song", cascade="all, delete-orphan")
     contracts = relationship("SongContract", back_populates="song", cascade="all, delete-orphan")
+    work_tracks = relationship("WorkTrack", back_populates="song", cascade="all, delete-orphan")
+    release_tracks = relationship("ReleaseTrack", back_populates="song", cascade="all, delete-orphan")
+
+
+class Work(Base):
+    __tablename__ = "works"
+    __table_args__ = (
+        Index('ix_works_organization_id', 'organization_id'),
+        Index('ix_works_iswc', 'iswc'),
+        UniqueConstraint('organization_id', 'iswc', name='uq_works_org_iswc'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    title = Column(String, index=True, nullable=False)
+    alternative_titles = Column(JSON, default=list)
+    iswc = Column(String, nullable=True)
+    language = Column(String, nullable=True)
+    genre = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    lyrics = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    work_tracks = relationship("WorkTrack", back_populates="work", cascade="all, delete-orphan")
+    credits = relationship("WorkCredit", back_populates="work", cascade="all, delete-orphan")
+
+
+class WorkTrack(Base):
+    __tablename__ = "work_tracks"
+    __table_args__ = (
+        UniqueConstraint('work_id', 'song_id', name='uq_work_track'),
+        Index('ix_work_tracks_work_id', 'work_id'),
+        Index('ix_work_tracks_song_id', 'song_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_id = Column(Integer, ForeignKey("works.id"), nullable=False)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=False)
+    is_primary = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    work = relationship("Work", back_populates="work_tracks")
+    song = relationship("Song", back_populates="work_tracks")
+
+
+class WorkCredit(Base):
+    __tablename__ = "work_credits"
+    __table_args__ = (
+        Index('ix_work_credits_work_id', 'work_id'),
+        Index('ix_work_credits_creator_id', 'creator_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    work_id = Column(Integer, ForeignKey("works.id"), nullable=False)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=False)
+    role = Column(String, nullable=False)
+    share_percentage = Column(Float, nullable=True)
+    publisher_name = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    work = relationship("Work", back_populates="credits")
+    creator = relationship("Creator", back_populates="work_credits")
+
+
+class Release(Base):
+    __tablename__ = "releases"
+    __table_args__ = (
+        Index('ix_releases_organization_id', 'organization_id'),
+        Index('ix_releases_upc', 'upc'),
+        UniqueConstraint('organization_id', 'upc', name='uq_releases_org_upc'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    title = Column(String, index=True, nullable=False)
+    release_type = Column(String, default="SINGLE")
+    status = Column(String, default="DRAFT")
+
+    primary_artist = Column(String, nullable=True)
+    label = Column(String, nullable=True)
+    upc = Column(String, nullable=True)
+    catalog_number = Column(String, nullable=True)
+    release_date = Column(Date, nullable=True)
+    original_release_date = Column(Date, nullable=True)
+    genre = Column(String, nullable=True)
+    subgenre = Column(String, nullable=True)
+    cover_art_url = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    copyright_line = Column(String, nullable=True)
+    copyright_year = Column(Integer, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    spotify_url = Column(String, nullable=True)
+    apple_music_url = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    release_tracks = relationship("ReleaseTrack", back_populates="release", cascade="all, delete-orphan", order_by="ReleaseTrack.disc_number, ReleaseTrack.track_number")
+
+
+class ReleaseTrack(Base):
+    __tablename__ = "release_tracks"
+    __table_args__ = (
+        UniqueConstraint('release_id', 'song_id', name='uq_release_track'),
+        Index('ix_release_tracks_release_id', 'release_id'),
+        Index('ix_release_tracks_song_id', 'song_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    release_id = Column(Integer, ForeignKey("releases.id"), nullable=False)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=False)
+    track_number = Column(Integer, nullable=False, default=1)
+    disc_number = Column(Integer, nullable=False, default=1)
+    is_bonus = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    release = relationship("Release", back_populates="release_tracks")
+    song = relationship("Song", back_populates="release_tracks")
+
 
 class SongCredit(Base):
     __tablename__ = "song_credits"

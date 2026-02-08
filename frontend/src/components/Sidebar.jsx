@@ -2,9 +2,11 @@ import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { 
   HomeIcon, 
+  MagnifyingGlassIcon,
   UsersIcon, 
   MusicalNoteIcon, 
   DocumentTextIcon,
+  RectangleStackIcon,
   ChartBarIcon,
   CurrencyDollarIcon,
   Cog6ToothIcon,
@@ -23,8 +25,11 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
   
   const navItems = [
     { path: '/', label: 'Home', icon: HomeIcon },
+    { path: '/search', label: 'Search', icon: MagnifyingGlassIcon },
     { path: '/roster', label: 'Roster', icon: UsersIcon },
     { path: '/catalog', label: 'Catalog', icon: MusicalNoteIcon },
+    { path: '/works', label: 'Works', icon: DocumentTextIcon },
+    { path: '/releases', label: 'Releases', icon: RectangleStackIcon },
     { path: '/reports', label: 'Reports', icon: ChartBarIcon },
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
   ]

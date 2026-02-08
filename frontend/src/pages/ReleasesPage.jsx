@@ -1,0 +1,837 @@
+import React, { useState, useEffect } from 'react'
+import axios from 'axios'
+import {
+  MagnifyingGlassIcon, PlusIcon, FunnelIcon, XMarkIcon,
+  TrashIcon, PencilSquareIcon, MusicalNoteIcon,
+  CalendarIcon, ExclamationTriangleIcon, CheckCircleIcon,
+  ChevronLeftIcon
+} from '@heroicons/react/24/outline'
+
+const STATUS_COLORS = {
+  DRAFT: 'bg-gray-100 text-gray-700',
+  READY: 'bg-blue-100 text-blue-700',
+  SUBMITTED: 'bg-amber-100 text-amber-700',
+  RELEASED: 'bg-green-100 text-green-700',
+}
+
+const TYPE_LABELS = {
+  SINGLE: 'Single',
+  EP: 'EP',
+  ALBUM: 'Album',
+  COMPILATION: 'Compilation',
+  MIXTAPE: 'Mixtape',
+}
+
+export default function ReleasesPage() {
+  const [releases, setReleases] = useState([])
+  const [totalCount, setTotalCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [organizationId, setOrganizationId] = useState(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [selectedRelease, setSelectedRelease] = useState(null)
+  const [detailData, setDetailData] = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [editForm, setEditForm] = useState({})
+  const [songs, setSongs] = useState([])
+  const [addTrackSongId, setAddTrackSongId] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
+  const [filters, setFilters] = useState({ status: '', release_type: '' })
+  const [createForm, setCreateForm] = useState({
+    title: '',
+    release_type: 'SINGLE',
+    primary_artist: '',
+    label: '',
+    upc: '',
+    release_date: '',
+    genre: '',
+    copyright_line: '',
+    copyright_year: '',
+    description: '',
+  })
+
+  useEffect(() => {
+    loadReleases()
+  }, [filters])
+
+  async function loadReleases() {
+    try {
+      const orgResponse = await axios.get('/api/organizations/current')
+      const orgId = orgResponse.data.id
+      setOrganizationId(orgId)
+
+      const params = new URLSearchParams()
+      if (filters.status) params.append('status', filters.status)
+      if (filters.release_type) params.append('release_type', filters.release_type)
+      params.append('limit', '500')
+
+      const response = await axios.get(`/api/releases/org/${orgId}?${params}`)
+      setReleases(response.data.releases || [])
+      setTotalCount(response.data.total || 0)
+    } catch (error) {
+      console.error('Failed to load releases:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadReleaseDetail(releaseId) {
+    setDetailLoading(true)
+    try {
+      const response = await axios.get(`/api/releases/${releaseId}`)
+      setDetailData(response.data)
+      setEditForm({
+        title: response.data.title || '',
+        release_type: response.data.release_type || 'SINGLE',
+        status: response.data.status || 'DRAFT',
+        primary_artist: response.data.primary_artist || '',
+        label: response.data.label || '',
+        upc: response.data.upc || '',
+        catalog_number: response.data.catalog_number || '',
+        release_date: response.data.release_date || '',
+        genre: response.data.genre || '',
+        subgenre: response.data.subgenre || '',
+        description: response.data.description || '',
+        copyright_line: response.data.copyright_line || '',
+        copyright_year: response.data.copyright_year || '',
+        notes: response.data.notes || '',
+      })
+
+      if (organizationId) {
+        const songsResponse = await axios.get(`/api/songs/org/${organizationId}?limit=1000`)
+        setSongs(Array.isArray(songsResponse.data) ? songsResponse.data : [])
+      }
+    } catch (error) {
+      console.error('Failed to load release detail:', error)
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  async function handleCreateRelease(e) {
+    e.preventDefault()
+    try {
+      const payload = { ...createForm }
+      if (payload.copyright_year) payload.copyright_year = parseInt(payload.copyright_year)
+      if (!payload.release_date) delete payload.release_date
+
+      await axios.post(`/api/releases/org/${organizationId}`, payload)
+      setShowCreateModal(false)
+      setCreateForm({
+        title: '',
+        release_type: 'SINGLE',
+        primary_artist: '',
+        label: '',
+        upc: '',
+        release_date: '',
+        genre: '',
+        copyright_line: '',
+        copyright_year: '',
+        description: '',
+      })
+      loadReleases()
+    } catch (error) {
+      console.error('Failed to create release:', error)
+    }
+  }
+
+  async function handleUpdateRelease() {
+    try {
+      const payload = { ...editForm }
+      if (payload.copyright_year) payload.copyright_year = parseInt(payload.copyright_year)
+      if (!payload.release_date) delete payload.release_date
+
+      await axios.put(`/api/releases/${selectedRelease}`, payload)
+      setEditMode(false)
+      loadReleaseDetail(selectedRelease)
+      loadReleases()
+    } catch (error) {
+      console.error('Failed to update release:', error)
+    }
+  }
+
+  async function handleDeleteRelease(releaseId) {
+    if (!window.confirm('Are you sure you want to delete this release?')) return
+    try {
+      await axios.delete(`/api/releases/${releaseId}`)
+      setSelectedRelease(null)
+      setDetailData(null)
+      loadReleases()
+    } catch (error) {
+      console.error('Failed to delete release:', error)
+    }
+  }
+
+  async function handleAddTrack() {
+    if (!addTrackSongId) return
+    try {
+      await axios.post(`/api/releases/${selectedRelease}/tracks`, { song_id: parseInt(addTrackSongId) })
+      setAddTrackSongId('')
+      loadReleaseDetail(selectedRelease)
+    } catch (error) {
+      console.error('Failed to add track:', error)
+    }
+  }
+
+  async function handleRemoveTrack(songId) {
+    try {
+      await axios.delete(`/api/releases/${selectedRelease}/tracks/${songId}`)
+      loadReleaseDetail(selectedRelease)
+    } catch (error) {
+      console.error('Failed to remove track:', error)
+    }
+  }
+
+  const filteredReleases = releases.filter(r => {
+    if (!searchTerm) return true
+    const term = searchTerm.toLowerCase()
+    return (
+      (r.title && r.title.toLowerCase().includes(term)) ||
+      (r.primary_artist && r.primary_artist.toLowerCase().includes(term)) ||
+      (r.upc && r.upc.toLowerCase().includes(term))
+    )
+  })
+
+  const hasActiveFilters = filters.status || filters.release_type
+
+  const statusCounts = {
+    DRAFT: releases.filter(r => r.status === 'DRAFT').length,
+    READY: releases.filter(r => r.status === 'READY').length,
+    SUBMITTED: releases.filter(r => r.status === 'SUBMITTED').length,
+    RELEASED: releases.filter(r => r.status === 'RELEASED').length,
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-[#7A8580]">Loading releases...</div>
+      </div>
+    )
+  }
+
+  if (selectedRelease && detailData) {
+    const existingTrackSongIds = (detailData.tracks || []).map(t => t.song_id)
+    const availableSongs = songs.filter(s => !existingTrackSongIds.includes(s.id))
+
+    return (
+      <div className="p-8">
+        <button
+          onClick={() => { setSelectedRelease(null); setDetailData(null); setEditMode(false) }}
+          className="flex items-center space-x-2 text-[#7A8580] hover:text-[#3D4A44] mb-6 transition-colors"
+        >
+          <ChevronLeftIcon className="w-5 h-5" />
+          <span>Back to Releases</span>
+        </button>
+
+        <div className="flex items-start justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <div className="w-20 h-20 bg-[#EEF1EC] rounded-xl flex items-center justify-center">
+              {detailData.cover_art_url ? (
+                <img src={detailData.cover_art_url} alt={detailData.title} className="w-20 h-20 rounded-xl object-cover" />
+              ) : (
+                <MusicalNoteIcon className="w-10 h-10 text-[#7A8580]" />
+              )}
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-[#3D4A44]">{detailData.title}</h1>
+              <div className="flex items-center space-x-3 mt-1">
+                <span className="text-[#7A8580]">{detailData.primary_artist || 'No artist'}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[detailData.status] || STATUS_COLORS.DRAFT}`}>
+                  {detailData.status}
+                </span>
+                <span className="text-xs text-[#7A8580] bg-[#EEF1EC] px-2 py-0.5 rounded-full">
+                  {TYPE_LABELS[detailData.release_type] || detailData.release_type}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={() => setEditMode(!editMode)}
+              className="flex items-center space-x-2 px-4 py-2 bg-[#EEF1EC] text-[#3D4A44] rounded-lg hover:bg-[#E4E8E2] transition-colors"
+            >
+              <PencilSquareIcon className="w-5 h-5" />
+              <span>{editMode ? 'Cancel' : 'Edit'}</span>
+            </button>
+            <button
+              onClick={() => handleDeleteRelease(selectedRelease)}
+              className="flex items-center space-x-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+            >
+              <TrashIcon className="w-5 h-5" />
+              <span>Delete</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-[#3D4A44] mb-4">Release Details</h2>
+              {editMode ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Title</label>
+                    <input
+                      type="text"
+                      value={editForm.title}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Type</label>
+                    <select
+                      value={editForm.release_type}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, release_type: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    >
+                      <option value="SINGLE">Single</option>
+                      <option value="EP">EP</option>
+                      <option value="ALBUM">Album</option>
+                      <option value="COMPILATION">Compilation</option>
+                      <option value="MIXTAPE">Mixtape</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Status</label>
+                    <select
+                      value={editForm.status}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    >
+                      <option value="DRAFT">Draft</option>
+                      <option value="READY">Ready</option>
+                      <option value="SUBMITTED">Submitted</option>
+                      <option value="RELEASED">Released</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Primary Artist</label>
+                    <input
+                      type="text"
+                      value={editForm.primary_artist}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, primary_artist: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Label</label>
+                    <input
+                      type="text"
+                      value={editForm.label}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, label: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">UPC</label>
+                    <input
+                      type="text"
+                      value={editForm.upc}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, upc: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Release Date</label>
+                    <input
+                      type="date"
+                      value={editForm.release_date}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, release_date: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Genre</label>
+                    <input
+                      type="text"
+                      value={editForm.genre}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, genre: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Copyright Line</label>
+                    <input
+                      type="text"
+                      value={editForm.copyright_line}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, copyright_line: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Copyright Year</label>
+                    <input
+                      type="number"
+                      value={editForm.copyright_year}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, copyright_year: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description</label>
+                    <textarea
+                      value={editForm.description}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                      rows={3}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                  <div className="md:col-span-2 flex justify-end space-x-3">
+                    <button
+                      onClick={() => setEditMode(false)}
+                      className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleUpdateRelease}
+                      className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-xs text-[#7A8580]">Type</p>
+                    <p className="text-sm font-medium text-[#3D4A44]">{TYPE_LABELS[detailData.release_type] || detailData.release_type}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[#7A8580]">Label</p>
+                    <p className="text-sm font-medium text-[#3D4A44]">{detailData.label || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[#7A8580]">UPC</p>
+                    <p className="text-sm font-medium text-[#3D4A44]">{detailData.upc || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[#7A8580]">Release Date</p>
+                    <p className="text-sm font-medium text-[#3D4A44]">{detailData.release_date || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[#7A8580]">Genre</p>
+                    <p className="text-sm font-medium text-[#3D4A44]">{detailData.genre || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[#7A8580]">Catalog #</p>
+                    <p className="text-sm font-medium text-[#3D4A44]">{detailData.catalog_number || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[#7A8580]">Copyright</p>
+                    <p className="text-sm font-medium text-[#3D4A44]">
+                      {detailData.copyright_line ? `${detailData.copyright_line} (${detailData.copyright_year || '-'})` : '-'}
+                    </p>
+                  </div>
+                  {detailData.description && (
+                    <div className="col-span-2 md:col-span-3">
+                      <p className="text-xs text-[#7A8580]">Description</p>
+                      <p className="text-sm text-[#3D4A44]">{detailData.description}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-[#3D4A44]">
+                  Tracks ({(detailData.tracks || []).length})
+                </h2>
+              </div>
+
+              <div className="flex items-center space-x-3 mb-4">
+                <select
+                  value={addTrackSongId}
+                  onChange={(e) => setAddTrackSongId(e.target.value)}
+                  className="flex-1 border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                >
+                  <option value="">Select a song to add...</option>
+                  {availableSongs.map(song => (
+                    <option key={song.id} value={song.id}>{song.title} — {song.primary_artist}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAddTrack}
+                  disabled={!addTrackSongId}
+                  className="flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  <span>Add</span>
+                </button>
+              </div>
+
+              {(detailData.tracks || []).length === 0 ? (
+                <div className="text-center py-8 text-[#7A8580]">No tracks added yet</div>
+              ) : (
+                <div className="divide-y divide-[rgba(59,77,67,0.08)]">
+                  {(detailData.tracks || []).map((track) => (
+                    <div key={track.id} className="flex items-center justify-between py-3">
+                      <div className="flex items-center space-x-4">
+                        <span className="text-sm font-medium text-[#7A8580] w-12">
+                          {track.disc_number > 1 ? `${track.disc_number}-` : ''}{track.track_number}
+                        </span>
+                        <div>
+                          <p className="text-sm font-medium text-[#3D4A44]">{track.title}</p>
+                          <p className="text-xs text-[#7A8580]">{track.primary_artist}{track.isrc ? ` · ${track.isrc}` : ''}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleRemoveTrack(track.song_id)}
+                        className="text-[#7A8580] hover:text-red-500 transition-colors"
+                      >
+                        <XMarkIcon className="w-5 h-5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+              <h2 className="text-lg font-semibold text-[#3D4A44] mb-4">Release Health</h2>
+              {detailData.health && (
+                <>
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="flex-1 h-3 bg-[#EEF1EC] rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594]"
+                        style={{ width: `${detailData.health.score || 0}%` }}
+                      />
+                    </div>
+                    <span className="text-lg font-bold text-[#3D4A44]">
+                      {Math.round(detailData.health.score || 0)}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#7A8580] mb-3">
+                    {detailData.health.passed}/{detailData.health.total_checks} checks passed
+                  </p>
+                  {(detailData.health.issues || []).length > 0 && (
+                    <div className="space-y-2">
+                      {detailData.health.issues.map((issue, idx) => (
+                        <div key={idx} className="flex items-start space-x-2">
+                          <ExclamationTriangleIcon className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                          <span className="text-sm text-[#3D4A44]">{issue}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(detailData.health.issues || []).length === 0 && (
+                    <div className="flex items-center space-x-2 text-[#5B8A72]">
+                      <CheckCircleIcon className="w-5 h-5" />
+                      <span className="text-sm font-medium">All checks passed</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {detailLoading && (
+          <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 shadow-xl">
+              <div className="text-[#7A8580]">Loading...</div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-8">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Releases</h1>
+          <p className="text-[#7A8580]">{totalCount} total releases</p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button
+            className="flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+            onClick={() => setShowCreateModal(true)}
+          >
+            <PlusIcon className="w-5 h-5" />
+            <span>Create Release</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-6 border-b border-[rgba(59,77,67,0.08)]">
+        <div className="flex space-x-8">
+          {['ALL', 'DRAFT', 'READY', 'SUBMITTED', 'RELEASED'].map(status => (
+            <button
+              key={status}
+              onClick={() => setFilters(prev => ({ ...prev, status: status === 'ALL' ? '' : status }))}
+              className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
+                (status === 'ALL' && !filters.status) || filters.status === status
+                  ? 'border-[#5B8A72] text-[#5B8A72]'
+                  : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
+              }`}
+            >
+              {status === 'ALL' ? `All (${totalCount})` : `${status.charAt(0) + status.slice(1).toLowerCase()} (${statusCounts[status] || 0})`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
+        <div className="flex items-center space-x-4">
+          <div className="flex-1 relative">
+            <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7A8580]" />
+            <input
+              type="text"
+              placeholder="Search releases, artists, or UPC..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+            />
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+              hasActiveFilters
+                ? 'bg-[#5B8A72] text-white'
+                : 'bg-[#EEF1EC] text-[#3D4A44] hover:bg-[#E4E8E2]'
+            }`}
+          >
+            <FunnelIcon className="w-5 h-5" />
+            <span>Filters</span>
+          </button>
+        </div>
+
+        {showFilters && (
+          <div className="mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)] grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">Type</label>
+              <select
+                value={filters.release_type}
+                onChange={(e) => setFilters(prev => ({ ...prev, release_type: e.target.value }))}
+                className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+              >
+                <option value="">All Types</option>
+                <option value="SINGLE">Single</option>
+                <option value="EP">EP</option>
+                <option value="ALBUM">Album</option>
+                <option value="COMPILATION">Compilation</option>
+                <option value="MIXTAPE">Mixtape</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">Status</label>
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+              >
+                <option value="">All Statuses</option>
+                <option value="DRAFT">Draft</option>
+                <option value="READY">Ready</option>
+                <option value="SUBMITTED">Submitted</option>
+                <option value="RELEASED">Released</option>
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={() => setFilters({ status: '', release_type: '' })}
+                className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {filteredReleases.map((release) => (
+          <div
+            key={release.id}
+            onClick={() => {
+              setSelectedRelease(release.id)
+              loadReleaseDetail(release.id)
+            }}
+            className="bg-[#FAFBF9] rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-all hover:translate-y-[-2px] overflow-hidden"
+          >
+            <div className="aspect-square bg-[#EEF1EC] flex items-center justify-center">
+              {release.cover_art_url ? (
+                <img src={release.cover_art_url} alt={release.title} className="w-full h-full object-cover" />
+              ) : (
+                <MusicalNoteIcon className="w-16 h-16 text-[#7A8580]" />
+              )}
+            </div>
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="font-semibold text-[#3D4A44] truncate flex-1">{release.title}</h3>
+              </div>
+              <p className="text-sm text-[#7A8580] truncate mb-2">{release.primary_artist || 'No artist'}</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[release.status] || STATUS_COLORS.DRAFT}`}>
+                    {release.status}
+                  </span>
+                  <span className="text-xs text-[#7A8580] bg-[#EEF1EC] px-2 py-0.5 rounded-full">
+                    {TYPE_LABELS[release.release_type] || release.release_type}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-3 text-xs text-[#7A8580]">
+                <div className="flex items-center space-x-1">
+                  <MusicalNoteIcon className="w-3.5 h-3.5" />
+                  <span>{release.track_count || 0} tracks</span>
+                </div>
+                {release.release_date && (
+                  <div className="flex items-center space-x-1">
+                    <CalendarIcon className="w-3.5 h-3.5" />
+                    <span>{release.release_date}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {filteredReleases.length === 0 && (
+          <div className="col-span-full text-center py-12 text-[#7A8580]">
+            No releases found
+          </div>
+        )}
+      </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-[#3D4A44]">Create Release</h3>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateRelease}>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Title *</label>
+                  <input
+                    type="text"
+                    required
+                    value={createForm.title}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Release Type</label>
+                  <select
+                    value={createForm.release_type}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, release_type: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="SINGLE">Single</option>
+                    <option value="EP">EP</option>
+                    <option value="ALBUM">Album</option>
+                    <option value="COMPILATION">Compilation</option>
+                    <option value="MIXTAPE">Mixtape</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Primary Artist</label>
+                  <input
+                    type="text"
+                    value={createForm.primary_artist}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, primary_artist: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Label</label>
+                  <input
+                    type="text"
+                    value={createForm.label}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, label: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">UPC</label>
+                  <input
+                    type="text"
+                    value={createForm.upc}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, upc: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Release Date</label>
+                  <input
+                    type="date"
+                    value={createForm.release_date}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, release_date: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Genre</label>
+                  <input
+                    type="text"
+                    value={createForm.genre}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, genre: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Copyright Line</label>
+                  <input
+                    type="text"
+                    value={createForm.copyright_line}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, copyright_line: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Copyright Year</label>
+                  <input
+                    type="number"
+                    value={createForm.copyright_year}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, copyright_year: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description</label>
+                  <textarea
+                    value={createForm.description}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
+                    rows={3}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+                >
+                  Create Release
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

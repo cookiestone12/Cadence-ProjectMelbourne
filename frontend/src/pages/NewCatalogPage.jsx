@@ -27,6 +27,20 @@ export default function NewCatalogPage() {
     status: ''
   })
   const [showFilters, setShowFilters] = useState(false)
+
+  const [selectedSongIds, setSelectedSongIds] = useState(new Set())
+  const [showBulkEditModal, setShowBulkEditModal] = useState(false)
+  const [bulkEditFields, setBulkEditFields] = useState({})
+  const [bulkEditLoading, setBulkEditLoading] = useState(false)
+
+  const [showSpotifyImportModal, setShowSpotifyImportModal] = useState(false)
+  const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState('')
+  const [spotifyCreatorId, setSpotifyCreatorId] = useState('')
+  const [spotifyPreviewTracks, setSpotifyPreviewTracks] = useState(null)
+  const [spotifySelectedTracks, setSpotifySelectedTracks] = useState(new Set())
+  const [spotifyPreviewLoading, setSpotifyPreviewLoading] = useState(false)
+  const [spotifyImportLoading, setSpotifyImportLoading] = useState(false)
+  const [spotifyImportResult, setSpotifyImportResult] = useState(null)
   
   useEffect(() => {
     loadData()
@@ -142,6 +156,138 @@ export default function NewCatalogPage() {
       window.open(link, '_blank')
     }
   }
+
+  const toggleSongSelection = (e, songId) => {
+    e.stopPropagation()
+    setSelectedSongIds(prev => {
+      const next = new Set(prev)
+      if (next.has(songId)) {
+        next.delete(songId)
+      } else {
+        next.add(songId)
+      }
+      return next
+    })
+  }
+
+  const selectAllSongs = () => {
+    setSelectedSongIds(new Set(filteredSongs.map(s => s.id)))
+  }
+
+  const clearSelection = () => {
+    setSelectedSongIds(new Set())
+  }
+
+  const openBulkEditModal = () => {
+    setBulkEditFields({})
+    setShowBulkEditModal(true)
+  }
+
+  const handleBulkEditFieldChange = (field, value) => {
+    setBulkEditFields(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleBulkEditSubmit = async () => {
+    if (!organizationId || selectedSongIds.size === 0) return
+    const updates = {}
+    Object.entries(bulkEditFields).forEach(([key, val]) => {
+      if (val !== '' && val !== undefined && val !== null) {
+        if (key === 'publishing_percentage' || key === 'master_percentage') {
+          updates[key] = parseFloat(val)
+        } else {
+          updates[key] = val
+        }
+      }
+    })
+    if (Object.keys(updates).length === 0) return
+    setBulkEditLoading(true)
+    try {
+      await axios.put(`/api/bulk/songs/${organizationId}`, {
+        song_ids: Array.from(selectedSongIds),
+        updates
+      })
+      setShowBulkEditModal(false)
+      setSelectedSongIds(new Set())
+      setLoading(true)
+      await loadData()
+    } catch (error) {
+      console.error('Bulk edit failed:', error)
+    } finally {
+      setBulkEditLoading(false)
+    }
+  }
+
+  const handleSpotifyPreview = async () => {
+    if (!organizationId || !spotifyPlaylistUrl) return
+    setSpotifyPreviewLoading(true)
+    setSpotifyImportResult(null)
+    try {
+      const res = await axios.post(`/api/spotify/playlist/preview/${organizationId}`, {
+        playlist_url: spotifyPlaylistUrl
+      })
+      setSpotifyPreviewTracks(res.data.tracks)
+      const selected = new Set()
+      res.data.tracks.forEach((t, i) => {
+        if (!t.already_exists) selected.add(i)
+      })
+      setSpotifySelectedTracks(selected)
+    } catch (error) {
+      console.error('Spotify preview failed:', error)
+    } finally {
+      setSpotifyPreviewLoading(false)
+    }
+  }
+
+  const toggleSpotifyTrack = (index) => {
+    setSpotifySelectedTracks(prev => {
+      const next = new Set(prev)
+      if (next.has(index)) {
+        next.delete(index)
+      } else {
+        next.add(index)
+      }
+      return next
+    })
+  }
+
+  const handleSpotifyImport = async () => {
+    if (!organizationId || !spotifyPreviewTracks || spotifySelectedTracks.size === 0) return
+    setSpotifyImportLoading(true)
+    try {
+      const tracks = Array.from(spotifySelectedTracks).map(i => {
+        const t = spotifyPreviewTracks[i]
+        return {
+          title: t.title || t.name,
+          primary_artist: t.primary_artist || t.artist || t.artists?.join(', ') || '',
+          isrc: t.isrc || null,
+          release_date: t.release_date || null,
+          spotify_url: t.spotify_url || t.external_url || null,
+          album_name: t.album_name || t.album || null
+        }
+      })
+      const res = await axios.post(`/api/spotify/playlist/import/${organizationId}`, {
+        tracks,
+        creator_id: spotifyCreatorId ? parseInt(spotifyCreatorId) : null
+      })
+      setSpotifyImportResult(res.data)
+      setSpotifyPreviewTracks(null)
+      setLoading(true)
+      await loadData()
+    } catch (error) {
+      console.error('Spotify import failed:', error)
+    } finally {
+      setSpotifyImportLoading(false)
+    }
+  }
+
+  const closeSpotifyImportModal = () => {
+    setShowSpotifyImportModal(false)
+    setSpotifyPlaylistUrl('')
+    setSpotifyCreatorId('')
+    setSpotifyPreviewTracks(null)
+    setSpotifySelectedTracks(new Set())
+    setSpotifyImportResult(null)
+  }
   
   if (loading) {
     return (
@@ -152,7 +298,7 @@ export default function NewCatalogPage() {
   }
   
   return (
-    <div className="p-8">
+    <div className="p-8 pb-24">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Catalog</h1>
@@ -172,6 +318,15 @@ export default function NewCatalogPage() {
           >
             <ArrowUpTrayIcon className="w-5 h-5" />
             <span>Upload Schedule A</span>
+          </button>
+          <button 
+            className="flex items-center space-x-2 px-4 py-2 bg-[#1DB954] text-white rounded-lg hover:bg-[#1aa34a] transition-colors"
+            onClick={() => setShowSpotifyImportModal(true)}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+            </svg>
+            <span>Import from Spotify</span>
           </button>
         </div>
       </div>
@@ -301,6 +456,20 @@ export default function NewCatalogPage() {
           <table className="w-full">
             <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
+                <th className="px-3 py-3 text-center w-10">
+                  <input
+                    type="checkbox"
+                    checked={filteredSongs.length > 0 && filteredSongs.every(s => selectedSongIds.has(s.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        selectAllSongs()
+                      } else {
+                        clearSelection()
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Song</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Artist</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Label</th>
@@ -317,8 +486,19 @@ export default function NewCatalogPage() {
                 <tr 
                   key={song.id} 
                   onClick={() => setSelectedSong(song)}
-                  className="hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
+                  className={`hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors ${
+                    selectedSongIds.has(song.id) ? 'bg-[rgba(91,138,114,0.08)]' : ''
+                  }`}
                 >
+                  <td className="px-3 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedSongIds.has(song.id)}
+                      onChange={(e) => toggleSongSelection(e, song.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-[#3D4A44]">{song.title}</div>
                     <div className="text-xs text-[#7A8580]">{song.project_title || '-'}</div>
@@ -394,7 +574,7 @@ export default function NewCatalogPage() {
               
               {filteredSongs.length === 0 && (
                 <tr>
-                  <td colSpan="9" className="px-6 py-12 text-center text-[#7A8580]">
+                  <td colSpan="10" className="px-6 py-12 text-center text-[#7A8580]">
                     No songs found
                   </td>
                 </tr>
@@ -403,6 +583,33 @@ export default function NewCatalogPage() {
           </table>
         </div>
       </div>
+
+      {selectedSongIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
+          <div className="bg-[#3D4A44] text-white px-6 py-3 rounded-2xl shadow-[0_8px_32px_rgba(61,74,68,0.3)] flex items-center space-x-4">
+            <span className="text-sm font-medium">{selectedSongIds.size} song{selectedSongIds.size !== 1 ? 's' : ''} selected</span>
+            <div className="w-px h-5 bg-[#7A8580]"></div>
+            <button
+              onClick={openBulkEditModal}
+              className="px-4 py-1.5 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7A62] transition-colors"
+            >
+              Bulk Edit
+            </button>
+            <button
+              onClick={selectAllSongs}
+              className="px-4 py-1.5 bg-[#EEF1EC] text-[#3D4A44] rounded-lg text-sm font-medium hover:bg-white transition-colors"
+            >
+              Select All
+            </button>
+            <button
+              onClick={clearSelection}
+              className="px-4 py-1.5 border border-[#7A8580] text-white rounded-lg text-sm font-medium hover:bg-[#4A5550] transition-colors"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
       
       {selectedSong && (
         <SongDetailModal song={selectedSong} onClose={() => setSelectedSong(null)} />
@@ -460,6 +667,265 @@ export default function NewCatalogPage() {
                 <span>Save & Mark Released</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkEditModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg mx-4">
+            <h3 className="text-lg font-semibold text-[#3D4A44] mb-2">Bulk Edit</h3>
+            <p className="text-sm text-[#7A8580] mb-4">
+              Update {selectedSongIds.size} selected song{selectedSongIds.size !== 1 ? 's' : ''}. Only changed fields will be applied.
+            </p>
+
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Label</label>
+                <input
+                  type="text"
+                  value={bulkEditFields.label || ''}
+                  onChange={(e) => handleBulkEditFieldChange('label', e.target.value)}
+                  placeholder="Enter label..."
+                  className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Publishing %</label>
+                  <input
+                    type="number"
+                    value={bulkEditFields.publishing_percentage ?? ''}
+                    onChange={(e) => handleBulkEditFieldChange('publishing_percentage', e.target.value)}
+                    placeholder="0-100"
+                    min="0"
+                    max="100"
+                    className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Master %</label>
+                  <input
+                    type="number"
+                    value={bulkEditFields.master_percentage ?? ''}
+                    onChange={(e) => handleBulkEditFieldChange('master_percentage', e.target.value)}
+                    placeholder="0-100"
+                    min="0"
+                    max="100"
+                    className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Notes</label>
+                <textarea
+                  value={bulkEditFields.notes || ''}
+                  onChange={(e) => handleBulkEditFieldChange('notes', e.target.value)}
+                  placeholder="Enter notes..."
+                  rows={3}
+                  className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] resize-none"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-6 pt-2">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bulkEditFields.is_released === true}
+                    onChange={(e) => handleBulkEditFieldChange('is_released', e.target.checked ? true : undefined)}
+                    className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
+                  />
+                  <span className="text-sm text-[#3D4A44]">Is Released</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bulkEditFields.has_contract_executed === true}
+                    onChange={(e) => handleBulkEditFieldChange('has_contract_executed', e.target.checked ? true : undefined)}
+                    className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
+                  />
+                  <span className="text-sm text-[#3D4A44]">Has Contract</span>
+                </label>
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bulkEditFields.is_registered_with_pro === true}
+                    onChange={(e) => handleBulkEditFieldChange('is_registered_with_pro', e.target.checked ? true : undefined)}
+                    className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
+                  />
+                  <span className="text-sm text-[#3D4A44]">PRO Registered</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 mt-6 pt-4 border-t border-[rgba(59,77,67,0.08)]">
+              <button
+                onClick={() => setShowBulkEditModal(false)}
+                className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkEditSubmit}
+                disabled={bulkEditLoading}
+                className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+              >
+                {bulkEditLoading ? 'Updating...' : 'Apply Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSpotifyImportModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col">
+            <h3 className="text-lg font-semibold text-[#3D4A44] mb-2 flex items-center space-x-2">
+              <svg className="w-6 h-6 text-[#1DB954]" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+              </svg>
+              <span>Import from Spotify</span>
+            </h3>
+            <p className="text-sm text-[#7A8580] mb-4">Import tracks from a Spotify playlist into your catalog.</p>
+
+            {spotifyImportResult ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-8">
+                <div className="w-16 h-16 bg-[#EEF1EC] rounded-full flex items-center justify-center mb-4">
+                  <CheckCircleIcon className="w-8 h-8 text-[#5B8A72]" />
+                </div>
+                <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Import Complete</h4>
+                <p className="text-sm text-[#7A8580] mb-1">{spotifyImportResult.imported} track{spotifyImportResult.imported !== 1 ? 's' : ''} imported</p>
+                <p className="text-sm text-[#7A8580]">{spotifyImportResult.skipped} track{spotifyImportResult.skipped !== 1 ? 's' : ''} skipped (already exist)</p>
+                <button
+                  onClick={closeSpotifyImportModal}
+                  className="mt-6 px-6 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Spotify Playlist URL</label>
+                    <input
+                      type="url"
+                      value={spotifyPlaylistUrl}
+                      onChange={(e) => setSpotifyPlaylistUrl(e.target.value)}
+                      placeholder="https://open.spotify.com/playlist/..."
+                      className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Assign to Creator (optional)</label>
+                    <select
+                      value={spotifyCreatorId}
+                      onChange={(e) => setSpotifyCreatorId(e.target.value)}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    >
+                      <option value="">No creator assigned</option>
+                      {creators.map(creator => (
+                        <option key={creator.id} value={creator.id}>{creator.display_name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={handleSpotifyPreview}
+                    disabled={spotifyPreviewLoading || !spotifyPlaylistUrl}
+                    className="px-4 py-2 bg-[#1DB954] text-white rounded-lg hover:bg-[#1aa34a] transition-colors disabled:opacity-50 flex items-center space-x-2"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                    </svg>
+                    <span>{spotifyPreviewLoading ? 'Loading...' : 'Preview'}</span>
+                  </button>
+                </div>
+
+                {spotifyPreviewTracks && (
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                    <div className="text-sm text-[#7A8580] mb-2">
+                      {spotifyPreviewTracks.length} tracks found — {spotifySelectedTracks.size} selected for import
+                    </div>
+                    <div className="flex-1 overflow-y-auto border border-[rgba(59,77,67,0.08)] rounded-lg">
+                      <table className="w-full">
+                        <thead className="bg-[#EEF1EC] sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-center w-10">
+                              <input
+                                type="checkbox"
+                                checked={spotifyPreviewTracks.length > 0 && spotifySelectedTracks.size === spotifyPreviewTracks.length}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSpotifySelectedTracks(new Set(spotifyPreviewTracks.map((_, i) => i)))
+                                  } else {
+                                    setSpotifySelectedTracks(new Set())
+                                  }
+                                }}
+                                className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
+                              />
+                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-[#3D4A44]">Artist</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-[#3D4A44]">ISRC</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-[#3D4A44]">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+                          {spotifyPreviewTracks.map((track, index) => (
+                            <tr key={index} className="hover:bg-[rgba(91,138,114,0.04)]">
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={spotifySelectedTracks.has(index)}
+                                  onChange={() => toggleSpotifyTrack(index)}
+                                  className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-sm text-[#3D4A44] font-medium">{track.title || track.name}</td>
+                              <td className="px-3 py-2 text-sm text-[#7A8580]">{track.primary_artist || track.artist || (track.artists && track.artists.join(', ')) || '-'}</td>
+                              <td className="px-3 py-2 text-xs text-[#7A8580] font-mono">{track.isrc || '-'}</td>
+                              <td className="px-3 py-2">
+                                {track.already_exists ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#FFF3CD] text-[#856404]">
+                                    Already exists
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#D4EDDA] text-[#155724]">
+                                    New
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end space-x-3 mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)]">
+                  <button
+                    onClick={closeSpotifyImportModal}
+                    className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  {spotifyPreviewTracks && (
+                    <button
+                      onClick={handleSpotifyImport}
+                      disabled={spotifyImportLoading || spotifySelectedTracks.size === 0}
+                      className="px-4 py-2 bg-[#1DB954] text-white rounded-lg hover:bg-[#1aa34a] transition-colors disabled:opacity-50 flex items-center space-x-2"
+                    >
+                      <span>{spotifyImportLoading ? 'Importing...' : `Import Selected (${spotifySelectedTracks.size})`}</span>
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
