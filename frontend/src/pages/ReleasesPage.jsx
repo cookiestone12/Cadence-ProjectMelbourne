@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import {
   MagnifyingGlassIcon, PlusIcon, FunnelIcon, XMarkIcon,
   TrashIcon, PencilSquareIcon, MusicalNoteIcon,
   CalendarIcon, ExclamationTriangleIcon, CheckCircleIcon,
-  ChevronLeftIcon
+  ChevronLeftIcon, ArrowDownTrayIcon, ArrowPathIcon,
+  ShieldCheckIcon, ClipboardDocumentCheckIcon
 } from '@heroicons/react/24/outline'
 
 const STATUS_COLORS = {
@@ -36,6 +37,10 @@ export default function ReleasesPage() {
   const [editForm, setEditForm] = useState({})
   const [songs, setSongs] = useState([])
   const [addTrackSongId, setAddTrackSongId] = useState('')
+  const [readiness, setReadiness] = useState(null)
+  const [readinessLoading, setReadinessLoading] = useState(false)
+  const [transitionLoading, setTransitionLoading] = useState(false)
+  const [transitionError, setTransitionError] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({ status: '', release_type: '' })
   const [createForm, setCreateForm] = useState({
@@ -81,10 +86,10 @@ export default function ReleasesPage() {
     try {
       const response = await axios.get(`/api/releases/${releaseId}`)
       setDetailData(response.data)
+      loadReadiness(releaseId)
       setEditForm({
         title: response.data.title || '',
         release_type: response.data.release_type || 'SINGLE',
-        status: response.data.status || 'DRAFT',
         primary_artist: response.data.primary_artist || '',
         label: response.data.label || '',
         upc: response.data.upc || '',
@@ -181,6 +186,51 @@ export default function ReleasesPage() {
     } catch (error) {
       console.error('Failed to remove track:', error)
     }
+  }
+
+  async function loadReadiness(releaseId) {
+    setReadinessLoading(true)
+    try {
+      const response = await axios.get(`/api/releases/${releaseId}/readiness`)
+      setReadiness(response.data)
+    } catch (error) {
+      console.error('Failed to load readiness:', error)
+    } finally {
+      setReadinessLoading(false)
+    }
+  }
+
+  async function handleTransition(newStatus) {
+    setTransitionLoading(true)
+    setTransitionError('')
+    try {
+      await axios.post(`/api/releases/${selectedRelease}/transition`, { new_status: newStatus })
+      loadReleaseDetail(selectedRelease)
+      loadReadiness(selectedRelease)
+      loadReleases()
+    } catch (error) {
+      setTransitionError(error.response?.data?.detail || 'Failed to update status')
+    } finally {
+      setTransitionLoading(false)
+    }
+  }
+
+  function handleExport(format) {
+    const token = localStorage.getItem('token')
+    const url = `/api/releases/${selectedRelease}/export/${format}`
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => {
+        if (!res.ok) throw new Error('Export failed')
+        return res.blob()
+      })
+      .then(blob => {
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `release_export.${format === 'csv' ? 'csv' : 'json'}`
+        a.click()
+        URL.revokeObjectURL(a.href)
+      })
+      .catch(err => console.error('Export failed:', err))
   }
 
   const filteredReleases = releases.filter(r => {
@@ -295,16 +345,9 @@ export default function ReleasesPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#3D4A44] mb-1">Status</label>
-                    <select
-                      value={editForm.status}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
-                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                    >
-                      <option value="DRAFT">Draft</option>
-                      <option value="READY">Ready</option>
-                      <option value="SUBMITTED">Submitted</option>
-                      <option value="RELEASED">Released</option>
-                    </select>
+                    <div className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 bg-[#EEF1EC] text-[#7A8580] text-sm">
+                      {detailData?.status || 'DRAFT'} — Use the status workflow buttons to change status
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#3D4A44] mb-1">Primary Artist</label>
@@ -493,41 +536,212 @@ export default function ReleasesPage() {
 
           <div className="space-y-6">
             <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
-              <h2 className="text-lg font-semibold text-[#3D4A44] mb-4">Release Health</h2>
-              {detailData.health && (
+              <div className="flex items-center space-x-2 mb-4">
+                <ArrowPathIcon className="w-5 h-5 text-[#5B8A72]" />
+                <h2 className="text-lg font-semibold text-[#3D4A44]">Status Workflow</h2>
+              </div>
+              <div className="flex items-center space-x-2 mb-4">
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${STATUS_COLORS[detailData.status] || STATUS_COLORS.DRAFT}`}>
+                  {detailData.status}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {detailData.status === 'DRAFT' && (
+                  <button
+                    onClick={() => handleTransition('READY')}
+                    disabled={transitionLoading}
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                  >
+                    <ShieldCheckIcon className="w-5 h-5" />
+                    <span>{transitionLoading ? 'Updating...' : 'Mark as Ready'}</span>
+                  </button>
+                )}
+                {detailData.status === 'READY' && (
+                  <>
+                    <button
+                      onClick={() => handleTransition('SUBMITTED')}
+                      disabled={transitionLoading}
+                      className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                    >
+                      <ClipboardDocumentCheckIcon className="w-5 h-5" />
+                      <span>{transitionLoading ? 'Updating...' : 'Submit for Distribution'}</span>
+                    </button>
+                    <button
+                      onClick={() => handleTransition('DRAFT')}
+                      disabled={transitionLoading}
+                      className="w-full flex items-center justify-center space-x-2 px-4 py-2 border border-[rgba(59,77,67,0.12)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] transition-colors disabled:opacity-50"
+                    >
+                      <span>{transitionLoading ? 'Updating...' : 'Back to Draft'}</span>
+                    </button>
+                  </>
+                )}
+                {detailData.status === 'SUBMITTED' && (
+                  <>
+                    <button
+                      onClick={() => handleTransition('RELEASED')}
+                      disabled={transitionLoading}
+                      className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                    >
+                      <CheckCircleIcon className="w-5 h-5" />
+                      <span>{transitionLoading ? 'Updating...' : 'Mark as Released'}</span>
+                    </button>
+                    <button
+                      onClick={() => handleTransition('READY')}
+                      disabled={transitionLoading}
+                      className="w-full flex items-center justify-center space-x-2 px-4 py-2 border border-[rgba(59,77,67,0.12)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] transition-colors disabled:opacity-50"
+                    >
+                      <span>{transitionLoading ? 'Updating...' : 'Back to Ready'}</span>
+                    </button>
+                  </>
+                )}
+                {detailData.status === 'RELEASED' && (
+                  <div className="flex items-center space-x-2 text-[#5B8A72] py-2">
+                    <CheckCircleIcon className="w-5 h-5" />
+                    <span className="text-sm font-medium">Released</span>
+                  </div>
+                )}
+              </div>
+              {transitionError && (
+                <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <ExclamationTriangleIcon className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
+                    <span className="text-sm text-red-700">{transitionError}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-2">
+                  <ShieldCheckIcon className="w-5 h-5 text-[#5B8A72]" />
+                  <h2 className="text-lg font-semibold text-[#3D4A44]">Distribution Readiness</h2>
+                </div>
+                <button
+                  onClick={() => loadReadiness(selectedRelease)}
+                  className="text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+                  title="Refresh readiness"
+                >
+                  <ArrowPathIcon className={`w-4 h-4 ${readinessLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+              {readinessLoading && !readiness ? (
+                <div className="flex items-center justify-center py-6">
+                  <ArrowPathIcon className="w-6 h-6 text-[#7A8580] animate-spin" />
+                </div>
+              ) : readiness ? (
                 <>
-                  <div className="flex items-center space-x-3 mb-4">
+                  <div className="flex items-center space-x-3 mb-2">
                     <div className="flex-1 h-3 bg-[#EEF1EC] rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594]"
-                        style={{ width: `${detailData.health.score || 0}%` }}
+                        className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] transition-all duration-300"
+                        style={{ width: `${readiness.readiness_score || 0}%` }}
                       />
                     </div>
                     <span className="text-lg font-bold text-[#3D4A44]">
-                      {Math.round(detailData.health.score || 0)}%
+                      {Math.round(readiness.readiness_score || 0)}%
                     </span>
                   </div>
-                  <p className="text-xs text-[#7A8580] mb-3">
-                    {detailData.health.passed}/{detailData.health.total_checks} checks passed
+                  <p className="text-xs text-[#7A8580] mb-4">
+                    {readiness.passed_required}/{readiness.total_required} required checks passed
                   </p>
-                  {(detailData.health.issues || []).length > 0 && (
-                    <div className="space-y-2">
-                      {detailData.health.issues.map((issue, idx) => (
-                        <div key={idx} className="flex items-start space-x-2">
-                          <ExclamationTriangleIcon className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                          <span className="text-sm text-[#3D4A44]">{issue}</span>
+
+                  {readiness.release_checks && readiness.release_checks.length > 0 && (
+                    <div className="mb-4">
+                      <p className="text-xs font-semibold text-[#3D4A44] uppercase tracking-wider mb-2">Release Checks</p>
+                      {(() => {
+                        const grouped = {}
+                        readiness.release_checks.forEach(check => {
+                          const cat = check.category || 'other'
+                          if (!grouped[cat]) grouped[cat] = []
+                          grouped[cat].push(check)
+                        })
+                        return Object.entries(grouped).map(([category, checks]) => (
+                          <div key={category} className="mb-3">
+                            <p className="text-xs text-[#7A8580] capitalize mb-1">{category}</p>
+                            <div className="space-y-1">
+                              {checks.map((check, idx) => (
+                                <div key={idx} className="flex items-center space-x-2">
+                                  {check.passed ? (
+                                    <CheckCircleIcon className="w-4 h-4 text-[#5B8A72] flex-shrink-0" />
+                                  ) : (
+                                    <XMarkIcon className="w-4 h-4 text-red-500 flex-shrink-0" />
+                                  )}
+                                  <span className={`text-xs ${check.passed ? 'text-[#3D4A44]' : 'text-red-600'}`}>
+                                    {check.label}
+                                    {check.required && <span className="text-[#7A8580]"> *</span>}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      })()}
+                    </div>
+                  )}
+
+                  {readiness.track_checks && readiness.track_checks.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-[#3D4A44] uppercase tracking-wider mb-2">Track Checks</p>
+                      {readiness.track_checks.map((track) => (
+                        <div key={track.song_id} className="mb-3">
+                          <p className="text-xs font-medium text-[#3D4A44] mb-1">
+                            {track.disc_number > 1 ? `${track.disc_number}-` : ''}{track.track_number}. {track.title}
+                          </p>
+                          <div className="space-y-1 pl-2">
+                            {(track.checks || []).map((check, idx) => (
+                              <div key={idx} className="flex items-center space-x-2">
+                                {check.passed ? (
+                                  <CheckCircleIcon className="w-3.5 h-3.5 text-[#5B8A72] flex-shrink-0" />
+                                ) : (
+                                  <XMarkIcon className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                                )}
+                                <span className={`text-xs ${check.passed ? 'text-[#3D4A44]' : 'text-red-600'}`}>
+                                  {check.label}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ))}
                     </div>
                   )}
-                  {(detailData.health.issues || []).length === 0 && (
-                    <div className="flex items-center space-x-2 text-[#5B8A72]">
+
+                  {readiness.is_ready && (
+                    <div className="flex items-center space-x-2 text-[#5B8A72] mt-3 pt-3 border-t border-[rgba(59,77,67,0.08)]">
                       <CheckCircleIcon className="w-5 h-5" />
-                      <span className="text-sm font-medium">All checks passed</span>
+                      <span className="text-sm font-medium">Ready for distribution</span>
                     </div>
                   )}
                 </>
+              ) : (
+                <p className="text-sm text-[#7A8580]">No readiness data available</p>
               )}
+            </div>
+
+            <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+              <div className="flex items-center space-x-2 mb-4">
+                <ArrowDownTrayIcon className="w-5 h-5 text-[#5B8A72]" />
+                <h2 className="text-lg font-semibold text-[#3D4A44]">Export</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => handleExport('csv')}
+                  disabled={!(detailData.tracks || []).length}
+                  className="flex items-center justify-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4" />
+                  <span className="text-sm">Export CSV</span>
+                </button>
+                <button
+                  onClick={() => handleExport('json')}
+                  disabled={!(detailData.tracks || []).length}
+                  className="flex items-center justify-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4" />
+                  <span className="text-sm">Export JSON</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import date
-from ..models import get_db, Release, ReleaseTrack, Song, OrganizationMember, User
+from datetime import date, datetime
+import csv
+import io
+import json
+from ..models import get_db, Release, ReleaseTrack, Song, SongCredit, Creator, OrganizationMember, User
 from ..utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/releases", tags=["releases"])
@@ -31,7 +35,6 @@ class ReleaseCreate(BaseModel):
 class ReleaseUpdate(BaseModel):
     title: Optional[str] = None
     release_type: Optional[str] = None
-    status: Optional[str] = None
     primary_artist: Optional[str] = None
     label: Optional[str] = None
     upc: Optional[str] = None
@@ -72,6 +75,34 @@ def verify_org_access(user: User, org_id: int, db: Session):
     return membership
 
 
+DISTRIBUTION_CHECKS = {
+    "release": [
+        {"field": "upc", "label": "UPC/EAN code", "category": "identifiers", "required": True},
+        {"field": "release_date", "label": "Release date", "category": "metadata", "required": True},
+        {"field": "primary_artist", "label": "Primary artist", "category": "metadata", "required": True},
+        {"field": "label", "label": "Label name", "category": "metadata", "required": True},
+        {"field": "cover_art_url", "label": "Cover artwork", "category": "artwork", "required": True},
+        {"field": "genre", "label": "Genre", "category": "metadata", "required": True},
+        {"field": "copyright_line", "label": "Copyright notice (℗/©)", "category": "legal", "required": True},
+        {"field": "copyright_year", "label": "Copyright year", "category": "legal", "required": True},
+        {"field": "catalog_number", "label": "Catalog number", "category": "identifiers", "required": False},
+    ],
+    "track": [
+        {"field": "isrc", "label": "ISRC", "category": "identifiers", "required": True},
+        {"field": "title", "label": "Track title", "category": "metadata", "required": True},
+        {"field": "primary_artist", "label": "Track artist", "category": "metadata", "required": True},
+        {"field": "credits", "label": "Credits/contributors", "category": "credits", "required": True},
+    ],
+}
+
+STATUS_TRANSITIONS = {
+    "DRAFT": ["READY"],
+    "READY": ["DRAFT", "SUBMITTED"],
+    "SUBMITTED": ["READY", "RELEASED"],
+    "RELEASED": [],
+}
+
+
 def get_release_health(release: Release, tracks: list, db: Session) -> dict:
     issues = []
     if not release.upc:
@@ -97,6 +128,129 @@ def get_release_health(release: Release, tracks: list, db: Session) -> dict:
     score = round((passed / total_checks) * 100, 1) if total_checks > 0 else 0
 
     return {"score": score, "issues": issues, "total_checks": total_checks, "passed": passed}
+
+
+def get_distribution_readiness(release: Release, tracks: list, db: Session) -> dict:
+    release_checks = []
+    for check in DISTRIBUTION_CHECKS["release"]:
+        value = getattr(release, check["field"], None)
+        passed = value is not None and value != ""
+        release_checks.append({
+            "field": check["field"],
+            "label": check["label"],
+            "category": check["category"],
+            "required": check["required"],
+            "passed": passed,
+            "value": str(value) if passed else None,
+        })
+
+    track_checks = []
+    songs_data = []
+    for rt in tracks:
+        song = db.query(Song).filter(Song.id == rt.song_id).first()
+        if not song:
+            continue
+        songs_data.append((rt, song))
+        credits = db.query(SongCredit).filter(SongCredit.song_id == song.id).all()
+        track_result = {
+            "song_id": song.id,
+            "title": song.title,
+            "track_number": rt.track_number,
+            "disc_number": rt.disc_number,
+            "checks": [],
+        }
+        for check in DISTRIBUTION_CHECKS["track"]:
+            if check["field"] == "credits":
+                passed = len(credits) > 0
+                track_result["checks"].append({
+                    "field": check["field"],
+                    "label": check["label"],
+                    "category": check["category"],
+                    "required": check["required"],
+                    "passed": passed,
+                    "value": f"{len(credits)} credits" if passed else None,
+                })
+            else:
+                value = getattr(song, check["field"], None)
+                passed = value is not None and value != ""
+                track_result["checks"].append({
+                    "field": check["field"],
+                    "label": check["label"],
+                    "category": check["category"],
+                    "required": check["required"],
+                    "passed": passed,
+                    "value": str(value) if passed else None,
+                })
+        track_checks.append(track_result)
+
+    has_tracks = len(tracks) > 0
+    all_required_release = all(c["passed"] for c in release_checks if c["required"])
+    all_required_tracks = all(
+        all(tc["passed"] for tc in t["checks"] if tc["required"])
+        for t in track_checks
+    ) if track_checks else False
+
+    total_required = sum(1 for c in release_checks if c["required"])
+    total_required += sum(
+        sum(1 for tc in t["checks"] if tc["required"])
+        for t in track_checks
+    )
+    passed_required = sum(1 for c in release_checks if c["required"] and c["passed"])
+    passed_required += sum(
+        sum(1 for tc in t["checks"] if tc["required"] and tc["passed"])
+        for t in track_checks
+    )
+    if not has_tracks:
+        total_required += 1
+
+    readiness_score = round((passed_required / total_required) * 100, 1) if total_required > 0 else 0
+    is_ready = has_tracks and all_required_release and all_required_tracks
+
+    return {
+        "is_ready": is_ready,
+        "readiness_score": readiness_score,
+        "total_required": total_required,
+        "passed_required": passed_required,
+        "has_tracks": has_tracks,
+        "release_checks": release_checks,
+        "track_checks": track_checks,
+    }
+
+
+def _build_track_export_data(release: Release, tracks: list, db: Session) -> list:
+    rows = []
+    for rt in tracks:
+        song = db.query(Song).filter(Song.id == rt.song_id).first()
+        if not song:
+            continue
+        credits = db.query(SongCredit).join(Creator, SongCredit.creator_id == Creator.id).filter(
+            SongCredit.song_id == song.id
+        ).all()
+        credit_names = []
+        for c in credits:
+            creator = db.query(Creator).filter(Creator.id == c.creator_id).first()
+            if creator:
+                credit_names.append(f"{creator.display_name} ({c.role})")
+
+        rows.append({
+            "release_title": release.title,
+            "release_type": release.release_type,
+            "release_upc": release.upc or "",
+            "release_label": release.label or "",
+            "release_date": release.release_date.isoformat() if release.release_date else "",
+            "release_genre": release.genre or "",
+            "release_copyright": release.copyright_line or "",
+            "release_copyright_year": str(release.copyright_year) if release.copyright_year else "",
+            "disc_number": str(rt.disc_number),
+            "track_number": str(rt.track_number),
+            "track_title": song.title,
+            "track_artist": song.primary_artist,
+            "isrc": song.isrc or "",
+            "iswc": song.iswc or "",
+            "is_bonus": "Yes" if rt.is_bonus else "No",
+            "credits": "; ".join(credit_names),
+        })
+    return rows
 
 
 @router.get("/org/{org_id}")
@@ -347,3 +501,170 @@ def check_release_health(release_id: int, db: Session = Depends(get_db), current
 
     release_tracks = db.query(ReleaseTrack).filter(ReleaseTrack.release_id == release_id).all()
     return get_release_health(release, release_tracks, db)
+
+
+@router.get("/{release_id}/readiness")
+def check_distribution_readiness(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    release = db.query(Release).filter(Release.id == release_id).first()
+    if not release:
+        raise HTTPException(status_code=404, detail="Release not found")
+    verify_org_access(current_user, release.organization_id, db)
+
+    release_tracks = db.query(ReleaseTrack).filter(
+        ReleaseTrack.release_id == release_id
+    ).order_by(ReleaseTrack.disc_number, ReleaseTrack.track_number).all()
+
+    return get_distribution_readiness(release, release_tracks, db)
+
+
+class StatusTransition(BaseModel):
+    new_status: str
+
+
+@router.post("/{release_id}/transition")
+def transition_release_status(release_id: int, data: StatusTransition, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    release = db.query(Release).filter(Release.id == release_id).first()
+    if not release:
+        raise HTTPException(status_code=404, detail="Release not found")
+    verify_org_access(current_user, release.organization_id, db)
+
+    current_status = release.status or "DRAFT"
+    new_status = data.new_status.upper()
+
+    allowed = STATUS_TRANSITIONS.get(current_status, [])
+    if new_status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot transition from {current_status} to {new_status}. Allowed: {', '.join(allowed) if allowed else 'none'}"
+        )
+
+    if new_status in ("READY", "SUBMITTED"):
+        release_tracks = db.query(ReleaseTrack).filter(ReleaseTrack.release_id == release_id).all()
+        readiness = get_distribution_readiness(release, release_tracks, db)
+
+        if new_status == "SUBMITTED" and not readiness["is_ready"]:
+            missing = []
+            for rc in readiness["release_checks"]:
+                if rc["required"] and not rc["passed"]:
+                    missing.append(rc["label"])
+            for tc in readiness["track_checks"]:
+                for check in tc["checks"]:
+                    if check["required"] and not check["passed"]:
+                        missing.append(f"{tc['title']}: {check['label']}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Release is not distribution-ready. Missing: {', '.join(missing[:10])}"
+            )
+
+    release.status = new_status
+    db.commit()
+    db.refresh(release)
+
+    return {
+        "id": release.id,
+        "status": release.status,
+        "message": f"Release status updated to {new_status}",
+    }
+
+
+@router.get("/{release_id}/export/csv")
+def export_release_csv(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    release = db.query(Release).filter(Release.id == release_id).first()
+    if not release:
+        raise HTTPException(status_code=404, detail="Release not found")
+    verify_org_access(current_user, release.organization_id, db)
+
+    release_tracks = db.query(ReleaseTrack).filter(
+        ReleaseTrack.release_id == release_id
+    ).order_by(ReleaseTrack.disc_number, ReleaseTrack.track_number).all()
+
+    rows = _build_track_export_data(release, release_tracks, db)
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="No tracks to export")
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+    writer.writeheader()
+    writer.writerows(rows)
+
+    safe_title = "".join(c if c.isalnum() or c in (" ", "-", "_") else "" for c in release.title).strip().replace(" ", "_")
+    filename = f"{safe_title}_distribution_{datetime.utcnow().strftime('%Y%m%d')}.csv"
+
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/{release_id}/export/json")
+def export_release_json(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    release = db.query(Release).filter(Release.id == release_id).first()
+    if not release:
+        raise HTTPException(status_code=404, detail="Release not found")
+    verify_org_access(current_user, release.organization_id, db)
+
+    release_tracks = db.query(ReleaseTrack).filter(
+        ReleaseTrack.release_id == release_id
+    ).order_by(ReleaseTrack.disc_number, ReleaseTrack.track_number).all()
+
+    tracks_json = []
+    for rt in release_tracks:
+        song = db.query(Song).filter(Song.id == rt.song_id).first()
+        if not song:
+            continue
+        credits = db.query(SongCredit).filter(SongCredit.song_id == song.id).all()
+        credit_list = []
+        for c in credits:
+            creator = db.query(Creator).filter(Creator.id == c.creator_id).first()
+            if creator:
+                credit_list.append({
+                    "name": creator.display_name,
+                    "role": c.role,
+                    "share_percentage": c.share_percentage,
+                })
+        tracks_json.append({
+            "disc_number": rt.disc_number,
+            "track_number": rt.track_number,
+            "title": song.title,
+            "artist": song.primary_artist,
+            "isrc": song.isrc,
+            "iswc": song.iswc,
+            "is_bonus": rt.is_bonus,
+            "credits": credit_list,
+        })
+
+    export_data = {
+        "schema_version": "1.0",
+        "export_date": datetime.utcnow().isoformat(),
+        "release": {
+            "title": release.title,
+            "release_type": release.release_type,
+            "status": release.status,
+            "primary_artist": release.primary_artist,
+            "label": release.label,
+            "upc": release.upc,
+            "catalog_number": release.catalog_number,
+            "release_date": release.release_date.isoformat() if release.release_date else None,
+            "original_release_date": release.original_release_date.isoformat() if release.original_release_date else None,
+            "genre": release.genre,
+            "subgenre": release.subgenre,
+            "copyright_line": release.copyright_line,
+            "copyright_year": release.copyright_year,
+            "cover_art_url": release.cover_art_url,
+        },
+        "tracks": tracks_json,
+        "track_count": len(tracks_json),
+    }
+
+    safe_title = "".join(c if c.isalnum() or c in (" ", "-", "_") else "" for c in release.title).strip().replace(" ", "_")
+    filename = f"{safe_title}_distribution_{datetime.utcnow().strftime('%Y%m%d')}.json"
+
+    json_bytes = json.dumps(export_data, indent=2, ensure_ascii=False).encode("utf-8")
+
+    return StreamingResponse(
+        io.BytesIO(json_bytes),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
