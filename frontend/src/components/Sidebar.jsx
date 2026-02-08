@@ -89,7 +89,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
                 <img 
                   src="/rythm-logo.png" 
                   alt="Rythm - Catalog Intelligence" 
-                  className="h-20 w-auto object-contain"
+                  className="h-28 w-auto object-contain"
                 />
               )}
             </div>
