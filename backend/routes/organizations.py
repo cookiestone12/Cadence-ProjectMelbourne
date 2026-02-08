@@ -15,6 +15,11 @@ class OrganizationResponse(BaseModel):
     creator_count: int
     song_count: int
     created_at: str
+    display_name: Optional[str] = None
+    logo_url: Optional[str] = None
+    logo_orientation: str = "square"
+    primary_color: Optional[str] = None
+    account_type: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -59,7 +64,12 @@ def get_current_organization(
         "type": org.type,
         "creator_count": creator_count or 0,
         "song_count": song_count or 0,
-        "created_at": org.created_at.isoformat() if org.created_at else ""
+        "created_at": org.created_at.isoformat() if org.created_at else "",
+        "display_name": org.display_name,
+        "logo_url": org.logo_url,
+        "logo_orientation": org.logo_orientation or "square",
+        "primary_color": org.primary_color,
+        "account_type": org.account_type,
     }
 
 @router.get("/current/membership")

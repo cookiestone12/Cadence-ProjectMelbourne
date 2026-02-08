@@ -14,7 +14,8 @@ import {
   ChartBarIcon,
   Cog6ToothIcon,
   CheckCircleIcon,
-  ExclamationCircleIcon
+  ExclamationCircleIcon,
+  KeyIcon
 } from '@heroicons/react/24/outline'
 
 export default function AdminDashboard() {
@@ -33,6 +34,7 @@ export default function AdminDashboard() {
   const [showIntegrationModal, setShowIntegrationModal] = useState(false)
   const [configuringIntegration, setConfiguringIntegration] = useState(null)
   const [platformStats, setPlatformStats] = useState(null)
+  const [resetPasswordUser, setResetPasswordUser] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -346,6 +348,15 @@ export default function AdminDashboard() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end space-x-2">
+                        {!user.is_super_admin && (
+                          <button
+                            onClick={() => setResetPasswordUser(user)}
+                            className="p-1 text-amber-500 hover:text-amber-600"
+                            title="Reset Password"
+                          >
+                            <KeyIcon className="w-5 h-5" />
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             setEditingUser(user)
@@ -593,6 +604,16 @@ export default function AdminDashboard() {
           onSave={() => {
             setShowOrgModal(false)
             loadData()
+          }}
+        />
+      )}
+
+      {resetPasswordUser && (
+        <AdminResetPasswordModal
+          user={resetPasswordUser}
+          onClose={() => setResetPasswordUser(null)}
+          onSuccess={() => {
+            setResetPasswordUser(null)
           }}
         />
       )}
@@ -997,6 +1018,82 @@ function IntegrationModal({ integration, onClose, onSave }) {
             After adding secrets, restart the app for changes to take effect.
           </p>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function AdminResetPasswordModal({ user, onClose, onSuccess }) {
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(false)
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await axios.put(`/api/admin/users/${user.id}`, { password: newPassword })
+      setSuccess(true)
+      setTimeout(() => onSuccess(), 1500)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to reset password')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 mx-4">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-semibold text-[#3D4A44]">Reset Password</h3>
+            <p className="text-sm text-[#7A8580]">User: {user.username} ({user.email})</p>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-[#EEF1EC] rounded-lg">
+            <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+          </button>
+        </div>
+
+        {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+        {success && <div className="mb-4 p-3 bg-green-50 text-green-700 rounded-lg text-sm">Password reset successfully!</div>}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[#3D4A44] mb-1">New Password</label>
+            <input
+              type="password" required value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+              placeholder="Min 6 characters"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[#3D4A44] mb-1">Confirm Password</label>
+            <input
+              type="password" required value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg">Cancel</button>
+            <button type="submit" disabled={saving || success} className="px-4 py-2 text-sm bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50">
+              {saving ? 'Resetting...' : success ? 'Done!' : 'Reset Password'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )

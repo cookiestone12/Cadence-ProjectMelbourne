@@ -8,7 +8,8 @@ from .routes import (
     organizations, creators, songs, credits,
     checklist, exports, valuations, valuation_reports, schedule_a,
     contracts, contracts_mgmt, account_links, admin, notifications, actions, csv_upload,
-    works, releases, bulk, spotify_import, royalties, placements, analytics
+    works, releases, bulk, spotify_import, royalties, placements, analytics,
+    tenant_admin
 )
 from .utils.logging_config import logger
 import os
@@ -74,6 +75,7 @@ app.include_router(spotify_import.router)
 app.include_router(royalties.router)
 app.include_router(placements.router)
 app.include_router(analytics.router)
+app.include_router(tenant_admin.router)
 
 @app.get("/api/health")
 def health_check():

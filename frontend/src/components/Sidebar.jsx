@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import axios from 'axios'
 import { 
   HomeIcon, 
   MagnifyingGlassIcon,
@@ -15,13 +16,30 @@ import {
   ClipboardDocumentListIcon,
   ClipboardDocumentCheckIcon,
   BanknotesIcon,
-  FilmIcon
+  FilmIcon,
+  BuildingOfficeIcon
 } from '@heroicons/react/24/outline'
 import NotificationBell from './NotificationBell'
 
 export default function Sidebar({ user, onLogout, isOpen, onClose }) {
   const location = useLocation()
-  
+  const [orgBranding, setOrgBranding] = useState(null)
+  const [isOrgAdmin, setIsOrgAdmin] = useState(false)
+
+  useEffect(() => {
+    const fetchOrgData = async () => {
+      try {
+        const [orgRes, memberRes] = await Promise.all([
+          axios.get('/api/organizations/current'),
+          axios.get('/api/organizations/current/membership')
+        ])
+        setOrgBranding(orgRes.data)
+        setIsOrgAdmin(memberRes.data.role === 'OWNER' || memberRes.data.role === 'ADMIN')
+      } catch {}
+    }
+    fetchOrgData()
+  }, [])
+
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/'
     return location.pathname.startsWith(path)
@@ -61,14 +79,22 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
         <div className="p-5 border-b border-am-separator">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <img 
-                src="/logo-small.png" 
-                alt="Rythm" 
-                className="h-10 w-10 rounded-xl shadow-am-sm"
-              />
+              {orgBranding?.logo_url ? (
+                <img 
+                  src={orgBranding.logo_url} 
+                  alt={orgBranding.display_name || orgBranding.name || 'Rythm'} 
+                  className="h-10 w-10 rounded-xl shadow-am-sm object-contain"
+                />
+              ) : (
+                <img 
+                  src="/logo-small.png" 
+                  alt="Rythm" 
+                  className="h-10 w-10 rounded-xl shadow-am-sm"
+                />
+              )}
               <div>
                 <h1 className="text-[17px] font-semibold text-am-text tracking-tight">
-                  Rythm
+                  {orgBranding?.display_name || orgBranding?.name || 'Rythm'}
                 </h1>
                 <p className="text-[12px] text-am-text-secondary">Catalog Manager</p>
               </div>
@@ -120,6 +146,24 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
             <NotificationBell />
           </div>
           
+          {(isOrgAdmin || user?.is_super_admin) && (
+            <Link
+              to="/org-admin"
+              onClick={() => window.innerWidth < 1024 && onClose()}
+              className={`
+                flex items-center gap-3 px-3 py-2.5 rounded-xl
+                transition-all duration-150 ease-am
+                ${isActive('/org-admin')
+                  ? 'bg-am-accent/10 text-am-accent font-medium'
+                  : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
+                }
+              `}
+            >
+              <BuildingOfficeIcon className="w-[20px] h-[20px] stroke-[1.5]" />
+              <span className="text-[14px]">Org Admin</span>
+            </Link>
+          )}
+          
           {user?.is_super_admin && (
             <Link
               to="/admin"
@@ -134,7 +178,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
               `}
             >
               <ShieldCheckIcon className="w-[20px] h-[20px] stroke-[1.5]" />
-              <span className="text-[14px]">Admin</span>
+              <span className="text-[14px]">Platform Admin</span>
             </Link>
           )}
           

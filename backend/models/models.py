@@ -179,6 +179,7 @@ class Creator(Base):
     website_url = Column(String, nullable=True)
     spotify_artist_id = Column(String, nullable=True)
     apple_music_id = Column(String, nullable=True)
+    assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -186,6 +187,7 @@ class Creator(Base):
     song_credits = relationship("SongCredit", back_populates="creator")
     work_credits = relationship("WorkCredit", back_populates="creator")
     linked_user = relationship("User", foreign_keys=[linked_user_id])
+    assigned_user = relationship("User", foreign_keys=[assigned_to_user_id])
 
 class Song(Base):
     __tablename__ = "songs"

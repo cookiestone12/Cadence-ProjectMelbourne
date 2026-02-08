@@ -19,6 +19,7 @@ import RoyaltiesPage from './pages/RoyaltiesPage'
 import PlacementsPage from './pages/PlacementsPage'
 import SearchPage from './pages/SearchPage'
 import UserGuidePage from './pages/UserGuidePage'
+import TenantAdminPage from './pages/TenantAdminPage'
 import Sidebar from './components/Sidebar'
 
 function App() {
@@ -137,6 +138,7 @@ function App() {
             <Route path="/valuation" element={<ValuationPage />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/guide" element={<UserGuidePage />} />
+            <Route path="/org-admin" element={<TenantAdminPage />} />
             {user?.is_super_admin && (
               <Route path="/admin" element={<AdminDashboard />} />
             )}

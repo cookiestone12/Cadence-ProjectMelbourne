@@ -174,10 +174,17 @@ export default function HomePage() {
     <div className="min-h-screen bg-[#F5F7F4] p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">
-            Welcome back, {org?.name}
-          </h1>
-          <p className="text-[17px] text-[#7A8580] mt-1">Here's what's happening with your catalog</p>
+          <div className="flex items-center gap-4">
+            {org?.logo_url && (
+              <img src={org.logo_url} alt={org.display_name || org.name} className="w-12 h-12 rounded-xl object-contain shadow-sm" />
+            )}
+            <div>
+              <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">
+                Welcome back, {org?.display_name || org?.name}
+              </h1>
+              <p className="text-[17px] text-[#7A8580] mt-1">Here's what's happening with your catalog</p>
+            </div>
+          </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
