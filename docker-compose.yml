@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ampersound
+      POSTGRES_PASSWORD: ampersound_dev
+      POSTGRES_DB: ampersound
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ampersound"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://ampersound:ampersound_dev@db:5432/ampersound
+      SESSION_SECRET: dev-secret-change-in-production
+      PORT: "8000"
+      WEB_CONCURRENCY: "2"
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+      CORS_ORIGINS: "*"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/backend/uploads
+
+volumes:
+  pgdata:
+  uploads:

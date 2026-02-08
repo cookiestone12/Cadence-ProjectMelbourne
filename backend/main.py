@@ -10,7 +10,11 @@ from .routes import (
     contracts, contracts_mgmt, account_links, admin, notifications, actions, csv_upload,
     works, releases, bulk, spotify_import, royalties, placements, analytics
 )
+from .utils.logging_config import logger
 import os
+import time
+import uuid
+import logging
 from pathlib import Path
 
 if not os.getenv("SESSION_SECRET"):
@@ -20,13 +24,29 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Gotcha Catalog Manager API")
 
+allowed_origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app_logger = logging.getLogger("ampersound")
+
+@app.middleware("http")
+async def logging_middleware(request, call_next):
+    request_id = str(uuid.uuid4())[:8]
+    start = time.time()
+    response = await call_next(request)
+    duration = round((time.time() - start) * 1000, 2)
+    if not request.url.path.startswith("/assets"):
+        app_logger.info(
+            f"{request.method} {request.url.path} -> {response.status_code} ({duration}ms)",
+            extra={"request_id": request_id}
+        )
+    return response
 
 app.include_router(auth.router)
 app.include_router(catalog.router)

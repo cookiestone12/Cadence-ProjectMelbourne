@@ -76,6 +76,13 @@ class AccountLinkPermission(str, enum.Enum):
     EDIT = "EDIT"
     FULL_ACCESS = "FULL_ACCESS"
 
+class IPAssetType(str, enum.Enum):
+    TRACK = "TRACK"
+    VIDEO = "VIDEO"
+    PODCAST = "PODCAST"
+    AUDIOBOOK = "AUDIOBOOK"
+    OTHER = "OTHER"
+
 class User(Base):
     __tablename__ = "users"
     
@@ -185,10 +192,12 @@ class Song(Base):
     __table_args__ = (
         Index('ix_songs_organization_id', 'organization_id'),
         Index('ix_songs_org_health', 'organization_id', 'status_health_score'),
+        Index('ix_songs_org_asset_type', 'organization_id', 'asset_type'),
     )
     
     id = Column(Integer, primary_key=True, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    asset_type = Column(String, default="TRACK", nullable=False, index=True)
     title = Column(String, index=True, nullable=False)
     primary_artist = Column(String, nullable=False)
     isrc = Column(String, nullable=True)
@@ -247,6 +256,7 @@ class Work(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    asset_type = Column(String, default="TRACK", nullable=False)
     title = Column(String, index=True, nullable=False)
     alternative_titles = Column(JSON, default=list)
     iswc = Column(String, nullable=True)
@@ -310,6 +320,7 @@ class Release(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    asset_type = Column(String, default="TRACK", nullable=False)
     title = Column(String, index=True, nullable=False)
     release_type = Column(String, default="SINGLE")
     status = Column(String, default="DRAFT")
