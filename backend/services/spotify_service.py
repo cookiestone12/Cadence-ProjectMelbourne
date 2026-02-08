@@ -27,7 +27,7 @@ def _get_replit_access_token() -> Optional[str]:
             f"https://{hostname}/api/v2/connection?include_secrets=true&connector_names=spotify",
             headers={
                 "Accept": "application/json",
-                "X-Replit-Token": x_replit_token,
+                "X_REPLIT_TOKEN": x_replit_token,
             },
             timeout=10,
         )
