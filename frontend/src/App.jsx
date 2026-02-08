@@ -16,6 +16,7 @@ import ReleasesPage from './pages/ReleasesPage'
 import ContractsPage from './pages/ContractsPage'
 import ActionItemsPage from './pages/ActionItemsPage'
 import RoyaltiesPage from './pages/RoyaltiesPage'
+import PlacementsPage from './pages/PlacementsPage'
 import SearchPage from './pages/SearchPage'
 import Sidebar from './components/Sidebar'
 
@@ -129,6 +130,7 @@ function App() {
             <Route path="/contracts" element={<ContractsPage />} />
             <Route path="/actions" element={<ActionItemsPage />} />
             <Route path="/royalties" element={<RoyaltiesPage />} />
+            <Route path="/placements" element={<PlacementsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/valuation" element={<ValuationPage />} />
             <Route path="/settings" element={<Settings />} />

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import {
   PlusIcon,
@@ -12,7 +13,14 @@ import {
   SparklesIcon,
   ArrowPathIcon,
   FunnelIcon,
-  ArrowsUpDownIcon
+  ArrowsUpDownIcon,
+  MusicalNoteIcon,
+  DocumentTextIcon,
+  FolderIcon,
+  CurrencyDollarIcon,
+  FilmIcon,
+  LinkIcon,
+  BoltIcon
 } from '@heroicons/react/24/outline'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 
@@ -29,7 +37,12 @@ const ACTION_TYPES = [
   'PRO_INCOMPLETE',
   'DSP_REGISTRATION',
   'CUSTOM_DEADLINE',
-  'GENERAL'
+  'GENERAL',
+  'CONTRACT_EXPIRING',
+  'RELEASE_INCOMPLETE',
+  'UNMATCHED_ROYALTIES',
+  'PLACEMENT_FOLLOWUP',
+  'PLACEMENT_NEEDS_CONTRACT'
 ]
 
 const formatActionType = (type) => {
@@ -40,10 +53,35 @@ const formatActionType = (type) => {
     'PRO_INCOMPLETE': 'PRO Incomplete',
     'DSP_REGISTRATION': 'DSP Registration',
     'CUSTOM_DEADLINE': 'Custom Deadline',
-    'GENERAL': 'General'
+    'GENERAL': 'General',
+    'CONTRACT_EXPIRING': 'Contract Expiring',
+    'RELEASE_INCOMPLETE': 'Release Incomplete',
+    'UNMATCHED_ROYALTIES': 'Unmatched Royalties',
+    'PLACEMENT_FOLLOWUP': 'Placement Follow-up',
+    'PLACEMENT_NEEDS_CONTRACT': 'Placement Needs Contract'
   }
   return labels[type] || type
 }
+
+const ENTITY_TYPE_PILLS = [
+  { value: '', label: 'All' },
+  { value: 'song', label: 'Songs' },
+  { value: 'work', label: 'Works' },
+  { value: 'release', label: 'Releases' },
+  { value: 'contract', label: 'Contracts' },
+  { value: 'placement', label: 'Placements' },
+  { value: 'royalty', label: 'Royalty' }
+]
+
+const ENTITY_TYPE_OPTIONS = [
+  { value: '', label: 'None' },
+  { value: 'song', label: 'Song' },
+  { value: 'work', label: 'Work' },
+  { value: 'release', label: 'Release' },
+  { value: 'contract', label: 'Contract' },
+  { value: 'placement', label: 'Placement' },
+  { value: 'royalty', label: 'Royalty' }
+]
 
 const getPriorityStyle = (priority) => {
   const opt = PRIORITY_OPTIONS.find(p => p.value === priority)
@@ -56,20 +94,28 @@ const formatDate = (dateStr) => {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+const formatEntityType = (type) => {
+  if (!type) return type
+  return type.charAt(0).toUpperCase() + type.slice(1)
+}
+
 export default function ActionItemsPage() {
+  const navigate = useNavigate()
   const [orgId, setOrgId] = useState(null)
   const [actions, setActions] = useState([])
   const [creators, setCreators] = useState([])
   const [songs, setSongs] = useState([])
-  const [summary, setSummary] = useState({ total_pending: 0, overdue: 0, due_this_week: 0, high_priority: 0 })
+  const [summary, setSummary] = useState({ total_pending: 0, overdue: 0, due_this_week: 0, high_priority: 0, by_entity_type: {}, by_action_type: {} })
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
   const [filterStatus, setFilterStatus] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
   const [filterCreator, setFilterCreator] = useState('')
   const [filterType, setFilterType] = useState('')
+  const [filterEntityType, setFilterEntityType] = useState('')
   const [sortBy, setSortBy] = useState('priority')
   const [generating, setGenerating] = useState(false)
+  const [generatingCrossModule, setGeneratingCrossModule] = useState(false)
   const [saving, setSaving] = useState(false)
   const [newAction, setNewAction] = useState({
     action_type: 'GENERAL',
@@ -79,7 +125,12 @@ export default function ActionItemsPage() {
     deadline: '',
     reminder_days_before: 3,
     creator_id: '',
-    song_id: ''
+    song_id: '',
+    entity_type: '',
+    work_id: '',
+    release_id: '',
+    contract_id: '',
+    placement_id: ''
   })
 
   useEffect(() => {
@@ -119,6 +170,7 @@ export default function ActionItemsPage() {
       if (filterStatus) params.append('status', filterStatus)
       if (filterCreator) params.append('creator_id', filterCreator)
       if (filterPriority) params.append('priority', filterPriority)
+      if (filterEntityType) params.append('entity_type', filterEntityType)
       const response = await axios.get(`/api/actions/org/${oid}?${params.toString()}`)
       setActions(response.data)
     } catch (error) {
@@ -141,7 +193,7 @@ export default function ActionItemsPage() {
     if (orgId) {
       loadActions()
     }
-  }, [filterStatus, filterCreator, filterPriority])
+  }, [filterStatus, filterCreator, filterPriority, filterEntityType])
 
   const handleAddAction = async () => {
     if (!newAction.title.trim()) return
@@ -151,6 +203,11 @@ export default function ActionItemsPage() {
         ...newAction,
         creator_id: newAction.creator_id ? parseInt(newAction.creator_id) : null,
         song_id: newAction.song_id ? parseInt(newAction.song_id) : null,
+        work_id: newAction.work_id ? parseInt(newAction.work_id) : null,
+        release_id: newAction.release_id ? parseInt(newAction.release_id) : null,
+        contract_id: newAction.contract_id ? parseInt(newAction.contract_id) : null,
+        placement_id: newAction.placement_id ? parseInt(newAction.placement_id) : null,
+        entity_type: newAction.entity_type || null,
         deadline: newAction.deadline || null
       })
       setShowAddForm(false)
@@ -162,7 +219,12 @@ export default function ActionItemsPage() {
         deadline: '',
         reminder_days_before: 3,
         creator_id: '',
-        song_id: ''
+        song_id: '',
+        entity_type: '',
+        work_id: '',
+        release_id: '',
+        contract_id: '',
+        placement_id: ''
       })
       await Promise.all([loadActions(), loadSummary()])
     } catch (error) {
@@ -202,6 +264,18 @@ export default function ActionItemsPage() {
     }
   }
 
+  const handleGenerateCrossModule = async () => {
+    setGeneratingCrossModule(true)
+    try {
+      await axios.post(`/api/actions/generate-cross-module/${orgId}`)
+      await Promise.all([loadActions(), loadSummary()])
+    } catch (error) {
+      console.error('Failed to generate cross-module actions:', error)
+    } finally {
+      setGeneratingCrossModule(false)
+    }
+  }
+
   const filteredActions = actions.filter(action => {
     if (filterType && action.action_type !== filterType) return false
     return true
@@ -225,23 +299,47 @@ export default function ActionItemsPage() {
     }
   })
 
-  const hasActiveFilters = filterStatus || filterPriority || filterCreator || filterType
+  const hasActiveFilters = filterStatus || filterPriority || filterCreator || filterType || filterEntityType
 
   const clearFilters = () => {
     setFilterStatus('')
     setFilterPriority('')
     setFilterCreator('')
     setFilterType('')
+    setFilterEntityType('')
   }
 
   const uniqueTypes = [...new Set(actions.map(a => a.action_type))]
+
+  const getEntityLink = (action) => {
+    const links = []
+    if (action.song_id && action.song_title) {
+      links.push({ label: `Song: ${action.song_title}`, path: '/catalog', icon: MusicalNoteIcon })
+    }
+    if (action.work_id && action.work_title) {
+      links.push({ label: `Work: ${action.work_title}`, path: '/works', icon: DocumentTextIcon })
+    }
+    if (action.release_id && action.release_title) {
+      links.push({ label: `Release: ${action.release_title}`, path: '/releases', icon: FolderIcon })
+    }
+    if (action.contract_id && action.contract_title) {
+      links.push({ label: `Contract: ${action.contract_title}`, path: '/contracts', icon: DocumentTextIcon })
+    }
+    if (action.placement_id && action.placement_title) {
+      links.push({ label: `Placement: ${action.placement_title}`, path: '/placements', icon: FilmIcon })
+    }
+    return links
+  }
+
+  const byEntityType = summary.by_entity_type || {}
+  const byActionType = summary.by_action_type || {}
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F5F7F4] flex items-center justify-center">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#5B8A72] border-t-transparent"></div>
-          <p className="mt-4 text-[#7A8580]">Loading action items...</p>
+          <p className="mt-4 text-[#7A8580]">Loading task inbox...</p>
         </div>
       </div>
     )
@@ -252,10 +350,22 @@ export default function ActionItemsPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Action Items</h1>
-            <p className="text-[17px] text-[#7A8580] mt-1">Organization-wide action items and tasks</p>
+            <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Task Inbox</h1>
+            <p className="text-[17px] text-[#7A8580] mt-1">Unified tasks across all modules</p>
           </div>
           <div className="flex items-center space-x-3">
+            <button
+              onClick={handleGenerateCrossModule}
+              disabled={generatingCrossModule}
+              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-[#4A7A62] to-[#5B8A72] text-white rounded-xl hover:from-[#3A6A52] hover:to-[#4A7A62] transition-all disabled:opacity-50 shadow-sm"
+            >
+              {generatingCrossModule ? (
+                <ArrowPathIcon className="w-5 h-5 animate-spin" />
+              ) : (
+                <BoltIcon className="w-5 h-5" />
+              )}
+              <span>{generatingCrossModule ? 'Scanning...' : 'Scan All Modules'}</span>
+            </button>
             <button
               onClick={handleGenerateActions}
               disabled={generating}
@@ -266,20 +376,20 @@ export default function ActionItemsPage() {
               ) : (
                 <SparklesIcon className="w-5 h-5" />
               )}
-              <span>{generating ? 'Scanning...' : 'Auto-Generate'}</span>
+              <span>{generating ? 'Scanning...' : 'Generate from Catalog'}</span>
             </button>
             <button
               onClick={() => setShowAddForm(true)}
               className="inline-flex items-center space-x-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-xl hover:bg-[#4A7862] transition-colors shadow-sm"
             >
               <PlusIcon className="w-5 h-5" />
-              <span>Add Action</span>
+              <span>Add Task</span>
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 relative overflow-hidden">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+          <div className="bg-white rounded-[18px] border border-[rgba(59,77,67,0.08)] shadow-sm p-6 relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#5B8A72] to-[#7BA594]"></div>
             <div className="flex items-center space-x-3">
               <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(91, 138, 114, 0.15)' }}>
@@ -292,7 +402,7 @@ export default function ActionItemsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 relative overflow-hidden">
+          <div className="bg-white rounded-[18px] border border-[rgba(59,77,67,0.08)] shadow-sm p-6 relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#C47068] to-[#D4908A]"></div>
             <div className="flex items-center space-x-3">
               <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(196, 112, 104, 0.15)' }}>
@@ -305,7 +415,7 @@ export default function ActionItemsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 relative overflow-hidden">
+          <div className="bg-white rounded-[18px] border border-[rgba(59,77,67,0.08)] shadow-sm p-6 relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#C4956B] to-[#D4B59B]"></div>
             <div className="flex items-center space-x-3">
               <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(196, 149, 107, 0.15)' }}>
@@ -318,7 +428,7 @@ export default function ActionItemsPage() {
             </div>
           </div>
 
-          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 relative overflow-hidden">
+          <div className="bg-white rounded-[18px] border border-[rgba(59,77,67,0.08)] shadow-sm p-6 relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#C47068] to-[#C4956B]"></div>
             <div className="flex items-center space-x-3">
               <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(196, 112, 104, 0.15)' }}>
@@ -332,7 +442,60 @@ export default function ActionItemsPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-4 mb-6">
+        {(Object.keys(byEntityType).length > 0 || Object.keys(byActionType).length > 0) && (
+          <div className="bg-white rounded-[18px] border border-[rgba(59,77,67,0.08)] shadow-sm p-4 mb-6">
+            <div className="flex flex-wrap gap-4">
+              {Object.keys(byEntityType).length > 0 && (
+                <div className="flex-1 min-w-[200px]">
+                  <p className="text-[11px] font-medium text-[#7A8580] uppercase tracking-wider mb-2">By Module</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(byEntityType).map(([type, count]) => (
+                      <span
+                        key={type}
+                        className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[rgba(91,138,114,0.1)] text-[#5B8A72]"
+                      >
+                        {formatEntityType(type)}: {count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {Object.keys(byActionType).length > 0 && (
+                <div className="flex-1 min-w-[200px]">
+                  <p className="text-[11px] font-medium text-[#7A8580] uppercase tracking-wider mb-2">By Type</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(byActionType).map(([type, count]) => (
+                      <span
+                        key={type}
+                        className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-[rgba(196,149,107,0.1)] text-[#C4956B]"
+                      >
+                        {formatActionType(type)}: {count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 mb-6">
+          {ENTITY_TYPE_PILLS.map(pill => (
+            <button
+              key={pill.value}
+              onClick={() => setFilterEntityType(pill.value)}
+              className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
+                filterEntityType === pill.value
+                  ? 'bg-[#5B8A72] text-white shadow-sm'
+                  : 'bg-white text-[#3D4A44] border border-[rgba(59,77,67,0.15)] hover:border-[#5B8A72] hover:text-[#5B8A72]'
+              }`}
+            >
+              {pill.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 bg-white rounded-[18px] border border-[rgba(59,77,67,0.08)] shadow-sm p-4 mb-6">
           <div className="flex items-center space-x-2 text-[#7A8580]">
             <FunnelIcon className="w-4 h-4" />
             <span className="text-sm font-medium">Filter:</span>
@@ -417,9 +580,9 @@ export default function ActionItemsPage() {
         </div>
 
         {showAddForm && (
-          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 mb-6 border border-[#5B8A72]">
+          <div className="bg-white rounded-[18px] border border-[#5B8A72] shadow-sm p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-semibold text-[#3D4A44]">New Action Item</h4>
+              <h4 className="text-lg font-semibold text-[#3D4A44]">New Task</h4>
               <button onClick={() => setShowAddForm(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
                 <XMarkIcon className="w-5 h-5" />
               </button>
@@ -458,6 +621,19 @@ export default function ActionItemsPage() {
                   className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                 >
                   {PRIORITY_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Entity Type</label>
+                <select
+                  value={newAction.entity_type}
+                  onChange={(e) => setNewAction({ ...newAction, entity_type: e.target.value })}
+                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                >
+                  {ENTITY_TYPE_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
@@ -512,7 +688,51 @@ export default function ActionItemsPage() {
                 </select>
               </div>
 
-              <div className="md:col-span-2 lg:col-span-2">
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Work ID (optional)</label>
+                <input
+                  type="number"
+                  value={newAction.work_id}
+                  onChange={(e) => setNewAction({ ...newAction, work_id: e.target.value })}
+                  placeholder="Work ID"
+                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Release ID (optional)</label>
+                <input
+                  type="number"
+                  value={newAction.release_id}
+                  onChange={(e) => setNewAction({ ...newAction, release_id: e.target.value })}
+                  placeholder="Release ID"
+                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Contract ID (optional)</label>
+                <input
+                  type="number"
+                  value={newAction.contract_id}
+                  onChange={(e) => setNewAction({ ...newAction, contract_id: e.target.value })}
+                  placeholder="Contract ID"
+                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Placement ID (optional)</label>
+                <input
+                  type="number"
+                  value={newAction.placement_id}
+                  onChange={(e) => setNewAction({ ...newAction, placement_id: e.target.value })}
+                  placeholder="Placement ID"
+                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                />
+              </div>
+
+              <div className="md:col-span-2 lg:col-span-3">
                 <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description</label>
                 <textarea
                   value={newAction.description}
@@ -536,7 +756,7 @@ export default function ActionItemsPage() {
                 disabled={saving || !newAction.title.trim()}
                 className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7862] transition-colors disabled:opacity-50"
               >
-                {saving ? 'Adding...' : 'Add Action'}
+                {saving ? 'Adding...' : 'Add Task'}
               </button>
             </div>
           </div>
@@ -544,19 +764,19 @@ export default function ActionItemsPage() {
 
         <div className="space-y-3">
           {sortedActions.length === 0 ? (
-            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-12 text-center">
+            <div className="bg-white rounded-[18px] border border-[rgba(59,77,67,0.08)] shadow-sm p-12 text-center">
               <ClockIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-4" />
               {hasActiveFilters ? (
                 <>
-                  <p className="text-[#7A8580]">No actions match your filters</p>
+                  <p className="text-[#7A8580]">No tasks match your filters</p>
                   <button onClick={clearFilters} className="text-sm text-[#5B8A72] hover:underline mt-2">
                     Clear filters
                   </button>
                 </>
               ) : (
                 <>
-                  <p className="text-[#7A8580]">No action items yet</p>
-                  <p className="text-sm text-[#7A8580] mt-1">Click "Add Action" or "Auto-Generate" to get started</p>
+                  <p className="text-[#7A8580]">No tasks yet</p>
+                  <p className="text-sm text-[#7A8580] mt-1">Click "Add Task", "Scan All Modules", or "Generate from Catalog" to get started</p>
                 </>
               )}
             </div>
@@ -564,13 +784,14 @@ export default function ActionItemsPage() {
             sortedActions.map((action) => {
               const priorityStyle = getPriorityStyle(action.priority)
               const isCompleted = action.status === 'COMPLETED'
+              const entityLinks = getEntityLink(action)
 
               return (
                 <div
                   key={action.id}
-                  className={`bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-4 transition-all ${
+                  className={`bg-white rounded-[18px] border border-[rgba(59,77,67,0.08)] shadow-sm p-4 transition-all ${
                     action.is_overdue
-                      ? 'border border-[#C47068]'
+                      ? 'border-[#C47068]'
                       : isCompleted
                         ? 'opacity-60'
                         : ''
@@ -601,6 +822,11 @@ export default function ActionItemsPage() {
                               <span>Overdue</span>
                             </span>
                           )}
+                          {action.is_auto_generated && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[rgba(91,138,114,0.08)] text-[#7A8580]">
+                              Auto
+                            </span>
+                          )}
                         </div>
 
                         {action.description && (
@@ -620,14 +846,16 @@ export default function ActionItemsPage() {
                             {formatActionType(action.action_type)}
                           </span>
 
+                          {action.entity_type && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-full bg-[rgba(90,138,154,0.1)] text-[#5A8A9A] font-medium">
+                              {formatEntityType(action.entity_type)}
+                            </span>
+                          )}
+
                           {action.creator_name && (
                             <span className="inline-flex items-center px-2 py-1 rounded-full bg-[#EEF1EC] text-[#3D4A44] font-medium">
                               {action.creator_name}
                             </span>
-                          )}
-
-                          {action.song_title && (
-                            <span className="text-[#7A8580]">Song: {action.song_title}</span>
                           )}
 
                           <span className="inline-flex items-center text-[#7A8580]">
@@ -646,6 +874,25 @@ export default function ActionItemsPage() {
                             )}
                           </span>
                         </div>
+
+                        {entityLinks.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                            {entityLinks.map((link, idx) => {
+                              const IconComp = link.icon
+                              return (
+                                <button
+                                  key={idx}
+                                  onClick={() => navigate(link.path)}
+                                  className="inline-flex items-center space-x-1 px-2 py-1 rounded-lg text-xs font-medium text-[#5B8A72] bg-[rgba(91,138,114,0.06)] hover:bg-[rgba(91,138,114,0.15)] transition-colors"
+                                >
+                                  <IconComp className="w-3 h-3" />
+                                  <span>{link.label}</span>
+                                  <LinkIcon className="w-2.5 h-2.5 opacity-50" />
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
 

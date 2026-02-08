@@ -689,6 +689,14 @@ class ActionItem(Base):
     creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
     song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
     
+    work_id = Column(Integer, ForeignKey("works.id"), nullable=True)
+    release_id = Column(Integer, ForeignKey("releases.id"), nullable=True)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+    placement_id = Column(Integer, ForeignKey("placements.id"), nullable=True)
+    
+    entity_type = Column(String, nullable=True)
+    entity_label = Column(String, nullable=True)
+    
     action_type = Column(String, nullable=False)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
@@ -714,6 +722,9 @@ class ActionItem(Base):
     organization = relationship("Organization")
     creator = relationship("Creator")
     song = relationship("Song")
+    work = relationship("Work")
+    release = relationship("Release")
+    contract = relationship("Contract")
     assigned_to = relationship("User", foreign_keys=[assigned_to_user_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     completed_by = relationship("User", foreign_keys=[completed_by_user_id])
@@ -1078,3 +1089,58 @@ class Payment(Base):
     payee = relationship("Creator")
     contract = relationship("Contract")
     created_by = relationship("User")
+
+
+class Placement(Base):
+    __tablename__ = "placements"
+    __table_args__ = (
+        Index('ix_placements_org_id', 'organization_id'),
+        Index('ix_placements_status', 'status'),
+        Index('ix_placements_song_id', 'song_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+
+    placement_type = Column(String, nullable=False, default="SYNC")
+    status = Column(String, nullable=False, default="PITCHED")
+
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    work_id = Column(Integer, ForeignKey("works.id"), nullable=True)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+
+    client_name = Column(String, nullable=True)
+    project_name = Column(String, nullable=True)
+    media_type = Column(String, nullable=True)
+
+    license_fee = Column(Float, nullable=True, default=0.0)
+    license_currency = Column(String, default="USD")
+    license_type = Column(String, nullable=True)
+    territory = Column(String, nullable=True)
+    usage_notes = Column(Text, nullable=True)
+
+    pitched_date = Column(Date, nullable=True)
+    secured_date = Column(Date, nullable=True)
+    delivery_date = Column(Date, nullable=True)
+    air_date = Column(Date, nullable=True)
+
+    contact_name = Column(String, nullable=True)
+    contact_email = Column(String, nullable=True)
+
+    notes = Column(Text, nullable=True)
+
+    assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    song = relationship("Song")
+    work = relationship("Work")
+    contract = relationship("Contract")
+    assigned_to = relationship("User", foreign_keys=[assigned_to_user_id])
+    created_by = relationship("User", foreign_keys=[created_by_user_id])

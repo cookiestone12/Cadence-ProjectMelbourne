@@ -1,0 +1,346 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy import desc, asc
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime, date
+from ..models import get_db, Placement, Song, Work, Contract, OrganizationMember, User
+from ..utils.auth import get_current_user
+
+router = APIRouter(prefix="/api/placements", tags=["placements"])
+
+PLACEMENT_TYPES = ["SYNC", "ADVERTISING", "FILM", "TV", "GAMING", "TRAILER", "OTHER"]
+PLACEMENT_STATUSES = ["PITCHED", "IN_REVIEW", "IN_NEGOTIATION", "SECURED", "DELIVERED", "AIRED", "PAID", "DECLINED", "CANCELLED"]
+MEDIA_TYPES = ["FILM", "TV_SHOW", "COMMERCIAL", "VIDEO_GAME", "TRAILER", "PODCAST", "SOCIAL_MEDIA", "OTHER"]
+
+STATUS_TRANSITIONS = {
+    "PITCHED": ["IN_REVIEW", "IN_NEGOTIATION", "DECLINED", "CANCELLED"],
+    "IN_REVIEW": ["IN_NEGOTIATION", "PITCHED", "DECLINED", "CANCELLED"],
+    "IN_NEGOTIATION": ["SECURED", "IN_REVIEW", "DECLINED", "CANCELLED"],
+    "SECURED": ["DELIVERED", "CANCELLED"],
+    "DELIVERED": ["AIRED", "PAID"],
+    "AIRED": ["PAID"],
+    "PAID": [],
+    "DECLINED": ["PITCHED"],
+    "CANCELLED": ["PITCHED"],
+}
+
+
+class PlacementCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    placement_type: str = "SYNC"
+    song_id: Optional[int] = None
+    work_id: Optional[int] = None
+    contract_id: Optional[int] = None
+    client_name: Optional[str] = None
+    project_name: Optional[str] = None
+    media_type: Optional[str] = None
+    license_fee: Optional[float] = None
+    license_currency: str = "USD"
+    license_type: Optional[str] = None
+    territory: Optional[str] = None
+    usage_notes: Optional[str] = None
+    pitched_date: Optional[date] = None
+    contact_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    notes: Optional[str] = None
+    assigned_to_user_id: Optional[int] = None
+
+
+class PlacementUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    placement_type: Optional[str] = None
+    song_id: Optional[int] = None
+    work_id: Optional[int] = None
+    contract_id: Optional[int] = None
+    client_name: Optional[str] = None
+    project_name: Optional[str] = None
+    media_type: Optional[str] = None
+    license_fee: Optional[float] = None
+    license_currency: Optional[str] = None
+    license_type: Optional[str] = None
+    territory: Optional[str] = None
+    usage_notes: Optional[str] = None
+    pitched_date: Optional[date] = None
+    secured_date: Optional[date] = None
+    delivery_date: Optional[date] = None
+    air_date: Optional[date] = None
+    contact_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    notes: Optional[str] = None
+    assigned_to_user_id: Optional[int] = None
+
+
+def verify_org_access(db: Session, user: User, org_id: int):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return membership
+
+
+def placement_to_dict(p: Placement, db: Session) -> dict:
+    song_title = None
+    if p.song_id:
+        song = db.query(Song).filter(Song.id == p.song_id).first()
+        song_title = song.title if song else None
+
+    work_title = None
+    if p.work_id:
+        work = db.query(Work).filter(Work.id == p.work_id).first()
+        work_title = work.title if work else None
+
+    contract_title = None
+    if p.contract_id:
+        contract = db.query(Contract).filter(Contract.id == p.contract_id).first()
+        contract_title = contract.title if contract else None
+
+    assigned_to_name = None
+    if p.assigned_to_user_id:
+        user = db.query(User).filter(User.id == p.assigned_to_user_id).first()
+        assigned_to_name = user.username if user else None
+
+    return {
+        "id": p.id,
+        "organization_id": p.organization_id,
+        "title": p.title,
+        "description": p.description,
+        "placement_type": p.placement_type,
+        "status": p.status,
+        "song_id": p.song_id,
+        "song_title": song_title,
+        "work_id": p.work_id,
+        "work_title": work_title,
+        "contract_id": p.contract_id,
+        "contract_title": contract_title,
+        "client_name": p.client_name,
+        "project_name": p.project_name,
+        "media_type": p.media_type,
+        "license_fee": p.license_fee,
+        "license_currency": p.license_currency,
+        "license_type": p.license_type,
+        "territory": p.territory,
+        "usage_notes": p.usage_notes,
+        "pitched_date": str(p.pitched_date) if p.pitched_date else None,
+        "secured_date": str(p.secured_date) if p.secured_date else None,
+        "delivery_date": str(p.delivery_date) if p.delivery_date else None,
+        "air_date": str(p.air_date) if p.air_date else None,
+        "contact_name": p.contact_name,
+        "contact_email": p.contact_email,
+        "notes": p.notes,
+        "assigned_to_user_id": p.assigned_to_user_id,
+        "assigned_to_name": assigned_to_name,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+    }
+
+
+@router.get("/org/{org_id}")
+def get_placements(
+    org_id: int,
+    status: Optional[str] = None,
+    placement_type: Optional[str] = None,
+    song_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_org_access(db, current_user, org_id)
+
+    query = db.query(Placement).filter(Placement.organization_id == org_id)
+
+    if status:
+        query = query.filter(Placement.status == status)
+    if placement_type:
+        query = query.filter(Placement.placement_type == placement_type)
+    if song_id:
+        query = query.filter(Placement.song_id == song_id)
+
+    query = query.order_by(desc(Placement.updated_at))
+    placements = query.all()
+
+    return [placement_to_dict(p, db) for p in placements]
+
+
+@router.get("/org/{org_id}/summary")
+def get_placement_summary(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_org_access(db, current_user, org_id)
+
+    from sqlalchemy import func
+
+    status_counts = db.query(
+        Placement.status, func.count(Placement.id)
+    ).filter(
+        Placement.organization_id == org_id
+    ).group_by(Placement.status).all()
+
+    total_fees = db.query(func.sum(Placement.license_fee)).filter(
+        Placement.organization_id == org_id,
+        Placement.status.in_(["SECURED", "DELIVERED", "AIRED", "PAID"])
+    ).scalar() or 0
+
+    paid_fees = db.query(func.sum(Placement.license_fee)).filter(
+        Placement.organization_id == org_id,
+        Placement.status == "PAID"
+    ).scalar() or 0
+
+    return {
+        "status_counts": {s: c for s, c in status_counts},
+        "total_pipeline_value": total_fees,
+        "total_paid": paid_fees,
+        "total_placements": sum(c for _, c in status_counts),
+    }
+
+
+@router.get("/{placement_id}")
+def get_placement(
+    placement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    placement = db.query(Placement).filter(Placement.id == placement_id).first()
+    if not placement:
+        raise HTTPException(status_code=404, detail="Placement not found")
+
+    verify_org_access(db, current_user, placement.organization_id)
+
+    return placement_to_dict(placement, db)
+
+
+@router.post("/org/{org_id}")
+def create_placement(
+    org_id: int,
+    data: PlacementCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_org_access(db, current_user, org_id)
+
+    if data.placement_type and data.placement_type not in PLACEMENT_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid placement type. Must be one of: {PLACEMENT_TYPES}")
+
+    placement = Placement(
+        organization_id=org_id,
+        title=data.title,
+        description=data.description,
+        placement_type=data.placement_type,
+        status="PITCHED",
+        song_id=data.song_id,
+        work_id=data.work_id,
+        contract_id=data.contract_id,
+        client_name=data.client_name,
+        project_name=data.project_name,
+        media_type=data.media_type,
+        license_fee=data.license_fee,
+        license_currency=data.license_currency,
+        license_type=data.license_type,
+        territory=data.territory,
+        usage_notes=data.usage_notes,
+        pitched_date=data.pitched_date or datetime.utcnow().date(),
+        contact_name=data.contact_name,
+        contact_email=data.contact_email,
+        notes=data.notes,
+        assigned_to_user_id=data.assigned_to_user_id,
+        created_by_user_id=current_user.id,
+    )
+    db.add(placement)
+    db.commit()
+    db.refresh(placement)
+
+    return placement_to_dict(placement, db)
+
+
+@router.put("/{placement_id}")
+def update_placement(
+    placement_id: int,
+    data: PlacementUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    placement = db.query(Placement).filter(Placement.id == placement_id).first()
+    if not placement:
+        raise HTTPException(status_code=404, detail="Placement not found")
+
+    verify_org_access(db, current_user, placement.organization_id)
+
+    update_data = data.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(placement, key, value)
+
+    db.commit()
+    db.refresh(placement)
+
+    return placement_to_dict(placement, db)
+
+
+@router.post("/{placement_id}/transition")
+def transition_placement(
+    placement_id: int,
+    target_status: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    placement = db.query(Placement).filter(Placement.id == placement_id).first()
+    if not placement:
+        raise HTTPException(status_code=404, detail="Placement not found")
+
+    verify_org_access(db, current_user, placement.organization_id)
+
+    current_status = placement.status or "PITCHED"
+    allowed = STATUS_TRANSITIONS.get(current_status, [])
+
+    if target_status not in allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot transition from {current_status} to {target_status}. Allowed: {allowed}"
+        )
+
+    placement.status = target_status
+    now = datetime.utcnow()
+
+    if target_status == "SECURED" and not placement.secured_date:
+        placement.secured_date = now.date()
+    elif target_status == "DELIVERED" and not placement.delivery_date:
+        placement.delivery_date = now.date()
+    elif target_status == "AIRED" and not placement.air_date:
+        placement.air_date = now.date()
+
+    db.commit()
+    db.refresh(placement)
+
+    return placement_to_dict(placement, db)
+
+
+@router.delete("/{placement_id}")
+def delete_placement(
+    placement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    placement = db.query(Placement).filter(Placement.id == placement_id).first()
+    if not placement:
+        raise HTTPException(status_code=404, detail="Placement not found")
+
+    verify_org_access(db, current_user, placement.organization_id)
+
+    db.delete(placement)
+    db.commit()
+
+    return {"message": "Placement deleted"}
+
+
+@router.get("/config/options")
+def get_placement_options():
+    return {
+        "placement_types": PLACEMENT_TYPES,
+        "statuses": PLACEMENT_STATUSES,
+        "media_types": MEDIA_TYPES,
+        "status_transitions": STATUS_TRANSITIONS,
+    }

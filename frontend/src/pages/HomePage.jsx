@@ -8,7 +8,9 @@ import {
   FlagIcon,
   BellIcon,
   ClipboardDocumentCheckIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  FilmIcon,
+  CurrencyDollarIcon
 } from '@heroicons/react/24/outline'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 
@@ -26,9 +28,14 @@ const formatActionType = (type) => {
     'PRO_INCOMPLETE': 'PRO Incomplete',
     'DSP_REGISTRATION': 'DSP Registration',
     'CUSTOM_DEADLINE': 'Custom Deadline',
-    'GENERAL': 'General'
+    'GENERAL': 'General',
+    'CONTRACT_EXPIRING': 'Contract Expiring',
+    'RELEASE_INCOMPLETE': 'Release Incomplete',
+    'UNMATCHED_ROYALTIES': 'Unmatched Royalties',
+    'PLACEMENT_FOLLOWUP': 'Placement Follow-up',
+    'PLACEMENT_NEEDS_CONTRACT': 'Needs Contract'
   }
-  return labels[type] || type
+  return labels[type] || type?.replace(/_/g, ' ') || type
 }
 
 const getTimeAgo = (dateStr) => {
@@ -67,6 +74,7 @@ export default function HomePage() {
   const [actionSummary, setActionSummary] = useState(null)
   const [urgentActions, setUrgentActions] = useState([])
   const [recentNotifications, setRecentNotifications] = useState([])
+  const [placementSummary, setPlacementSummary] = useState(null)
   const [loading, setLoading] = useState(true)
   
   useEffect(() => {
@@ -76,12 +84,13 @@ export default function HomePage() {
         setOrg(orgResponse.data)
         const orgId = orgResponse.data.id
         
-        const [songsResponse, creatorsResponse, summaryResponse, actionsResponse, notificationsResponse] = await Promise.allSettled([
+        const [songsResponse, creatorsResponse, summaryResponse, actionsResponse, notificationsResponse, placementRes] = await Promise.allSettled([
           axios.get(`/api/songs/org/${orgId}`),
           axios.get(`/api/creators/org/${orgId}`),
           axios.get(`/api/actions/summary/org/${orgId}`),
           axios.get(`/api/actions/org/${orgId}?status=PENDING`),
-          axios.get('/api/notifications?limit=5')
+          axios.get('/api/notifications?limit=5'),
+          axios.get(`/api/placements/org/${orgId}/summary`)
         ])
         
         if (songsResponse.status === 'fulfilled') {
@@ -120,6 +129,10 @@ export default function HomePage() {
         
         if (notificationsResponse.status === 'fulfilled') {
           setRecentNotifications(notificationsResponse.value.data)
+        }
+
+        if (placementRes.status === 'fulfilled') {
+          setPlacementSummary(placementRes.value.data)
         }
       } catch (error) {
         console.error('Failed to load dashboard:', error)
@@ -207,6 +220,79 @@ export default function HomePage() {
           </div>
         </div>
 
+        {(placementSummary && placementSummary.total_placements > 0) && (
+          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2">
+                <FilmIcon className="w-5 h-5 text-[#5B8A72]" />
+                <h2 className="text-[22px] font-medium text-[#3D4A44]">Placement Pipeline</h2>
+              </div>
+              <Link to="/placements" className="text-[15px] text-[#5B8A72] hover:underline font-medium">
+                View All →
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="bg-[#FAFBF9] rounded-xl p-3 text-center">
+                <p className="text-[24px] font-semibold text-[#3D4A44]">{placementSummary.total_placements}</p>
+                <p className="text-[12px] text-[#7A8580]">Total</p>
+              </div>
+              <div className="bg-[#FAFBF9] rounded-xl p-3 text-center">
+                <p className="text-[24px] font-semibold text-[#5B8A72]">
+                  ${(placementSummary.total_pipeline_value || 0).toLocaleString()}
+                </p>
+                <p className="text-[12px] text-[#7A8580]">Pipeline Value</p>
+              </div>
+              <div className="bg-[#FAFBF9] rounded-xl p-3 text-center">
+                <p className="text-[24px] font-semibold text-[#5B9A6E]">
+                  ${(placementSummary.total_paid || 0).toLocaleString()}
+                </p>
+                <p className="text-[12px] text-[#7A8580]">Paid</p>
+              </div>
+              <div className="bg-[#FAFBF9] rounded-xl p-3 text-center">
+                <p className="text-[24px] font-semibold text-[#C4956B]">
+                  {(placementSummary.status_counts?.['IN_NEGOTIATION'] || 0) + (placementSummary.status_counts?.['PITCHED'] || 0)}
+                </p>
+                <p className="text-[12px] text-[#7A8580]">Active Pitches</p>
+              </div>
+            </div>
+            {Object.keys(placementSummary.status_counts || {}).length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(placementSummary.status_counts).map(([status, count]) => (
+                  <span key={status} className="px-2.5 py-1 bg-[#EEF1EC] rounded-full text-[11px] font-medium text-[#3D4A44]">
+                    {status.replace(/_/g, ' ')}: {count}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {actionSummary?.by_entity_type && Object.keys(actionSummary.by_entity_type).length > 0 && (
+          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-2">
+                <ClipboardDocumentCheckIcon className="w-5 h-5 text-[#5B8A72]" />
+                <h2 className="text-[22px] font-medium text-[#3D4A44]">Tasks by Module</h2>
+              </div>
+              <Link to="/actions" className="text-[15px] text-[#5B8A72] hover:underline font-medium">
+                Task Inbox →
+              </Link>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              {Object.entries(actionSummary.by_entity_type).map(([type, count]) => {
+                const icons = { song: '🎵', work: '📝', release: '💿', contract: '📋', placement: '🎬', royalty: '💰' }
+                return (
+                  <div key={type} className="bg-[#FAFBF9] rounded-xl p-3 text-center">
+                    <p className="text-[20px] mb-1">{icons[type] || '📌'}</p>
+                    <p className="text-[20px] font-semibold text-[#3D4A44]">{count}</p>
+                    <p className="text-[11px] text-[#7A8580] capitalize">{type}</p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {urgentActions.length > 0 && (
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 mb-6 border-l-4 border-[#C47068]">
             <div className="flex justify-between items-center mb-4">
@@ -243,6 +329,9 @@ export default function HomePage() {
                           <span className="text-[10px] text-[#7A8580]">{formatActionType(action.action_type)}</span>
                           {action.creator_name && (
                             <span className="text-[10px] text-[#5B8A72]">{action.creator_name}</span>
+                          )}
+                          {action.entity_type && action.entity_label && (
+                            <span className="text-[10px] text-[#5A8A9A] capitalize">{action.entity_type}: {action.entity_label}</span>
                           )}
                         </div>
                       </div>
