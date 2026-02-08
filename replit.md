@@ -19,7 +19,8 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 ### Technical Implementations
 - **Multi-Tenant Architecture**: Ensures secure data isolation and organization-scoped access control.
 - **Authentication**: JWT for token-based authentication and bcrypt for password hashing.
-- **Database Schema**: Core models manage `Organization`, `User`, `Creator`, `Song`, `SongCredit`, `SongDSPLink`, `ChecklistItem`, `SongChecklistStatus`, `SongStreamingMetrics`, `TerritoryRevenue`, `ValuationCalculation`, `AccountLink`, `SongContract`, `Notification`, `NotificationPreference`, `ActionItem`, `Work`, `WorkTrack`, `WorkCredit`, `Release`, and `ReleaseTrack`.
+- **Database Schema**: Core models manage `Organization`, `User`, `Creator`, `Song`, `SongCredit`, `SongDSPLink`, `ChecklistItem`, `SongChecklistStatus`, `SongStreamingMetrics`, `TerritoryRevenue`, `ValuationCalculation`, `AccountLink`, `SongContract`, `Notification`, `NotificationPreference`, `ActionItem`, `Work`, `WorkTrack`, `WorkCredit`, `Release`, `ReleaseTrack`, `Contract`, `ContractParty`, `ContractAsset`, and `RightsSplit`.
+- **Rights & Contract Tracking**: Deal-level contracts with parties, territory, advance tracking. Asset-to-contract linking (songs and works). Per-asset rights splits with percentage validation (max 100% per rights type). Query rights by asset or by rights holder.
 - **Health Score System**: Dynamically calculates song health based on weighted checklist completion.
 - **Catalog Valuation Tool**: Employs a weighted average of four methodologies (Streaming Multiple, Revenue Multiple, Market Comparables, Black Box Algorithm) considering streaming data, revenue, growth rates, and territory breakdown.
 - **API Security**: Enforces JWT authentication, user-organization membership validation, organization-scoped queries, and cross-tenant validation.
@@ -38,7 +39,8 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Released Status & Spotify Links**: Mark songs as released and prompt for Spotify links.
 - **Reports & Analytics**: Health distribution charts, placement rates, and insights.
 - **Schedule A Export**: CSV generation of creator catalogs.
-- **Contract Management**: Secure PDF upload, download, and deletion linked to songs with access control.
+- **Contract Management**: Secure PDF upload, download, and deletion linked to songs with access control. Full deal-level contract tracking with parties, assets, rights splits, territory, and advance management via Contracts page.
+- **Rights & Splits**: Per-asset rights splits with percentage validation. Rights query by asset or rights holder. Rights & Splits tab in song detail modal.
 - **Account Linking**: Secure linking between Individual and Enterprise organizations with mutual consent.
 - **Master Admin System**: Super admin role for platform-wide management (user/organization management, impersonation, system statistics).
 - **Global Search**: Unified search across songs, works, releases, and creators.

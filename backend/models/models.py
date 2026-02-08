@@ -612,9 +612,12 @@ class SongContract(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+    
     song = relationship("Song", back_populates="contracts")
     organization = relationship("Organization")
     uploaded_by = relationship("User")
+    contract = relationship("Contract")
 
 
 class NotificationType(str, enum.Enum):
@@ -759,3 +762,149 @@ class PlatformIntegration(Base):
     created_by_id = Column(Integer, ForeignKey('users.id'), nullable=True)
     
     created_by = relationship("User")
+
+
+class ContractType(str, enum.Enum):
+    MASTER = "MASTER"
+    PUBLISHING = "PUBLISHING"
+    SYNC_LICENSE = "SYNC_LICENSE"
+    DISTRIBUTION = "DISTRIBUTION"
+    MANAGEMENT = "MANAGEMENT"
+    ADMINISTRATION = "ADMINISTRATION"
+    CO_PUBLISHING = "CO_PUBLISHING"
+    SUB_PUBLISHING = "SUB_PUBLISHING"
+    OTHER = "OTHER"
+
+class ContractStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    PENDING = "PENDING"
+    ACTIVE = "ACTIVE"
+    EXPIRED = "EXPIRED"
+    TERMINATED = "TERMINATED"
+
+class AssetType(str, enum.Enum):
+    SONG = "SONG"
+    WORK = "WORK"
+
+class RightsType(str, enum.Enum):
+    MASTER = "MASTER"
+    PUBLISHING = "PUBLISHING"
+    SYNC = "SYNC"
+    MECHANICAL = "MECHANICAL"
+    PERFORMANCE = "PERFORMANCE"
+    NEIGHBORING = "NEIGHBORING"
+    OTHER = "OTHER"
+
+class PartyRole(str, enum.Enum):
+    LICENSOR = "LICENSOR"
+    LICENSEE = "LICENSEE"
+    ASSIGNOR = "ASSIGNOR"
+    ASSIGNEE = "ASSIGNEE"
+    PUBLISHER = "PUBLISHER"
+    SUB_PUBLISHER = "SUB_PUBLISHER"
+    ADMINISTRATOR = "ADMINISTRATOR"
+    ARTIST = "ARTIST"
+    LABEL = "LABEL"
+    DISTRIBUTOR = "DISTRIBUTOR"
+    OTHER = "OTHER"
+
+
+class Contract(Base):
+    __tablename__ = "contracts"
+    __table_args__ = (
+        Index('ix_contracts_organization_id', 'organization_id'),
+        Index('ix_contracts_status', 'status'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+
+    title = Column(String, nullable=False, index=True)
+    contract_type = Column(String, nullable=False, default="OTHER")
+    status = Column(String, nullable=False, default="DRAFT")
+    reference_number = Column(String, nullable=True)
+
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+
+    territory = Column(JSON, default=list)
+
+    advance_amount = Column(Float, nullable=True, default=0.0)
+    advance_currency = Column(String, default="USD")
+    advance_recouped = Column(Float, nullable=True, default=0.0)
+
+    notes = Column(Text, nullable=True)
+    terms_summary = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    organization = relationship("Organization")
+    created_by = relationship("User")
+    parties = relationship("ContractParty", back_populates="contract", cascade="all, delete-orphan")
+    assets = relationship("ContractAsset", back_populates="contract", cascade="all, delete-orphan")
+
+
+class ContractParty(Base):
+    __tablename__ = "contract_parties"
+    __table_args__ = (
+        Index('ix_contract_parties_contract_id', 'contract_id'),
+        Index('ix_contract_parties_creator_id', 'creator_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=False)
+
+    party_name = Column(String, nullable=False)
+    party_role = Column(String, nullable=False, default="OTHER")
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
+
+    contact_email = Column(String, nullable=True)
+    contact_info = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    contract = relationship("Contract", back_populates="parties")
+    creator = relationship("Creator")
+
+
+class ContractAsset(Base):
+    __tablename__ = "contract_assets"
+    __table_args__ = (
+        UniqueConstraint('contract_id', 'asset_type', 'asset_id', name='uq_contract_asset'),
+        Index('ix_contract_assets_contract_id', 'contract_id'),
+        Index('ix_contract_assets_asset', 'asset_type', 'asset_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=False)
+    asset_type = Column(String, nullable=False)
+    asset_id = Column(Integer, nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    contract = relationship("Contract", back_populates="assets")
+
+
+class RightsSplit(Base):
+    __tablename__ = "rights_splits"
+    __table_args__ = (
+        Index('ix_rights_splits_contract_asset_id', 'contract_asset_id'),
+        Index('ix_rights_splits_rights_holder_id', 'rights_holder_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    contract_asset_id = Column(Integer, ForeignKey("contract_assets.id", ondelete="CASCADE"), nullable=False)
+    rights_holder_id = Column(Integer, ForeignKey("creators.id"), nullable=False)
+
+    rights_type = Column(String, nullable=False, default="MASTER")
+    share_percentage = Column(Float, nullable=False)
+
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    contract_asset = relationship("ContractAsset")
+    rights_holder = relationship("Creator")

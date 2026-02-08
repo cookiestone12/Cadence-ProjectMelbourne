@@ -7,7 +7,7 @@ from .routes import (
     auth, catalog, settings,
     organizations, creators, songs, credits,
     checklist, exports, valuations, valuation_reports, schedule_a,
-    contracts, account_links, admin, notifications, actions, csv_upload,
+    contracts, contracts_mgmt, account_links, admin, notifications, actions, csv_upload,
     works, releases, bulk, spotify_import
 )
 import os
@@ -41,6 +41,7 @@ app.include_router(valuations.router)
 app.include_router(valuation_reports.router)
 app.include_router(schedule_a.router)
 app.include_router(contracts.router)
+app.include_router(contracts_mgmt.router)
 app.include_router(account_links.router)
 app.include_router(admin.router)
 app.include_router(notifications.router)

@@ -13,6 +13,7 @@ import Login from './pages/Login'
 import AdminDashboard from './pages/AdminDashboard'
 import WorksPage from './pages/WorksPage'
 import ReleasesPage from './pages/ReleasesPage'
+import ContractsPage from './pages/ContractsPage'
 import SearchPage from './pages/SearchPage'
 import Sidebar from './components/Sidebar'
 
@@ -123,6 +124,7 @@ function App() {
             <Route path="/catalog" element={<NewCatalogPage />} />
             <Route path="/works" element={<WorksPage />} />
             <Route path="/releases" element={<ReleasesPage />} />
+            <Route path="/contracts" element={<ContractsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/valuation" element={<ValuationPage />} />
             <Route path="/settings" element={<Settings />} />

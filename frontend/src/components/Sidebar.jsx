@@ -11,7 +11,8 @@ import {
   CurrencyDollarIcon,
   Cog6ToothIcon,
   XMarkIcon,
-  ShieldCheckIcon
+  ShieldCheckIcon,
+  ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline'
 import NotificationBell from './NotificationBell'
 
@@ -30,6 +31,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/catalog', label: 'Catalog', icon: MusicalNoteIcon },
     { path: '/works', label: 'Works', icon: DocumentTextIcon },
     { path: '/releases', label: 'Releases', icon: RectangleStackIcon },
+    { path: '/contracts', label: 'Contracts', icon: ClipboardDocumentListIcon },
     { path: '/reports', label: 'Reports', icon: ChartBarIcon },
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
   ]

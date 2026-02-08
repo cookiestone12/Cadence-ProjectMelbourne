@@ -9,7 +9,9 @@ from .models import (
     AccountLink, SongContract, ActionItem, Notification, NotificationPreference, OrgNotificationSetting,
     SongStreamingMetrics, TerritoryRevenue, ValuationCalculation, PlatformIntegration,
     Work, WorkTrack, WorkCredit, Release, ReleaseTrack,
-    ContributorType, ReleaseType, ReleaseStatus
+    ContributorType, ReleaseType, ReleaseStatus,
+    Contract, ContractParty, ContractAsset, RightsSplit,
+    ContractType, ContractStatus, AssetType, RightsType, PartyRole,
 )
 
 __all__ = [
@@ -24,4 +26,6 @@ __all__ = [
     "SongStreamingMetrics", "TerritoryRevenue", "ValuationCalculation", "PlatformIntegration",
     "Work", "WorkTrack", "WorkCredit", "Release", "ReleaseTrack",
     "ContributorType", "ReleaseType", "ReleaseStatus",
+    "Contract", "ContractParty", "ContractAsset", "RightsSplit",
+    "ContractType", "ContractStatus", "AssetType", "RightsType", "PartyRole",
 ]

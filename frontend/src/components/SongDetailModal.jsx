@@ -4,7 +4,8 @@ import axios from 'axios'
 import {
   XMarkIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon,
   MusicalNoteIcon, ChartBarIcon, DocumentTextIcon, LinkIcon,
-  DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon, UserIcon
+  DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon, UserIcon,
+  ScaleIcon
 } from '@heroicons/react/24/outline'
 
 export default function SongDetailModal({ song, onClose }) {
@@ -13,11 +14,14 @@ export default function SongDetailModal({ song, onClose }) {
   const [loading, setLoading] = useState(true)
   const [contracts, setContracts] = useState([])
   const [uploading, setUploading] = useState(false)
+  const [rightsData, setRightsData] = useState([])
+  const [rightsLoading, setRightsLoading] = useState(false)
   const fileInputRef = useRef(null)
   
   useEffect(() => {
     loadSongDetails()
     loadContracts()
+    loadRightsData()
   }, [song.id])
   
   async function loadSongDetails() {
@@ -43,6 +47,21 @@ export default function SongDetailModal({ song, onClose }) {
       setContracts(response.data)
     } catch (error) {
       console.error('Failed to load contracts:', error)
+    }
+  }
+  
+  async function loadRightsData() {
+    setRightsLoading(true)
+    try {
+      const orgResponse = await axios.get('/api/organizations/current')
+      const orgId = orgResponse.data.id
+      const response = await axios.get(`/api/rights/asset/${orgId}?asset_type=SONG&asset_id=${song.id}`)
+      setRightsData(response.data.contracts || [])
+    } catch (error) {
+      console.error('Failed to load rights data:', error)
+      setRightsData([])
+    } finally {
+      setRightsLoading(false)
     }
   }
   
@@ -180,6 +199,7 @@ export default function SongDetailModal({ song, onClose }) {
           <div className="flex space-x-8">
             {[
               { id: 'overview', label: 'Overview', icon: MusicalNoteIcon },
+              { id: 'rights', label: 'Rights & Splits', icon: ScaleIcon },
               { id: 'placement', label: 'Placement Status', icon: DocumentTextIcon },
               { id: 'streaming', label: 'Streaming & Valuation', icon: ChartBarIcon },
               { id: 'links', label: 'Credits & Links', icon: LinkIcon }
@@ -293,6 +313,89 @@ export default function SongDetailModal({ song, onClose }) {
                     <p className="text-[15px] text-[#3D4A44] whitespace-pre-wrap">{songDetails.notes}</p>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+          
+          {activeTab === 'rights' && (
+            <div className="space-y-6">
+              {rightsLoading ? (
+                <div className="text-center py-12 text-[#7A8580]">Loading rights data...</div>
+              ) : rightsData.length === 0 ? (
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-8 text-center">
+                  <ScaleIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
+                  <p className="text-[#3D4A44] font-medium">No rights or contracts assigned</p>
+                  <p className="text-[13px] text-[#7A8580] mt-1">
+                    Link this song to a contract in the Contracts page to define rights splits
+                  </p>
+                </div>
+              ) : (
+                rightsData.map((contractInfo, idx) => (
+                  <div key={idx} className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-[17px] font-semibold text-[#3D4A44]">{contractInfo.contract_title}</h3>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${
+                            contractInfo.contract_type === 'MASTER' ? 'bg-purple-100 text-purple-700' :
+                            contractInfo.contract_type === 'PUBLISHING' ? 'bg-blue-100 text-blue-700' :
+                            contractInfo.contract_type === 'SYNC_LICENSE' ? 'bg-teal-100 text-teal-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {(contractInfo.contract_type || '').replace(/_/g, ' ')}
+                          </span>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${
+                            contractInfo.contract_status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                            contractInfo.contract_status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                            contractInfo.contract_status === 'EXPIRED' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {contractInfo.contract_status}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {contractInfo.splits && contractInfo.splits.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-4 gap-4 px-3 py-2 text-[12px] font-medium text-[#7A8580] uppercase tracking-wider">
+                          <span>Rights Holder</span>
+                          <span>Rights Type</span>
+                          <span>Share</span>
+                          <span>Notes</span>
+                        </div>
+                        {contractInfo.splits.map((split, sidx) => (
+                          <div key={sidx} className="grid grid-cols-4 gap-4 px-3 py-3 bg-[#F5F7F4] rounded-[12px] items-center">
+                            <span className="font-medium text-[#3D4A44] text-[14px]">{split.rights_holder_name}</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-medium w-fit ${
+                              split.rights_type === 'MASTER' ? 'bg-purple-50 text-purple-600' :
+                              split.rights_type === 'PUBLISHING' ? 'bg-blue-50 text-blue-600' :
+                              split.rights_type === 'PERFORMANCE' ? 'bg-amber-50 text-amber-600' :
+                              split.rights_type === 'MECHANICAL' ? 'bg-indigo-50 text-indigo-600' :
+                              'bg-gray-50 text-gray-600'
+                            }`}>
+                              {split.rights_type}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden max-w-[80px]">
+                                <div
+                                  className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full"
+                                  style={{ width: `${Math.min(split.share_percentage, 100)}%` }}
+                                ></div>
+                              </div>
+                              <span className="text-[14px] font-semibold text-[#3D4A44]">{split.share_percentage}%</span>
+                            </div>
+                            <span className="text-[13px] text-[#7A8580] truncate">{split.notes || '-'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[13px] text-[#7A8580] py-4 text-center bg-[#F5F7F4] rounded-[12px]">
+                        No splits defined for this asset yet
+                      </p>
+                    )}
+                  </div>
+                ))
               )}
             </div>
           )}

@@ -22,6 +22,8 @@ export default function WorksPage() {
   const [trackSearch, setTrackSearch] = useState('')
   const [creditForm, setCreditForm] = useState({ creator_id: '', role: '', share_percentage: '' })
   const [activeDetailTab, setActiveDetailTab] = useState('info')
+  const [rightsData, setRightsData] = useState([])
+  const [rightsLoading, setRightsLoading] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -63,6 +65,7 @@ export default function WorksPage() {
     setDetailLoading(true)
     setActiveDetailTab('info')
     setEditMode(false)
+    setRightsData([])
     try {
       const res = await axios.get(`/api/works/${work.id}`)
       setWorkDetail(res.data)
@@ -73,6 +76,7 @@ export default function WorksPage() {
         genre: res.data.genre || '',
         notes: res.data.notes || ''
       })
+      loadWorkRights(work.id)
     } catch (error) {
       console.error('Failed to load work detail:', error)
     } finally {
@@ -168,6 +172,20 @@ export default function WorksPage() {
       await loadData()
     } catch (error) {
       console.error('Failed to remove credit:', error)
+    }
+  }
+
+  async function loadWorkRights(workId) {
+    if (!organizationId) return
+    setRightsLoading(true)
+    try {
+      const response = await axios.get(`/api/rights/asset/${organizationId}?asset_type=WORK&asset_id=${workId}`)
+      setRightsData(response.data.contracts || [])
+    } catch (error) {
+      console.error('Failed to load rights data:', error)
+      setRightsData([])
+    } finally {
+      setRightsLoading(false)
     }
   }
 
@@ -389,7 +407,7 @@ export default function WorksPage() {
 
             <div className="border-b border-[rgba(59,77,67,0.08)]">
               <div className="flex space-x-6 px-6">
-                {['info', 'tracks', 'credits'].map(tab => (
+                {['info', 'tracks', 'credits', 'rights'].map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveDetailTab(tab)}
@@ -401,6 +419,7 @@ export default function WorksPage() {
                   >
                     {tab === 'tracks' ? `Tracks (${workDetail?.tracks?.length || 0})` :
                      tab === 'credits' ? `Credits (${workDetail?.credits?.length || 0})` :
+                     tab === 'rights' ? `Rights (${rightsData.length})` :
                      'Info'}
                   </button>
                 ))}
@@ -640,6 +659,73 @@ export default function WorksPage() {
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {workDetail && activeDetailTab === 'rights' && (
+                <div className="space-y-4">
+                  {rightsLoading ? (
+                    <div className="text-center py-8 text-[#7A8580]">Loading rights data...</div>
+                  ) : rightsData.length === 0 ? (
+                    <div className="text-center py-8 bg-[#F5F7F4] rounded-lg border-2 border-dashed border-[rgba(59,77,67,0.08)]">
+                      <p className="text-[#3D4A44] font-medium">No rights or contracts assigned</p>
+                      <p className="text-xs text-[#7A8580] mt-1">Link this work to a contract in the Contracts page to define rights splits</p>
+                    </div>
+                  ) : (
+                    rightsData.map((contractInfo, idx) => (
+                      <div key={idx} className="bg-[#F5F7F4] rounded-lg p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <h4 className="text-sm font-semibold text-[#3D4A44]">{contractInfo.contract_title}</h4>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                            contractInfo.contract_type === 'MASTER' ? 'bg-purple-100 text-purple-700' :
+                            contractInfo.contract_type === 'PUBLISHING' ? 'bg-blue-100 text-blue-700' :
+                            contractInfo.contract_type === 'SYNC_LICENSE' ? 'bg-teal-100 text-teal-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {(contractInfo.contract_type || '').replace(/_/g, ' ')}
+                          </span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                            contractInfo.contract_status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                            contractInfo.contract_status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                            contractInfo.contract_status === 'EXPIRED' ? 'bg-red-100 text-red-700' :
+                            'bg-gray-100 text-gray-700'
+                          }`}>
+                            {contractInfo.contract_status}
+                          </span>
+                        </div>
+                        {contractInfo.splits?.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {contractInfo.splits.map((split, sidx) => (
+                              <div key={sidx} className="flex items-center justify-between p-2.5 bg-white rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm font-medium text-[#3D4A44]">{split.rights_holder_name}</span>
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                    split.rights_type === 'MASTER' ? 'bg-purple-50 text-purple-600' :
+                                    split.rights_type === 'PUBLISHING' ? 'bg-blue-50 text-blue-600' :
+                                    split.rights_type === 'PERFORMANCE' ? 'bg-amber-50 text-amber-600' :
+                                    'bg-gray-50 text-gray-600'
+                                  }`}>
+                                    {split.rights_type}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-16 h-1.5 bg-[#EEF1EC] rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full"
+                                      style={{ width: `${Math.min(split.share_percentage, 100)}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className="text-sm font-semibold text-[#3D4A44] w-12 text-right">{split.share_percentage}%</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-[#7A8580] text-center py-3">No splits defined yet</p>
+                        )}
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </div>
