@@ -9,7 +9,8 @@ from ..models import (
     Work, WorkTrack, Release, ReleaseTrack,
     Contract, ContractAsset, RightsSplit,
     RoyaltyStatement, RoyaltyTransaction, RoyaltyAllocation,
-    Placement, ActionItem, Payment
+    Placement, ActionItem, Payment,
+    ValuationCalculation, SongValuationSnapshot, Organization
 )
 from ..utils.auth import get_current_user
 
@@ -453,3 +454,223 @@ def get_rights_coverage(org_id: int, db: Session = Depends(get_db), current_user
         "contracts_by_type": {t: c for t, c in contracts_by_type},
         "expiring_soon": expiring_soon,
     }
+
+
+@router.get("/org/{org_id}/valuation")
+def get_valuation_analytics(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    verify_org_access(db, current_user.id, org_id)
+
+    from sqlalchemy.orm import aliased
+
+    latest_vals = db.query(
+        ValuationCalculation.song_id,
+        func.max(ValuationCalculation.id).label('max_id')
+    ).filter(
+        ValuationCalculation.organization_id == org_id
+    ).group_by(ValuationCalculation.song_id).subquery()
+
+    valuations = db.query(ValuationCalculation).join(
+        latest_vals, ValuationCalculation.id == latest_vals.c.max_id
+    ).all()
+
+    total_valuation = sum(v.final_valuation_cents or 0 for v in valuations)
+    total_streaming = sum(v.streaming_multiple_value_cents or 0 for v in valuations)
+    total_revenue_mult = sum(v.revenue_multiple_value_cents or 0 for v in valuations)
+    total_market = sum(v.market_comp_value_cents or 0 for v in valuations)
+    total_blackbox = sum(v.black_box_value_cents or 0 for v in valuations)
+
+    top_songs = sorted(valuations, key=lambda v: v.final_valuation_cents or 0, reverse=True)[:10]
+    top_songs_data = []
+    for v in top_songs:
+        song = db.query(Song.title, Song.primary_artist).filter(Song.id == v.song_id).first()
+        if song:
+            top_songs_data.append({
+                "song_id": v.song_id,
+                "title": song.title,
+                "artist": song.primary_artist,
+                "valuation_cents": v.final_valuation_cents or 0,
+            })
+
+    return {
+        "total_valuation_cents": total_valuation,
+        "songs_valued": len(valuations),
+        "methodology_breakdown": {
+            "streaming_multiple": total_streaming,
+            "revenue_multiple": total_revenue_mult,
+            "market_comparables": total_market,
+            "black_box": total_blackbox,
+        },
+        "top_valued_songs": top_songs_data,
+    }
+
+
+@router.get("/org/{org_id}/expiring-contracts")
+def get_expiring_contracts(org_id: int, days: int = 90, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    verify_org_access(db, current_user.id, org_id)
+
+    cutoff = date.today() + timedelta(days=days)
+
+    contracts = db.query(Contract).filter(
+        Contract.organization_id == org_id,
+        Contract.status == "ACTIVE",
+        Contract.end_date.isnot(None),
+        Contract.end_date <= cutoff
+    ).order_by(Contract.end_date.asc()).all()
+
+    result = []
+    for c in contracts:
+        asset_count = db.query(func.count(ContractAsset.id)).filter(
+            ContractAsset.contract_id == c.id
+        ).scalar() or 0
+
+        days_remaining = (c.end_date - date.today()).days if c.end_date else None
+
+        result.append({
+            "id": c.id,
+            "title": c.title,
+            "contract_type": c.contract_type,
+            "end_date": c.end_date.isoformat() if c.end_date else None,
+            "days_remaining": days_remaining,
+            "asset_count": asset_count,
+            "status": c.status,
+        })
+
+    return {"contracts": result}
+
+
+@router.get("/admin/platform-stats")
+def get_platform_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user.is_super_admin:
+        raise HTTPException(status_code=403, detail="Super admin access required")
+
+    total_users = db.query(func.count(User.id)).scalar() or 0
+    total_orgs = db.query(func.count(Organization.id)).scalar() or 0
+    total_songs = db.query(func.count(Song.id)).scalar() or 0
+    total_works = db.query(func.count(Work.id)).scalar() or 0
+    total_releases = db.query(func.count(Release.id)).scalar() or 0
+    total_contracts = db.query(func.count(Contract.id)).scalar() or 0
+    total_placements = db.query(func.count(Placement.id)).scalar() or 0
+    total_revenue = db.query(func.sum(RoyaltyTransaction.revenue_cents)).scalar() or 0
+
+    top_orgs = db.query(
+        Organization.id,
+        Organization.name,
+        func.count(Song.id).label('song_count')
+    ).outerjoin(Song, Song.organization_id == Organization.id).group_by(
+        Organization.id, Organization.name
+    ).order_by(func.count(Song.id).desc()).limit(10).all()
+
+    top_orgs_data = [{"id": o.id, "name": o.name or "Unnamed", "song_count": o.song_count} for o in top_orgs]
+
+    recent_orgs = db.query(
+        Organization.id,
+        Organization.name,
+        func.max(Song.created_at).label('last_activity')
+    ).outerjoin(Song, Song.organization_id == Organization.id).group_by(
+        Organization.id, Organization.name
+    ).order_by(func.max(Song.created_at).desc().nullslast()).limit(10).all()
+
+    recent_activity = [
+        {"id": o.id, "name": o.name, "last_activity": o.last_activity.isoformat() if o.last_activity else None}
+        for o in recent_orgs
+    ]
+
+    return {
+        "totals": {
+            "users": total_users,
+            "organizations": total_orgs,
+            "songs": total_songs,
+            "works": total_works,
+            "releases": total_releases,
+            "contracts": total_contracts,
+            "placements": total_placements,
+            "total_revenue_cents": int(total_revenue),
+        },
+        "top_orgs": top_orgs_data,
+        "recent_activity": recent_activity,
+    }
+
+
+@router.get("/org/{org_id}/export/{report_type}")
+def export_analytics(org_id: int, report_type: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    verify_org_access(db, current_user.id, org_id)
+
+    import csv
+    import io
+    from fastapi.responses import StreamingResponse
+
+    if report_type == "catalog-summary":
+        songs = db.query(Song).filter(Song.organization_id == org_id).all()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Title", "Artist", "ISRC", "ISWC", "Health Score", "Released", "Release Date", "Created"])
+        for s in songs:
+            writer.writerow([s.title, s.primary_artist, s.isrc or "", s.iswc or "",
+                           round(s.status_health_score or 0, 1), "Yes" if s.is_released else "No",
+                           s.release_date.isoformat() if s.release_date else "",
+                           s.created_at.strftime("%Y-%m-%d") if s.created_at else ""])
+        output.seek(0)
+        return StreamingResponse(io.BytesIO(output.getvalue().encode()), media_type="text/csv",
+                                headers={"Content-Disposition": f"attachment; filename=catalog-summary-{org_id}.csv"})
+
+    elif report_type == "revenue-summary":
+        transactions = db.query(
+            Song.title, Song.primary_artist, RoyaltyTransaction.platform,
+            RoyaltyTransaction.territory, RoyaltyTransaction.revenue_cents
+        ).outerjoin(Song, Song.id == RoyaltyTransaction.song_id).filter(
+            RoyaltyTransaction.organization_id == org_id
+        ).all()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Track", "Artist", "Platform", "Territory", "Revenue"])
+        for t in transactions:
+            writer.writerow([t.title or "Unknown", t.primary_artist or "", t.platform or "",
+                           t.territory or "", round((t.revenue_cents or 0) / 100, 2)])
+        output.seek(0)
+        return StreamingResponse(io.BytesIO(output.getvalue().encode()), media_type="text/csv",
+                                headers={"Content-Disposition": f"attachment; filename=revenue-summary-{org_id}.csv"})
+
+    elif report_type == "creators-summary":
+        creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Name", "Legal Name", "Email", "Roles", "PRO", "IPI", "Territory"])
+        for c in creators:
+            writer.writerow([c.display_name, c.legal_name or "", c.email or "",
+                           ", ".join(c.roles or []), c.primary_pro or "", c.primary_ipi or "",
+                           c.primary_territory or ""])
+        output.seek(0)
+        return StreamingResponse(io.BytesIO(output.getvalue().encode()), media_type="text/csv",
+                                headers={"Content-Disposition": f"attachment; filename=creators-summary-{org_id}.csv"})
+
+    elif report_type == "contracts-summary":
+        contracts = db.query(Contract).filter(Contract.organization_id == org_id).all()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Title", "Type", "Status", "Start Date", "End Date", "Territory", "Advance"])
+        for c in contracts:
+            writer.writerow([c.title, c.contract_type or "", c.status or "",
+                           c.start_date.isoformat() if c.start_date else "",
+                           c.end_date.isoformat() if c.end_date else "",
+                           c.territory or "", float(c.advance_amount or 0)])
+        output.seek(0)
+        return StreamingResponse(io.BytesIO(output.getvalue().encode()), media_type="text/csv",
+                                headers={"Content-Disposition": f"attachment; filename=contracts-summary-{org_id}.csv"})
+
+    elif report_type == "placements-summary":
+        placements = db.query(Placement).filter(Placement.organization_id == org_id).all()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Title", "Type", "Status", "Client", "Project", "License Fee", "Currency", "Pitched Date", "Secured Date"])
+        for p in placements:
+            writer.writerow([p.title, p.placement_type or "", p.status or "",
+                           p.client_name or "", p.project_name or "",
+                           float(p.license_fee or 0), p.license_currency or "USD",
+                           p.pitched_date.isoformat() if p.pitched_date else "",
+                           p.secured_date.isoformat() if p.secured_date else ""])
+        output.seek(0)
+        return StreamingResponse(io.BytesIO(output.getvalue().encode()), media_type="text/csv",
+                                headers={"Content-Disposition": f"attachment; filename=placements-summary-{org_id}.csv"})
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown report type: {report_type}")

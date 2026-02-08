@@ -32,6 +32,7 @@ export default function AdminDashboard() {
   const [integrations, setIntegrations] = useState(null)
   const [showIntegrationModal, setShowIntegrationModal] = useState(false)
   const [configuringIntegration, setConfiguringIntegration] = useState(null)
+  const [platformStats, setPlatformStats] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -41,16 +42,18 @@ export default function AdminDashboard() {
     try {
       setLoading(true)
       setError(null)
-      const [statsRes, usersRes, orgsRes, integrationsRes] = await Promise.all([
+      const [statsRes, usersRes, orgsRes, integrationsRes, platformRes] = await Promise.all([
         axios.get('/api/admin/stats'),
         axios.get('/api/admin/users'),
         axios.get('/api/admin/organizations'),
-        axios.get('/api/admin/integrations')
+        axios.get('/api/admin/integrations'),
+        axios.get('/api/analytics/admin/platform-stats').catch(() => ({ data: null }))
       ])
       setStats(statsRes.data)
       setUsers(usersRes.data)
       setOrganizations(orgsRes.data)
       setIntegrations(integrationsRes.data)
+      if (platformRes.data) setPlatformStats(platformRes.data)
     } catch (err) {
       console.error('Failed to load admin data:', err)
       if (err.response?.status === 403) {
@@ -174,6 +177,53 @@ export default function AdminDashboard() {
               color="#C4956B"
             />
           </div>
+
+          {platformStats && (
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+              {[
+                { label: 'Works', value: platformStats.totals.works, color: '#5A8A9A' },
+                { label: 'Releases', value: platformStats.totals.releases, color: '#8B6EAE' },
+                { label: 'Contracts', value: platformStats.totals.contracts, color: '#5B9A6E' },
+                { label: 'Placements', value: platformStats.totals.placements, color: '#C47068' },
+              ].map(s => (
+                <div key={s.label} className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 text-center">
+                  <p className="text-[24px] font-semibold text-[#3D4A44]">{(s.value || 0).toLocaleString()}</p>
+                  <p className="text-[11px] text-[#7A8580] uppercase tracking-wider">{s.label}</p>
+                </div>
+              ))}
+              <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 text-center col-span-2 md:col-span-3">
+                <p className="text-[24px] font-semibold text-[#5B9A6E]">
+                  ${((platformStats.totals.total_revenue_cents || 0) / 100).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                </p>
+                <p className="text-[11px] text-[#7A8580] uppercase tracking-wider">Platform-wide Revenue</p>
+              </div>
+            </div>
+          )}
+
+          {platformStats?.top_orgs?.length > 0 && (
+            <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+              <h3 className="text-lg font-bold text-[#3D4A44] mb-4">Top Organizations by Catalog Size</h3>
+              <div className="space-y-2">
+                {platformStats.top_orgs.map((org, i) => {
+                  const maxCount = platformStats.top_orgs[0]?.song_count || 1
+                  return (
+                    <div key={org.id} className="flex items-center gap-3">
+                      <span className="text-[12px] font-semibold text-[#7A8580] w-5">{i + 1}</span>
+                      <div className="flex-1">
+                        <div className="flex justify-between mb-1">
+                          <span className="text-[13px] font-medium text-[#3D4A44]">{org.name || 'Unnamed Org'}</span>
+                          <span className="text-[12px] text-[#7A8580]">{org.song_count} songs</span>
+                        </div>
+                        <div className="h-1.5 bg-[#EEF1EC] rounded-full overflow-hidden">
+                          <div className="h-full bg-[#5B8A72] rounded-full transition-all" style={{ width: `${(org.song_count / maxCount) * 100}%` }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">

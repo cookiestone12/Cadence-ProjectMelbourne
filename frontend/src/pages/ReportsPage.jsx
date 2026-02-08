@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import axios from 'axios'
 import {
   BarChart, Bar, PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis,
@@ -9,7 +10,7 @@ import {
   ChartBarIcon, CurrencyDollarIcon, UsersIcon, HeartIcon,
   FilmIcon, ShieldCheckIcon, MusicalNoteIcon, DocumentTextIcon,
   RectangleStackIcon, ExclamationTriangleIcon, ArrowTrendingUpIcon,
-  CheckCircleIcon
+  CheckCircleIcon, ArrowDownTrayIcon
 } from '@heroicons/react/24/outline'
 
 const TABS = [
@@ -20,6 +21,24 @@ const TABS = [
   { key: 'placements', label: 'Placements', icon: FilmIcon },
   { key: 'rights', label: 'Rights Coverage', icon: ShieldCheckIcon },
 ]
+
+const DATE_RANGES = [
+  { key: '30d', label: '30d' },
+  { key: '90d', label: '90d' },
+  { key: '1y', label: '1y' },
+  { key: 'all', label: 'All' },
+]
+
+const DATE_RANGE_MONTHS = { '30d': 1, '90d': 3, '1y': 12, 'all': 120 }
+
+const EXPORT_MAP = {
+  overview: 'catalog-summary',
+  health: 'catalog-summary',
+  revenue: 'revenue-summary',
+  creators: 'creators-summary',
+  placements: 'placements-summary',
+  rights: 'contracts-summary',
+}
 
 const CHART_COLORS = ['#5B8A72', '#5A8A9A', '#C4956B', '#C47068', '#7BA594', '#8B6EAE', '#5B9A6E', '#D4A57B']
 
@@ -49,6 +68,9 @@ export default function ReportsPage() {
   const [placementsData, setPlacementsData] = useState(null)
   const [rightsData, setRightsData] = useState(null)
   const [growthData, setGrowthData] = useState(null)
+  const [valuationData, setValuationData] = useState(null)
+  const [expiringContracts, setExpiringContracts] = useState(null)
+  const [dateRange, setDateRange] = useState('all')
 
   useEffect(() => {
     async function init() {
@@ -65,27 +87,34 @@ export default function ReportsPage() {
   useEffect(() => {
     if (!orgId) return
     loadTabData(activeTab)
-  }, [orgId, activeTab])
+  }, [orgId, activeTab, dateRange])
+
+  function handleExport(reportType) {
+    window.open(`/api/analytics/org/${orgId}/export/${reportType}`, '_blank')
+  }
 
   async function loadTabData(tab) {
     setLoading(true)
+    const months = DATE_RANGE_MONTHS[dateRange] || 120
     try {
       switch (tab) {
         case 'overview': {
-          const [overviewRes, growthRes, healthRes] = await Promise.all([
+          const [overviewRes, growthRes, healthRes, valuationRes] = await Promise.all([
             axios.get(`/api/analytics/org/${orgId}/overview`),
-            axios.get(`/api/analytics/org/${orgId}/catalog-growth`),
+            axios.get(`/api/analytics/org/${orgId}/catalog-growth`, { params: { months } }),
             axios.get(`/api/analytics/org/${orgId}/health-distribution`),
+            axios.get(`/api/analytics/org/${orgId}/valuation`).catch(() => ({ data: null })),
           ])
           setOverview(overviewRes.data)
           setGrowthData(growthRes.data)
           setHealthData(healthRes.data)
+          setValuationData(valuationRes.data)
           break
         }
         case 'health': {
           const [healthRes, growthRes] = await Promise.all([
             axios.get(`/api/analytics/org/${orgId}/health-distribution`),
-            axios.get(`/api/analytics/org/${orgId}/catalog-growth`),
+            axios.get(`/api/analytics/org/${orgId}/catalog-growth`, { params: { months } }),
           ])
           setHealthData(healthRes.data)
           setGrowthData(growthRes.data)
@@ -107,8 +136,12 @@ export default function ReportsPage() {
           break
         }
         case 'rights': {
-          const res = await axios.get(`/api/analytics/org/${orgId}/rights-coverage`)
-          setRightsData(res.data)
+          const [rightsRes, expiringRes] = await Promise.all([
+            axios.get(`/api/analytics/org/${orgId}/rights-coverage`),
+            axios.get(`/api/analytics/org/${orgId}/expiring-contracts`).catch(() => ({ data: null })),
+          ])
+          setRightsData(rightsRes.data)
+          setExpiringContracts(expiringRes.data)
           break
         }
       }
@@ -130,12 +163,21 @@ export default function ReportsPage() {
   return (
     <div className="min-h-screen bg-[#F5F7F4] p-6 lg:p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Reports & Analytics</h1>
-          <p className="text-[17px] text-[#7A8580] mt-1">Comprehensive insights into your catalog performance</p>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Reports & Analytics</h1>
+            <p className="text-[17px] text-[#7A8580] mt-1">Comprehensive insights into your catalog performance</p>
+          </div>
+          <button
+            onClick={() => handleExport(EXPORT_MAP[activeTab])}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white rounded-[12px] shadow-[0px_2px_8px_rgba(0,0,0,0.06)] text-[14px] font-medium text-[#3D4A44] hover:bg-[#EEF1EC] transition-all"
+          >
+            <ArrowDownTrayIcon className="w-4 h-4" />
+            Export
+          </button>
         </div>
 
-        <div className="flex gap-1 mb-6 bg-white rounded-[14px] p-1.5 shadow-[0px_2px_8px_rgba(0,0,0,0.06)] overflow-x-auto">
+        <div className="flex gap-1 mb-3 bg-white rounded-[14px] p-1.5 shadow-[0px_2px_8px_rgba(0,0,0,0.06)] overflow-x-auto">
           {TABS.map(tab => (
             <button
               key={tab.key}
@@ -152,6 +194,22 @@ export default function ReportsPage() {
           ))}
         </div>
 
+        <div className="flex gap-1.5 mb-6">
+          {DATE_RANGES.map(dr => (
+            <button
+              key={dr.key}
+              onClick={() => setDateRange(dr.key)}
+              className={`px-4 py-1.5 rounded-full text-[13px] font-medium transition-all ${
+                dateRange === dr.key
+                  ? 'bg-[#5B8A72] text-white shadow-sm'
+                  : 'bg-white text-[#7A8580] hover:bg-[#EEF1EC] shadow-[0px_1px_4px_rgba(0,0,0,0.06)]'
+              }`}
+            >
+              {dr.label}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
@@ -161,12 +219,12 @@ export default function ReportsPage() {
           </div>
         ) : (
           <>
-            {activeTab === 'overview' && <OverviewTab overview={overview} growthData={growthData} healthData={healthData} />}
+            {activeTab === 'overview' && <OverviewTab overview={overview} growthData={growthData} healthData={healthData} valuationData={valuationData} />}
             {activeTab === 'health' && <HealthTab data={healthData} growthData={growthData} />}
             {activeTab === 'revenue' && <RevenueTab data={revenueData} />}
             {activeTab === 'creators' && <CreatorsTab data={creatorsData} />}
             {activeTab === 'placements' && <PlacementsTab data={placementsData} />}
-            {activeTab === 'rights' && <RightsTab data={rightsData} />}
+            {activeTab === 'rights' && <RightsTab data={rightsData} expiringContracts={expiringContracts} />}
           </>
         )}
       </div>
@@ -203,9 +261,18 @@ function ChartCard({ title, children, className = '' }) {
   )
 }
 
-function OverviewTab({ overview, growthData, healthData }) {
+function OverviewTab({ overview, growthData, healthData, valuationData }) {
   if (!overview) return null
   const { totals, health, financial, tasks } = overview
+
+  const methodologyData = valuationData?.methodology_breakdown
+    ? Object.entries(valuationData.methodology_breakdown)
+        .filter(([_, v]) => v > 0)
+        .map(([key, value]) => ({
+          name: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          value,
+        }))
+    : []
 
   return (
     <div className="space-y-6">
@@ -223,6 +290,13 @@ function OverviewTab({ overview, growthData, healthData }) {
         <StatCard label="Total Royalty Revenue" value={formatCents(financial.total_royalty_revenue)} icon={CurrencyDollarIcon} color="#5B9A6E" gradient="bg-gradient-to-r from-[#5B9A6E] to-[#6BAA7E]" />
         <StatCard label="Placement Value" value={formatDollars(financial.total_placement_value)} subtitle={`${tasks.pending_actions} pending tasks`} icon={FilmIcon} color="#C4956B" gradient="bg-gradient-to-r from-[#C4956B] to-[#D4A57B]" />
       </div>
+
+      {valuationData && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <StatCard label="Total Catalog Valuation" value={formatCents(valuationData.total_valuation_cents)} icon={CurrencyDollarIcon} color="#8B6EAE" gradient="bg-gradient-to-r from-[#8B6EAE] to-[#A88EC6]" />
+          <StatCard label="Songs Valued" value={valuationData.songs_valued || 0} icon={MusicalNoteIcon} color="#5B8A72" gradient="bg-gradient-to-r from-[#5B8A72] to-[#7BA594]" />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {growthData?.timeline?.length > 0 && (
@@ -266,6 +340,53 @@ function OverviewTab({ overview, growthData, healthData }) {
           </ChartCard>
         )}
       </div>
+
+      {methodologyData.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ChartCard title="Valuation Methodology">
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={methodologyData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={3}
+                  dataKey="value"
+                >
+                  {methodologyData.map((_, i) => (
+                    <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                <Legend formatter={(value) => <span className="text-[12px] text-[#3D4A44]">{value}</span>} />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartCard>
+          <div className="flex items-center justify-center">
+            <Link
+              to="/valuation"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-[#5B8A72] text-white rounded-[14px] text-[15px] font-medium hover:bg-[#4A7A62] transition-all shadow-sm"
+            >
+              View Full Valuation
+              <ArrowTrendingUpIcon className="w-5 h-5" />
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {valuationData && methodologyData.length === 0 && (
+        <div className="flex justify-center">
+          <Link
+            to="/valuation"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-[#5B8A72] text-white rounded-[14px] text-[15px] font-medium hover:bg-[#4A7A62] transition-all shadow-sm"
+          >
+            View Full Valuation
+            <ArrowTrendingUpIcon className="w-5 h-5" />
+          </Link>
+        </div>
+      )}
     </div>
   )
 }
@@ -619,7 +740,7 @@ function PlacementsTab({ data }) {
   )
 }
 
-function RightsTab({ data }) {
+function RightsTab({ data, expiringContracts }) {
   if (!data) return null
 
   const statusData = Object.entries(data.contracts_by_status).map(([s, c]) => ({ name: s, value: c }))
@@ -629,6 +750,15 @@ function RightsTab({ data }) {
     { label: 'Contract Coverage', value: data.coverage.contract_coverage_rate, count: data.coverage.songs_with_contracts, total: data.coverage.total_songs, color: '#5B8A72' },
     { label: 'Rights Splits Defined', value: data.coverage.splits_coverage_rate, count: data.coverage.songs_with_splits, total: data.coverage.total_songs, color: '#5A8A9A' },
   ]
+
+  const getDaysColor = (days) => {
+    if (days < 30) return 'text-[#C47068]'
+    if (days < 60) return 'text-[#C4956B]'
+    if (days < 90) return 'text-[#B5A642]'
+    return 'text-[#3D4A44]'
+  }
+
+  const contracts = expiringContracts?.contracts || expiringContracts || []
 
   return (
     <div className="space-y-6">
@@ -696,6 +826,43 @@ function RightsTab({ data }) {
           </ChartCard>
         )}
       </div>
+
+      <ChartCard title="Contracts Expiring Soon">
+        {Array.isArray(contracts) && contracts.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-[#EEF1EC]">
+                  <th className="text-left py-3 px-2 text-[12px] uppercase tracking-wider text-[#7A8580] font-medium">Contract</th>
+                  <th className="text-left py-3 px-2 text-[12px] uppercase tracking-wider text-[#7A8580] font-medium">Type</th>
+                  <th className="text-left py-3 px-2 text-[12px] uppercase tracking-wider text-[#7A8580] font-medium">End Date</th>
+                  <th className="text-right py-3 px-2 text-[12px] uppercase tracking-wider text-[#7A8580] font-medium">Days Remaining</th>
+                  <th className="text-right py-3 px-2 text-[12px] uppercase tracking-wider text-[#7A8580] font-medium">Assets</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contracts.map((contract, i) => (
+                  <tr key={contract.id || i} className="border-b border-[#EEF1EC] last:border-0 hover:bg-[#FAFBF9] transition-colors">
+                    <td className="py-3 px-2 text-[14px] font-medium text-[#3D4A44]">{contract.name || contract.contract_name || 'Untitled'}</td>
+                    <td className="py-3 px-2 text-[13px] text-[#7A8580]">{contract.type || contract.contract_type || '—'}</td>
+                    <td className="py-3 px-2 text-[13px] text-[#3D4A44]">{contract.end_date ? new Date(contract.end_date).toLocaleDateString() : '—'}</td>
+                    <td className={`py-3 px-2 text-[14px] font-semibold text-right ${getDaysColor(contract.days_remaining)}`}>
+                      {contract.days_remaining != null ? contract.days_remaining : '—'}
+                    </td>
+                    <td className="py-3 px-2 text-[14px] text-[#3D4A44] text-right">{contract.asset_count ?? contract.assets ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="py-8 text-center">
+            <ShieldCheckIcon className="w-10 h-10 text-[#7A8580] mx-auto mb-2" />
+            <p className="text-[15px] text-[#3D4A44] font-medium">No Contracts Expiring Soon</p>
+            <p className="text-[13px] text-[#7A8580] mt-1">All contracts are in good standing</p>
+          </div>
+        )}
+      </ChartCard>
     </div>
   )
 }
