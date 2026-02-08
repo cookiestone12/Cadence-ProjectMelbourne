@@ -31,17 +31,13 @@ export default function Login({ onLogin }) {
     <div className="min-h-screen bg-gradient-to-br from-[#5B8A72] via-[#7BA594] to-[#6B9A84] flex items-center justify-center p-4">
       <div className="bg-white/95 backdrop-blur-xl rounded-[24px] shadow-am-xl p-8 w-full max-w-md animate-am-scale-in">
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-5">
+          <div className="flex justify-center">
             <img 
               src="/rythm-logo.png" 
-              alt="Rythm" 
-              className="h-24 w-auto drop-shadow-md"
+              alt="Rythm - Catalog Intelligence" 
+              className="h-28 w-auto drop-shadow-md"
             />
           </div>
-          <h1 className="text-[28px] font-bold text-am-text tracking-tight mb-1">
-            Rythm
-          </h1>
-          <p className="text-[15px] text-am-text-secondary">Catalog Intelligence</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
