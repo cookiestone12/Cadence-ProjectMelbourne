@@ -53,8 +53,11 @@ def preview_playlist_import(
     verify_org_access(current_user, org_id, db)
 
     tracks = spotify_service.get_playlist_tracks(data.playlist_url)
-    if not tracks:
-        raise HTTPException(status_code=400, detail="Could not fetch playlist tracks. Check the playlist URL and ensure Spotify is connected.")
+    if tracks is None or (isinstance(tracks, list) and len(tracks) == 0):
+        token = spotify_service._get_access_token()
+        if not token:
+            raise HTTPException(status_code=400, detail="Spotify is not connected. Please set up the Spotify integration in your project settings, or provide SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables.")
+        raise HTTPException(status_code=400, detail="Could not fetch playlist tracks. Please check that the playlist URL is correct and the playlist is public or accessible.")
 
     existing_isrcs = set()
     existing_songs = db.query(Song.isrc).filter(
