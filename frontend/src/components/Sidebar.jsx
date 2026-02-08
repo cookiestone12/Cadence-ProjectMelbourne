@@ -13,7 +13,8 @@ import {
   XMarkIcon,
   ShieldCheckIcon,
   ClipboardDocumentListIcon,
-  ClipboardDocumentCheckIcon
+  ClipboardDocumentCheckIcon,
+  BanknotesIcon
 } from '@heroicons/react/24/outline'
 import NotificationBell from './NotificationBell'
 
@@ -34,6 +35,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/releases', label: 'Releases', icon: RectangleStackIcon },
     { path: '/contracts', label: 'Contracts', icon: ClipboardDocumentListIcon },
     { path: '/actions', label: 'Actions', icon: ClipboardDocumentCheckIcon },
+    { path: '/royalties', label: 'Royalties', icon: BanknotesIcon },
     { path: '/reports', label: 'Reports', icon: ChartBarIcon },
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
   ]

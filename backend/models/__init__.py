@@ -12,6 +12,8 @@ from .models import (
     ContributorType, ReleaseType, ReleaseStatus,
     Contract, ContractParty, ContractAsset, RightsSplit,
     ContractType, ContractStatus, AssetType, RightsType, PartyRole,
+    StatementStatus, TransactionMatchStatus, PaymentStatus,
+    RoyaltyStatement, RoyaltyTransaction, RoyaltyAllocation, Payment,
 )
 
 __all__ = [
@@ -28,4 +30,6 @@ __all__ = [
     "ContributorType", "ReleaseType", "ReleaseStatus",
     "Contract", "ContractParty", "ContractAsset", "RightsSplit",
     "ContractType", "ContractStatus", "AssetType", "RightsType", "PartyRole",
+    "StatementStatus", "TransactionMatchStatus", "PaymentStatus",
+    "RoyaltyStatement", "RoyaltyTransaction", "RoyaltyAllocation", "Payment",
 ]

@@ -908,3 +908,173 @@ class RightsSplit(Base):
 
     contract_asset = relationship("ContractAsset")
     rights_holder = relationship("Creator")
+
+
+class StatementStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    PROCESSED = "PROCESSED"
+    FAILED = "FAILED"
+    PARTIALLY_MATCHED = "PARTIALLY_MATCHED"
+
+class TransactionMatchStatus(str, enum.Enum):
+    MATCHED = "MATCHED"
+    UNMATCHED = "UNMATCHED"
+    MANUAL = "MANUAL"
+
+class PaymentStatus(str, enum.Enum):
+    PENDING_PAYMENT = "PENDING"
+    APPROVED = "APPROVED"
+    PAID = "PAID"
+    CANCELLED = "CANCELLED"
+
+
+class RoyaltyStatement(Base):
+    __tablename__ = "royalty_statements"
+    __table_args__ = (
+        Index('ix_royalty_statements_org_id', 'organization_id'),
+        Index('ix_royalty_statements_status', 'status'),
+        Index('ix_royalty_statements_period', 'period_start', 'period_end'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+
+    source_name = Column(String, nullable=False)
+    source_type = Column(String, nullable=True)
+
+    period_start = Column(Date, nullable=True)
+    period_end = Column(Date, nullable=True)
+
+    currency = Column(String, default="USD")
+    exchange_rate = Column(Float, default=1.0)
+
+    file_name = Column(String, nullable=True)
+    file_path = Column(String, nullable=True)
+
+    total_revenue_cents = Column(Integer, default=0)
+    total_transactions = Column(Integer, default=0)
+    matched_transactions = Column(Integer, default=0)
+    unmatched_transactions = Column(Integer, default=0)
+
+    status = Column(String, default="PENDING")
+    processing_notes = Column(Text, nullable=True)
+
+    column_mapping = Column(JSON, nullable=True)
+
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    transactions = relationship("RoyaltyTransaction", back_populates="statement", cascade="all, delete-orphan")
+    organization = relationship("Organization")
+    uploaded_by = relationship("User")
+
+
+class RoyaltyTransaction(Base):
+    __tablename__ = "royalty_transactions"
+    __table_args__ = (
+        Index('ix_royalty_tx_statement_id', 'statement_id'),
+        Index('ix_royalty_tx_song_id', 'song_id'),
+        Index('ix_royalty_tx_match_status', 'match_status'),
+        Index('ix_royalty_tx_org_id', 'organization_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    statement_id = Column(Integer, ForeignKey("royalty_statements.id", ondelete="CASCADE"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+
+    original_track_title = Column(String, nullable=True)
+    original_artist = Column(String, nullable=True)
+    original_isrc = Column(String, nullable=True)
+    original_upc = Column(String, nullable=True)
+
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    match_status = Column(String, default="UNMATCHED")
+    match_confidence = Column(Float, nullable=True)
+
+    revenue_cents = Column(Integer, default=0)
+    currency = Column(String, default="USD")
+    quantity = Column(Integer, default=0)
+
+    territory = Column(String, nullable=True)
+    platform = Column(String, nullable=True)
+    revenue_type = Column(String, nullable=True)
+
+    raw_data = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    statement = relationship("RoyaltyStatement", back_populates="transactions")
+    song = relationship("Song")
+    allocations = relationship("RoyaltyAllocation", back_populates="transaction", cascade="all, delete-orphan")
+
+
+class RoyaltyAllocation(Base):
+    __tablename__ = "royalty_allocations"
+    __table_args__ = (
+        Index('ix_royalty_alloc_tx_id', 'transaction_id'),
+        Index('ix_royalty_alloc_contract_id', 'contract_id'),
+        Index('ix_royalty_alloc_holder_id', 'rights_holder_id'),
+        Index('ix_royalty_alloc_org_id', 'organization_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    transaction_id = Column(Integer, ForeignKey("royalty_transactions.id", ondelete="CASCADE"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+    rights_holder_id = Column(Integer, ForeignKey("creators.id"), nullable=False)
+
+    rights_type = Column(String, nullable=False)
+    share_percentage = Column(Float, nullable=False)
+    allocated_cents = Column(Integer, default=0)
+
+    is_recoupable = Column(Boolean, default=False)
+    recouped_cents = Column(Integer, default=0)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    transaction = relationship("RoyaltyTransaction", back_populates="allocations")
+    contract = relationship("Contract")
+    rights_holder = relationship("Creator")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+    __table_args__ = (
+        Index('ix_payments_org_id', 'organization_id'),
+        Index('ix_payments_payee_id', 'payee_id'),
+        Index('ix_payments_status', 'status'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+
+    payee_id = Column(Integer, ForeignKey("creators.id"), nullable=False)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+
+    amount_cents = Column(Integer, nullable=False)
+    currency = Column(String, default="USD")
+
+    period_start = Column(Date, nullable=True)
+    period_end = Column(Date, nullable=True)
+
+    status = Column(String, default="PENDING")
+
+    payment_date = Column(Date, nullable=True)
+    payment_method = Column(String, nullable=True)
+    payment_reference = Column(String, nullable=True)
+
+    notes = Column(Text, nullable=True)
+
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    payee = relationship("Creator")
+    contract = relationship("Contract")
+    created_by = relationship("User")

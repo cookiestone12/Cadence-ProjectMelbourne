@@ -8,7 +8,7 @@ from .routes import (
     organizations, creators, songs, credits,
     checklist, exports, valuations, valuation_reports, schedule_a,
     contracts, contracts_mgmt, account_links, admin, notifications, actions, csv_upload,
-    works, releases, bulk, spotify_import
+    works, releases, bulk, spotify_import, royalties
 )
 import os
 from pathlib import Path
@@ -51,6 +51,7 @@ app.include_router(works.router)
 app.include_router(releases.router)
 app.include_router(bulk.router)
 app.include_router(spotify_import.router)
+app.include_router(royalties.router)
 
 @app.get("/api/health")
 def health_check():

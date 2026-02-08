@@ -19,7 +19,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 ### Technical Implementations
 - **Multi-Tenant Architecture**: Ensures secure data isolation and organization-scoped access control.
 - **Authentication**: JWT for token-based authentication and bcrypt for password hashing.
-- **Database Schema**: Core models manage `Organization`, `User`, `Creator`, `Song`, `SongCredit`, `SongDSPLink`, `ChecklistItem`, `SongChecklistStatus`, `SongStreamingMetrics`, `TerritoryRevenue`, `ValuationCalculation`, `AccountLink`, `SongContract`, `Notification`, `NotificationPreference`, `ActionItem`, `Work`, `WorkTrack`, `WorkCredit`, `Release`, `ReleaseTrack`, `Contract`, `ContractParty`, `ContractAsset`, and `RightsSplit`.
+- **Database Schema**: Core models manage `Organization`, `User`, `Creator`, `Song`, `SongCredit`, `SongDSPLink`, `ChecklistItem`, `SongChecklistStatus`, `SongStreamingMetrics`, `TerritoryRevenue`, `ValuationCalculation`, `AccountLink`, `SongContract`, `Notification`, `NotificationPreference`, `ActionItem`, `Work`, `WorkTrack`, `WorkCredit`, `Release`, `ReleaseTrack`, `Contract`, `ContractParty`, `ContractAsset`, `RightsSplit`, `RoyaltyStatement`, `RoyaltyTransaction`, `RoyaltyAllocation`, and `Payment`.
 - **Rights & Contract Tracking**: Deal-level contracts with parties, territory, advance tracking. Asset-to-contract linking (songs and works). Per-asset rights splits with percentage validation (max 100% per rights type). Query rights by asset or by rights holder.
 - **Health Score System**: Dynamically calculates song health based on weighted checklist completion.
 - **Catalog Valuation Tool**: Employs a weighted average of four methodologies (Streaming Multiple, Revenue Multiple, Market Comparables, Black Box Algorithm) considering streaming data, revenue, growth rates, and territory breakdown.
@@ -48,6 +48,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Notification Center**: In-app notification bell with unread count badge, dropdown panel with read/unread states, mark-all-read, and per-notification delete. User and org-level notification preferences in Settings.
 - **Action Items Dashboard**: Standalone org-wide Action Items page with summary cards (pending, overdue, due this week, high priority), filterable/sortable list, inline creation form, complete/delete actions, and org-wide auto-generation from catalog gaps.
 - **Enhanced Home Dashboard**: Homepage shows urgent action items widget, recent notifications summary, action item summary cards with overdue/priority badges, alongside existing needs-attention songs and top creators.
+- **Royalty Accounting System**: Full financial engine with statement ingestion (CSV/Excel upload), asset matching (ISRC/title/artist fuzzy matching), royalty calculation engine applying contract splits, advance recoupment tracking, per-holder allocations, and payment management. Dashboard with revenue charts, top earning tracks, recoupment progress bars, and earnings breakdowns by rights holder, contract, and track. Supports multi-currency with exchange rate conversion.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.
