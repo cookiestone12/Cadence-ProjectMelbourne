@@ -78,26 +78,20 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
       `}>
         <div className="p-5 border-b border-am-separator">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center">
               {orgBranding?.logo_url ? (
                 <img 
                   src={orgBranding.logo_url} 
                   alt={orgBranding.display_name || orgBranding.name || 'Rythm'} 
-                  className="h-10 w-10 rounded-xl shadow-am-sm object-contain"
+                  className="h-12 w-auto object-contain"
                 />
               ) : (
                 <img 
                   src="/rythm-logo.png" 
-                  alt="Rythm" 
-                  className="h-10 w-auto max-h-10 object-contain"
+                  alt="Rythm - Catalog Intelligence" 
+                  className="h-12 w-auto object-contain"
                 />
               )}
-              <div>
-                <h1 className="text-[17px] font-semibold text-am-text tracking-tight">
-                  {orgBranding?.display_name || orgBranding?.name || 'Rythm'}
-                </h1>
-                <p className="text-[12px] text-am-text-secondary">Catalog Intelligence</p>
-              </div>
             </div>
             <button
               onClick={onClose}
