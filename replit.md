@@ -39,7 +39,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Song Management**: Manual and bulk CSV upload (with AI mapping) of songs with full metadata.
 - **Placement Tracking**: Full placement management page with summary cards (total, pipeline value, paid, active pitches), status filters, detail panel with status transitions, CRUD operations, and contract linking. Visual pipeline from PITCHED through to PAID.
 - **Released Status & Spotify Links**: Mark songs as released and prompt for Spotify links.
-- **Reports & Analytics**: Health distribution charts, placement rates, and insights.
+- **Reports & Analytics**: Comprehensive tabbed analytics dashboard (Overview, Catalog Health, Revenue, Creators, Placements, Rights Coverage) with Recharts visualizations including area charts, pie charts, bar charts, line charts, funnel views, coverage progress bars, top earners tables, and gap analysis. Backend analytics API aggregates data across all modules.
 - **Schedule A Export**: CSV generation of creator catalogs.
 - **Contract Management**: Secure PDF upload, download, and deletion linked to songs with access control. Full deal-level contract tracking with parties, assets, rights splits, territory, and advance management via Contracts page.
 - **Rights & Splits**: Per-asset rights splits with percentage validation. Rights query by asset or rights holder. Rights & Splits tab in song detail modal and works detail panel.
