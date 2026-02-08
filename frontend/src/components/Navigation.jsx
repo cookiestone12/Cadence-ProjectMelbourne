@@ -11,8 +11,8 @@ export default function Navigation({ user, onLogout }) {
       <div className="container mx-auto px-4 py-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center space-x-8">
-            <img src="/ampersound-logo-3d.png" alt="Ampersound Intelligence" className="h-12" />
-            <h1 className="text-2xl font-bold font-heading uppercase tracking-wide">Ampersound Intelligence</h1>
+            <img src="/ampersound-logo-3d.png" alt="Rythm" className="h-12" />
+            <h1 className="text-2xl font-bold font-heading uppercase tracking-wide">Rythm</h1>
             <div className="flex space-x-4">
               <Link 
                 to="/catalog" 

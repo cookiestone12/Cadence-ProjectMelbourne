@@ -112,8 +112,8 @@ export default function UserGuidePage() {
 
       <div ref={contentRef} className="max-w-4xl mx-auto px-6 py-8 print:max-w-none print:px-12 print:py-8">
         <div className="text-center mb-12 print:mb-16">
-          <img src="/logo-medium.png" alt="Ampersound Intelligence" className="h-24 w-auto mx-auto mb-6" />
-          <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Ampersound Intelligence</h1>
+          <img src="/logo-medium.png" alt="Rythm" className="h-24 w-auto mx-auto mb-6" />
+          <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Rythm</h1>
           <p className="text-xl text-[#5B8A72] font-medium mb-1">Catalog Manager</p>
           <p className="text-lg text-[#7A8580]">User Guide & Reference Manual</p>
           <div className="mt-4 text-sm text-[#7A8580]">
@@ -154,7 +154,7 @@ export default function UserGuidePage() {
 
         <SubHeading>Understanding Your Organization</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          Ampersound Intelligence is a multi-tenant platform. All your data — songs, creators, contracts, and more — is scoped to your organization. Each user belongs to an organization, and all content you create is visible only to members of that organization.
+          Rythm is a multi-tenant platform. All your data — songs, creators, contracts, and more — is scoped to your organization. Each user belongs to an organization, and all content you create is visible only to members of that organization.
         </p>
 
         <SubHeading>User Roles</SubHeading>
@@ -669,7 +669,7 @@ export default function UserGuidePage() {
 
         <div className="mt-16 pt-8 border-t border-[rgba(59,77,67,0.1)] text-center text-sm text-[#7A8580] print:mt-12">
           <img src="/logo-small.png" alt="Logo" className="h-8 w-auto mx-auto mb-3 opacity-60" />
-          <p className="font-medium text-[#3D4A44]">Ampersound Intelligence — Catalog Manager</p>
+          <p className="font-medium text-[#3D4A44]">Rythm — Catalog Manager</p>
           <p>Version {VERSION} &middot; {LAST_UPDATED}</p>
           <p className="mt-2">For support, contact your organization administrator.</p>
         </div>

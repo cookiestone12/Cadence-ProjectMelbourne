@@ -34,12 +34,12 @@ export default function Login({ onLogin }) {
           <div className="flex justify-center mb-5">
             <img 
               src="/logo-medium.png" 
-              alt="Ampersound Intelligence" 
+              alt="Rythm" 
               className="h-20 w-auto drop-shadow-md"
             />
           </div>
           <h1 className="text-[28px] font-bold text-am-text tracking-tight mb-1">
-            Ampersound Intelligence
+            Rythm
           </h1>
           <p className="text-[15px] text-am-text-secondary">Catalog Manager</p>
         </div>

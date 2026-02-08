@@ -118,7 +118,7 @@ export default function CatalogView() {
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `Ampersound_Catalog_Report_${catalogSummary.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+      link.download = `Rythm_Catalog_Report_${catalogSummary.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -473,7 +473,7 @@ export default function CatalogView() {
 
       <div className="bg-white rounded border border-[rgba(59,77,67,0.08)] shadow-lg p-6 mb-6 hover:shadow-lg transition-colors duration-200">
         <h3 className="text-lg font-bold font-medium mb-4 ">Upload Filled Schedule A (Internal Demo)</h3>
-        <p className="text-sm text-[#7A8580] mb-4">Use the official Ampersound Schedule A template only.</p>
+        <p className="text-sm text-[#7A8580] mb-4">Use the official Rythm Schedule A template only.</p>
         <div
           {...getRootProps()}
           className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition ${

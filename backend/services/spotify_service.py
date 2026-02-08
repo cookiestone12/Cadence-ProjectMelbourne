@@ -19,7 +19,7 @@ def _get_replit_connector_header() -> Optional[str]:
 
 def _get_replit_access_token() -> Optional[str]:
     import logging
-    logger = logging.getLogger("ampersound")
+    logger = logging.getLogger("rythm")
     hostname = os.getenv("REPLIT_CONNECTORS_HOSTNAME")
     x_replit_token = _get_replit_connector_header()
 
@@ -91,7 +91,7 @@ def _get_replit_access_token() -> Optional[str]:
 
 def _refresh_spotify_token(refresh_token: str, client_id: str) -> Optional[str]:
     import logging
-    logger = logging.getLogger("ampersound")
+    logger = logging.getLogger("rythm")
     try:
         resp = requests.post(
             "https://accounts.spotify.com/api/token",
@@ -139,7 +139,7 @@ def _get_access_token() -> Optional[str]:
 
 def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dict]:
     import logging
-    logger = logging.getLogger("ampersound")
+    logger = logging.getLogger("rythm")
     try:
         url = f"https://api.spotify.com/v1/{endpoint}"
         logger.info(f"Spotify API GET: {url} params={params}")
@@ -192,7 +192,7 @@ def get_track_data(spotify_link: str = None) -> Dict[str, Any]:
 
 def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
     import logging
-    logger = logging.getLogger("ampersound")
+    logger = logging.getLogger("rythm")
     token = _get_access_token()
     if not token:
         logger.error("Spotify: No access token available")

@@ -32,7 +32,7 @@ def get_song_valuation(
 ):
     """
     Get the latest valuation snapshot for a song.
-    TODO: This will later integrate with Luminate/Ampersound for automated valuations.
+    TODO: This will later integrate with Luminate/Rythm for automated valuations.
     """
     
     song = db.query(Song).filter(Song.id == song_id).first()
@@ -73,7 +73,7 @@ def create_song_valuation(
 ):
     """
     Manually create a valuation snapshot for a song.
-    TODO: This endpoint will later trigger automated valuation via Luminate/Ampersound API.
+    TODO: This endpoint will later trigger automated valuation via Luminate/Rythm API.
     For now, it only accepts manual valuations from admin users.
     """
     

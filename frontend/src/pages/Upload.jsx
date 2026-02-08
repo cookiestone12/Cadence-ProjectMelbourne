@@ -88,7 +88,7 @@ export default function Upload() {
           <div className="mt-8 bg-surface-black border border-border-grey border-l-4 border-l-signal-red p-4">
             <h3 className="font-semibold font-heading mb-2 text-white uppercase tracking-wide">Important Notes:</h3>
             <ul className="list-disc list-inside text-sm text-tech-grey space-y-1">
-              <li>Use the official Ampersound Schedule A template</li>
+              <li>Use the official Rythm Schedule A template</li>
               <li>Ensure all required fields are filled out</li>
               <li>Deviations from the format may result in parsing errors</li>
               <li>The system will automatically fetch analytics and calculate valuations</li>

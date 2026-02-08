@@ -33,7 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app_logger = logging.getLogger("ampersound")
+app_logger = logging.getLogger("rythm")
 
 @app.middleware("http")
 async def logging_middleware(request, call_next):

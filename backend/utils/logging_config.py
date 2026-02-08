@@ -52,7 +52,7 @@ def setup_logging():
         logging.DEBUG if os.getenv("SQL_DEBUG") == "true" else logging.WARNING
     )
 
-    return logging.getLogger("ampersound")
+    return logging.getLogger("rythm")
 
 
 logger = setup_logging()

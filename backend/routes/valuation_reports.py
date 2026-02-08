@@ -291,7 +291,7 @@ def download_catalog_valuation_excel(
     ws_summary = wb.active
     ws_summary.title = "Catalog Summary"
     
-    ws_summary['A1'] = "Ampersound Intelligence Catalog Report"
+    ws_summary['A1'] = "Rythm Catalog Report"
     ws_summary['A1'].font = Font(size=14, bold=True)
     ws_summary['A2'] = f"Catalog: {org.name}"
     ws_summary['A3'] = f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
@@ -349,7 +349,7 @@ def download_catalog_valuation_excel(
     wb.save(output)
     output.seek(0)
     
-    filename = f"ampersound_catalog_report_{org.name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    filename = f"rythm_catalog_report_{org.name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
     
     return Response(
         content=output.getvalue(),

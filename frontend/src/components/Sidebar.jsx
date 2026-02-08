@@ -63,12 +63,12 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
             <div className="flex items-center gap-3">
               <img 
                 src="/logo-small.png" 
-                alt="Ampersound" 
+                alt="Rythm" 
                 className="h-10 w-10 rounded-xl shadow-am-sm"
               />
               <div>
                 <h1 className="text-[17px] font-semibold text-am-text tracking-tight">
-                  Ampersound
+                  Rythm
                 </h1>
                 <p className="text-[12px] text-am-text-secondary">Catalog Manager</p>
               </div>

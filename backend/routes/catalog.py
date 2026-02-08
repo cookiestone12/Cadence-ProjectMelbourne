@@ -1064,7 +1064,7 @@ def export_catalog_report(
     # Remove default sheet
     wb.remove(wb.active)
     
-    # Define styles - Ampersound Signal Red branding
+    # Define styles - Rythm branding
     header_fill = PatternFill(start_color="E62E2E", end_color="E62E2E", fill_type="solid")
     header_font = Font(name="Inter", color="FFFFFF", bold=True, size=11)
     header_alignment = Alignment(horizontal="center", vertical="center")
@@ -1287,7 +1287,7 @@ def export_catalog_report(
     
     # Sheet 4: Methodology
     ws_method = wb.create_sheet("Methodology")
-    ws_method.append(["Ampersound Catalog Intelligence - Calculation Methodology"])
+    ws_method.append(["Rythm Catalog Intelligence - Calculation Methodology"])
     ws_method.append([])
     ws_method.append(["Revenue Calculations:"])
     ws_method.append(["- Premium Stream Rate: $0.0012 per stream"])
@@ -1332,7 +1332,7 @@ def export_catalog_report(
     # Sanitize filename to remove special characters that can't be encoded in latin-1
     safe_catalog_name = ''.join(c if c.isalnum() or c in (' ', '_', '-') else '_' for c in catalog.name)
     safe_catalog_name = safe_catalog_name.replace(' ', '_')
-    filename = f"Ampersound_Catalog_Report_{safe_catalog_name}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    filename = f"Rythm_Catalog_Report_{safe_catalog_name}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
     
     return StreamingResponse(
         output,
@@ -1342,7 +1342,7 @@ def export_catalog_report(
 
 @router.get("/template/schedule-a")
 def download_schedule_a_template():
-    """Generate and serve the official Ampersound Schedule A upload template"""
+    """Generate and serve the official Rythm Schedule A upload template"""
     
     # Create Excel workbook
     wb = openpyxl.Workbook()
@@ -1351,7 +1351,7 @@ def download_schedule_a_template():
     wb.remove(wb.active)
     ws = wb.create_sheet("Schedule A")
     
-    # Define styles - Ampersound branding
+    # Define styles - Rythm branding
     title_font = Font(name="Inter", size=18, bold=True, color="E62E2E")
     section_header_font = Font(name="Inter", size=12, bold=True, color="FFFFFF")
     section_header_fill = PatternFill(start_color="E62E2E", end_color="E62E2E", fill_type="solid")
@@ -1438,10 +1438,10 @@ def download_schedule_a_template():
         "3. Publishing % and Master % should be entered as numbers (e.g., 50 for 50%)",
         "4. Spotify Link should be the full URL to the track on Spotify",
         "5. Release Date format: YYYY-MM-DD (e.g., 2024-01-15)",
-        "6. Save this file and upload it through the Ampersound platform",
+        "6. Save this file and upload it through the Rythm platform",
         "7. The system will automatically fetch analytics and calculate valuations",
         "",
-        "For assistance, contact Ampersound support"
+        "For assistance, contact Rythm support"
     ]
     
     for instruction in instructions:
@@ -1462,7 +1462,7 @@ def download_schedule_a_template():
     wb.save(output)
     output.seek(0)
     
-    filename = f"Ampersound_Schedule_A_Template_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    filename = f"Rythm_Schedule_A_Template_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
     
     return StreamingResponse(
         output,

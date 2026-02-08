@@ -13,10 +13,10 @@ export default function Home() {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2260%22%20height%3D%2260%22%20viewBox%3D%220%200%2060%2060%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cg%20fill%3D%22none%22%20fill-rule%3D%22evenodd%22%3E%3Cg%20fill%3D%22%23ffffff%22%20fill-opacity%3D%220.05%22%3E%3Cpath%20d%3D%22M36%2034v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6%2034v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6%204V0H4v4H0v2h4v4h2V6h4V4H6z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E')] opacity-50"></div>
         <div className="container mx-auto px-4 text-center relative z-10">
           <div className="flex justify-center mb-6">
-            <img src="/ampersound-logo.png" alt="Ampersound" className="h-16 w-auto drop-shadow-lg" onError={(e) => e.target.style.display = 'none'} />
+            <img src="/ampersound-logo.png" alt="Rythm" className="h-16 w-auto drop-shadow-lg" onError={(e) => e.target.style.display = 'none'} />
           </div>
-          <h1 className="text-5xl font-bold mb-4 tracking-tight">Ampersound Intelligence</h1>
-          <p className="text-xl mb-10 text-white/80 max-w-2xl mx-auto">Catalog Manager - Multi-Tenant Rights & Catalog Administration</p>
+          <h1 className="text-5xl font-bold mb-4 tracking-tight">Rythm</h1>
+          <p className="text-xl mb-10 text-white/80 max-w-2xl mx-auto">Catalog Manager</p>
           <Link
             to="/login"
             className="bg-white text-am-accent px-8 py-3.5 rounded-full font-semibold shadow-am-lg hover:shadow-am-xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 inline-block"
@@ -95,7 +95,7 @@ export default function Home() {
       {/* Footer */}
       <div className="bg-am-text py-10">
         <div className="container mx-auto px-4 text-center">
-          <p className="text-white/50 text-[13px]">© 2026 Ampersound Intelligence. All rights reserved.</p>
+          <p className="text-white/50 text-[13px]">© 2026 Rythm. All rights reserved.</p>
         </div>
       </div>
     </div>

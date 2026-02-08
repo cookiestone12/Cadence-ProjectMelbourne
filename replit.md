@@ -1,7 +1,7 @@
-# Ampersound Intelligence - Catalog Manager - Multi-Tenant Rights & Catalog Administration
+# Rythm - Catalog Manager - Multi-Tenant Rights & Catalog Administration
 
 ## Overview
-Ampersound Intelligence is a multi-tenant platform for music labels, publishers, production companies, and creators to manage music catalogs and rights. It features an Apple Music-inspired UI, creator-centric views, health scoring, placement tracking, and robust rights administration. The platform includes a comprehensive catalog valuation tool with multiple methodologies and detailed reporting, providing actionable insights into catalog performance and value.
+Rythm is a multi-tenant platform for music labels, publishers, production companies, and creators to manage music catalogs and rights. It features an Apple Music-inspired UI, creator-centric views, health scoring, placement tracking, and robust rights administration. The platform includes a comprehensive catalog valuation tool with multiple methodologies and detailed reporting, providing actionable insights into catalog performance and value.
 
 ## User Preferences
 ### Coding Style
