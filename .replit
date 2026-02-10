@@ -57,7 +57,7 @@ externalPort = 8000
 
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "freetype", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc"]
+packages = ["cargo", "freetype", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "imagemagick"]
 
 [deployment]
 build = ["npm", "--prefix", "frontend", "run", "build"]

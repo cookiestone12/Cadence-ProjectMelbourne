@@ -1,7 +1,37 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import axios from 'axios'
 import { BellIcon, CheckIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { BellAlertIcon } from '@heroicons/react/24/solid'
+
+function requestDesktopNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission()
+  }
+}
+
+function sendDesktopNotification(title, body, onClick) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      const notification = new Notification(title, {
+        body: body || '',
+        icon: '/favicon-192.png',
+        badge: '/favicon-192.png',
+        tag: 'rythm-notification-' + Date.now(),
+        requireInteraction: false,
+      })
+      if (onClick) {
+        notification.onclick = () => {
+          window.focus()
+          onClick()
+          notification.close()
+        }
+      }
+      setTimeout(() => notification.close(), 8000)
+    } catch (e) {
+      // Silent fail for environments that don't support Notification constructor
+    }
+  }
+}
 
 export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false)
@@ -9,12 +39,49 @@ export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const dropdownRef = useRef(null)
+  const prevUnreadCountRef = useRef(-1)
+  const initialLoadRef = useRef(true)
+
+  const fetchUnreadCount = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/notifications/unread-count')
+      const newCount = res.data.unread_count
+      const prevCount = prevUnreadCountRef.current
+
+      if (!initialLoadRef.current && newCount > prevCount && prevCount >= 0) {
+        try {
+          const notifRes = await axios.get('/api/notifications?limit=5&unread=true')
+          const newNotifs = notifRes.data || []
+          if (newNotifs.length > 0) {
+            const latest = newNotifs[0]
+            sendDesktopNotification(
+              latest.title || 'Rythm — New Notification',
+              latest.message || `You have ${newCount - prevCount} new notification${(newCount - prevCount) > 1 ? 's' : ''}`,
+              () => window.location.href = '/actions'
+            )
+          }
+        } catch {
+          sendDesktopNotification(
+            'Rythm — New Notification',
+            `You have ${newCount - prevCount} new notification${(newCount - prevCount) > 1 ? 's' : ''}`,
+            () => window.location.href = '/actions'
+          )
+        }
+      }
+
+      initialLoadRef.current = false
+      prevUnreadCountRef.current = newCount
+      setUnreadCount(newCount)
+    } catch (err) {
+      console.error('Failed to fetch unread count:', err)
+    }
+  }, [])
 
   useEffect(() => {
     fetchUnreadCount()
     const interval = setInterval(fetchUnreadCount, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchUnreadCount])
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -25,15 +92,6 @@ export default function NotificationBell() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
-
-  const fetchUnreadCount = async () => {
-    try {
-      const res = await axios.get('/api/notifications/unread-count')
-      setUnreadCount(res.data.unread_count)
-    } catch (err) {
-      console.error('Failed to fetch unread count:', err)
-    }
-  }
 
   const fetchNotifications = async () => {
     setLoading(true)

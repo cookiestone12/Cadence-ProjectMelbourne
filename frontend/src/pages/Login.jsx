@@ -19,6 +19,9 @@ export default function Login({ onLogin }) {
       })
 
       const { access_token, user } = response.data
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission()
+      }
       onLogin(access_token, user)
     } catch (err) {
       setError(err.response?.data?.detail || 'Login failed. Please try again.')
