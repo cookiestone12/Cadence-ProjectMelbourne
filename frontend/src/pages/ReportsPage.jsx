@@ -76,9 +76,12 @@ export default function ReportsPage() {
     async function init() {
       try {
         const orgRes = await axios.get('/api/organizations/current')
-        setOrgId(orgRes.data.id)
+        const id = orgRes.data?.id
+        if (id) setOrgId(id)
+        else setLoading(false)
       } catch (e) {
         console.error('Failed to load org:', e)
+        setLoading(false)
       }
     }
     init()

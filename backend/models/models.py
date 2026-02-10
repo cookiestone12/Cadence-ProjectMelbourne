@@ -259,6 +259,7 @@ class Work(Base):
     id = Column(Integer, primary_key=True, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
     asset_type = Column(String, default="TRACK", nullable=False)
+    work_type = Column(String, default="TRACK", nullable=False)
     title = Column(String, index=True, nullable=False)
     alternative_titles = Column(JSON, default=list)
     iswc = Column(String, nullable=True)

@@ -11,6 +11,7 @@ router = APIRouter(prefix="/api/works", tags=["works"])
 
 class WorkCreate(BaseModel):
     title: str
+    work_type: Optional[str] = "TRACK"
     iswc: Optional[str] = None
     alternative_titles: Optional[List[str]] = []
     language: Optional[str] = None
@@ -21,6 +22,7 @@ class WorkCreate(BaseModel):
 
 class WorkUpdate(BaseModel):
     title: Optional[str] = None
+    work_type: Optional[str] = None
     iswc: Optional[str] = None
     alternative_titles: Optional[List[str]] = None
     language: Optional[str] = None
@@ -81,6 +83,7 @@ def list_works(
         results.append({
             "id": w.id,
             "title": w.title,
+            "work_type": w.work_type or "TRACK",
             "iswc": w.iswc,
             "alternative_titles": w.alternative_titles or [],
             "language": w.language,
@@ -130,6 +133,7 @@ def get_work(work_id: int, db: Session = Depends(get_db), current_user: User = D
     return {
         "id": work.id,
         "title": work.title,
+        "work_type": work.work_type or "TRACK",
         "iswc": work.iswc,
         "alternative_titles": work.alternative_titles or [],
         "language": work.language,
@@ -150,6 +154,7 @@ def create_work(org_id: int, data: WorkCreate, db: Session = Depends(get_db), cu
     work = Work(
         organization_id=org_id,
         title=data.title,
+        work_type=data.work_type or "TRACK",
         iswc=data.iswc,
         alternative_titles=data.alternative_titles or [],
         language=data.language,

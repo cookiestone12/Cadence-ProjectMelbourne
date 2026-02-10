@@ -27,6 +27,7 @@ Base.metadata.create_all(bind=engine)
 
 def seed_super_admin():
     from .utils.auth import get_password_hash
+    from .models.models import Organization, OrganizationMember
     db = SessionLocal()
     try:
         from sqlalchemy import func
@@ -41,7 +42,25 @@ def seed_super_admin():
             )
             db.add(admin)
             db.commit()
+            db.refresh(admin)
             logger.info("MasterPAdmin super admin account created")
+            existing = admin
+
+        if existing:
+            has_membership = db.query(OrganizationMember).filter(
+                OrganizationMember.user_id == existing.id
+            ).first()
+            if not has_membership:
+                first_org = db.query(Organization).order_by(Organization.id).first()
+                if first_org:
+                    membership = OrganizationMember(
+                        organization_id=first_org.id,
+                        user_id=existing.id,
+                        role="OWNER"
+                    )
+                    db.add(membership)
+                    db.commit()
+                    logger.info(f"Added MasterPAdmin to organization '{first_org.name}' as OWNER")
     except Exception as e:
         db.rollback()
         logger.error(f"Error seeding super admin: {e}")

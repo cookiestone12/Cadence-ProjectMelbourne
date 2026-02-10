@@ -80,7 +80,8 @@ export default function ContractsPage() {
   async function loadData() {
     try {
       const orgResponse = await axios.get('/api/organizations/current')
-      const orgId = orgResponse.data.id
+      const orgId = orgResponse.data?.id
+      if (!orgId) { setLoading(false); return }
       setOrganizationId(orgId)
 
       const [contractsResponse, songsResponse, worksResponse, creatorsResponse] = await Promise.all([

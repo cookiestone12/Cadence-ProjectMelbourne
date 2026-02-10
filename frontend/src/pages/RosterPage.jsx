@@ -59,7 +59,8 @@ export default function RosterPage() {
   async function loadData() {
     try {
       const orgResponse = await axios.get('/api/organizations/current')
-      const currentOrgId = orgResponse.data.id
+      const currentOrgId = orgResponse.data?.id
+      if (!currentOrgId) { setLoading(false); return }
       setOrgId(currentOrgId)
       
       const creatorsResponse = await axios.get(`/api/creators/org/${currentOrgId}`)

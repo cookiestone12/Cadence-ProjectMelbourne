@@ -23,7 +23,8 @@ export default function CatalogPage() {
   async function loadData() {
     try {
       const orgResponse = await axios.get('/api/organizations/current')
-      const orgId = orgResponse.data.id
+      const orgId = orgResponse.data?.id
+      if (!orgId) { setLoading(false); return }
       
       const params = new URLSearchParams()
       if (filters.creator_id) params.append('creator_id', filters.creator_id)

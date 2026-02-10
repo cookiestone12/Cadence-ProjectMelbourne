@@ -55,7 +55,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/contracts', label: 'Contracts', icon: ClipboardDocumentListIcon },
     { path: '/actions', label: 'Actions', icon: ClipboardDocumentCheckIcon },
     { path: '/royalties', label: 'Royalties', icon: BanknotesIcon },
-    { path: '/placements', label: 'Placements', icon: FilmIcon },
+    { path: '/placements', label: 'Sync Placements', icon: FilmIcon },
     { path: '/reports', label: 'Reports', icon: ChartBarIcon },
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
   ]

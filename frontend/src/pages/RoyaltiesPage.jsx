@@ -1060,7 +1060,8 @@ export default function RoyaltiesPage() {
     const loadInitialData = async () => {
       try {
         const orgRes = await axios.get('/api/organizations/current')
-        const id = orgRes.data.id
+        const id = orgRes.data?.id
+        if (!id) { setLoading(false); return }
         setOrgId(id)
 
         const results = await Promise.allSettled([

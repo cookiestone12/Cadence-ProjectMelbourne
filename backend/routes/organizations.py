@@ -48,9 +48,14 @@ def get_current_organization(
     ).first()
     
     if not membership:
-        raise HTTPException(status_code=404, detail="User is not a member of any organization")
-    
-    org = db.query(Organization).filter(Organization.id == membership.organization_id).first()
+        if current_user.is_super_admin:
+            org = db.query(Organization).order_by(Organization.id).first()
+            if not org:
+                raise HTTPException(status_code=404, detail="No organizations exist yet")
+        else:
+            raise HTTPException(status_code=404, detail="User is not a member of any organization")
+    else:
+        org = db.query(Organization).filter(Organization.id == membership.organization_id).first()
     
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -82,6 +87,14 @@ def get_current_membership(
     ).first()
     
     if not membership:
+        if current_user.is_super_admin:
+            org = db.query(Organization).order_by(Organization.id).first()
+            if org:
+                return {
+                    "organization_id": org.id,
+                    "user_id": current_user.id,
+                    "role": "OWNER"
+                }
         raise HTTPException(status_code=404, detail="User is not a member of any organization")
     
     return {

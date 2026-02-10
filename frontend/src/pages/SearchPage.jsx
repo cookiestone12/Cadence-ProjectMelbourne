@@ -25,7 +25,8 @@ export default function SearchPage() {
 
   useEffect(() => {
     axios.get('/api/organizations/current').then(res => {
-      setOrgId(res.data.id)
+      const id = res.data?.id
+      if (id) setOrgId(id)
     }).catch(err => console.error('Failed to load organization:', err))
   }, [])
 

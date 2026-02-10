@@ -18,7 +18,8 @@ export default function WorksPage() {
   const [creators, setCreators] = useState([])
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState({})
-  const [addForm, setAddForm] = useState({ title: '', iswc: '', language: '', genre: '', notes: '' })
+  const [addForm, setAddForm] = useState({ title: '', iswc: '', language: '', genre: '', notes: '', work_type: 'TRACK' })
+  const [workTypeFilter, setWorkTypeFilter] = useState('')
   const [trackSearch, setTrackSearch] = useState('')
   const [creditForm, setCreditForm] = useState({ creator_id: '', role: '', share_percentage: '' })
   const [activeDetailTab, setActiveDetailTab] = useState('info')
@@ -32,7 +33,8 @@ export default function WorksPage() {
   async function loadData() {
     try {
       const orgResponse = await axios.get('/api/organizations/current')
-      const orgId = orgResponse.data.id
+      const orgId = orgResponse.data?.id
+      if (!orgId) { setLoading(false); return }
       setOrganizationId(orgId)
 
       const [worksResponse, songsResponse, creatorsResponse] = await Promise.all([
@@ -52,6 +54,7 @@ export default function WorksPage() {
   }
 
   const filteredWorks = works.filter(work => {
+    if (workTypeFilter && (work.work_type || 'TRACK') !== workTypeFilter) return false
     if (!searchTerm) return true
     const term = searchTerm.toLowerCase()
     return (
@@ -71,6 +74,7 @@ export default function WorksPage() {
       setWorkDetail(res.data)
       setEditForm({
         title: res.data.title || '',
+        work_type: res.data.work_type || 'TRACK',
         iswc: res.data.iswc || '',
         language: res.data.language || '',
         genre: res.data.genre || '',
@@ -89,7 +93,7 @@ export default function WorksPage() {
     try {
       await axios.post(`/api/works/org/${organizationId}`, addForm)
       setShowAddModal(false)
-      setAddForm({ title: '', iswc: '', language: '', genre: '', notes: '' })
+      setAddForm({ title: '', iswc: '', language: '', genre: '', notes: '', work_type: 'TRACK' })
       await loadData()
     } catch (error) {
       console.error('Failed to create work:', error)
@@ -235,6 +239,15 @@ export default function WorksPage() {
               className="w-full pl-10 pr-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
             />
           </div>
+          <select
+            value={workTypeFilter}
+            onChange={(e) => setWorkTypeFilter(e.target.value)}
+            className="border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44] text-sm"
+          >
+            <option value="">All Types</option>
+            <option value="DEMO">Demo</option>
+            <option value="TRACK">Track</option>
+          </select>
         </div>
       </div>
 
@@ -244,6 +257,7 @@ export default function WorksPage() {
             <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Type</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">ISWC</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Genre</th>
                 <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Linked Tracks</th>
@@ -259,6 +273,15 @@ export default function WorksPage() {
                 >
                   <td className="px-4 py-3">
                     <div className="font-medium text-[#3D4A44]">{work.title}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                      (work.work_type || 'TRACK') === 'DEMO'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-sky-100 text-sky-700'
+                    }`}>
+                      {(work.work_type || 'TRACK') === 'DEMO' ? 'Demo' : 'Track'}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-[#7A8580]">
                     {work.iswc || '-'}
@@ -282,7 +305,7 @@ export default function WorksPage() {
               ))}
               {filteredWorks.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="px-6 py-12 text-center text-[#7A8580]">
+                  <td colSpan="6" className="px-6 py-12 text-center text-[#7A8580]">
                     No works found
                   </td>
                 </tr>
@@ -311,6 +334,17 @@ export default function WorksPage() {
                   className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
                   placeholder="Work title"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Work Type</label>
+                <select
+                  value={addForm.work_type}
+                  onChange={(e) => setAddForm(prev => ({ ...prev, work_type: e.target.value }))}
+                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                >
+                  <option value="TRACK">Track (Instrumental/Beat)</option>
+                  <option value="DEMO">Demo (Song with Lyrics/Melodies)</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#3D4A44] mb-1">ISWC</label>
@@ -444,6 +478,17 @@ export default function WorksPage() {
                       />
                     </div>
                     <div>
+                      <label className="block text-sm font-medium text-[#3D4A44] mb-1">Work Type</label>
+                      <select
+                        value={editForm.work_type}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, work_type: e.target.value }))}
+                        className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                      >
+                        <option value="TRACK">Track (Instrumental/Beat)</option>
+                        <option value="DEMO">Demo (Song with Lyrics/Melodies)</option>
+                      </select>
+                    </div>
+                    <div>
                       <label className="block text-sm font-medium text-[#3D4A44] mb-1">ISWC</label>
                       <input
                         type="text"
@@ -500,6 +545,16 @@ export default function WorksPage() {
                       <div>
                         <p className="text-xs font-medium text-[#7A8580] mb-1">Title</p>
                         <p className="text-sm text-[#3D4A44]">{workDetail.title}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-[#7A8580] mb-1">Work Type</p>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                          (workDetail.work_type || 'TRACK') === 'DEMO'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-sky-100 text-sky-700'
+                        }`}>
+                          {(workDetail.work_type || 'TRACK') === 'DEMO' ? 'Demo' : 'Track'}
+                        </span>
                       </div>
                       <div>
                         <p className="text-xs font-medium text-[#7A8580] mb-1">ISWC</p>

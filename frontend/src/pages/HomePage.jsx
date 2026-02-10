@@ -81,8 +81,9 @@ export default function HomePage() {
     async function loadDashboard() {
       try {
         const orgResponse = await axios.get('/api/organizations/current')
+        const orgId = orgResponse.data?.id
+        if (!orgId) { setLoading(false); return }
         setOrg(orgResponse.data)
-        const orgId = orgResponse.data.id
         
         const [songsResponse, creatorsResponse, summaryResponse, actionsResponse, notificationsResponse, placementRes] = await Promise.allSettled([
           axios.get(`/api/songs/org/${orgId}`),

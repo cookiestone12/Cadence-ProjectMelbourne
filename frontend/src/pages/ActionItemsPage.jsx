@@ -140,7 +140,8 @@ export default function ActionItemsPage() {
   const loadInitialData = async () => {
     try {
       const orgResponse = await axios.get('/api/organizations/current')
-      const id = orgResponse.data.id
+      const id = orgResponse.data?.id
+      if (!id) { setLoading(false); return }
       setOrgId(id)
 
       const [creatorsRes, songsRes] = await Promise.all([
