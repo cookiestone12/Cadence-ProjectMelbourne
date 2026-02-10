@@ -139,31 +139,27 @@ if frontend_dist.exists():
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """Serve the React SPA for all non-API routes"""
-        # Skip API routes
+        from fastapi.responses import Response
+        
         if full_path.startswith("api/"):
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Not found")
         
-        # Sanitize path to prevent directory traversal
         try:
-            # Resolve the requested path and ensure it's within frontend_dist
             requested_path = (frontend_dist / full_path).resolve()
             frontend_dist_resolved = frontend_dist.resolve()
             
-            # Security check: ensure resolved path is within frontend_dist using is_relative_to
             if not requested_path.is_relative_to(frontend_dist_resolved):
-                # Path traversal attempt detected - serve index.html for SPA routing
-                return FileResponse(frontend_dist / "index.html")
+                return FileResponse(frontend_dist / "index.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
             
-            # Try to serve static file if it exists
             if requested_path.is_file():
-                return FileResponse(requested_path)
+                if full_path.startswith("assets/"):
+                    return FileResponse(requested_path, headers={"Cache-Control": "public, max-age=31536000, immutable"})
+                return FileResponse(requested_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         except (ValueError, RuntimeError):
-            # Invalid path, serve index.html
             pass
         
-        # Otherwise serve index.html (SPA routing)
-        return FileResponse(frontend_dist / "index.html")
+        return FileResponse(frontend_dist / "index.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 if __name__ == "__main__":
     import uvicorn
