@@ -60,6 +60,6 @@ channel = "stable-25_05"
 packages = ["cargo", "freetype", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "imagemagick"]
 
 [deployment]
-build = ["bash", "build.sh"]
+build = ["npm", "run", "build"]
 run = ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0"]
 deploymentTarget = "autoscale"
