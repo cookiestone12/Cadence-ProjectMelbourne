@@ -407,14 +407,61 @@ export default function CreatorDetailPage() {
           {label || 'No'}
         </span>
       )
-    } else {
+    } else if (value === 'N/A' || value === null || value === undefined) {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(0, 0, 0, 0.05)', color: '#7A8580' }}>
           <MinusCircleIcon className="w-3 h-3" />
           N/A
         </span>
       )
+    } else {
+      return (
+        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(52, 199, 89, 0.15)', color: '#5B9A6E' }}>
+          <CheckCircleIcon className="w-3 h-3" />
+          ${parseFloat(value).toLocaleString()}
+        </span>
+      )
     }
+  }
+
+  const DollarOrNAInput = ({ value, onChange, placeholder }) => {
+    const isNA = value === 'N/A'
+    return (
+      <div className="flex items-center gap-1">
+        {isNA ? (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-[#F5F7F4] text-[#7A8580] hover:bg-[#EEF1EC] transition-colors w-full text-center"
+          >
+            N/A
+          </button>
+        ) : (
+          <div className="flex items-center gap-1 w-full">
+            <div className="relative flex-1">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#7A8580] text-sm">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className="w-full pl-5 pr-2 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72]"
+                placeholder={placeholder || '0'}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange('N/A')}
+              className="px-2 py-2 text-xs text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#F5F7F4] rounded-lg transition-colors whitespace-nowrap"
+              title="Set to N/A"
+            >
+              N/A
+            </button>
+          </div>
+        )}
+      </div>
+    )
   }
   
   const PlacementStatusBadge = ({ status }) => {
@@ -455,7 +502,10 @@ export default function CreatorDetailPage() {
   
   const placedSongs = songs.filter(s => s.is_paid === 'Yes' || s.is_paid === true)
   const registeredPro = songs.filter(s => s.is_registered_with_pro).length
-  const registeredFee = songs.filter(s => s.is_registered_with_dsp === 'Yes').length
+  const registeredFee = songs.filter(s => {
+    const v = s.is_registered_with_dsp
+    return v === 'Yes' || v === true || (v && v !== 'N/A' && v !== 'No' && !isNaN(parseFloat(v)))
+  }).length
   const totalAdvance = songs.reduce((sum, s) => sum + (s.advance_amount || 0), 0) / 100
   
   const toggleSongSelection = (songId) => {
@@ -807,16 +857,12 @@ export default function CreatorDetailPage() {
                               max="100"
                             />
                           </td>
-                          <td className="px-4 py-2 text-center">
-                            <select 
+                          <td className="px-4 py-2">
+                            <DollarOrNAInput
                               value={editForm.is_invoiced}
-                              onChange={(e) => setEditForm({...editForm, is_invoiced: e.target.value})}
-                              className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72]"
-                            >
-                              <option value="N/A">N/A</option>
-                              <option value="Yes">Yes</option>
-                              <option value="No">No</option>
-                            </select>
+                              onChange={(val) => setEditForm({...editForm, is_invoiced: val})}
+                              placeholder="0"
+                            />
                           </td>
                           <td className="px-4 py-2 text-center">
                             <input 
@@ -826,16 +872,12 @@ export default function CreatorDetailPage() {
                               className="w-4 h-4 text-[#5B8A72] rounded accent-[#5B8A72]"
                             />
                           </td>
-                          <td className="px-4 py-2 text-center">
-                            <select 
+                          <td className="px-4 py-2">
+                            <DollarOrNAInput
                               value={editForm.is_registered_with_dsp}
-                              onChange={(e) => setEditForm({...editForm, is_registered_with_dsp: e.target.value})}
-                              className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72]"
-                            >
-                              <option value="N/A">N/A</option>
-                              <option value="Yes">Yes</option>
-                              <option value="No">No</option>
-                            </select>
+                              onChange={(val) => setEditForm({...editForm, is_registered_with_dsp: val})}
+                              placeholder="0"
+                            />
                           </td>
                           <td className="px-4 py-2 text-center">
                             <select 

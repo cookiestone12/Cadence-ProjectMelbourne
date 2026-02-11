@@ -71,11 +71,18 @@ def sync_song_to_checklist(db: Session, song: Song):
         value = getattr(song, field, None)
         
         if field in NA_CAPABLE_FIELDS:
-            str_val = str(value).strip().upper() if value else "NO"
-            if str_val in ("N/A", "NA", "NOT_APPLICABLE"):
+            str_val = str(value).strip() if value else ""
+            upper_val = str_val.upper()
+            if upper_val in ("N/A", "NA", "NOT_APPLICABLE"):
                 set_checklist_status(db, song.id, checklist_item.id, "NOT_APPLICABLE")
-            elif str_val in ("YES", "TRUE", "1"):
+            elif upper_val in ("YES", "TRUE", "1"):
                 set_checklist_status(db, song.id, checklist_item.id, "COMPLETED")
+            elif str_val and upper_val not in ("NO", "FALSE", "0", ""):
+                try:
+                    float(str_val)
+                    set_checklist_status(db, song.id, checklist_item.id, "COMPLETED")
+                except ValueError:
+                    set_checklist_status(db, song.id, checklist_item.id, "NOT_STARTED")
             else:
                 set_checklist_status(db, song.id, checklist_item.id, "NOT_STARTED")
         elif field in ("isrc", "iswc"):

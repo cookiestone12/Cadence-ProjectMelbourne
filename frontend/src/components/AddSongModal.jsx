@@ -2,6 +2,46 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { XMarkIcon } from '@heroicons/react/24/outline'
 
+const DollarOrNAInput = ({ value, onChange }) => {
+  const isNA = value === 'N/A'
+  return (
+    <div className="flex items-center gap-1">
+      {isNA ? (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="w-full px-3 py-2 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-[#F5F7F4] text-[#7A8580] hover:bg-[#EEF1EC] transition-colors text-center"
+        >
+          N/A
+        </button>
+      ) : (
+        <div className="flex items-center gap-1 w-full">
+          <div className="relative flex-1">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#7A8580] text-sm">$</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              className="w-full pl-5 pr-2 py-2 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
+              placeholder="0"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => onChange('N/A')}
+            className="px-2 py-2 text-xs text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#F5F7F4] rounded-lg transition-colors whitespace-nowrap"
+            title="Set to N/A"
+          >
+            N/A
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AddSongModal({ onClose, onSuccess, organizationId }) {
   const [creators, setCreators] = useState([])
   const [loadingCreators, setLoadingCreators] = useState(true)
@@ -451,15 +491,10 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
               
               <div>
                 <label className="block text-[13px] font-medium text-[#7A8580] mb-1">Fee</label>
-                <select
+                <DollarOrNAInput
                   value={formData.is_registered_with_dsp}
-                  onChange={(e) => handleChange('is_registered_with_dsp', e.target.value)}
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
-                >
-                  <option value="N/A">N/A</option>
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
-                </select>
+                  onChange={(val) => handleChange('is_registered_with_dsp', val)}
+                />
               </div>
               <div>
                 <label className="block text-[13px] font-medium text-[#7A8580] mb-1">Paid</label>
@@ -475,15 +510,10 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
               </div>
               <div>
                 <label className="block text-[13px] font-medium text-[#7A8580] mb-1">Advance</label>
-                <select
+                <DollarOrNAInput
                   value={formData.is_invoiced}
-                  onChange={(e) => handleChange('is_invoiced', e.target.value)}
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
-                >
-                  <option value="N/A">N/A</option>
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
-                </select>
+                  onChange={(val) => handleChange('is_invoiced', val)}
+                />
               </div>
             </div>
           </div>

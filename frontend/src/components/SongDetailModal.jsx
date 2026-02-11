@@ -228,7 +228,55 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const getStatusIcon = (value) => {
     if (value === 'Yes' || value === true) return <CheckCircleIcon className="w-5 h-5 text-[#5B9A6E]" />
     if (value === 'No' || value === false) return <XCircleIcon className="w-5 h-5 text-[#C47068]" />
+    if (value && value !== 'N/A' && !isNaN(parseFloat(value))) {
+      return (
+        <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#5B9A6E]">
+          <CheckCircleIcon className="w-5 h-5" />
+          ${parseFloat(value).toLocaleString()}
+        </span>
+      )
+    }
     return <MinusCircleIcon className="w-5 h-5 text-[#7A8580]" />
+  }
+
+  const DollarOrNAInput = ({ value, onChange }) => {
+    const isNA = value === 'N/A'
+    return (
+      <div className="flex items-center gap-1 mt-1">
+        {isNA ? (
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm bg-[#F5F7F4] text-[#7A8580] hover:bg-[#EEF1EC] transition-colors text-center"
+          >
+            N/A
+          </button>
+        ) : (
+          <div className="flex items-center gap-1 w-full">
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A8580] text-[15px]">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className="w-full pl-7 pr-2 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                placeholder="0"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange('N/A')}
+              className="px-2 py-2 text-xs text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#F5F7F4] rounded-lg transition-colors whitespace-nowrap"
+              title="Set to N/A"
+            >
+              N/A
+            </button>
+          </div>
+        )}
+      </div>
+    )
   }
   
   const formatCurrency = (cents) => {
@@ -603,27 +651,17 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       </div>
                       <div>
                         <label className="text-[13px] font-medium text-[#7A8580]">Advance</label>
-                        <select
+                        <DollarOrNAInput
                           value={editForm.is_invoiced}
-                          onChange={(e) => handleEditChange('is_invoiced', e.target.value)}
-                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
-                        >
-                          <option value="N/A">N/A</option>
-                          <option value="Yes">Yes</option>
-                          <option value="No">No</option>
-                        </select>
+                          onChange={(val) => handleEditChange('is_invoiced', val)}
+                        />
                       </div>
                       <div>
                         <label className="text-[13px] font-medium text-[#7A8580]">Fee</label>
-                        <select
+                        <DollarOrNAInput
                           value={editForm.is_registered_with_dsp}
-                          onChange={(e) => handleEditChange('is_registered_with_dsp', e.target.value)}
-                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
-                        >
-                          <option value="N/A">N/A</option>
-                          <option value="Yes">Yes</option>
-                          <option value="No">No</option>
-                        </select>
+                          onChange={(val) => handleEditChange('is_registered_with_dsp', val)}
+                        />
                       </div>
                     </>
                   )}

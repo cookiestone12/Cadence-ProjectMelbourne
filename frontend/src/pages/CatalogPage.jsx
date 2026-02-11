@@ -261,9 +261,9 @@ export default function CatalogPage() {
                           PRO
                         </span>
                       )}
-                      {(song.is_registered_with_dsp === 'Yes' || song.is_registered_with_dsp === true) && (
+                      {(song.is_registered_with_dsp && song.is_registered_with_dsp !== 'N/A' && song.is_registered_with_dsp !== 'No' && song.is_registered_with_dsp !== false) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[rgba(91,138,114,0.12)] text-[#5B8A72]">
-                          Fee
+                          {!isNaN(parseFloat(song.is_registered_with_dsp)) ? `Fee $${parseFloat(song.is_registered_with_dsp).toLocaleString()}` : 'Fee'}
                         </span>
                       )}
                       {song.has_contract_executed && (
