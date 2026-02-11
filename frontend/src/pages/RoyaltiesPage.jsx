@@ -54,15 +54,31 @@ const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY']
 
 const TARGET_FIELDS = [
   { value: '', label: '— Skip —' },
-  { value: 'track_title', label: 'Track Title' },
-  { value: 'artist', label: 'Artist' },
+  { value: 'track_title', label: 'Track / Work Title' },
+  { value: 'artist', label: 'Artist / Writer' },
   { value: 'isrc', label: 'ISRC' },
   { value: 'upc', label: 'UPC' },
+  { value: 'iswc', label: 'ISWC' },
   { value: 'revenue', label: 'Revenue / Amount' },
-  { value: 'quantity', label: 'Quantity / Streams' },
+  { value: 'quantity', label: 'Quantity / Performances' },
   { value: 'territory', label: 'Territory' },
-  { value: 'platform', label: 'Platform' },
-  { value: 'revenue_type', label: 'Revenue Type' },
+  { value: 'platform', label: 'Platform / Licensee' },
+  { value: 'revenue_type', label: 'Revenue / Rights Type' },
+  { value: 'publisher', label: 'Publisher' },
+  { value: 'work_id', label: 'Work ID / Song Code' },
+  { value: 'share_percentage', label: 'Share %' },
+]
+
+const SOURCE_TYPE_OPTIONS = [
+  { value: '', label: 'Auto-detect' },
+  { value: 'DSP', label: 'DSP / Distributor (Spotify, Apple Music, DistroKid, etc.)' },
+  { value: 'BMI', label: 'BMI' },
+  { value: 'ASCAP', label: 'ASCAP' },
+  { value: 'SESAC', label: 'SESAC' },
+  { value: 'SoundExchange', label: 'SoundExchange' },
+  { value: 'SOCAN', label: 'SOCAN' },
+  { value: 'PRS', label: 'PRS for Music' },
+  { value: 'OTHER_PRO', label: 'Other PRO' },
 ]
 
 const CHART_COLORS = ['#5B8A72', '#7BA594', '#9BBFAA', '#A8C4B8', '#C4D9CE', '#5A8A9A', '#8BB0BE']
@@ -258,6 +274,8 @@ function StatementsTab({ orgId, songs }) {
   const [uploadPeriodStart, setUploadPeriodStart] = useState('')
   const [uploadPeriodEnd, setUploadPeriodEnd] = useState('')
   const [uploadCurrency, setUploadCurrency] = useState('USD')
+  const [uploadSourceType, setUploadSourceType] = useState('')
+  const [detectedSourceType, setDetectedSourceType] = useState(null)
   const [previewData, setPreviewData] = useState(null)
   const [columnMappings, setColumnMappings] = useState({})
   const [uploading, setUploading] = useState(false)
@@ -298,11 +316,14 @@ function StatementsTab({ orgId, songs }) {
     try {
       const formData = new FormData()
       formData.append('file', uploadFile)
-      formData.append('source_name', uploadSource)
+      formData.append('source_name', uploadSourceType || uploadSource)
       const res = await axios.post(`/api/royalties/statements/${orgId}/preview`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       setPreviewData(res.data)
+      if (res.data.detected_source_type) {
+        setDetectedSourceType(res.data.detected_source_type)
+      }
       const rawMapping = res.data.mapping || res.data.suggested_mappings || res.data.mappings || {}
       const inverted = {}
       Object.entries(rawMapping).forEach(([field, header]) => {
@@ -323,7 +344,8 @@ function StatementsTab({ orgId, songs }) {
     try {
       const formData = new FormData()
       formData.append('file', uploadFile)
-      formData.append('source_name', uploadSource)
+      formData.append('source_name', uploadSource || uploadSourceType)
+      formData.append('source_type', detectedSourceType || uploadSourceType || '')
       formData.append('period_start', uploadPeriodStart)
       formData.append('period_end', uploadPeriodEnd)
       formData.append('currency', uploadCurrency)
@@ -395,6 +417,8 @@ function StatementsTab({ orgId, songs }) {
     setUploadStep(1)
     setUploadFile(null)
     setUploadSource('')
+    setUploadSourceType('')
+    setDetectedSourceType(null)
     setUploadPeriodStart('')
     setUploadPeriodEnd('')
     setUploadCurrency('USD')
@@ -581,12 +605,26 @@ function StatementsTab({ orgId, songs }) {
                     />
                   </div>
                   <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Statement Source</label>
+                    <select
+                      value={uploadSourceType}
+                      onChange={e => {
+                        setUploadSourceType(e.target.value)
+                        if (e.target.value && e.target.value !== 'DSP') setUploadSource(e.target.value)
+                      }}
+                      className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
+                    >
+                      {SOURCE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <p className="text-xs text-[#7A8580] mt-1">Select the type of statement for better column detection</p>
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Name</label>
                     <input
                       type="text"
                       value={uploadSource}
                       onChange={e => setUploadSource(e.target.value)}
-                      placeholder="e.g. Spotify, Apple Music, DistroKid"
+                      placeholder={uploadSourceType === 'DSP' ? 'e.g. Spotify, Apple Music, DistroKid' : uploadSourceType ? `e.g. ${uploadSourceType} Q4 2025` : 'e.g. Spotify, BMI, ASCAP'}
                       className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
                     />
                   </div>
@@ -620,6 +658,14 @@ function StatementsTab({ orgId, songs }) {
 
               {uploadStep === 2 && previewData && (
                 <div className="space-y-4">
+                  {detectedSourceType && (
+                    <div className="flex items-center gap-2 px-4 py-3 bg-[rgba(91,138,114,0.08)] border border-[rgba(91,138,114,0.15)] rounded-xl">
+                      <CheckCircleSolid className="w-5 h-5 text-[#5B8A72] flex-shrink-0" />
+                      <p className="text-sm text-[#3D4A44]">
+                        Detected as <span className="font-semibold">{detectedSourceType}</span> statement — columns mapped accordingly
+                      </p>
+                    </div>
+                  )}
                   <p className="text-sm text-[#7A8580]">
                     Detected {previewData.columns?.length || 0} columns and {previewData.row_count || previewData.rows?.length || 0} rows. Adjust the mappings below:
                   </p>
@@ -973,7 +1019,7 @@ function PaymentsTab({ orgId, creators, contracts }) {
                 <label className="block text-sm font-medium text-[#3D4A44] mb-1">Payee</label>
                 <select value={form.payee_id} onChange={e => setForm(prev => ({ ...prev, payee_id: e.target.value }))} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none">
                   <option value="">Select payee...</option>
-                  {(creators || []).map(c => <option key={c.id} value={c.id}>{c.name || c.artist_name}</option>)}
+                  {(creators || []).map(c => <option key={c.id} value={c.id}>{c.display_name || c.name || c.artist_name}</option>)}
                 </select>
               </div>
               <div>

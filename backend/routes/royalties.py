@@ -64,26 +64,139 @@ class ManualMatchRequest(BaseModel):
 COLUMN_HINTS = {
     "isrc": ["isrc"],
     "upc": ["upc", "barcode"],
-    "track_title": ["title", "track", "song", "track_title", "song_title", "track name", "song name"],
-    "artist": ["artist", "performer", "band", "artist name", "primary artist"],
-    "revenue": ["revenue", "amount", "earnings", "net", "royalty", "payment", "gross", "total", "payout"],
-    "quantity": ["quantity", "streams", "plays", "downloads", "units", "count"],
+    "track_title": [
+        "title", "track", "song", "track_title", "song_title", "track name", "song name",
+        "work title", "composition", "composition title", "work", "musical work",
+    ],
+    "artist": [
+        "artist", "performer", "band", "artist name", "primary artist",
+        "writer", "writer name", "composer", "author", "songwriter",
+        "interested party", "ip name", "affiliate name", "member name",
+    ],
+    "revenue": [
+        "revenue", "amount", "earnings", "net", "royalty", "payment", "gross", "total", "payout",
+        "royalty amount", "net amount", "gross amount", "total earned", "net royalty",
+        "domestic amount", "foreign amount", "total amount", "license fee",
+    ],
+    "quantity": [
+        "quantity", "streams", "plays", "downloads", "units", "count",
+        "performances", "performance count", "feature performances", "total performances",
+        "credits", "detections", "spins",
+    ],
     "territory": ["territory", "country", "region", "market"],
-    "platform": ["platform", "store", "service", "dsp", "source"],
-    "revenue_type": ["type", "revenue_type", "sale type", "transaction type", "usage type"],
+    "platform": [
+        "platform", "store", "service", "dsp", "source",
+        "licensee", "music user", "station", "network", "broadcaster",
+        "survey type", "medium", "use type",
+    ],
+    "revenue_type": [
+        "type", "revenue_type", "sale type", "transaction type", "usage type",
+        "right type", "rights type", "royalty type", "income type", "license type",
+        "performance type", "category",
+    ],
+    "publisher": [
+        "publisher", "publisher name", "original publisher", "sub-publisher",
+        "admin publisher", "pub name",
+    ],
+    "iswc": ["iswc", "work code", "work id"],
+    "work_id": [
+        "work id", "work #", "work number", "song code", "internal id",
+        "bmi work#", "ascap work id", "sesac work id", "bmi work id",
+    ],
+    "share_percentage": [
+        "share", "share %", "ownership", "ownership %", "percentage",
+        "writer share", "publisher share", "split", "pro rata",
+    ],
+}
+
+PRO_SOURCE_TYPES = {
+    "BMI": {
+        "keywords": ["bmi", "broadcast music"],
+        "extra_hints": {
+            "track_title": ["work title", "song title"],
+            "artist": ["writer", "writer name", "affiliated writer"],
+            "revenue": ["current activity royalty", "royalty amount", "total earned"],
+            "quantity": ["performances", "credits", "total performances"],
+            "work_id": ["bmi work#", "work #", "bmi work id"],
+        }
+    },
+    "ASCAP": {
+        "keywords": ["ascap", "american society"],
+        "extra_hints": {
+            "track_title": ["title", "work title"],
+            "artist": ["writer/publisher", "interested party", "writer name"],
+            "revenue": ["dollars", "amount", "domestic amount", "foreign amount", "total earned"],
+            "quantity": ["credits", "performances"],
+            "work_id": ["ascap work id", "work id"],
+        }
+    },
+    "SESAC": {
+        "keywords": ["sesac"],
+        "extra_hints": {
+            "track_title": ["composition", "title"],
+            "artist": ["affiliate", "writer"],
+            "revenue": ["royalty", "amount", "net amount"],
+            "quantity": ["performances", "detections"],
+            "work_id": ["sesac work id", "song code"],
+        }
+    },
+    "SoundExchange": {
+        "keywords": ["soundexchange", "sound exchange"],
+        "extra_hints": {
+            "track_title": ["featured title", "track title", "sound recording"],
+            "artist": ["featured artist", "artist"],
+            "revenue": ["royalty", "amount"],
+            "quantity": ["performances", "plays"],
+        }
+    },
+    "SOCAN": {
+        "keywords": ["socan"],
+        "extra_hints": {
+            "track_title": ["work title", "title"],
+            "artist": ["member", "writer"],
+            "revenue": ["distribution amount", "amount"],
+        }
+    },
+    "PRS": {
+        "keywords": ["prs", "prs for music"],
+        "extra_hints": {
+            "track_title": ["work title", "title"],
+            "artist": ["writer", "member"],
+            "revenue": ["royalty", "amount", "net"],
+        }
+    },
 }
 
 
-def suggest_column_mapping(headers: List[str]) -> Dict[str, Optional[str]]:
+def detect_pro_source(headers: List[str], source_name: str = "") -> Optional[str]:
+    all_text = " ".join(headers).lower() + " " + source_name.lower()
+    for pro_name, config in PRO_SOURCE_TYPES.items():
+        for keyword in config["keywords"]:
+            if keyword in all_text:
+                return pro_name
+    return None
+
+
+def suggest_column_mapping(headers: List[str], source_type: str = "") -> Dict[str, Optional[str]]:
+    hints = {k: list(v) for k, v in COLUMN_HINTS.items()}
+
+    detected_pro = detect_pro_source(headers, source_type)
+    if detected_pro and detected_pro in PRO_SOURCE_TYPES:
+        for field, extra in PRO_SOURCE_TYPES[detected_pro].get("extra_hints", {}).items():
+            if field in hints:
+                hints[field] = extra + hints[field]
+            else:
+                hints[field] = extra
+
     mapping = {}
     used_headers = set()
-    for field, hints in COLUMN_HINTS.items():
+    for field, field_hints in hints.items():
         best_match = None
         for header in headers:
             if header in used_headers:
                 continue
             lower = header.lower().strip()
-            for hint in hints:
+            for hint in field_hints:
                 if hint == lower or hint in lower:
                     best_match = header
                     break
@@ -223,19 +336,22 @@ def match_transaction_to_song(tx: RoyaltyTransaction, songs: List[Song]) -> tupl
 async def preview_statement(
     org_id: int,
     file: UploadFile = File(...),
+    source_name: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
     content = await file.read()
     headers, rows = parse_uploaded_file(content, file.filename or "data.csv")
-    mapping = suggest_column_mapping(headers)
+    detected_source = detect_pro_source(headers, source_name or "")
+    mapping = suggest_column_mapping(headers, source_name or "")
     preview = rows[:10]
     return {
         "headers": headers,
         "mapping": mapping,
         "preview_rows": preview,
         "row_count": len(rows),
+        "detected_source_type": detected_source,
         "success": True,
     }
 

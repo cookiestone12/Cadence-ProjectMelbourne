@@ -111,7 +111,7 @@ function App() {
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
         />
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto bg-[#F5F7F4]">
           <div className="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3">
             <button
               onClick={() => setSidebarOpen(true)}
