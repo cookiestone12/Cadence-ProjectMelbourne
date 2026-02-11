@@ -5,8 +5,26 @@ import {
   TrashIcon, PencilSquareIcon, MusicalNoteIcon,
   CalendarIcon, ExclamationTriangleIcon, CheckCircleIcon,
   ChevronLeftIcon, ArrowDownTrayIcon, ArrowPathIcon,
-  ShieldCheckIcon, ClipboardDocumentCheckIcon, PhotoIcon
+  ShieldCheckIcon, ClipboardDocumentCheckIcon, PhotoIcon,
+  InformationCircleIcon, CheckIcon
 } from '@heroicons/react/24/outline'
+
+const READINESS_TOOLTIPS = {
+  'UPC/EAN code': 'A Universal Product Code is required by all digital stores and streaming platforms to identify your release.',
+  'Catalog number': 'Your internal catalog reference number helps distributors and stores organize your catalog.',
+  'Release date': 'Stores need a release date to schedule your release and coordinate with editorial playlists.',
+  'Primary artist': 'The main performing artist name is displayed on all streaming platforms and stores.',
+  'Label name': 'The label name appears on store pages and is used for royalty reporting and crediting.',
+  'Genre': 'Genre classification helps platforms categorize your release and recommend it to the right listeners.',
+  'Cover artwork': 'High-quality artwork (min 3000x3000px recommended) is required by all major platforms.',
+  'Copyright notice': 'The copyright notice (© or ℗) protects your intellectual property and is legally required for distribution.',
+  'Copyright notice (℗/©)': 'The copyright notice (© or ℗) protects your intellectual property and is legally required for distribution.',
+  'Copyright year': 'The copyright year establishes when the work was first published or the recording was made.',
+  'ISRC': 'International Standard Recording Code uniquely identifies each track for royalty tracking and radio play monitoring.',
+  'Track title': 'Each track must have a title for proper display on streaming platforms.',
+  'Track artist': 'The performing artist for each track helps platforms display proper credits.',
+  'Credits/contributors': 'Adding credits (writers, producers) ensures proper royalty splits and legal compliance.',
+}
 
 const STATUS_COLORS = {
   DRAFT: 'bg-gray-100 text-gray-700',
@@ -41,6 +59,9 @@ export default function ReleasesPage() {
   const [readinessLoading, setReadinessLoading] = useState(false)
   const [transitionLoading, setTransitionLoading] = useState(false)
   const [transitionError, setTransitionError] = useState('')
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false)
+  const [editingIsrc, setEditingIsrc] = useState(null)
+  const [isrcValue, setIsrcValue] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({ status: '', release_type: '' })
   const [creators, setCreators] = useState([])
@@ -224,11 +245,16 @@ export default function ReleasesPage() {
     }
   }
 
-  async function handleTransition(newStatus) {
+  async function handleTransition(newStatus, force = false) {
+    if (newStatus === 'SUBMITTED' && readiness && !readiness.is_ready && !force) {
+      setShowSubmitConfirm(true)
+      return
+    }
     setTransitionLoading(true)
     setTransitionError('')
+    setShowSubmitConfirm(false)
     try {
-      await axios.post(`/api/releases/${selectedRelease}/transition`, { new_status: newStatus })
+      await axios.post(`/api/releases/${selectedRelease}/transition`, { new_status: newStatus, force })
       loadReleaseDetail(selectedRelease)
       loadReadiness(selectedRelease)
       loadReleases()
@@ -236,6 +262,18 @@ export default function ReleasesPage() {
       setTransitionError(error.response?.data?.detail || 'Failed to update status')
     } finally {
       setTransitionLoading(false)
+    }
+  }
+
+  async function handleSaveIsrc(songId) {
+    try {
+      await axios.patch(`/api/songs/${songId}`, { isrc: isrcValue })
+      setEditingIsrc(null)
+      setIsrcValue('')
+      loadReleaseDetail(selectedRelease)
+      loadReadiness(selectedRelease)
+    } catch (error) {
+      console.error('Failed to update ISRC:', error)
     }
   }
 
@@ -592,7 +630,45 @@ export default function ReleasesPage() {
                         </span>
                         <div>
                           <p className="text-sm font-medium text-[#3D4A44]">{track.title}</p>
-                          <p className="text-xs text-[#7A8580]">{track.primary_artist}{track.isrc ? ` · ${track.isrc}` : ''}</p>
+                          <div className="flex items-center space-x-1">
+                            <p className="text-xs text-[#7A8580]">{track.primary_artist}</p>
+                            {editingIsrc === track.song_id ? (
+                              <div className="flex items-center space-x-1 ml-1">
+                                <span className="text-xs text-[#7A8580]">·</span>
+                                <input
+                                  type="text"
+                                  value={isrcValue}
+                                  onChange={(e) => setIsrcValue(e.target.value.toUpperCase())}
+                                  placeholder="e.g. USRC12345678"
+                                  className="text-xs border border-[#5B8A72] rounded px-1.5 py-0.5 w-36 focus:ring-1 focus:ring-[#5B8A72] focus:outline-none bg-white text-[#3D4A44]"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleSaveIsrc(track.song_id)
+                                    if (e.key === 'Escape') { setEditingIsrc(null); setIsrcValue('') }
+                                  }}
+                                />
+                                <button onClick={() => handleSaveIsrc(track.song_id)} className="text-[#5B8A72] hover:text-[#4A7A62]">
+                                  <CheckIcon className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => { setEditingIsrc(null); setIsrcValue('') }} className="text-[#7A8580] hover:text-red-500">
+                                  <XMarkIcon className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setEditingIsrc(track.song_id); setIsrcValue(track.isrc || '') }}
+                                className="flex items-center space-x-1 ml-1 group/isrc"
+                                title={track.isrc ? 'Edit ISRC' : 'Add ISRC'}
+                              >
+                                {track.isrc ? (
+                                  <span className="text-xs text-[#7A8580]">· {track.isrc}</span>
+                                ) : (
+                                  <span className="text-xs text-amber-500">· Add ISRC</span>
+                                )}
+                                <PencilSquareIcon className="w-3 h-3 text-[#7A8580] opacity-0 group-hover/isrc:opacity-100 transition-opacity" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <button
@@ -640,6 +716,42 @@ export default function ReleasesPage() {
                       <ClipboardDocumentCheckIcon className="w-5 h-5" />
                       <span>{transitionLoading ? 'Updating...' : 'Submit for Distribution'}</span>
                     </button>
+                    {showSubmitConfirm && (
+                      <div className="mt-2 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="flex items-start space-x-2 mb-3">
+                          <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-medium text-amber-800">Incomplete readiness ({Math.round(readiness?.readiness_score || 0)}%)</p>
+                            <p className="text-xs text-amber-600 mt-1">Some required items are still missing. Submitting without completing them may cause delays or rejections from distributors.</p>
+                            {readiness && (
+                              <ul className="mt-2 space-y-0.5">
+                                {(readiness.release_checks || []).filter(c => c.required && !c.passed).map((c, i) => (
+                                  <li key={i} className="text-xs text-amber-700">• {c.label}</li>
+                                ))}
+                                {(readiness.track_checks || []).flatMap(t => (t.checks || []).filter(c => !c.passed).map((c, i) => (
+                                  <li key={`${t.song_id}-${i}`} className="text-xs text-amber-700">• {t.title}: {c.label}</li>
+                                )))}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleTransition('SUBMITTED', true)}
+                            disabled={transitionLoading}
+                            className="flex-1 px-3 py-1.5 bg-amber-500 text-white text-sm rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50"
+                          >
+                            {transitionLoading ? 'Submitting...' : 'Submit Anyway'}
+                          </button>
+                          <button
+                            onClick={() => setShowSubmitConfirm(false)}
+                            className="flex-1 px-3 py-1.5 border border-amber-300 text-amber-700 text-sm rounded-lg hover:bg-amber-100 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <button
                       onClick={() => handleTransition('DRAFT')}
                       disabled={transitionLoading}
@@ -735,7 +847,7 @@ export default function ReleasesPage() {
                             <p className="text-xs text-[#7A8580] capitalize mb-1">{category}</p>
                             <div className="space-y-1">
                               {checks.map((check, idx) => (
-                                <div key={idx} className="flex items-center space-x-2">
+                                <div key={idx} className="flex items-center space-x-2 group/tip">
                                   {check.passed ? (
                                     <CheckCircleIcon className="w-4 h-4 text-[#5B8A72] flex-shrink-0" />
                                   ) : (
@@ -745,6 +857,14 @@ export default function ReleasesPage() {
                                     {check.label}
                                     {check.required && <span className="text-[#7A8580]"> *</span>}
                                   </span>
+                                  {READINESS_TOOLTIPS[check.label] && (
+                                    <div className="relative">
+                                      <InformationCircleIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-50 hover:opacity-100 cursor-help peer" />
+                                      <div className="absolute left-5 bottom-0 w-52 p-2 bg-[#3D4A44] text-white text-[10px] leading-snug rounded-lg shadow-lg opacity-0 invisible peer-hover:opacity-100 peer-hover:visible transition-all z-50 pointer-events-none">
+                                        {READINESS_TOOLTIPS[check.label]}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -773,6 +893,14 @@ export default function ReleasesPage() {
                                 <span className={`text-xs ${check.passed ? 'text-[#3D4A44]' : 'text-red-600'}`}>
                                   {check.label}
                                 </span>
+                                {READINESS_TOOLTIPS[check.label] && (
+                                  <div className="relative">
+                                    <InformationCircleIcon className="w-3 h-3 text-[#7A8580] opacity-50 hover:opacity-100 cursor-help peer" />
+                                    <div className="absolute left-4 bottom-0 w-48 p-2 bg-[#3D4A44] text-white text-[10px] leading-snug rounded-lg shadow-lg opacity-0 invisible peer-hover:opacity-100 peer-hover:visible transition-all z-50 pointer-events-none">
+                                      {READINESS_TOOLTIPS[check.label]}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>

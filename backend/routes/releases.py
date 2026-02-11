@@ -529,6 +529,7 @@ def check_distribution_readiness(release_id: int, db: Session = Depends(get_db),
 
 class StatusTransition(BaseModel):
     new_status: str
+    force: Optional[bool] = False
 
 
 @router.post("/{release_id}/transition")
@@ -552,7 +553,7 @@ def transition_release_status(release_id: int, data: StatusTransition, db: Sessi
         release_tracks = db.query(ReleaseTrack).filter(ReleaseTrack.release_id == release_id).all()
         readiness = get_distribution_readiness(release, release_tracks, db)
 
-        if new_status == "SUBMITTED" and not readiness["is_ready"]:
+        if new_status == "SUBMITTED" and not readiness["is_ready"] and not data.force:
             missing = []
             for rc in readiness["release_checks"]:
                 if rc["required"] and not rc["passed"]:
