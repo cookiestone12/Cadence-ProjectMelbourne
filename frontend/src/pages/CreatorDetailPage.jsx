@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import axios from 'axios'
-import { ArrowLeftIcon, ArrowDownTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon } from '@heroicons/react/24/outline'
 import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/24/solid'
 import ActionsTab from '../components/ActionsTab'
 
@@ -18,6 +18,8 @@ export default function CreatorDetailPage() {
   const [organizationId, setOrganizationId] = useState(null)
   const [showAddSongModal, setShowAddSongModal] = useState(false)
   const [addingSong, setAddingSong] = useState(false)
+  const [uploadingScheduleA, setUploadingScheduleA] = useState(false)
+  const [uploadFeedback, setUploadFeedback] = useState(null)
   const [newSong, setNewSong] = useState({
     title: '',
     primary_artist: '',
@@ -142,6 +144,58 @@ export default function CreatorDetailPage() {
       link.remove()
     } catch (error) {
       console.error('Failed to export Catalog Doc PDF:', error)
+    }
+  }
+  
+  const handleScheduleAUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    const ext = file.name.toLowerCase()
+    if (!ext.endsWith('.csv') && !ext.endsWith('.xlsx') && !ext.endsWith('.xls')) {
+      setUploadFeedback({ msg: 'Please upload a CSV or Excel file (.csv, .xlsx, .xls)', type: 'error' })
+      setTimeout(() => setUploadFeedback(null), 4000)
+      return
+    }
+    
+    setUploadingScheduleA(true)
+    setUploadFeedback(null)
+    
+    try {
+      const token = localStorage.getItem('token')
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      const creatorNameParam = encodeURIComponent(creator.display_name)
+      const response = await axios.post(
+        `/api/schedule-a/upload/${organizationId}?creator_name=${creatorNameParam}`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      )
+      
+      const data = response.data
+      const parts = []
+      if (data.songs_created) parts.push(`${data.songs_created} songs created`)
+      if (data.songs_updated) parts.push(`${data.songs_updated} songs updated`)
+      if (data.songs_skipped) parts.push(`${data.songs_skipped} skipped`)
+      
+      setUploadFeedback({ msg: `Import complete: ${parts.join(', ')}`, type: 'success' })
+      setTimeout(() => setUploadFeedback(null), 5000)
+      
+      loadCreator()
+      loadScheduleAData()
+    } catch (error) {
+      const detail = error.response?.data?.detail || 'Failed to upload file. Please check format.'
+      setUploadFeedback({ msg: detail, type: 'error' })
+      setTimeout(() => setUploadFeedback(null), 5000)
+    } finally {
+      setUploadingScheduleA(false)
+      e.target.value = ''
     }
   }
   
@@ -910,6 +964,13 @@ export default function CreatorDetailPage() {
         
         {activeTab === 'schedule-a' && (
           <div className="space-y-6">
+            {uploadFeedback && (
+              <div className={`px-5 py-3 rounded-xl text-sm font-medium ${
+                uploadFeedback.type === 'error' ? 'bg-[rgba(196,112,104,0.15)] text-[#A45850]' : 'bg-[rgba(91,154,110,0.15)] text-[#3D6B4F]'
+              }`}>
+                {uploadFeedback.msg}
+              </div>
+            )}
             <div className="rounded-[18px] p-8 text-white" style={{ background: 'linear-gradient(135deg, #5B8A72 0%, #7BA594 100%)', boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
@@ -919,10 +980,22 @@ export default function CreatorDetailPage() {
                   </p>
                 </div>
                 <div className="flex gap-3 flex-wrap">
+                  <label className={`inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl font-medium transition-all duration-200 border border-white/30 cursor-pointer ${
+                    uploadingScheduleA ? 'bg-white/10 text-white/60' : 'bg-white text-[#5B8A72] hover:bg-white/90'
+                  }`} style={{ boxShadow: '0px 2px 8px rgba(0,0,0,0.1)' }}>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".csv,.xlsx,.xls"
+                      onChange={handleScheduleAUpload}
+                      disabled={uploadingScheduleA}
+                    />
+                    <ArrowUpTrayIcon className="w-5 h-5" />
+                    <span>{uploadingScheduleA ? 'Uploading...' : 'Upload Schedule A'}</span>
+                  </label>
                   <button
                     onClick={handleScheduleAExportPDF}
-                    className="inline-flex items-center space-x-2 bg-white text-[#5B8A72] px-5 py-2.5 rounded-xl font-medium hover:bg-white/90 transition-all duration-200"
-                    style={{ boxShadow: '0px 2px 8px rgba(0,0,0,0.1)' }}
+                    className="inline-flex items-center space-x-2 bg-white/20 text-white px-5 py-2.5 rounded-xl font-medium hover:bg-white/30 transition-all duration-200 border border-white/30"
                   >
                     <DocumentTextIcon className="w-5 h-5" />
                     <span>Schedule A</span>

@@ -1075,7 +1075,7 @@ def export_catalog_report(
     
     # Sheet 1: Catalog Summary
     ws_summary = wb.create_sheet("Catalog Summary")
-    ws_summary.append(["AMPERSOUND CATALOG INTELLIGENCE REPORT"])
+    ws_summary.append(["RYTHM CATALOG INTELLIGENCE REPORT"])
     ws_summary["A1"].font = title_font
     ws_summary.append(["Catalog:", catalog.name])
     ws_summary["A2"].font = subtitle_font
@@ -1363,7 +1363,7 @@ def download_schedule_a_template():
     
     # Title
     ws.merge_cells('A1:F1')
-    ws['A1'] = "AMPERSOUND SCHEDULE A TEMPLATE"
+    ws['A1'] = "RYTHM SCHEDULE A TEMPLATE"
     ws['A1'].font = title_font
     ws['A1'].alignment = center_alignment
     ws.row_dimensions[1].height = 30

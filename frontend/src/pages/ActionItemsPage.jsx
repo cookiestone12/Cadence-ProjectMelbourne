@@ -117,6 +117,7 @@ export default function ActionItemsPage() {
   const [generating, setGenerating] = useState(false)
   const [generatingCrossModule, setGeneratingCrossModule] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [feedback, setFeedback] = useState(null)
   const [newAction, setNewAction] = useState({
     action_type: 'GENERAL',
     title: '',
@@ -253,13 +254,25 @@ export default function ActionItemsPage() {
     }
   }
 
+  const showFeedback = (msg, type = 'success') => {
+    setFeedback({ msg, type })
+    setTimeout(() => setFeedback(null), 4000)
+  }
+
   const handleGenerateActions = async () => {
     setGenerating(true)
     try {
-      await axios.post(`/api/actions/generate-org/${orgId}`)
+      const response = await axios.post(`/api/actions/generate-org/${orgId}`)
       await Promise.all([loadActions(), loadSummary()])
+      const count = response.data?.created_count || 0
+      if (count > 0) {
+        showFeedback(`Generated ${count} action items from catalog gaps`)
+      } else {
+        showFeedback('No new catalog gaps found — your catalog looks good!', 'info')
+      }
     } catch (error) {
       console.error('Failed to generate actions:', error)
+      showFeedback('Failed to generate actions. Please try again.', 'error')
     } finally {
       setGenerating(false)
     }
@@ -268,10 +281,17 @@ export default function ActionItemsPage() {
   const handleGenerateCrossModule = async () => {
     setGeneratingCrossModule(true)
     try {
-      await axios.post(`/api/actions/generate-cross-module/${orgId}`)
+      const response = await axios.post(`/api/actions/generate-cross-module/${orgId}`)
       await Promise.all([loadActions(), loadSummary()])
+      const count = response.data?.created_count || 0
+      if (count > 0) {
+        showFeedback(`Generated ${count} cross-module tasks`)
+      } else {
+        showFeedback('No new cross-module tasks found — everything is up to date!', 'info')
+      }
     } catch (error) {
       console.error('Failed to generate cross-module actions:', error)
+      showFeedback('Failed to scan modules. Please try again.', 'error')
     } finally {
       setGeneratingCrossModule(false)
     }
@@ -348,6 +368,15 @@ export default function ActionItemsPage() {
 
   return (
     <div className="min-h-screen bg-[#F5F7F4] p-6 lg:p-8">
+      {feedback && (
+        <div className={`fixed top-4 right-4 z-50 px-5 py-3 rounded-xl shadow-lg text-sm font-medium transition-all animate-fade-in ${
+          feedback.type === 'error' ? 'bg-[#C47068] text-white' :
+          feedback.type === 'info' ? 'bg-[#5A8A9A] text-white' :
+          'bg-[#5B9A6E] text-white'
+        }`}>
+          {feedback.msg}
+        </div>
+      )}
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>

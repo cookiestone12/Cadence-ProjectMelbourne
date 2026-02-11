@@ -61,6 +61,7 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
   const [saving, setSaving] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [gapsCount, setGapsCount] = useState(0)
+  const [feedback, setFeedback] = useState(null)
   const [filterType, setFilterType] = useState('')
   const [filterSong, setFilterSong] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
@@ -145,14 +146,26 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
     }
   }
 
+  const showFeedback = (msg, type = 'success') => {
+    setFeedback({ msg, type })
+    setTimeout(() => setFeedback(null), 4000)
+  }
+
   const handleGenerateActions = async () => {
     setGenerating(true)
     try {
       const response = await axios.post(`/api/actions/generate/${creatorId}`)
       loadActions()
       loadGapsCount()
+      const count = response.data?.created_count || 0
+      if (count > 0) {
+        showFeedback(`Generated ${count} action items from catalog gaps`)
+      } else {
+        showFeedback('No new gaps found — catalog looks good!', 'info')
+      }
     } catch (error) {
       console.error('Failed to generate actions:', error)
+      showFeedback('Failed to generate actions. Please try again.', 'error')
     } finally {
       setGenerating(false)
     }
@@ -221,6 +234,15 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
 
   return (
     <div className="space-y-6">
+      {feedback && (
+        <div className={`px-5 py-3 rounded-xl text-sm font-medium ${
+          feedback.type === 'error' ? 'bg-[rgba(196,112,104,0.15)] text-[#A45850]' :
+          feedback.type === 'info' ? 'bg-[rgba(90,138,154,0.15)] text-[#4A7A8A]' :
+          'bg-[rgba(91,154,110,0.15)] text-[#3D6B4F]'
+        }`}>
+          {feedback.msg}
+        </div>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl p-6 border border-[rgba(59,77,67,0.08)]">
           <div className="flex items-center space-x-3">
@@ -274,20 +296,18 @@ export default function ActionsTab({ creatorId, organizationId, creatorName }) {
             </label>
           </div>
           <div className="flex items-center space-x-2">
-            {gapsCount > 0 && (
-              <button
-                onClick={handleGenerateActions}
-                disabled={generating}
-                className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg hover:from-[#4A7862] hover:to-[#6A9484] transition-all disabled:opacity-50"
-              >
-                {generating ? (
-                  <ArrowPathIcon className="w-4 h-4 animate-spin" />
-                ) : (
-                  <SparklesIcon className="w-4 h-4" />
-                )}
-                <span>{generating ? 'Generating...' : `Generate Actions (${gapsCount})`}</span>
-              </button>
-            )}
+            <button
+              onClick={handleGenerateActions}
+              disabled={generating}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg hover:from-[#4A7862] hover:to-[#6A9484] transition-all disabled:opacity-50"
+            >
+              {generating ? (
+                <ArrowPathIcon className="w-4 h-4 animate-spin" />
+              ) : (
+                <SparklesIcon className="w-4 h-4" />
+              )}
+              <span>{generating ? 'Scanning...' : `AI Generate${gapsCount > 0 ? ` (${gapsCount})` : ''}`}</span>
+            </button>
             <button
               onClick={() => setShowAddForm(true)}
               className="inline-flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7862] transition-colors"
