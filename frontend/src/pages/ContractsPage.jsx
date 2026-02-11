@@ -64,6 +64,8 @@ export default function ContractsPage() {
   const [editForm, setEditForm] = useState({})
   const [createForm, setCreateForm] = useState({ ...emptyCreateForm })
   const [createParties, setCreateParties] = useState([])
+  const [createError, setCreateError] = useState('')
+  const [createLoading, setCreateLoading] = useState(false)
   const [activeDetailTab, setActiveDetailTab] = useState('overview')
   const [partyForm, setPartyForm] = useState({ ...emptyPartyForm })
   const [assetSearch, setAssetSearch] = useState('')
@@ -154,7 +156,12 @@ export default function ContractsPage() {
   }
 
   async function handleCreateContract() {
-    if (!createForm.title.trim()) return
+    if (!createForm.title.trim()) {
+      setCreateError('Please enter a contract title.')
+      return
+    }
+    setCreateError('')
+    setCreateLoading(true)
     try {
       const payload = { ...createForm }
       if (payload.advance_amount) payload.advance_amount = parseFloat(payload.advance_amount)
@@ -167,9 +174,13 @@ export default function ContractsPage() {
       setShowCreateModal(false)
       setCreateForm({ ...emptyCreateForm })
       setCreateParties([])
+      setCreateError('')
       await loadData()
     } catch (error) {
       console.error('Failed to create contract:', error)
+      setCreateError(error.response?.data?.detail || 'Failed to create contract. Please try again.')
+    } finally {
+      setCreateLoading(false)
     }
   }
 
@@ -359,7 +370,7 @@ export default function ContractsPage() {
         </div>
         <button
           className="flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => { setShowCreateModal(true); setCreateError(''); setCreateLoading(false) }}
         >
           <PlusIcon className="w-5 h-5" />
           <span>New Contract</span>
@@ -633,19 +644,24 @@ export default function ContractsPage() {
                 </div>
               </div>
             </div>
+            {createError && (
+              <div className="mx-6 mb-0 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {createError}
+              </div>
+            )}
             <div className="flex justify-end space-x-3 p-6 border-t border-[rgba(59,77,67,0.08)]">
               <button
-                onClick={() => { setShowCreateModal(false); setCreateParties([]) }}
+                onClick={() => { setShowCreateModal(false); setCreateParties([]); setCreateError('') }}
                 className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreateContract}
-                disabled={!createForm.title.trim()}
+                disabled={!createForm.title.trim() || createLoading}
                 className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Create Contract
+                {createLoading ? 'Creating...' : 'Create Contract'}
               </button>
             </div>
           </div>
