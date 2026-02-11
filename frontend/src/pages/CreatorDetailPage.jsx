@@ -202,6 +202,8 @@ export default function CreatorDetailPage() {
   const startEdit = (song) => {
     setEditingSong(song.id)
     setEditForm({
+      title: song.title || '',
+      primary_artist: song.primary_artist || '',
       publishing_percentage: song.publishing_percentage || '',
       master_percentage: song.master_percentage || '',
       advance_amount: song.advance_amount ? (song.advance_amount / 100) : '',
@@ -227,6 +229,8 @@ export default function CreatorDetailPage() {
     setSaving(true)
     try {
       const payload = {
+        title: editForm.title || undefined,
+        primary_artist: editForm.primary_artist || undefined,
         publishing_percentage: editForm.publishing_percentage === '' ? null : Math.min(parseFloat(editForm.publishing_percentage), 100),
         master_percentage: editForm.master_percentage === '' ? null : Math.min(parseFloat(editForm.master_percentage), 100),
         advance_amount: editForm.advance_amount === '' ? null : Math.round(parseFloat(editForm.advance_amount) * 100),
@@ -767,9 +771,21 @@ export default function CreatorDetailPage() {
                       </td>
                       {editingSong === song.id ? (
                         <>
-                          <td className={`px-4 py-3 sticky left-0 ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'}`}>
-                            <div className="font-medium text-[#3D4A44]">{song.title}</div>
-                            <div className="text-xs text-[#7A8580]">{song.primary_artist}</div>
+                          <td className={`px-4 py-2 sticky left-0 ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'}`}>
+                            <input
+                              type="text"
+                              value={editForm.title || ''}
+                              onChange={(e) => setEditForm({...editForm, title: e.target.value})}
+                              className="w-full px-3 py-1.5 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm font-medium bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[rgba(91,138,114,0.15)] mb-1"
+                              placeholder="Song title"
+                            />
+                            <input
+                              type="text"
+                              value={editForm.primary_artist || ''}
+                              onChange={(e) => setEditForm({...editForm, primary_artist: e.target.value})}
+                              className="w-full px-3 py-1.5 border border-[rgba(0,0,0,0.1)] rounded-xl text-xs bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[rgba(91,138,114,0.15)] text-[#7A8580]"
+                              placeholder="Artist name"
+                            />
                           </td>
                           <td className="px-4 py-2">
                             <input 
