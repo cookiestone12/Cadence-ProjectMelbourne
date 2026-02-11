@@ -52,15 +52,25 @@ def seed_super_admin():
             ).first()
             if not has_membership:
                 first_org = db.query(Organization).order_by(Organization.id).first()
-                if first_org:
-                    membership = OrganizationMember(
-                        organization_id=first_org.id,
-                        user_id=existing.id,
-                        role="OWNER"
+                if not first_org:
+                    first_org = Organization(
+                        name="Rythm",
+                        display_name="Rythm",
+                        type="LABEL",
+                        account_type="ENTERPRISE",
                     )
-                    db.add(membership)
+                    db.add(first_org)
                     db.commit()
-                    logger.info(f"Added MasterPAdmin to organization '{first_org.name}' as OWNER")
+                    db.refresh(first_org)
+                    logger.info(f"Created default organization '{first_org.name}'")
+                membership = OrganizationMember(
+                    organization_id=first_org.id,
+                    user_id=existing.id,
+                    role="OWNER"
+                )
+                db.add(membership)
+                db.commit()
+                logger.info(f"Added MasterPAdmin to organization '{first_org.name}' as OWNER")
     except Exception as e:
         db.rollback()
         logger.error(f"Error seeding super admin: {e}")
