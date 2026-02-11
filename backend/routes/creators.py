@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
@@ -281,6 +282,41 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 
+@router.get("/{creator_id}/image")
+def serve_creator_image(
+    creator_id: int,
+    db: Session = Depends(get_db),
+):
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+
+    if creator.hero_image_data:
+        return Response(
+            content=creator.hero_image_data,
+            media_type=creator.hero_image_mime or "image/jpeg",
+            headers={"Cache-Control": "public, max-age=3600"}
+        )
+
+    if creator.hero_image_url:
+        filepath = UPLOADS_DIR / creator.hero_image_url.split("/")[-1]
+        if filepath.exists():
+            mime = "image/jpeg"
+            if str(filepath).endswith(".png"):
+                mime = "image/png"
+            elif str(filepath).endswith(".webp"):
+                mime = "image/webp"
+            elif str(filepath).endswith(".gif"):
+                mime = "image/gif"
+            return Response(
+                content=filepath.read_bytes(),
+                media_type=mime,
+                headers={"Cache-Control": "public, max-age=3600"}
+            )
+
+    raise HTTPException(status_code=404, detail="No image found")
+
+
 @router.post("/{creator_id}/image")
 async def upload_creator_image(
     creator_id: int,
@@ -306,22 +342,9 @@ async def upload_creator_image(
     if len(content) > MAX_IMAGE_SIZE:
         raise HTTPException(status_code=400, detail="Image too large. Maximum size is 5MB.")
 
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
-    if ext not in ("jpg", "jpeg", "png", "webp", "gif"):
-        ext = "jpg"
-    filename = f"{creator_id}_{uuid.uuid4().hex[:8]}.{ext}"
-
-    if creator.hero_image_url:
-        old_filename = creator.hero_image_url.split("/")[-1]
-        old_path = UPLOADS_DIR / old_filename
-        if old_path.exists():
-            old_path.unlink()
-
-    filepath = UPLOADS_DIR / filename
-    with open(filepath, "wb") as f:
-        f.write(content)
-
-    creator.hero_image_url = f"/uploads/creators/{filename}"
+    creator.hero_image_data = content
+    creator.hero_image_mime = file.content_type
+    creator.hero_image_url = f"/api/creators/{creator_id}/image"
     db.commit()
     db.refresh(creator)
 

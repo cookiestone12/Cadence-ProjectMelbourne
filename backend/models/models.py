@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, JSON, Enum as SQLEnum, Date, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, JSON, Enum as SQLEnum, Date, UniqueConstraint, Index, LargeBinary
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -170,6 +170,8 @@ class Creator(Base):
     primary_pro = Column(String, nullable=True)
     primary_ipi = Column(String, nullable=True)
     hero_image_url = Column(String, nullable=True)
+    hero_image_data = Column(LargeBinary, nullable=True)
+    hero_image_mime = Column(String, nullable=True)
     linked_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     contributor_type = Column(String, nullable=True)
     phone = Column(String, nullable=True)
