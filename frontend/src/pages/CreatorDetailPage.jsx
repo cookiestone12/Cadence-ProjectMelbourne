@@ -43,6 +43,14 @@ export default function CreatorDetailPage() {
   const [spotifyModalSong, setSpotifyModalSong] = useState(null)
   const [spotifyLinkInput, setSpotifyLinkInput] = useState('')
   const [savingSpotifyLink, setSavingSpotifyLink] = useState(false)
+  const [accountingData, setAccountingData] = useState(null)
+  const [accountingLoading, setAccountingLoading] = useState(false)
+  const [showAddFeeModal, setShowAddFeeModal] = useState(false)
+  const [showAddAdvanceModal, setShowAddAdvanceModal] = useState(false)
+  const [feeForm, setFeeForm] = useState({ fee_type: 'MANAGEMENT_FEE', description: '', amount: '', fee_date: '', notes: '' })
+  const [advanceForm, setAdvanceForm] = useState({ description: '', amount: '', advance_date: '', notes: '' })
+  const [savingFee, setSavingFee] = useState(false)
+  const [savingAdvance, setSavingAdvance] = useState(false)
   const [creatorForm, setCreatorForm] = useState({
     display_name: '',
     legal_name: '',
@@ -95,6 +103,25 @@ export default function CreatorDetailPage() {
     loadCreatorData()
   }, [id])
   
+  const loadAccounting = async () => {
+    if (!organizationId) return
+    setAccountingLoading(true)
+    try {
+      const response = await axios.get(`/api/royalties/creator-accounting/${organizationId}/${id}`)
+      setAccountingData(response.data)
+    } catch (err) {
+      console.error('Failed to load accounting:', err)
+    } finally {
+      setAccountingLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'accounting' && organizationId) {
+      loadAccounting()
+    }
+  }, [activeTab, organizationId])
+
   useEffect(() => {
     if (activeTab === 'schedule-a') {
       loadScheduleAData()
@@ -554,6 +581,69 @@ export default function CreatorDetailPage() {
     }
   }
 
+  const handleCreateFee = async (e) => {
+    e.preventDefault()
+    setSavingFee(true)
+    try {
+      await axios.post(`/api/royalties/fees/${organizationId}`, {
+        creator_id: parseInt(id),
+        fee_type: feeForm.fee_type,
+        description: feeForm.description,
+        amount_cents: Math.round(parseFloat(feeForm.amount) * 100),
+        fee_date: feeForm.fee_date || null,
+        notes: feeForm.notes || null,
+      })
+      setShowAddFeeModal(false)
+      setFeeForm({ fee_type: 'MANAGEMENT_FEE', description: '', amount: '', fee_date: '', notes: '' })
+      loadAccounting()
+    } catch (err) {
+      alert('Failed to create fee: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setSavingFee(false)
+    }
+  }
+
+  const handleCreateAdvance = async (e) => {
+    e.preventDefault()
+    setSavingAdvance(true)
+    try {
+      await axios.post(`/api/royalties/advances/${organizationId}`, {
+        creator_id: parseInt(id),
+        description: advanceForm.description,
+        amount_cents: Math.round(parseFloat(advanceForm.amount) * 100),
+        advance_date: advanceForm.advance_date || null,
+        notes: advanceForm.notes || null,
+      })
+      setShowAddAdvanceModal(false)
+      setAdvanceForm({ description: '', amount: '', advance_date: '', notes: '' })
+      loadAccounting()
+    } catch (err) {
+      alert('Failed to create advance: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setSavingAdvance(false)
+    }
+  }
+
+  const handleDeleteFee = async (feeId) => {
+    if (!confirm('Delete this fee?')) return
+    try {
+      await axios.delete(`/api/royalties/fees/${organizationId}/${feeId}`)
+      loadAccounting()
+    } catch (err) {
+      alert('Failed to delete fee')
+    }
+  }
+
+  const handleDeleteAdvance = async (advanceId) => {
+    if (!confirm('Delete this advance?')) return
+    try {
+      await axios.delete(`/api/royalties/advances/${organizationId}/${advanceId}`)
+      loadAccounting()
+    } catch (err) {
+      alert('Failed to delete advance')
+    }
+  }
+
   const handleBulkDelete = async () => {
     if (selectedSongs.size === 0) return
     setDeleting(true)
@@ -574,6 +664,7 @@ export default function CreatorDetailPage() {
     { id: 'records', label: `Records (${songs.length})` },
     { id: 'releases', label: `Artist Releases (${creatorReleases.length})` },
     { id: 'actions', label: 'Actions' },
+    { id: 'accounting', label: 'Accounting' },
     { id: 'schedule-a', label: 'Schedule A' }
   ]
   
@@ -1101,6 +1192,195 @@ export default function CreatorDetailPage() {
             organizationId={organizationId}
             creatorName={creator.display_name}
           />
+        )}
+
+        {activeTab === 'accounting' && (
+          <div className="space-y-6">
+            {accountingLoading ? (
+              <div className="text-center py-12 text-[#7A8580]">Loading accounting data...</div>
+            ) : accountingData ? (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white rounded-2xl p-5 border border-[rgba(59,77,67,0.08)]">
+                    <p className="text-xs text-[#7A8580] mb-1">Royalty Earnings</p>
+                    <p className="text-2xl font-bold text-[#5B8A72]">${accountingData.summary.total_royalties_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                  </div>
+                  <div className="bg-white rounded-2xl p-5 border border-[rgba(59,77,67,0.08)]">
+                    <p className="text-xs text-[#7A8580] mb-1">Placement Revenue</p>
+                    <p className="text-2xl font-bold text-[#5B8A72]">${accountingData.summary.placement_revenue_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                  </div>
+                  <div className="bg-white rounded-2xl p-5 border border-[rgba(59,77,67,0.08)]">
+                    <p className="text-xs text-[#7A8580] mb-1">Total Fees</p>
+                    <p className="text-2xl font-bold text-[#C4956B]">${accountingData.summary.total_fees_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                  </div>
+                  <div className="bg-white rounded-2xl p-5 border border-[rgba(59,77,67,0.08)]">
+                    <p className="text-xs text-[#7A8580] mb-1">Net Balance</p>
+                    <p className={`text-2xl font-bold ${accountingData.summary.net_balance_cents >= 0 ? 'text-[#5B8A72]' : 'text-[#C47068]'}`}>${accountingData.summary.net_balance_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.08)]">
+                  <div className="px-6 py-4 border-b border-[rgba(59,77,67,0.08)] flex items-center justify-between">
+                    <h3 className="font-semibold text-[#3D4A44]">Advances</h3>
+                    <button onClick={() => setShowAddAdvanceModal(true)} className="text-sm bg-[#5B8A72] text-white px-3 py-1.5 rounded-lg hover:bg-[#4A7A62] transition-colors flex items-center gap-1">
+                      <PlusIcon className="w-4 h-4" /> Add Advance
+                    </button>
+                  </div>
+                  <div className="p-6">
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                      <div className="bg-[#F5F7F4] rounded-xl p-4">
+                        <p className="text-xs text-[#7A8580] mb-1">Total Advances</p>
+                        <p className="text-lg font-bold text-[#3D4A44]">${accountingData.summary.total_advances_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                      </div>
+                      <div className="bg-[#F5F7F4] rounded-xl p-4">
+                        <p className="text-xs text-[#7A8580] mb-1">Recouped</p>
+                        <p className="text-lg font-bold text-[#5B8A72]">${accountingData.summary.total_recouped_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                      </div>
+                      <div className="bg-[#F5F7F4] rounded-xl p-4">
+                        <p className="text-xs text-[#7A8580] mb-1">Outstanding</p>
+                        <p className="text-lg font-bold text-[#C4956B]">${accountingData.summary.outstanding_advances_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                      </div>
+                    </div>
+                    {accountingData.advances.length === 0 ? (
+                      <p className="text-sm text-[#7A8580] text-center py-4">No advances recorded</p>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-[#7A8580] border-b border-[rgba(59,77,67,0.08)]">
+                            <th className="pb-2 font-medium">Description</th>
+                            <th className="pb-2 font-medium">Date</th>
+                            <th className="pb-2 font-medium text-right">Amount</th>
+                            <th className="pb-2 font-medium text-right">Recouped</th>
+                            <th className="pb-2 font-medium text-right">Remaining</th>
+                            <th className="pb-2 font-medium text-center">Status</th>
+                            <th className="pb-2 font-medium"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {accountingData.advances.map((adv) => (
+                            <tr key={adv.id} className="border-b border-[rgba(59,77,67,0.04)] hover:bg-[#F5F7F4]/50">
+                              <td className="py-3 text-[#3D4A44]">{adv.description || '—'}</td>
+                              <td className="py-3 text-[#7A8580]">{adv.advance_date ? new Date(adv.advance_date).toLocaleDateString() : '—'}</td>
+                              <td className="py-3 text-right font-medium text-[#3D4A44]">${adv.amount_dollars.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                              <td className="py-3 text-right text-[#5B8A72]">${adv.recouped_dollars.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                              <td className="py-3 text-right text-[#C4956B]">${adv.remaining_dollars.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                              <td className="py-3 text-center">
+                                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${adv.fully_recouped ? 'bg-[rgba(91,154,110,0.15)] text-[#3D7A4E]' : 'bg-[rgba(196,149,107,0.15)] text-[#C4956B]'}`}>
+                                  {adv.fully_recouped ? 'Recouped' : 'Active'}
+                                </span>
+                              </td>
+                              <td className="py-3 text-right">
+                                <button onClick={() => handleDeleteAdvance(adv.id)} className="text-[#C47068] hover:text-[#A45850] p-1"><TrashIcon className="w-4 h-4" /></button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.08)]">
+                  <div className="px-6 py-4 border-b border-[rgba(59,77,67,0.08)] flex items-center justify-between">
+                    <h3 className="font-semibold text-[#3D4A44]">Fees</h3>
+                    <button onClick={() => setShowAddFeeModal(true)} className="text-sm bg-[#5B8A72] text-white px-3 py-1.5 rounded-lg hover:bg-[#4A7A62] transition-colors flex items-center gap-1">
+                      <PlusIcon className="w-4 h-4" /> Add Fee
+                    </button>
+                  </div>
+                  <div className="p-6">
+                    {accountingData.fees.length === 0 ? (
+                      <p className="text-sm text-[#7A8580] text-center py-4">No fees recorded</p>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-[#7A8580] border-b border-[rgba(59,77,67,0.08)]">
+                            <th className="pb-2 font-medium">Type</th>
+                            <th className="pb-2 font-medium">Description</th>
+                            <th className="pb-2 font-medium">Date</th>
+                            <th className="pb-2 font-medium text-right">Amount</th>
+                            <th className="pb-2 font-medium text-center">Status</th>
+                            <th className="pb-2 font-medium"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {accountingData.fees.map((fee) => (
+                            <tr key={fee.id} className="border-b border-[rgba(59,77,67,0.04)] hover:bg-[#F5F7F4]/50">
+                              <td className="py-3">
+                                <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-[rgba(91,138,114,0.1)] text-[#5B8A72]">
+                                  {fee.fee_type.replace(/_/g, ' ')}
+                                </span>
+                              </td>
+                              <td className="py-3 text-[#3D4A44]">{fee.description || '—'}</td>
+                              <td className="py-3 text-[#7A8580]">{fee.fee_date ? new Date(fee.fee_date).toLocaleDateString() : '—'}</td>
+                              <td className="py-3 text-right font-medium text-[#3D4A44]">${fee.amount_dollars.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                              <td className="py-3 text-center">
+                                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${fee.status === 'PAID' ? 'bg-[rgba(91,154,110,0.15)] text-[#3D7A4E]' : 'bg-[rgba(196,149,107,0.15)] text-[#C4956B]'}`}>
+                                  {fee.status}
+                                </span>
+                              </td>
+                              <td className="py-3 text-right">
+                                <button onClick={() => handleDeleteFee(fee.id)} className="text-[#C47068] hover:text-[#A45850] p-1"><TrashIcon className="w-4 h-4" /></button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.08)]">
+                  <div className="px-6 py-4 border-b border-[rgba(59,77,67,0.08)]">
+                    <h3 className="font-semibold text-[#3D4A44]">Payments</h3>
+                  </div>
+                  <div className="p-6">
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div className="bg-[#F5F7F4] rounded-xl p-4">
+                        <p className="text-xs text-[#7A8580] mb-1">Total Paid</p>
+                        <p className="text-lg font-bold text-[#5B8A72]">${accountingData.summary.total_paid_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                      </div>
+                      <div className="bg-[#F5F7F4] rounded-xl p-4">
+                        <p className="text-xs text-[#7A8580] mb-1">Pending</p>
+                        <p className="text-lg font-bold text-[#C4956B]">${accountingData.summary.total_pending_dollars.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+                      </div>
+                    </div>
+                    {accountingData.payments.length === 0 ? (
+                      <p className="text-sm text-[#7A8580] text-center py-4">No payments recorded</p>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-[#7A8580] border-b border-[rgba(59,77,67,0.08)]">
+                            <th className="pb-2 font-medium">Date</th>
+                            <th className="pb-2 font-medium text-right">Amount</th>
+                            <th className="pb-2 font-medium">Method</th>
+                            <th className="pb-2 font-medium text-center">Status</th>
+                            <th className="pb-2 font-medium">Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {accountingData.payments.map((pmt) => (
+                            <tr key={pmt.id} className="border-b border-[rgba(59,77,67,0.04)] hover:bg-[#F5F7F4]/50">
+                              <td className="py-3 text-[#7A8580]">{pmt.payment_date ? new Date(pmt.payment_date).toLocaleDateString() : pmt.created_at ? new Date(pmt.created_at).toLocaleDateString() : '—'}</td>
+                              <td className="py-3 text-right font-medium text-[#3D4A44]">${pmt.amount_dollars.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                              <td className="py-3 text-[#7A8580]">{pmt.payment_method || '—'}</td>
+                              <td className="py-3 text-center">
+                                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${pmt.status === 'PAID' ? 'bg-[rgba(91,154,110,0.15)] text-[#3D7A4E]' : 'bg-[rgba(196,149,107,0.15)] text-[#C4956B]'}`}>
+                                  {pmt.status}
+                                </span>
+                              </td>
+                              <td className="py-3 text-[#7A8580] text-sm truncate max-w-[150px]">{pmt.notes || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12 text-[#7A8580]">No accounting data available</div>
+            )}
+          </div>
         )}
         
         {activeTab === 'schedule-a' && (
@@ -1657,6 +1937,89 @@ export default function CreatorDetailPage() {
                 >
                   {editingCreator ? 'Saving...' : 'Save Changes'}
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAddFeeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowAddFeeModal(false)} />
+          <div className="relative w-full max-w-md bg-white rounded-[18px] shadow-2xl overflow-hidden">
+            <div className="border-b border-[rgba(59,77,67,0.08)] px-6 py-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-[#3D4A44]">Add Fee</h2>
+              <button onClick={() => setShowAddFeeModal(false)} className="p-2 rounded-lg text-[#7A8580] hover:bg-[#EEF1EC]"><XMarkIcon className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleCreateFee} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Fee Type</label>
+                <select value={feeForm.fee_type} onChange={(e) => setFeeForm({...feeForm, fee_type: e.target.value})} className="w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30">
+                  <option value="MANAGEMENT_FEE">Management Fee</option>
+                  <option value="ADMIN_FEE">Admin Fee</option>
+                  <option value="DISTRIBUTION_FEE">Distribution Fee</option>
+                  <option value="SYNC_FEE">Sync Fee</option>
+                  <option value="LEGAL_FEE">Legal Fee</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Description</label>
+                <input type="text" value={feeForm.description} onChange={(e) => setFeeForm({...feeForm, description: e.target.value})} className="w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Amount ($)</label>
+                <input type="number" step="0.01" value={feeForm.amount} onChange={(e) => setFeeForm({...feeForm, amount: e.target.value})} required className="w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Date</label>
+                <input type="date" value={feeForm.fee_date} onChange={(e) => setFeeForm({...feeForm, fee_date: e.target.value})} className="w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Notes</label>
+                <textarea value={feeForm.notes} onChange={(e) => setFeeForm({...feeForm, notes: e.target.value})} rows={2} className="w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30" />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="submit" disabled={savingFee || !feeForm.amount} className="bg-[#5B8A72] hover:bg-[#4A7A62] text-white px-5 py-2.5 rounded-xl font-medium transition-all disabled:opacity-50">
+                  {savingFee ? 'Saving...' : 'Add Fee'}
+                </button>
+                <button type="button" onClick={() => setShowAddFeeModal(false)} className="px-5 py-2.5 rounded-xl font-medium text-[#7A8580] hover:bg-[#EEF1EC]">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAddAdvanceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setShowAddAdvanceModal(false)} />
+          <div className="relative w-full max-w-md bg-white rounded-[18px] shadow-2xl overflow-hidden">
+            <div className="border-b border-[rgba(59,77,67,0.08)] px-6 py-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-[#3D4A44]">Add Advance</h2>
+              <button onClick={() => setShowAddAdvanceModal(false)} className="p-2 rounded-lg text-[#7A8580] hover:bg-[#EEF1EC]"><XMarkIcon className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleCreateAdvance} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Description</label>
+                <input type="text" value={advanceForm.description} onChange={(e) => setAdvanceForm({...advanceForm, description: e.target.value})} className="w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Amount ($)</label>
+                <input type="number" step="0.01" value={advanceForm.amount} onChange={(e) => setAdvanceForm({...advanceForm, amount: e.target.value})} required className="w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Date</label>
+                <input type="date" value={advanceForm.advance_date} onChange={(e) => setAdvanceForm({...advanceForm, advance_date: e.target.value})} className="w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Notes</label>
+                <textarea value={advanceForm.notes} onChange={(e) => setAdvanceForm({...advanceForm, notes: e.target.value})} rows={2} className="w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30" />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="submit" disabled={savingAdvance || !advanceForm.amount} className="bg-[#5B8A72] hover:bg-[#4A7A62] text-white px-5 py-2.5 rounded-xl font-medium transition-all disabled:opacity-50">
+                  {savingAdvance ? 'Saving...' : 'Add Advance'}
+                </button>
+                <button type="button" onClick={() => setShowAddAdvanceModal(false)} className="px-5 py-2.5 rounded-xl font-medium text-[#7A8580] hover:bg-[#EEF1EC]">Cancel</button>
               </div>
             </form>
           </div>

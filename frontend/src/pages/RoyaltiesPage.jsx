@@ -33,6 +33,7 @@ const TABS = [
   { key: 'statements', label: 'Statements', icon: DocumentTextIcon },
   { key: 'earnings', label: 'Earnings', icon: CurrencyDollarIcon },
   { key: 'payments', label: 'Payments', icon: BanknotesIcon },
+  { key: 'fees', label: 'Fees & Advances', icon: CalculatorIcon },
 ]
 
 const STATEMENT_STATUS_COLORS = {
@@ -1094,6 +1095,353 @@ function EmptyState({ icon: Icon, title, message }) {
   )
 }
 
+function FeesAdvancesTab({ orgId, creators }) {
+  const [fees, setFees] = useState([])
+  const [advances, setAdvances] = useState([])
+  const [loadingFees, setLoadingFees] = useState(true)
+  const [loadingAdvances, setLoadingAdvances] = useState(true)
+  const [showAddFeeModal, setShowAddFeeModal] = useState(false)
+  const [showAddAdvanceModal, setShowAddAdvanceModal] = useState(false)
+  const [feeForm, setFeeForm] = useState({ creator_id: '', fee_type: 'MANAGEMENT_FEE', description: '', amount: '', fee_date: '', notes: '' })
+  const [advanceForm, setAdvanceForm] = useState({ creator_id: '', description: '', amount: '', advance_date: '', notes: '' })
+  const [savingFee, setSavingFee] = useState(false)
+  const [savingAdvance, setSavingAdvance] = useState(false)
+
+  const loadFees = useCallback(async () => {
+    if (!orgId) return
+    try {
+      const res = await axios.get(`/api/royalties/fees/${orgId}`)
+      setFees(Array.isArray(res.data) ? res.data : res.data.fees || [])
+    } catch (err) {
+      console.error('Failed to load fees:', err)
+    } finally {
+      setLoadingFees(false)
+    }
+  }, [orgId])
+
+  const loadAdvances = useCallback(async () => {
+    if (!orgId) return
+    try {
+      const res = await axios.get(`/api/royalties/advances/${orgId}`)
+      setAdvances(Array.isArray(res.data) ? res.data : res.data.advances || [])
+    } catch (err) {
+      console.error('Failed to load advances:', err)
+    } finally {
+      setLoadingAdvances(false)
+    }
+  }, [orgId])
+
+  useEffect(() => { loadFees(); loadAdvances() }, [loadFees, loadAdvances])
+
+  const handleCreateFee = async () => {
+    if (!feeForm.creator_id || !feeForm.amount) return
+    setSavingFee(true)
+    try {
+      await axios.post(`/api/royalties/fees/${orgId}`, {
+        creator_id: parseInt(feeForm.creator_id),
+        fee_type: feeForm.fee_type,
+        description: feeForm.description,
+        amount_cents: Math.round(parseFloat(feeForm.amount) * 100),
+        fee_date: feeForm.fee_date || null,
+        notes: feeForm.notes || null
+      })
+      setShowAddFeeModal(false)
+      setFeeForm({ creator_id: '', fee_type: 'MANAGEMENT_FEE', description: '', amount: '', fee_date: '', notes: '' })
+      loadFees()
+    } catch (err) {
+      console.error('Failed to create fee:', err)
+      alert('Failed to create fee.')
+    } finally {
+      setSavingFee(false)
+    }
+  }
+
+  const handleCreateAdvance = async () => {
+    if (!advanceForm.creator_id || !advanceForm.amount) return
+    setSavingAdvance(true)
+    try {
+      await axios.post(`/api/royalties/advances/${orgId}`, {
+        creator_id: parseInt(advanceForm.creator_id),
+        description: advanceForm.description,
+        amount_cents: Math.round(parseFloat(advanceForm.amount) * 100),
+        advance_date: advanceForm.advance_date || null,
+        notes: advanceForm.notes || null
+      })
+      setShowAddAdvanceModal(false)
+      setAdvanceForm({ creator_id: '', description: '', amount: '', advance_date: '', notes: '' })
+      loadAdvances()
+    } catch (err) {
+      console.error('Failed to create advance:', err)
+      alert('Failed to create advance.')
+    } finally {
+      setSavingAdvance(false)
+    }
+  }
+
+  const handleDeleteFee = async (feeId) => {
+    if (!window.confirm('Delete this fee? This cannot be undone.')) return
+    try {
+      await axios.delete(`/api/royalties/fees/${orgId}/${feeId}`)
+      loadFees()
+    } catch (err) {
+      console.error('Failed to delete fee:', err)
+    }
+  }
+
+  const handleDeleteAdvance = async (advanceId) => {
+    if (!window.confirm('Delete this advance? This cannot be undone.')) return
+    try {
+      await axios.delete(`/api/royalties/advances/${orgId}/${advanceId}`)
+      loadAdvances()
+    } catch (err) {
+      console.error('Failed to delete advance:', err)
+    }
+  }
+
+  const getCreatorName = (creatorId) => {
+    const c = (creators || []).find(cr => cr.id === creatorId)
+    return c ? (c.display_name || c.name || c.artist_name || 'Unknown') : 'Unknown'
+  }
+
+  const formatAmount = (dollars) => {
+    if (dollars == null) return '$0.00'
+    return `$${Number(dollars).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  }
+
+  const inputClass = "w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30"
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)]">
+        <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+          <h3 className="text-lg font-semibold text-[#3D4A44]">Fees</h3>
+          <button onClick={() => setShowAddFeeModal(true)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
+            <PlusIcon className="w-4 h-4" /> Add Fee
+          </button>
+        </div>
+        {loadingFees ? <LoadingSpinner message="Loading fees..." /> : fees.length === 0 ? (
+          <EmptyState icon={CalculatorIcon} title="No Fees" message="No fees have been recorded yet." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-[#EEF1EC]">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Creator</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Description</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Date</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Amount</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Status</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-[#7A8580] uppercase"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                {fees.map(fee => (
+                  <tr key={fee.id} className="hover:bg-[rgba(91,138,114,0.04)]">
+                    <td className="px-4 py-3 text-sm font-medium text-[#3D4A44]">{getCreatorName(fee.creator_id)}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[rgba(91,138,114,0.1)] text-[#5B8A72]">
+                        {(fee.fee_type || '').replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">{fee.description || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">{formatDate(fee.fee_date)}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatAmount(fee.amount_dollars != null ? fee.amount_dollars : (fee.amount_cents || 0) / 100)}</td>
+                    <td className="px-4 py-3">
+                      {fee.status === 'PAID' ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">PAID</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[rgba(196,149,107,0.15)] text-[#C4956B]">{fee.status || 'PENDING'}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button onClick={() => handleDeleteFee(fee.id)} className="p-1.5 text-[#7A8580] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)]">
+        <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+          <h3 className="text-lg font-semibold text-[#3D4A44]">Advances</h3>
+          <button onClick={() => setShowAddAdvanceModal(true)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
+            <PlusIcon className="w-4 h-4" /> Add Advance
+          </button>
+        </div>
+        {loadingAdvances ? <LoadingSpinner message="Loading advances..." /> : advances.length === 0 ? (
+          <EmptyState icon={BanknotesIcon} title="No Advances" message="No advances have been recorded yet." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-[#EEF1EC]">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Creator</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Description</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Date</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Amount</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Recouped</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Remaining</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Status</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-[#7A8580] uppercase"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                {advances.map(adv => {
+                  const amountDollars = adv.amount_dollars != null ? adv.amount_dollars : (adv.amount_cents || 0) / 100
+                  const recoupedDollars = adv.recouped_dollars != null ? adv.recouped_dollars : (adv.recouped_cents || 0) / 100
+                  const remainingDollars = adv.remaining_dollars != null ? adv.remaining_dollars : amountDollars - recoupedDollars
+                  const pct = adv.recoupment_pct != null ? adv.recoupment_pct : (amountDollars > 0 ? Math.min((recoupedDollars / amountDollars) * 100, 100) : 0)
+                  return (
+                    <tr key={adv.id} className="hover:bg-[rgba(91,138,114,0.04)]">
+                      <td className="px-4 py-3 text-sm font-medium text-[#3D4A44]">{getCreatorName(adv.creator_id)}</td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580]">{adv.description || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580]">{formatDate(adv.advance_date)}</td>
+                      <td className="px-4 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatAmount(amountDollars)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-[#7A8580]">{formatAmount(recoupedDollars)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-[#7A8580]">{formatAmount(remainingDollars)}</td>
+                      <td className="px-4 py-3">
+                        <div>
+                          {adv.fully_recouped ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[rgba(91,154,110,0.15)] text-[#3D7A4E]">RECOUPED</span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[rgba(196,149,107,0.15)] text-[#C4956B]">ACTIVE</span>
+                          )}
+                          <div className="mt-1.5 w-full bg-[#EEF1EC] rounded-full h-1.5">
+                            <div className="h-1.5 rounded-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] transition-all" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="text-[10px] text-[#7A8580]">{pct.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button onClick={() => handleDeleteAdvance(adv.id)} className="p-1.5 text-[#7A8580] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {showAddFeeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-lg font-semibold text-[#3D4A44]">Add Fee</h3>
+              <button onClick={() => setShowAddFeeModal(false)} className="p-2 hover:bg-[rgba(59,77,67,0.06)] rounded-full transition-colors">
+                <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Creator</label>
+                <select value={feeForm.creator_id} onChange={e => setFeeForm(prev => ({ ...prev, creator_id: e.target.value }))} className={inputClass}>
+                  <option value="">Select creator...</option>
+                  {(creators || []).map(c => <option key={c.id} value={c.id}>{c.display_name || c.name || c.artist_name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Fee Type</label>
+                <select value={feeForm.fee_type} onChange={e => setFeeForm(prev => ({ ...prev, fee_type: e.target.value }))} className={inputClass}>
+                  <option value="MANAGEMENT_FEE">Management Fee</option>
+                  <option value="ADMIN_FEE">Admin Fee</option>
+                  <option value="DISTRIBUTION_FEE">Distribution Fee</option>
+                  <option value="SYNC_FEE">Sync Fee</option>
+                  <option value="LEGAL_FEE">Legal Fee</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description</label>
+                <input type="text" value={feeForm.description} onChange={e => setFeeForm(prev => ({ ...prev, description: e.target.value }))} placeholder="Fee description" className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Amount ($)</label>
+                <input type="number" step="0.01" value={feeForm.amount} onChange={e => setFeeForm(prev => ({ ...prev, amount: e.target.value }))} placeholder="0.00" className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Date</label>
+                <input type="date" value={feeForm.fee_date} onChange={e => setFeeForm(prev => ({ ...prev, fee_date: e.target.value }))} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Notes</label>
+                <textarea value={feeForm.notes} onChange={e => setFeeForm(prev => ({ ...prev, notes: e.target.value }))} rows={3} placeholder="Optional notes..." className={`${inputClass} resize-none`} />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={() => setShowAddFeeModal(false)} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
+                <button
+                  onClick={handleCreateFee}
+                  disabled={!feeForm.creator_id || !feeForm.amount || savingFee}
+                  className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium disabled:opacity-50"
+                >
+                  {savingFee ? 'Saving...' : 'Add Fee'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddAdvanceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-lg font-semibold text-[#3D4A44]">Add Advance</h3>
+              <button onClick={() => setShowAddAdvanceModal(false)} className="p-2 hover:bg-[rgba(59,77,67,0.06)] rounded-full transition-colors">
+                <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Creator</label>
+                <select value={advanceForm.creator_id} onChange={e => setAdvanceForm(prev => ({ ...prev, creator_id: e.target.value }))} className={inputClass}>
+                  <option value="">Select creator...</option>
+                  {(creators || []).map(c => <option key={c.id} value={c.id}>{c.display_name || c.name || c.artist_name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description</label>
+                <input type="text" value={advanceForm.description} onChange={e => setAdvanceForm(prev => ({ ...prev, description: e.target.value }))} placeholder="Advance description" className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Amount ($)</label>
+                <input type="number" step="0.01" value={advanceForm.amount} onChange={e => setAdvanceForm(prev => ({ ...prev, amount: e.target.value }))} placeholder="0.00" className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Date</label>
+                <input type="date" value={advanceForm.advance_date} onChange={e => setAdvanceForm(prev => ({ ...prev, advance_date: e.target.value }))} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Notes</label>
+                <textarea value={advanceForm.notes} onChange={e => setAdvanceForm(prev => ({ ...prev, notes: e.target.value }))} rows={3} placeholder="Optional notes..." className={`${inputClass} resize-none`} />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={() => setShowAddAdvanceModal(false)} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
+                <button
+                  onClick={handleCreateAdvance}
+                  disabled={!advanceForm.creator_id || !advanceForm.amount || savingAdvance}
+                  className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium disabled:opacity-50"
+                >
+                  {savingAdvance ? 'Saving...' : 'Add Advance'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function RoyaltiesPage() {
   const [orgId, setOrgId] = useState(null)
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -1179,6 +1527,7 @@ export default function RoyaltiesPage() {
         {activeTab === 'statements' && <StatementsTab orgId={orgId} songs={songs} />}
         {activeTab === 'earnings' && <EarningsTab orgId={orgId} />}
         {activeTab === 'payments' && <PaymentsTab orgId={orgId} creators={creators} contracts={contracts} />}
+        {activeTab === 'fees' && <FeesAdvancesTab orgId={orgId} creators={creators} />}
       </div>
     </div>
   )
