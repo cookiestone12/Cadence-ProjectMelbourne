@@ -1088,7 +1088,7 @@ export default function CreatorDetailPage() {
                             <th className="px-4 py-3 text-right font-semibold text-[#3D4A44]">Advance</th>
                             <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Status</th>
                             <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">PRO</th>
-                            <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">DSP</th>
+                            <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Fee</th>
                           </tr>
                         </thead>
                         <tbody>

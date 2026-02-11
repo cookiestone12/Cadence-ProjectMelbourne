@@ -28,7 +28,9 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
     media_url: '',
     has_contract_executed: false,
     is_registered_with_pro: false,
-    is_registered_with_dsp: false
+    is_registered_with_dsp: 'N/A',
+    is_paid: 'N/A',
+    is_invoiced: 'N/A'
   })
   
   const [loading, setLoading] = useState(false)
@@ -93,7 +95,9 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
         media_url: formData.media_url || null,
         has_contract_executed: formData.has_contract_executed,
         is_registered_with_pro: formData.is_registered_with_pro,
-        is_registered_with_dsp: formData.is_registered_with_dsp
+        is_registered_with_dsp: formData.is_registered_with_dsp,
+        is_paid: formData.is_paid,
+        is_invoiced: formData.is_invoiced
       }
       
       const songResponse = await axios.post(`/api/songs/org/${organizationId}`, payload, {
@@ -445,15 +449,42 @@ export default function AddSongModal({ onClose, onSuccess, organizationId }) {
                 <span className="ml-2 text-[15px] text-[#3D4A44]">Registered with PRO</span>
               </label>
               
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={formData.is_registered_with_dsp}
-                  onChange={(e) => handleChange('is_registered_with_dsp', e.target.checked)}
-                  className="w-4 h-4 text-[#5B8A72] border-[rgba(59,77,67,0.08)] rounded focus:ring-[#5B8A72]"
-                />
-                <span className="ml-2 text-[15px] text-[#3D4A44]">Registered with DSP</span>
-              </label>
+              <div>
+                <label className="block text-[13px] font-medium text-[#7A8580] mb-1">Fee</label>
+                <select
+                  value={formData.is_registered_with_dsp}
+                  onChange={(e) => handleChange('is_registered_with_dsp', e.target.value)}
+                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
+                >
+                  <option value="N/A">N/A</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[13px] font-medium text-[#7A8580] mb-1">Paid</label>
+                <select
+                  value={formData.is_paid}
+                  onChange={(e) => handleChange('is_paid', e.target.value)}
+                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
+                >
+                  <option value="N/A">N/A</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-[13px] font-medium text-[#7A8580] mb-1">Advance</label>
+                <select
+                  value={formData.is_invoiced}
+                  onChange={(e) => handleChange('is_invoiced', e.target.value)}
+                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
+                >
+                  <option value="N/A">N/A</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
             </div>
           </div>
           
