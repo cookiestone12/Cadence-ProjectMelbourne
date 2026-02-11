@@ -503,7 +503,7 @@ export default function CreatorDetailPage() {
         {creator.hero_image_url ? (
           <>
             <img 
-              src={creator.hero_image_url} 
+              src={`/api/creators/${creator.id}/image`} 
               alt=""
               className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl brightness-75"
             />
@@ -526,7 +526,7 @@ export default function CreatorDetailPage() {
           <div className="flex items-center gap-5 mb-2">
             {creator.hero_image_url && (
               <img 
-                src={creator.hero_image_url} 
+                src={`/api/creators/${creator.id}/image`} 
                 alt={creator.display_name}
                 className="w-20 h-20 rounded-xl object-cover border-2 border-white/30 shadow-lg flex-shrink-0"
               />

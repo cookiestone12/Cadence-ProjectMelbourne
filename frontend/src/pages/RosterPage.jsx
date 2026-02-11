@@ -297,7 +297,7 @@ export default function RosterPage() {
                   <Link to={`/roster/${creator.id}`} className="block w-full h-full">
                     {creator.hero_image_url ? (
                       <img 
-                        src={creator.hero_image_url} 
+                        src={`/api/creators/${creator.id}/image`} 
                         alt={creator.display_name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                       />
