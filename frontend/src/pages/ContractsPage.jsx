@@ -431,9 +431,9 @@ export default function ContractsPage() {
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTypeBadgeClass(contract.contract_type)}`}>
                 {TYPE_LABELS[contract.contract_type] || contract.contract_type}
               </span>
-              {contract.territory && (
+              {contract.territory && (Array.isArray(contract.territory) ? contract.territory.length > 0 : contract.territory) && (
                 <span className="px-2 py-0.5 rounded-full text-xs bg-[#EEF1EC] text-[#7A8580]">
-                  {contract.territory}
+                  {Array.isArray(contract.territory) ? contract.territory.join(', ') : contract.territory}
                 </span>
               )}
             </div>
@@ -452,7 +452,7 @@ export default function ContractsPage() {
             <div className="flex items-center space-x-4 text-xs text-[#7A8580] pt-2 border-t border-[rgba(59,77,67,0.08)]">
               <span className="flex items-center space-x-1">
                 <UserGroupIcon className="w-3.5 h-3.5" />
-                <span>{contract.party_count || 0} parties</span>
+                <span>{contract.party_count || (contract.parties ? contract.parties.length : 0)} parties</span>
               </span>
               <span className="flex items-center space-x-1">
                 <LinkIcon className="w-3.5 h-3.5" />
