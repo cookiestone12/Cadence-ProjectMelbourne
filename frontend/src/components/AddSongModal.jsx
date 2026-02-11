@@ -10,28 +10,28 @@ const DollarOrNAInput = ({ value, onChange }) => {
         <button
           type="button"
           onClick={() => onChange('')}
-          className="w-full px-3 py-2 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-[#F5F7F4] text-[#7A8580] hover:bg-[#EEF1EC] transition-colors text-center"
+          className="w-full px-3 py-2.5 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-[#F5F7F4] text-[#7A8580] hover:bg-[#EEF1EC] transition-colors text-center"
         >
           N/A
         </button>
       ) : (
         <div className="flex items-center gap-1 w-full">
           <div className="relative flex-1">
-            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#7A8580] text-sm">$</span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A8580] text-sm font-medium">$</span>
             <input
               type="number"
               min="0"
               step="0.01"
               value={value}
               onChange={(e) => onChange(e.target.value)}
-              className="w-full pl-5 pr-2 py-2 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
-              placeholder="0"
+              className="w-full pl-6 pr-3 py-2.5 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
+              placeholder="Amount"
             />
           </div>
           <button
             type="button"
             onClick={() => onChange('N/A')}
-            className="px-2 py-2 text-xs text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#F5F7F4] rounded-lg transition-colors whitespace-nowrap"
+            className="px-2 py-2 text-xs font-medium text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#F5F7F4] rounded-lg transition-colors whitespace-nowrap border border-transparent hover:border-[rgba(0,0,0,0.1)]"
             title="Set to N/A"
           >
             N/A

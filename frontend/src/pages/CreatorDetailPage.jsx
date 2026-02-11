@@ -199,6 +199,23 @@ export default function CreatorDetailPage() {
     }
   }
   
+  const normalizeDollarField = (val) => {
+    if (val === null || val === undefined) return 'N/A'
+    const s = String(val).toLowerCase()
+    if (s === 'n/a' || s === 'na') return 'N/A'
+    if (s === 'true' || s === 'yes' || s === 'false' || s === 'no' || s === '') return ''
+    return String(val)
+  }
+
+  const normalizeTriState = (val) => {
+    if (val === null || val === undefined || val === '') return 'N/A'
+    const s = String(val).toLowerCase()
+    if (s === 'n/a' || s === 'na') return 'N/A'
+    if (s === 'true' || s === 'yes') return 'Yes'
+    if (s === 'false' || s === 'no') return 'No'
+    return val
+  }
+
   const startEdit = (song) => {
     setEditingSong(song.id)
     setEditForm({
@@ -209,10 +226,10 @@ export default function CreatorDetailPage() {
       advance_amount: song.advance_amount ? (song.advance_amount / 100) : '',
       label: song.label || '',
       is_registered_with_pro: song.is_registered_with_pro || false,
-      is_registered_with_dsp: song.is_registered_with_dsp || 'No',
-      soundexchange_registered: song.soundexchange_registered || 'N/A',
-      is_paid: song.is_paid || 'No',
-      is_invoiced: song.is_invoiced || 'No',
+      is_registered_with_dsp: normalizeDollarField(song.is_registered_with_dsp),
+      soundexchange_registered: normalizeTriState(song.soundexchange_registered),
+      is_paid: normalizeTriState(song.is_paid),
+      is_invoiced: normalizeDollarField(song.is_invoiced),
       has_contract_executed: song.has_contract_executed || false,
       is_released: song.is_released || false,
       spotify_link: song.spotify_link || '',
@@ -393,21 +410,22 @@ export default function CreatorDetailPage() {
   }
   
   const StatusBadge = ({ value, label }) => {
-    if (value === true || value === 'Yes') {
+    const strVal = String(value ?? '').toLowerCase()
+    if (value === true || strVal === 'yes' || strVal === 'true') {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(52, 199, 89, 0.15)', color: '#5B9A6E' }}>
           <CheckCircleIcon className="w-3 h-3" />
           {label || 'Yes'}
         </span>
       )
-    } else if (value === false || value === 'No') {
+    } else if (value === false || strVal === 'no' || strVal === 'false') {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(255, 59, 48, 0.15)', color: '#C47068' }}>
           <XCircleIcon className="w-3 h-3" />
           {label || 'No'}
         </span>
       )
-    } else if (value === 'N/A' || value === null || value === undefined) {
+    } else if (strVal === 'n/a' || strVal === '' || value === null || value === undefined) {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(0, 0, 0, 0.05)', color: '#7A8580' }}>
           <MinusCircleIcon className="w-3 h-3" />
@@ -415,19 +433,21 @@ export default function CreatorDetailPage() {
         </span>
       )
     } else {
+      const num = parseFloat(value)
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(52, 199, 89, 0.15)', color: '#5B9A6E' }}>
           <CheckCircleIcon className="w-3 h-3" />
-          ${parseFloat(value).toLocaleString()}
+          {isNaN(num) ? 'Yes' : `$${num.toLocaleString()}`}
         </span>
       )
     }
   }
 
-  const DollarOrNAInput = ({ value, onChange, placeholder }) => {
+  const DollarOrNAInput = ({ value, onChange }) => {
     const isNA = value === 'N/A'
+    const displayVal = (value === 'true' || value === true) ? '' : (value === 'false' || value === false) ? '' : value
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1" style={{ minWidth: '120px' }}>
         {isNA ? (
           <button
             type="button"
@@ -439,21 +459,22 @@ export default function CreatorDetailPage() {
         ) : (
           <div className="flex items-center gap-1 w-full">
             <div className="relative flex-1">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[#7A8580] text-sm">$</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#7A8580] text-sm font-medium">$</span>
               <input
                 type="number"
                 min="0"
                 step="0.01"
-                value={value}
+                value={displayVal}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full pl-5 pr-2 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72]"
-                placeholder={placeholder || '0'}
+                className="w-full pl-6 pr-2 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-1 focus:ring-[#5B8A72]"
+                placeholder="Amount"
+                style={{ minWidth: '80px' }}
               />
             </div>
             <button
               type="button"
               onClick={() => onChange('N/A')}
-              className="px-2 py-2 text-xs text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#F5F7F4] rounded-lg transition-colors whitespace-nowrap"
+              className="px-2 py-2 text-xs font-medium text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#F5F7F4] rounded-lg transition-colors whitespace-nowrap border border-transparent hover:border-[rgba(0,0,0,0.1)]"
               title="Set to N/A"
             >
               N/A

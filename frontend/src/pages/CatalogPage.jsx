@@ -261,11 +261,17 @@ export default function CatalogPage() {
                           PRO
                         </span>
                       )}
-                      {(song.is_registered_with_dsp && song.is_registered_with_dsp !== 'N/A' && song.is_registered_with_dsp !== 'No' && song.is_registered_with_dsp !== false) && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[rgba(91,138,114,0.12)] text-[#5B8A72]">
-                          {!isNaN(parseFloat(song.is_registered_with_dsp)) ? `Fee $${parseFloat(song.is_registered_with_dsp).toLocaleString()}` : 'Fee'}
-                        </span>
-                      )}
+                      {(() => {
+                        const v = String(song.is_registered_with_dsp ?? '').toLowerCase()
+                        const isActive = v === 'yes' || v === 'true' || (song.is_registered_with_dsp && v !== 'n/a' && v !== 'no' && v !== 'false' && v !== '' && !isNaN(parseFloat(song.is_registered_with_dsp)))
+                        if (!isActive) return null
+                        const num = parseFloat(song.is_registered_with_dsp)
+                        return (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[rgba(91,138,114,0.12)] text-[#5B8A72]">
+                            {!isNaN(num) && v !== 'true' ? `Fee $${num.toLocaleString()}` : 'Fee'}
+                          </span>
+                        )
+                      })()}
                       {song.has_contract_executed && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[rgba(107,154,132,0.12)] text-[#6B9A84]">
                           Contract

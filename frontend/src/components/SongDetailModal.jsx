@@ -142,9 +142,9 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       advance_amount: songDetails.advance_amount ?? '',
       contract_location: songDetails.contract_location || '',
       payment_status: songDetails.payment_status || 'PENDING',
-      is_paid: songDetails.is_paid || 'N/A',
-      is_invoiced: songDetails.is_invoiced || 'N/A',
-      is_registered_with_dsp: songDetails.is_registered_with_dsp || 'N/A',
+      is_paid: (() => { const s = String(songDetails.is_paid ?? '').toLowerCase(); if (s === 'true') return 'Yes'; if (s === 'false') return 'No'; return songDetails.is_paid || 'N/A' })(),
+      is_invoiced: (() => { if (songDetails.is_invoiced == null) return 'N/A'; const s = String(songDetails.is_invoiced).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || s === 'false' || s === 'no' || s === '') return ''; return String(songDetails.is_invoiced) })(),
+      is_registered_with_dsp: (() => { if (songDetails.is_registered_with_dsp == null) return 'N/A'; const s = String(songDetails.is_registered_with_dsp).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || s === 'false' || s === 'no' || s === '') return ''; return String(songDetails.is_registered_with_dsp) })(),
     })
     setIsEditing(true)
     setEditFeedback(null)
@@ -226,21 +226,26 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   }
   
   const getStatusIcon = (value) => {
-    if (value === 'Yes' || value === true) return <CheckCircleIcon className="w-5 h-5 text-[#5B9A6E]" />
-    if (value === 'No' || value === false) return <XCircleIcon className="w-5 h-5 text-[#C47068]" />
-    if (value && value !== 'N/A' && !isNaN(parseFloat(value))) {
-      return (
-        <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#5B9A6E]">
-          <CheckCircleIcon className="w-5 h-5" />
-          ${parseFloat(value).toLocaleString()}
-        </span>
-      )
+    const strVal = String(value ?? '').toLowerCase()
+    if (strVal === 'yes' || strVal === 'true' || value === true) return <CheckCircleIcon className="w-5 h-5 text-[#5B9A6E]" />
+    if (strVal === 'no' || strVal === 'false' || value === false) return <XCircleIcon className="w-5 h-5 text-[#C47068]" />
+    if (value && strVal !== 'n/a' && strVal !== '') {
+      const num = parseFloat(value)
+      if (!isNaN(num)) {
+        return (
+          <span className="inline-flex items-center gap-1 text-[13px] font-medium text-[#5B9A6E]">
+            <CheckCircleIcon className="w-5 h-5" />
+            ${num.toLocaleString()}
+          </span>
+        )
+      }
     }
     return <MinusCircleIcon className="w-5 h-5 text-[#7A8580]" />
   }
 
   const DollarOrNAInput = ({ value, onChange }) => {
     const isNA = value === 'N/A'
+    const displayVal = (value === 'true' || value === true) ? '' : (value === 'false' || value === false) ? '' : value
     return (
       <div className="flex items-center gap-1 mt-1">
         {isNA ? (
@@ -254,21 +259,21 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
         ) : (
           <div className="flex items-center gap-1 w-full">
             <div className="relative flex-1">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A8580] text-[15px]">$</span>
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7A8580] text-[15px] font-medium">$</span>
               <input
                 type="number"
                 min="0"
                 step="0.01"
-                value={value}
+                value={displayVal}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full pl-7 pr-2 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                placeholder="0"
+                className="w-full pl-7 pr-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                placeholder="Amount"
               />
             </div>
             <button
               type="button"
               onClick={() => onChange('N/A')}
-              className="px-2 py-2 text-xs text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#F5F7F4] rounded-lg transition-colors whitespace-nowrap"
+              className="px-2 py-2 text-xs font-medium text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#F5F7F4] rounded-lg transition-colors whitespace-nowrap border border-transparent hover:border-[rgba(0,0,0,0.1)]"
               title="Set to N/A"
             >
               N/A
