@@ -298,15 +298,16 @@ def serve_creator_image(
             headers={"Cache-Control": "public, max-age=3600"}
         )
 
-    if creator.hero_image_url:
-        filepath = UPLOADS_DIR / creator.hero_image_url.split("/")[-1]
+    if creator.hero_image_url and creator.hero_image_url.startswith("/uploads/"):
+        filename = creator.hero_image_url.split("/")[-1]
+        filepath = UPLOADS_DIR / filename
         if filepath.exists():
             mime = "image/jpeg"
-            if str(filepath).endswith(".png"):
+            if filename.endswith(".png"):
                 mime = "image/png"
-            elif str(filepath).endswith(".webp"):
+            elif filename.endswith(".webp"):
                 mime = "image/webp"
-            elif str(filepath).endswith(".gif"):
+            elif filename.endswith(".gif"):
                 mime = "image/gif"
             return Response(
                 content=filepath.read_bytes(),

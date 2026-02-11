@@ -25,6 +25,25 @@ if not os.getenv("SESSION_SECRET"):
 
 Base.metadata.create_all(bind=engine)
 
+def ensure_schema_updates():
+    from sqlalchemy import text, inspect
+    with engine.connect() as conn:
+        inspector = inspect(engine)
+        cols = [c['name'] for c in inspector.get_columns('creators')]
+        if 'hero_image_data' not in cols:
+            conn.execute(text("ALTER TABLE creators ADD COLUMN hero_image_data BYTEA"))
+            conn.commit()
+            logger.info("Added hero_image_data column to creators")
+        if 'hero_image_mime' not in cols:
+            conn.execute(text("ALTER TABLE creators ADD COLUMN hero_image_mime VARCHAR"))
+            conn.commit()
+            logger.info("Added hero_image_mime column to creators")
+
+try:
+    ensure_schema_updates()
+except Exception as e:
+    logger.warning(f"Schema update check: {e}")
+
 def seed_super_admin():
     from .utils.auth import get_password_hash
     from .models.models import Organization, OrganizationMember
