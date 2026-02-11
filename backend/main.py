@@ -51,6 +51,13 @@ def ensure_schema_updates():
             conn.commit()
             logger.info("Added cover_art_data/cover_art_mime columns to releases")
 
+        if 'song_contracts' in inspector.get_table_names():
+            sc_cols = [c['name'] for c in inspector.get_columns('song_contracts')]
+            if 'contract_id' not in sc_cols:
+                conn.execute(text("ALTER TABLE song_contracts ADD COLUMN contract_id INTEGER REFERENCES contracts(id)"))
+                conn.commit()
+                logger.info("Added contract_id column to song_contracts")
+
         song_cols = {c['name']: c for c in inspector.get_columns('songs')}
         if 'audio_file_url' not in song_cols:
             conn.execute(text("ALTER TABLE songs ADD COLUMN audio_file_url VARCHAR"))

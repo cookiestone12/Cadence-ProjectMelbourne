@@ -405,6 +405,8 @@ def generate_org_actions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    import logging
+    logger = logging.getLogger("rythm")
     from ..utils.catalog_gaps import generate_actions_from_gaps
     
     membership = db.query(OrganizationMember).filter(
@@ -415,22 +417,27 @@ def generate_org_actions(
     if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
-    
-    total_created = 0
-    for creator in creators:
-        created_count = generate_actions_from_gaps(
-            db,
-            creator.id,
-            org_id,
-            current_user.id
-        )
-        total_created += created_count
-    
-    return {
-        "message": f"Generated {total_created} action items across {len(creators)} creators",
-        "created_count": total_created
-    }
+    try:
+        creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
+        
+        total_created = 0
+        for creator in creators:
+            created_count = generate_actions_from_gaps(
+                db,
+                creator.id,
+                org_id,
+                current_user.id
+            )
+            total_created += created_count
+        
+        return {
+            "message": f"Generated {total_created} action items across {len(creators)} creators",
+            "created_count": total_created
+        }
+    except Exception as e:
+        logger.error(f"generate-org/{org_id} failed: {type(e).__name__}: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to generate actions: {str(e)}")
 
 
 @router.post("/generate-cross-module/{org_id}")
@@ -439,6 +446,8 @@ def generate_cross_module_actions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    import logging
+    logger = logging.getLogger("rythm")
     from ..utils.cross_module_tasks import generate_cross_module_tasks
 
     membership = db.query(OrganizationMember).filter(
@@ -449,12 +458,17 @@ def generate_cross_module_actions(
     if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    created_count = generate_cross_module_tasks(db, org_id, current_user.id)
+    try:
+        created_count = generate_cross_module_tasks(db, org_id, current_user.id)
 
-    return {
-        "message": f"Generated {created_count} cross-module action items",
-        "created_count": created_count
-    }
+        return {
+            "message": f"Generated {created_count} cross-module action items",
+            "created_count": created_count
+        }
+    except Exception as e:
+        logger.error(f"generate-cross-module/{org_id} failed: {type(e).__name__}: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to scan modules: {str(e)}")
 
 
 @router.get("/summary/org/{org_id}")
