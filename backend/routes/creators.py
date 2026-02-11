@@ -190,7 +190,7 @@ def get_creator(
         SongCredit, Song.id == SongCredit.song_id
     ).filter(
         SongCredit.creator_id == creator.id,
-        Song.is_paid == True
+        Song.is_paid == "Yes"
     ).scalar() or 0
     
     return {

@@ -109,7 +109,14 @@ def update_song_checklist(
             )
             db.add(new_status)
     
-    total_weight = db.query(func.sum(ChecklistItem.weight)).scalar() or 1
+    na_statuses = db.query(SongChecklistStatus).filter(
+        SongChecklistStatus.song_id == song_id,
+        SongChecklistStatus.status == "NOT_APPLICABLE"
+    ).all()
+    na_item_ids = {s.checklist_item_id for s in na_statuses}
+
+    all_items = db.query(ChecklistItem).all()
+    total_weight = sum(item.weight for item in all_items if item.id not in na_item_ids) or 1
     
     completed_weight = db.query(func.sum(ChecklistItem.weight)).join(
         SongChecklistStatus,
@@ -120,7 +127,7 @@ def update_song_checklist(
     ).scalar() or 0
     
     health_score = (completed_weight / total_weight) * 100
-    song.status_health_score = round(health_score, 2)
+    song.status_health_score = round(min(health_score, 100.0), 2)
     
     db.commit()
     

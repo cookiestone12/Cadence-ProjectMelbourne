@@ -209,10 +209,10 @@ export default function CreatorDetailPage() {
       advance_amount: song.advance_amount ? (song.advance_amount / 100) : '',
       label: song.label || '',
       is_registered_with_pro: song.is_registered_with_pro || false,
-      is_registered_with_dsp: song.is_registered_with_dsp || false,
+      is_registered_with_dsp: song.is_registered_with_dsp || 'No',
       soundexchange_registered: song.soundexchange_registered || 'N/A',
-      is_paid: song.is_paid || false,
-      is_invoiced: song.is_invoiced || false,
+      is_paid: song.is_paid || 'No',
+      is_invoiced: song.is_invoiced || 'No',
       has_contract_executed: song.has_contract_executed || false,
       is_released: song.is_released || false,
       spotify_link: song.spotify_link || '',
@@ -453,9 +453,9 @@ export default function CreatorDetailPage() {
     )
   }
   
-  const placedSongs = songs.filter(s => s.is_paid)
+  const placedSongs = songs.filter(s => s.is_paid === 'Yes' || s.is_paid === true)
   const registeredPro = songs.filter(s => s.is_registered_with_pro).length
-  const registeredDsp = songs.filter(s => s.is_registered_with_dsp).length
+  const registeredFee = songs.filter(s => s.is_registered_with_dsp === 'Yes').length
   const totalAdvance = songs.reduce((sum, s) => sum + (s.advance_amount || 0), 0) / 100
   
   const toggleSongSelection = (songId) => {
@@ -596,8 +596,8 @@ export default function CreatorDetailPage() {
                     <p className="text-2xl font-semibold text-[#5A8A9A]">{registeredPro}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-[#7A8580] mb-1">DSP Released</p>
-                    <p className="text-2xl font-semibold text-[#5B8A72]">{registeredDsp}</p>
+                    <p className="text-sm text-[#7A8580] mb-1">Fee Received</p>
+                    <p className="text-2xl font-semibold text-[#5B8A72]">{registeredFee}</p>
                   </div>
                 </div>
               </div>
@@ -689,13 +689,13 @@ export default function CreatorDetailPage() {
                   </div>
                   
                   <div className="flex justify-between items-center mt-4">
-                    <span className="text-[#7A8580]">DSP Released</span>
-                    <span className="font-medium text-[#3D4A44]">{registeredDsp} / {songs.length}</span>
+                    <span className="text-[#7A8580]">Fee Received</span>
+                    <span className="font-medium text-[#3D4A44]">{registeredFee} / {songs.length}</span>
                   </div>
                   <div className="w-full bg-[#EEF1EC] rounded-full h-2">
                     <div 
                       className="h-2 rounded-full" 
-                      style={{ width: `${songs.length > 0 ? (registeredDsp / songs.length) * 100 : 0}%`, background: '#5B8A72' }}
+                      style={{ width: `${songs.length > 0 ? (registeredFee / songs.length) * 100 : 0}%`, background: '#5B8A72' }}
                     />
                   </div>
                 </div>
@@ -747,9 +747,9 @@ export default function CreatorDetailPage() {
                     <th className="px-4 py-3 text-left font-semibold text-[#3D4A44] sticky left-0 bg-[#F8F8FB]">Title / Artist</th>
                     <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Label</th>
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Pub %</th>
-                    <th className="px-4 py-3 text-right font-semibold text-[#3D4A44]">Advance</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Advance</th>
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">PRO</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">DSP</th>
+                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Fee</th>
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Sound Ex.</th>
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Contract</th>
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Paid</th>
@@ -807,15 +807,16 @@ export default function CreatorDetailPage() {
                               max="100"
                             />
                           </td>
-                          <td className="px-4 py-2">
-                            <input 
-                              type="number" 
-                              value={editForm.advance_amount}
-                              onChange={(e) => setEditForm({...editForm, advance_amount: e.target.value})}
-                              className="w-24 px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm text-right bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[rgba(160,32,240,0.1)]"
-                              placeholder="$"
-                              step="0.01"
-                            />
+                          <td className="px-4 py-2 text-center">
+                            <select 
+                              value={editForm.is_invoiced}
+                              onChange={(e) => setEditForm({...editForm, is_invoiced: e.target.value})}
+                              className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72]"
+                            >
+                              <option value="N/A">N/A</option>
+                              <option value="Yes">Yes</option>
+                              <option value="No">No</option>
+                            </select>
                           </td>
                           <td className="px-4 py-2 text-center">
                             <input 
@@ -826,12 +827,15 @@ export default function CreatorDetailPage() {
                             />
                           </td>
                           <td className="px-4 py-2 text-center">
-                            <input 
-                              type="checkbox" 
-                              checked={editForm.is_registered_with_dsp}
-                              onChange={(e) => setEditForm({...editForm, is_registered_with_dsp: e.target.checked})}
-                              className="w-4 h-4 text-[#5B8A72] rounded accent-[#5B8A72]"
-                            />
+                            <select 
+                              value={editForm.is_registered_with_dsp}
+                              onChange={(e) => setEditForm({...editForm, is_registered_with_dsp: e.target.value})}
+                              className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72]"
+                            >
+                              <option value="N/A">N/A</option>
+                              <option value="Yes">Yes</option>
+                              <option value="No">No</option>
+                            </select>
                           </td>
                           <td className="px-4 py-2 text-center">
                             <select 
@@ -853,12 +857,15 @@ export default function CreatorDetailPage() {
                             />
                           </td>
                           <td className="px-4 py-2 text-center">
-                            <input 
-                              type="checkbox" 
-                              checked={editForm.is_paid}
-                              onChange={(e) => setEditForm({...editForm, is_paid: e.target.checked})}
-                              className="w-4 h-4 text-[#5B8A72] rounded accent-[#5B8A72]"
-                            />
+                            <select 
+                              value={editForm.is_paid}
+                              onChange={(e) => setEditForm({...editForm, is_paid: e.target.value})}
+                              className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72]"
+                            >
+                              <option value="N/A">N/A</option>
+                              <option value="Yes">Yes</option>
+                              <option value="No">No</option>
+                            </select>
                           </td>
                           <td className="px-4 py-2 text-center">
                             <input 
@@ -909,8 +916,8 @@ export default function CreatorDetailPage() {
                           <td className="px-4 py-3 text-center text-[#7A8580]">
                             {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
                           </td>
-                          <td className="px-4 py-3 text-right text-[#7A8580]">
-                            {song.advance_amount ? `$${(song.advance_amount / 100).toLocaleString()}` : '-'}
+                          <td className="px-4 py-3 text-center">
+                            <StatusBadge value={song.is_invoiced} />
                           </td>
                           <td className="px-4 py-3 text-center">
                             <StatusBadge value={song.is_registered_with_pro} />

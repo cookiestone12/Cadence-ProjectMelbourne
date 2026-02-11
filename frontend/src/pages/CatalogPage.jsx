@@ -251,7 +251,7 @@ export default function CatalogPage() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-wrap gap-1">
-                      {song.is_paid && (
+                      {(song.is_paid === 'Yes' || song.is_paid === true) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[rgba(91,154,110,0.12)] text-[#5B9A6E]">
                           Paid
                         </span>
@@ -261,9 +261,9 @@ export default function CatalogPage() {
                           PRO
                         </span>
                       )}
-                      {song.is_registered_with_dsp && (
+                      {(song.is_registered_with_dsp === 'Yes' || song.is_registered_with_dsp === true) && (
                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-[rgba(91,138,114,0.12)] text-[#5B8A72]">
-                          DSP
+                          Fee
                         </span>
                       )}
                       {song.has_contract_executed && (

@@ -213,9 +213,9 @@ class Song(Base):
     has_contract_sent = Column(Boolean, default=False)
     has_contract_executed = Column(Boolean, default=False)
     is_registered_with_pro = Column(Boolean, default=False)
-    is_registered_with_dsp = Column(Boolean, default=False)
-    is_invoiced = Column(Boolean, default=False)
-    is_paid = Column(Boolean, default=False)
+    is_registered_with_dsp = Column(String, default="No", nullable=True)
+    is_invoiced = Column(String, default="No", nullable=True)
+    is_paid = Column(String, default="No", nullable=True)
     
     is_released = Column(Boolean, default=False)
     spotify_link = Column(String, nullable=True)

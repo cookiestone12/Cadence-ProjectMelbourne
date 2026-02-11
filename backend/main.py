@@ -39,6 +39,24 @@ def ensure_schema_updates():
             conn.commit()
             logger.info("Added hero_image_mime column to creators")
 
+        song_cols = {c['name']: c for c in inspector.get_columns('songs')}
+        bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
+        for field in bool_to_string_fields:
+            if field in song_cols:
+                col_type = str(song_cols[field]['type'])
+                if 'BOOLEAN' in col_type.upper() or 'BOOL' in col_type.upper():
+                    conn.execute(text(f"""
+                        ALTER TABLE songs ALTER COLUMN {field} TYPE VARCHAR
+                        USING CASE
+                            WHEN {field} = true THEN 'Yes'
+                            WHEN {field} = false THEN 'No'
+                            ELSE 'No'
+                        END
+                    """))
+                    conn.execute(text(f"ALTER TABLE songs ALTER COLUMN {field} SET DEFAULT 'No'"))
+                    conn.commit()
+                    logger.info(f"Converted songs.{field} from BOOLEAN to VARCHAR")
+
 try:
     ensure_schema_updates()
 except Exception as e:

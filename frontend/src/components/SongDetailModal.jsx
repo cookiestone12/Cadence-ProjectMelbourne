@@ -142,6 +142,9 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       advance_amount: songDetails.advance_amount ?? '',
       contract_location: songDetails.contract_location || '',
       payment_status: songDetails.payment_status || 'PENDING',
+      is_paid: songDetails.is_paid || 'N/A',
+      is_invoiced: songDetails.is_invoiced || 'N/A',
+      is_registered_with_dsp: songDetails.is_registered_with_dsp || 'N/A',
     })
     setIsEditing(true)
     setEditFeedback(null)
@@ -180,6 +183,10 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
 
       const advAmt = editForm.advance_amount === '' ? null : parseInt(editForm.advance_amount, 10)
       if (advAmt !== (songDetails.advance_amount ?? null)) payload.advance_amount = advAmt
+
+      if (editForm.is_paid !== (songDetails.is_paid || 'N/A')) payload.is_paid = editForm.is_paid
+      if (editForm.is_invoiced !== (songDetails.is_invoiced || 'N/A')) payload.is_invoiced = editForm.is_invoiced
+      if (editForm.is_registered_with_dsp !== (songDetails.is_registered_with_dsp || 'N/A')) payload.is_registered_with_dsp = editForm.is_registered_with_dsp
 
       if (Object.keys(payload).length === 0) {
         setIsEditing(false)
@@ -582,6 +589,42 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                           <option value="OVERDUE">Overdue</option>
                         </select>
                       </div>
+                      <div>
+                        <label className="text-[13px] font-medium text-[#7A8580]">Paid</label>
+                        <select
+                          value={editForm.is_paid}
+                          onChange={(e) => handleEditChange('is_paid', e.target.value)}
+                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
+                        >
+                          <option value="N/A">N/A</option>
+                          <option value="Yes">Yes</option>
+                          <option value="No">No</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[13px] font-medium text-[#7A8580]">Advance</label>
+                        <select
+                          value={editForm.is_invoiced}
+                          onChange={(e) => handleEditChange('is_invoiced', e.target.value)}
+                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
+                        >
+                          <option value="N/A">N/A</option>
+                          <option value="Yes">Yes</option>
+                          <option value="No">No</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[13px] font-medium text-[#7A8580]">Fee</label>
+                        <select
+                          value={editForm.is_registered_with_dsp}
+                          onChange={(e) => handleEditChange('is_registered_with_dsp', e.target.value)}
+                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
+                        >
+                          <option value="N/A">N/A</option>
+                          <option value="Yes">Yes</option>
+                          <option value="No">No</option>
+                        </select>
+                      </div>
                     </>
                   )}
                 </div>
@@ -761,7 +804,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       {getStatusIcon(songDetails.is_registered_with_pro)}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[15px] text-[#3D4A44]">DSP Registered</span>
+                      <span className="text-[15px] text-[#3D4A44]">Fee</span>
                       {getStatusIcon(songDetails.is_registered_with_dsp)}
                     </div>
                     <div className="flex items-center justify-between">
@@ -769,8 +812,12 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       {getStatusIcon(songDetails.soundexchange_registered)}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[15px] text-[#3D4A44]">Master Paid</span>
-                      {getStatusIcon(songDetails.master_paid)}
+                      <span className="text-[15px] text-[#3D4A44]">Paid</span>
+                      {getStatusIcon(songDetails.is_paid)}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[15px] text-[#3D4A44]">Advance</span>
+                      {getStatusIcon(songDetails.is_invoiced)}
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[15px] text-[#3D4A44]">Payment Status</span>

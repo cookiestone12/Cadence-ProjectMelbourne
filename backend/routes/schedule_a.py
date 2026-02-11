@@ -134,10 +134,10 @@ def parse_date(value):
 
 def get_placement_status(song):
     """Derive placement status from song fields for Schedule A"""
-    if song.is_paid:
+    if str(song.is_paid).upper() in ("YES", "TRUE"):
         return "Paid"
     elif song.has_contract_executed:
-        if song.is_invoiced:
+        if str(song.is_invoiced).upper() in ("YES", "TRUE"):
             return "Invoiced"
         else:
             return "Contracted"
@@ -169,10 +169,10 @@ def format_percentage(pct):
     return f"{pct:.2f}%"
 
 def format_bool(val):
-    """Format boolean to Yes/No"""
-    if val is True:
+    """Format boolean or string flag to Yes/No/N/A"""
+    if val is True or str(val).strip().upper() in ("YES", "TRUE", "1"):
         return "Yes"
-    elif val is False:
+    elif val is False or str(val).strip().upper() in ("NO", "FALSE", "0"):
         return "No"
     return "N/A"
 
@@ -250,10 +250,10 @@ def get_schedule_a_data(
     
     # Calculate summary stats
     total_advance = sum(s.advance_amount or 0 for s in songs)
-    paid_count = sum(1 for s in songs if s.is_paid)
+    paid_count = sum(1 for s in songs if str(s.is_paid).upper() in ("YES", "TRUE"))
     contracted_count = sum(1 for s in songs if s.has_contract_executed)
     pro_registered = sum(1 for s in songs if s.is_registered_with_pro)
-    dsp_registered = sum(1 for s in songs if s.is_registered_with_dsp)
+    dsp_registered = sum(1 for s in songs if str(s.is_registered_with_dsp).upper() in ("YES", "TRUE"))
     
     return {
         "creator": {
@@ -522,9 +522,9 @@ def export_schedule_a_pdf(
                 song['advance_display'],
                 song['status'],
                 "Y" if song['is_registered_with_pro'] else "N",
-                "Y" if song['is_registered_with_dsp'] else "N",
+                "Y" if str(song.get('is_registered_with_dsp', '')).upper() == 'YES' else ("N/A" if str(song.get('is_registered_with_dsp', '')).upper() == 'N/A' else "N"),
                 "Y" if song['has_contract_executed'] else "N",
-                "Y" if song['is_paid'] else "N"
+                "Y" if str(song.get('is_paid', '')).upper() == 'YES' else ("N/A" if str(song.get('is_paid', '')).upper() == 'N/A' else "N")
             ])
         
         released_table = Table(table_data, colWidths=[
@@ -561,9 +561,9 @@ def export_schedule_a_pdf(
                 song['advance_display'],
                 song['status'],
                 "Y" if song['is_registered_with_pro'] else "N",
-                "Y" if song['is_registered_with_dsp'] else "N",
+                "Y" if str(song.get('is_registered_with_dsp', '')).upper() == 'YES' else ("N/A" if str(song.get('is_registered_with_dsp', '')).upper() == 'N/A' else "N"),
                 "Y" if song['has_contract_executed'] else "N",
-                "Y" if song['is_paid'] else "N"
+                "Y" if str(song.get('is_paid', '')).upper() == 'YES' else ("N/A" if str(song.get('is_paid', '')).upper() == 'N/A' else "N")
             ])
         
         pipeline_table = Table(table_data, colWidths=[

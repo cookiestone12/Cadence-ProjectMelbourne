@@ -24,9 +24,9 @@ class SongResponse(BaseModel):
     has_contract_sent: bool
     has_contract_executed: bool
     is_registered_with_pro: bool
-    is_registered_with_dsp: bool
-    is_invoiced: bool
-    is_paid: bool
+    is_registered_with_dsp: Optional[str] = None
+    is_invoiced: Optional[str] = None
+    is_paid: Optional[str] = None
     is_released: bool
     spotify_link: Optional[str] = None
     label: Optional[str]
@@ -88,9 +88,9 @@ class SongDetailResponse(BaseModel):
     has_contract_sent: bool
     has_contract_executed: bool
     is_registered_with_pro: bool
-    is_registered_with_dsp: bool
-    is_invoiced: bool
-    is_paid: bool
+    is_registered_with_dsp: Optional[str] = None
+    is_invoiced: Optional[str] = None
+    is_paid: Optional[str] = None
     is_released: bool
     spotify_link: Optional[str] = None
     label: Optional[str]
@@ -133,7 +133,9 @@ class SongCreateRequest(BaseModel):
     media_url: Optional[str] = None
     has_contract_executed: Optional[bool] = None
     is_registered_with_pro: Optional[bool] = None
-    is_registered_with_dsp: Optional[bool] = None
+    is_registered_with_dsp: Optional[str] = None
+    is_invoiced: Optional[str] = None
+    is_paid: Optional[str] = None
 
 class SongUpdateRequest(BaseModel):
     title: Optional[str] = None
@@ -145,9 +147,9 @@ class SongUpdateRequest(BaseModel):
     has_contract_sent: Optional[bool] = None
     has_contract_executed: Optional[bool] = None
     is_registered_with_pro: Optional[bool] = None
-    is_registered_with_dsp: Optional[bool] = None
-    is_invoiced: Optional[bool] = None
-    is_paid: Optional[bool] = None
+    is_registered_with_dsp: Optional[str] = None
+    is_invoiced: Optional[str] = None
+    is_paid: Optional[str] = None
     is_released: Optional[bool] = None
     spotify_link: Optional[str] = None
     label: Optional[str] = None
@@ -198,11 +200,11 @@ def get_organization_songs(
         query = query.filter(Song.status_health_score <= max_health)
     
     if status == "paid":
-        query = query.filter(Song.is_paid == True)
+        query = query.filter(Song.is_paid == "Yes")
     elif status == "invoiced":
-        query = query.filter(Song.is_invoiced == True)
+        query = query.filter(Song.is_invoiced == "Yes")
     elif status == "registered":
-        query = query.filter(Song.is_registered_with_dsp == True)
+        query = query.filter(Song.is_registered_with_dsp == "Yes")
     elif status == "contract_executed":
         query = query.filter(Song.has_contract_executed == True)
     elif status == "contract_sent":
@@ -423,7 +425,9 @@ def create_song(
         media_url=request.media_url,
         has_contract_executed=request.has_contract_executed or False,
         is_registered_with_pro=request.is_registered_with_pro or False,
-        is_registered_with_dsp=request.is_registered_with_dsp or False
+        is_registered_with_dsp=request.is_registered_with_dsp or "No",
+        is_invoiced=request.is_invoiced or "No",
+        is_paid=request.is_paid or "No"
     )
     db.add(song)
     db.flush()

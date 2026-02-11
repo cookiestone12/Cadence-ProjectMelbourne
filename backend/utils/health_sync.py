@@ -13,6 +13,8 @@ FIELD_TO_CHECKLIST_MAP = {
     "is_paid": "PY-01",
 }
 
+NA_CAPABLE_FIELDS = {"is_paid", "is_invoiced", "is_registered_with_dsp"}
+
 DSP_PLATFORM_TO_CHECKLIST_MAP = {
     "spotify": "DSP-03",
     "apple_music": "DSP-02",
@@ -21,9 +23,7 @@ DSP_PLATFORM_TO_CHECKLIST_MAP = {
 def get_checklist_item_by_code(db: Session, code: str) -> ChecklistItem:
     return db.query(ChecklistItem).filter(ChecklistItem.code == code).first()
 
-def set_checklist_status(db: Session, song_id: int, checklist_item_id: int, completed: bool):
-    status_value = "COMPLETED" if completed else "NOT_STARTED"
-    
+def set_checklist_status(db: Session, song_id: int, checklist_item_id: int, status_value: str):
     existing = db.query(SongChecklistStatus).filter(
         SongChecklistStatus.song_id == song_id,
         SongChecklistStatus.checklist_item_id == checklist_item_id
@@ -40,7 +40,14 @@ def set_checklist_status(db: Session, song_id: int, checklist_item_id: int, comp
         db.add(new_status)
 
 def recalculate_health_score(db: Session, song: Song):
-    total_weight = db.query(func.sum(ChecklistItem.weight)).scalar() or 1
+    na_statuses = db.query(SongChecklistStatus).filter(
+        SongChecklistStatus.song_id == song.id,
+        SongChecklistStatus.status == "NOT_APPLICABLE"
+    ).all()
+    na_item_ids = {s.checklist_item_id for s in na_statuses}
+
+    all_items = db.query(ChecklistItem).all()
+    total_weight = sum(item.weight for item in all_items if item.id not in na_item_ids) or 1
     
     completed_weight = db.query(func.sum(ChecklistItem.weight)).join(
         SongChecklistStatus,
@@ -51,7 +58,7 @@ def recalculate_health_score(db: Session, song: Song):
     ).scalar() or 0
     
     health_score = (completed_weight / total_weight) * 100
-    song.status_health_score = round(health_score, 2)
+    song.status_health_score = round(min(health_score, 100.0), 2)
 
 def sync_song_to_checklist(db: Session, song: Song):
     checklist_items = {item.code: item for item in db.query(ChecklistItem).all()}
@@ -63,12 +70,20 @@ def sync_song_to_checklist(db: Session, song: Song):
         checklist_item = checklist_items[code]
         value = getattr(song, field, None)
         
-        if field in ("isrc", "iswc"):
+        if field in NA_CAPABLE_FIELDS:
+            str_val = str(value).strip().upper() if value else "NO"
+            if str_val in ("N/A", "NA", "NOT_APPLICABLE"):
+                set_checklist_status(db, song.id, checklist_item.id, "NOT_APPLICABLE")
+            elif str_val in ("YES", "TRUE", "1"):
+                set_checklist_status(db, song.id, checklist_item.id, "COMPLETED")
+            else:
+                set_checklist_status(db, song.id, checklist_item.id, "NOT_STARTED")
+        elif field in ("isrc", "iswc"):
             completed = bool(value and str(value).strip())
+            set_checklist_status(db, song.id, checklist_item.id, "COMPLETED" if completed else "NOT_STARTED")
         else:
             completed = bool(value)
-        
-        set_checklist_status(db, song.id, checklist_item.id, completed)
+            set_checklist_status(db, song.id, checklist_item.id, "COMPLETED" if completed else "NOT_STARTED")
     
     dsp_links = db.query(SongDSPLink).filter(SongDSPLink.song_id == song.id).all()
     platforms_linked = {link.platform.lower() for link in dsp_links}
@@ -78,7 +93,7 @@ def sync_song_to_checklist(db: Session, song: Song):
             continue
         checklist_item = checklist_items[code]
         completed = platform in platforms_linked
-        set_checklist_status(db, song.id, checklist_item.id, completed)
+        set_checklist_status(db, song.id, checklist_item.id, "COMPLETED" if completed else "NOT_STARTED")
     
     recalculate_health_score(db, song)
 

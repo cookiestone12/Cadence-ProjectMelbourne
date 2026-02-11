@@ -77,7 +77,7 @@ def analyze_creator_catalog_gaps(db: Session, creator_id: int) -> List[Dict]:
                     "priority": 2
                 })
         
-        if not song.is_registered_with_dsp:
+        if song.is_registered_with_dsp not in ("Yes", "N/A"):
             dsp_links = db.query(SongDSPLink).filter(SongDSPLink.song_id == song.id).count()
             if dsp_links == 0:
                 key = ("DSP_REGISTRATION", song.id)
