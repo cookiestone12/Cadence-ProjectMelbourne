@@ -52,6 +52,14 @@ def ensure_schema_updates():
             logger.info("Added cover_art_data/cover_art_mime columns to releases")
 
         song_cols = {c['name']: c for c in inspector.get_columns('songs')}
+        if 'audio_file_url' not in song_cols:
+            conn.execute(text("ALTER TABLE songs ADD COLUMN audio_file_url VARCHAR"))
+            conn.commit()
+            logger.info("Added audio_file_url column to songs")
+        if 'lyrics' not in song_cols:
+            conn.execute(text("ALTER TABLE songs ADD COLUMN lyrics TEXT"))
+            conn.commit()
+            logger.info("Added lyrics column to songs")
         bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
         for field in bool_to_string_fields:
             if field in song_cols:

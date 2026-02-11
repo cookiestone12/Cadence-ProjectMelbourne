@@ -4,9 +4,9 @@ import {
   MagnifyingGlassIcon, PlusIcon, FunnelIcon, XMarkIcon,
   TrashIcon, PencilSquareIcon, MusicalNoteIcon,
   CalendarIcon, ExclamationTriangleIcon, CheckCircleIcon,
-  ChevronLeftIcon, ArrowDownTrayIcon, ArrowPathIcon,
+  ChevronLeftIcon, ChevronDownIcon, ChevronUpIcon, ArrowDownTrayIcon, ArrowPathIcon,
   ShieldCheckIcon, ClipboardDocumentCheckIcon, PhotoIcon,
-  InformationCircleIcon, CheckIcon
+  InformationCircleIcon, CheckIcon, LinkIcon, DocumentTextIcon
 } from '@heroicons/react/24/outline'
 
 const READINESS_TOOLTIPS = {
@@ -66,6 +66,9 @@ export default function ReleasesPage() {
   const [filters, setFilters] = useState({ status: '', release_type: '' })
   const [artworkUrls, setArtworkUrls] = useState({})
   const [detailArtworkUrl, setDetailArtworkUrl] = useState(null)
+  const [expandedTrack, setExpandedTrack] = useState(null)
+  const [trackEdits, setTrackEdits] = useState({})
+  const [savingTrack, setSavingTrack] = useState(null)
   const [creators, setCreators] = useState([])
   const [createForm, setCreateForm] = useState({
     title: '',
@@ -307,6 +310,20 @@ export default function ReleasesPage() {
     }
   }
 
+  async function handleSaveTrackFields(songId) {
+    const edits = trackEdits[songId]
+    if (!edits) return
+    setSavingTrack(songId)
+    try {
+      await axios.patch(`/api/songs/${songId}`, edits)
+      loadReleaseDetail(selectedRelease)
+      setSavingTrack(null)
+    } catch (error) {
+      console.error('Failed to save track fields:', error)
+      setSavingTrack(null)
+    }
+  }
+
   function handleExport(format) {
     const token = localStorage.getItem('token')
     const url = `/api/releases/${selectedRelease}/export/${format}`
@@ -318,7 +335,7 @@ export default function ReleasesPage() {
       .then(blob => {
         const a = document.createElement('a')
         a.href = URL.createObjectURL(blob)
-        a.download = `release_export.${format === 'csv' ? 'csv' : 'json'}`
+        a.download = `release_export.${format === 'csv' ? 'csv' : 'pdf'}`
         a.click()
         URL.revokeObjectURL(a.href)
       })
@@ -652,63 +669,149 @@ export default function ReleasesPage() {
                 <div className="text-center py-8 text-[#7A8580]">No tracks added yet</div>
               ) : (
                 <div className="divide-y divide-[rgba(59,77,67,0.08)]">
-                  {(detailData.tracks || []).map((track) => (
-                    <div key={track.id} className="flex items-center justify-between py-3">
-                      <div className="flex items-center space-x-4">
-                        <span className="text-sm font-medium text-[#7A8580] w-12">
-                          {track.disc_number > 1 ? `${track.disc_number}-` : ''}{track.track_number}
-                        </span>
-                        <div>
-                          <p className="text-sm font-medium text-[#3D4A44]">{track.title}</p>
-                          <div className="flex items-center space-x-1">
-                            <p className="text-xs text-[#7A8580]">{track.primary_artist}</p>
-                            {editingIsrc === track.song_id ? (
-                              <div className="flex items-center space-x-1 ml-1">
-                                <span className="text-xs text-[#7A8580]">·</span>
-                                <input
-                                  type="text"
-                                  value={isrcValue}
-                                  onChange={(e) => setIsrcValue(e.target.value.toUpperCase())}
-                                  placeholder="e.g. USRC12345678"
-                                  className="text-xs border border-[#5B8A72] rounded px-1.5 py-0.5 w-36 focus:ring-1 focus:ring-[#5B8A72] focus:outline-none bg-white text-[#3D4A44]"
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleSaveIsrc(track.song_id)
-                                    if (e.key === 'Escape') { setEditingIsrc(null); setIsrcValue('') }
-                                  }}
-                                />
-                                <button onClick={() => handleSaveIsrc(track.song_id)} className="text-[#5B8A72] hover:text-[#4A7A62]">
-                                  <CheckIcon className="w-3.5 h-3.5" />
+                  {(detailData.tracks || []).map((track) => {
+                    const isExpanded = expandedTrack === track.song_id
+                    const currentEdits = trackEdits[track.song_id] || {}
+                    const hasAudio = track.audio_file_url || currentEdits.audio_file_url
+                    const hasLyrics = track.lyrics || currentEdits.lyrics
+                    return (
+                    <div key={track.id}>
+                      <div className="flex items-center justify-between py-3">
+                        <div className="flex items-center space-x-4 flex-1 min-w-0">
+                          <span className="text-sm font-medium text-[#7A8580] w-12 flex-shrink-0">
+                            {track.disc_number > 1 ? `${track.disc_number}-` : ''}{track.track_number}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center space-x-2">
+                              <p className="text-sm font-medium text-[#3D4A44]">{track.title}</p>
+                              {hasAudio && <LinkIcon className="w-3.5 h-3.5 text-[#5B8A72] flex-shrink-0" title="Has audio link" />}
+                              {hasLyrics && <DocumentTextIcon className="w-3.5 h-3.5 text-[#5B8A72] flex-shrink-0" title="Has lyrics" />}
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              <p className="text-xs text-[#7A8580]">{track.primary_artist}</p>
+                              {editingIsrc === track.song_id ? (
+                                <div className="flex items-center space-x-1 ml-1">
+                                  <span className="text-xs text-[#7A8580]">·</span>
+                                  <input
+                                    type="text"
+                                    value={isrcValue}
+                                    onChange={(e) => setIsrcValue(e.target.value.toUpperCase())}
+                                    placeholder="e.g. USRC12345678"
+                                    className="text-xs border border-[#5B8A72] rounded px-1.5 py-0.5 w-36 focus:ring-1 focus:ring-[#5B8A72] focus:outline-none bg-white text-[#3D4A44]"
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveIsrc(track.song_id)
+                                      if (e.key === 'Escape') { setEditingIsrc(null); setIsrcValue('') }
+                                    }}
+                                  />
+                                  <button onClick={() => handleSaveIsrc(track.song_id)} className="text-[#5B8A72] hover:text-[#4A7A62]">
+                                    <CheckIcon className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={() => { setEditingIsrc(null); setIsrcValue('') }} className="text-[#7A8580] hover:text-red-500">
+                                    <XMarkIcon className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => { setEditingIsrc(track.song_id); setIsrcValue(track.isrc || '') }}
+                                  className="flex items-center space-x-1 ml-1 group/isrc"
+                                  title={track.isrc ? 'Edit ISRC' : 'Add ISRC'}
+                                >
+                                  {track.isrc ? (
+                                    <span className="text-xs text-[#7A8580]">· {track.isrc}</span>
+                                  ) : (
+                                    <span className="text-xs text-amber-500">· Add ISRC</span>
+                                  )}
+                                  <PencilSquareIcon className="w-3 h-3 text-[#7A8580] opacity-0 group-hover/isrc:opacity-100 transition-opacity" />
                                 </button>
-                                <button onClick={() => { setEditingIsrc(null); setIsrcValue('') }} className="text-[#7A8580] hover:text-red-500">
-                                  <XMarkIcon className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => { setEditingIsrc(track.song_id); setIsrcValue(track.isrc || '') }}
-                                className="flex items-center space-x-1 ml-1 group/isrc"
-                                title={track.isrc ? 'Edit ISRC' : 'Add ISRC'}
-                              >
-                                {track.isrc ? (
-                                  <span className="text-xs text-[#7A8580]">· {track.isrc}</span>
-                                ) : (
-                                  <span className="text-xs text-amber-500">· Add ISRC</span>
-                                )}
-                                <PencilSquareIcon className="w-3 h-3 text-[#7A8580] opacity-0 group-hover/isrc:opacity-100 transition-opacity" />
-                              </button>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </div>
+                        <div className="flex items-center space-x-2 flex-shrink-0">
+                          <button
+                            onClick={() => {
+                              if (isExpanded) {
+                                setExpandedTrack(null)
+                              } else {
+                                setExpandedTrack(track.song_id)
+                                if (!trackEdits[track.song_id]) {
+                                  setTrackEdits(prev => ({
+                                    ...prev,
+                                    [track.song_id]: {
+                                      audio_file_url: track.audio_file_url || '',
+                                      lyrics: track.lyrics || '',
+                                    }
+                                  }))
+                                }
+                              }
+                            }}
+                            className="text-[#7A8580] hover:text-[#5B8A72] transition-colors"
+                            title="Edit audio link & lyrics"
+                          >
+                            {isExpanded ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}
+                          </button>
+                          <button
+                            onClick={() => handleRemoveTrack(track.song_id)}
+                            className="text-[#7A8580] hover:text-red-500 transition-colors"
+                          >
+                            <XMarkIcon className="w-5 h-5" />
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => handleRemoveTrack(track.song_id)}
-                        className="text-[#7A8580] hover:text-red-500 transition-colors"
-                      >
-                        <XMarkIcon className="w-5 h-5" />
-                      </button>
+                      {isExpanded && (
+                        <div className="pb-4 pl-16 pr-4 space-y-3">
+                          <div>
+                            <label className="flex items-center space-x-1.5 text-xs font-medium text-[#7A8580] mb-1">
+                              <LinkIcon className="w-3.5 h-3.5" />
+                              <span>Audio File Link</span>
+                            </label>
+                            <input
+                              type="url"
+                              value={currentEdits.audio_file_url || ''}
+                              onChange={(e) => setTrackEdits(prev => ({
+                                ...prev,
+                                [track.song_id]: { ...prev[track.song_id], audio_file_url: e.target.value }
+                              }))}
+                              placeholder="Dropbox, Google Drive, or direct link to audio file"
+                              className="w-full text-sm border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 focus:ring-1 focus:ring-[#5B8A72] focus:border-[#5B8A72] focus:outline-none bg-white text-[#3D4A44]"
+                            />
+                            {currentEdits.audio_file_url && (
+                              <a href={currentEdits.audio_file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#5B8A72] hover:underline mt-1 inline-block">
+                                Open link
+                              </a>
+                            )}
+                          </div>
+                          <div>
+                            <label className="flex items-center space-x-1.5 text-xs font-medium text-[#7A8580] mb-1">
+                              <DocumentTextIcon className="w-3.5 h-3.5" />
+                              <span>Lyrics</span>
+                            </label>
+                            <textarea
+                              value={currentEdits.lyrics || ''}
+                              onChange={(e) => setTrackEdits(prev => ({
+                                ...prev,
+                                [track.song_id]: { ...prev[track.song_id], lyrics: e.target.value }
+                              }))}
+                              placeholder="Paste or type lyrics here..."
+                              rows={6}
+                              className="w-full text-sm border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 focus:ring-1 focus:ring-[#5B8A72] focus:border-[#5B8A72] focus:outline-none bg-white text-[#3D4A44] resize-y"
+                            />
+                          </div>
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => handleSaveTrackFields(track.song_id)}
+                              disabled={savingTrack === track.song_id}
+                              className="flex items-center space-x-1.5 px-4 py-1.5 bg-[#5B8A72] text-white text-sm rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                            >
+                              <CheckIcon className="w-4 h-4" />
+                              <span>{savingTrack === track.song_id ? 'Saving...' : 'Save'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </div>
@@ -966,12 +1069,12 @@ export default function ReleasesPage() {
                   <span className="text-sm">Export CSV</span>
                 </button>
                 <button
-                  onClick={() => handleExport('json')}
+                  onClick={() => handleExport('pdf')}
                   disabled={!(detailData.tracks || []).length}
                   className="flex items-center justify-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <ArrowDownTrayIcon className="w-4 h-4" />
-                  <span className="text-sm">Export JSON</span>
+                  <span className="text-sm">Export PDF</span>
                 </button>
               </div>
             </div>

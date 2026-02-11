@@ -40,6 +40,8 @@ class SongResponse(BaseModel):
     contract_location: Optional[str]
     notes: Optional[str]
     media_url: Optional[str]
+    audio_file_url: Optional[str] = None
+    lyrics: Optional[str] = None
     client_name: Optional[str] = None
     client_id: Optional[int] = None
     
@@ -161,6 +163,8 @@ class SongUpdateRequest(BaseModel):
     contract_location: Optional[str] = None
     notes: Optional[str] = None
     media_url: Optional[str] = None
+    audio_file_url: Optional[str] = None
+    lyrics: Optional[str] = None
 
 @router.get("/org/{org_id}", response_model=List[SongResponse])
 def get_organization_songs(

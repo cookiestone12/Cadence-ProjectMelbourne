@@ -232,6 +232,8 @@ class Song(Base):
     notes = Column(Text, nullable=True)
     
     media_url = Column(String, nullable=True)
+    audio_file_url = Column(String, nullable=True)
+    lyrics = Column(Text, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
