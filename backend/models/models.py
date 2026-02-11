@@ -1114,6 +1114,82 @@ class Payment(Base):
     created_by = relationship("User")
 
 
+class FeeType(str, enum.Enum):
+    MANAGEMENT_FEE = "MANAGEMENT_FEE"
+    ADMIN_FEE = "ADMIN_FEE"
+    DISTRIBUTION_FEE = "DISTRIBUTION_FEE"
+    SYNC_FEE = "SYNC_FEE"
+    LEGAL_FEE = "LEGAL_FEE"
+    OTHER = "OTHER"
+
+
+class Fee(Base):
+    __tablename__ = "fees"
+    __table_args__ = (
+        Index('ix_fees_org_id', 'organization_id'),
+        Index('ix_fees_creator_id', 'creator_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=False)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    placement_id = Column(Integer, ForeignKey("placements.id"), nullable=True)
+
+    fee_type = Column(String, nullable=False, default="MANAGEMENT_FEE")
+    description = Column(String, nullable=True)
+    amount_cents = Column(Integer, nullable=False, default=0)
+    currency = Column(String, default="USD")
+    fee_date = Column(Date, nullable=True)
+    period_start = Column(Date, nullable=True)
+    period_end = Column(Date, nullable=True)
+    status = Column(String, default="PENDING")
+    notes = Column(Text, nullable=True)
+
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    creator = relationship("Creator")
+    contract = relationship("Contract")
+    song = relationship("Song")
+    placement = relationship("Placement")
+    created_by = relationship("User")
+
+
+class Advance(Base):
+    __tablename__ = "advances"
+    __table_args__ = (
+        Index('ix_advances_org_id', 'organization_id'),
+        Index('ix_advances_creator_id', 'creator_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=False)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+
+    description = Column(String, nullable=True)
+    amount_cents = Column(Integer, nullable=False, default=0)
+    recouped_cents = Column(Integer, nullable=False, default=0)
+    currency = Column(String, default="USD")
+    advance_date = Column(Date, nullable=True)
+    fully_recouped = Column(Boolean, default=False)
+    status = Column(String, default="ACTIVE")
+    notes = Column(Text, nullable=True)
+
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    creator = relationship("Creator")
+    contract = relationship("Contract")
+    created_by = relationship("User")
+
+
 class Placement(Base):
     __tablename__ = "placements"
     __table_args__ = (

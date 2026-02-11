@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
 import {
   PlusIcon,
@@ -119,6 +119,8 @@ export default function PlacementsPage() {
   const [saving, setSaving] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
   const [error, setError] = useState('')
+  const [createSongTitle, setCreateSongTitle] = useState('')
+  const [editSongTitle, setEditSongTitle] = useState('')
 
   useEffect(() => {
     loadInitialData()
@@ -175,6 +177,7 @@ export default function PlacementsPage() {
     try {
       const response = await axios.get(`/api/placements/${placementId}`)
       setDetailData(response.data)
+      setEditSongTitle(response.data.song_title || '')
       setEditForm({
         title: response.data.title || '',
         description: response.data.description || '',
@@ -244,6 +247,7 @@ export default function PlacementsPage() {
       await axios.post(`/api/placements/org/${orgId}`, payload)
       setShowCreateModal(false)
       setCreateForm({ ...emptyCreateForm })
+      setCreateSongTitle('')
       await Promise.all([loadPlacements(), loadSummary()])
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create placement')
@@ -707,10 +711,15 @@ export default function PlacementsPage() {
                       <FormField label="License Type" value={editForm.license_type} onChange={(v) => setEditForm({ ...editForm, license_type: v })} />
                       <FormField label="Territory" value={editForm.territory} onChange={(v) => setEditForm({ ...editForm, territory: v })} />
                       <FormField label="Usage Notes" value={editForm.usage_notes} onChange={(v) => setEditForm({ ...editForm, usage_notes: v })} textarea />
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField label="Song ID" value={editForm.song_id} onChange={(v) => setEditForm({ ...editForm, song_id: v })} type="number" />
-                        <FormField label="Work ID" value={editForm.work_id} onChange={(v) => setEditForm({ ...editForm, work_id: v })} type="number" />
-                      </div>
+                      <SongSearchField
+                        label="Linked Song"
+                        orgId={orgId}
+                        value={editForm.song_id}
+                        songTitle={editSongTitle}
+                        onChange={(id, title) => { setEditForm({ ...editForm, song_id: id }); setEditSongTitle(title) }}
+                        onClear={() => { setEditForm({ ...editForm, song_id: '' }); setEditSongTitle('') }}
+                      />
+                      <FormField label="Work ID" value={editForm.work_id} onChange={(v) => setEditForm({ ...editForm, work_id: v })} type="number" />
                       <div className="grid grid-cols-2 gap-4">
                         <FormField label="Contract ID" value={editForm.contract_id} onChange={(v) => setEditForm({ ...editForm, contract_id: v })} type="number" />
                         <FormField label="Assigned User ID" value={editForm.assigned_to_user_id} onChange={(v) => setEditForm({ ...editForm, assigned_to_user_id: v })} type="number" />
@@ -782,7 +791,14 @@ export default function PlacementsPage() {
               </div>
               <FormField label="License Type" value={createForm.license_type} onChange={(v) => setCreateForm({ ...createForm, license_type: v })} />
               <FormField label="Territory" value={createForm.territory} onChange={(v) => setCreateForm({ ...createForm, territory: v })} />
-              <FormField label="Song ID" value={createForm.song_id} onChange={(v) => setCreateForm({ ...createForm, song_id: v })} type="number" />
+              <SongSearchField
+                label="Linked Song"
+                orgId={orgId}
+                value={createForm.song_id}
+                songTitle={createSongTitle}
+                onChange={(id, title) => { setCreateForm({ ...createForm, song_id: id }); setCreateSongTitle(title) }}
+                onClear={() => { setCreateForm({ ...createForm, song_id: '' }); setCreateSongTitle('') }}
+              />
               <FormField label="Pitched Date" value={createForm.pitched_date} onChange={(v) => setCreateForm({ ...createForm, pitched_date: v })} type="date" />
               <FormField label="Contact Name" value={createForm.contact_name} onChange={(v) => setCreateForm({ ...createForm, contact_name: v })} />
               <FormField label="Contact Email" value={createForm.contact_email} onChange={(v) => setCreateForm({ ...createForm, contact_email: v })} type="email" />
@@ -830,6 +846,119 @@ function InfoField({ label, value, icon }) {
         {icon}
         {value || '—'}
       </span>
+    </div>
+  )
+}
+
+function SongSearchField({ label, orgId, value, songTitle, onChange, onClear }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
+  const debounceRef = useRef(null)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleSearch = (searchQuery) => {
+    setQuery(searchQuery)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (searchQuery.length < 2) {
+      setResults([])
+      setShowDropdown(false)
+      return
+    }
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const response = await axios.get(`/api/songs/org/${orgId}?search=${encodeURIComponent(searchQuery)}`)
+        const songs = response.data.songs || response.data || []
+        setResults(songs)
+        setShowDropdown(true)
+      } catch (err) {
+        console.error('Song search failed:', err)
+        setResults([])
+      } finally {
+        setLoading(false)
+      }
+    }, 300)
+  }
+
+  const handleSelect = (song) => {
+    const displayTitle = song.artist_name ? `${song.title} - ${song.artist_name}` : song.title
+    onChange(song.id, displayTitle)
+    setQuery('')
+    setResults([])
+    setShowDropdown(false)
+  }
+
+  const handleClear = () => {
+    onClear()
+    setQuery('')
+    setResults([])
+    setShowDropdown(false)
+  }
+
+  const inputCls = "w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30 placeholder:text-[#7A8580]/50"
+
+  return (
+    <div ref={containerRef}>
+      <label className="block text-xs font-medium text-[#7A8580] mb-1">{label}</label>
+      <div className="relative">
+        {value && songTitle ? (
+          <div className={`${inputCls} flex items-center justify-between`}>
+            <span className="truncate">{songTitle}</span>
+            <button
+              type="button"
+              onClick={handleClear}
+              className="ml-2 flex-shrink-0 p-0.5 rounded hover:bg-[#EEF1EC] text-[#7A8580] hover:text-[#C47068] transition-colors"
+            >
+              <XMarkIcon className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => handleSearch(e.target.value)}
+            onFocus={() => { if (results.length > 0) setShowDropdown(true) }}
+            placeholder="Search songs..."
+            className={inputCls}
+          />
+        )}
+        {loading && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#5B8A72] border-t-transparent"></div>
+          </div>
+        )}
+        {showDropdown && results.length > 0 && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-[rgba(59,77,67,0.15)] rounded-lg shadow-lg max-h-48 overflow-y-auto">
+            {results.map((song) => (
+              <div
+                key={song.id}
+                onClick={() => handleSelect(song)}
+                className="px-3 py-2 text-sm hover:bg-[#EEF1EC] cursor-pointer"
+              >
+                <span className="font-medium text-[#3D4A44]">{song.title}</span>
+                {song.artist_name && <span className="text-[#7A8580]"> — {song.artist_name}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        {showDropdown && query.length >= 2 && !loading && results.length === 0 && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-[rgba(59,77,67,0.15)] rounded-lg shadow-lg">
+            <div className="px-3 py-2 text-sm text-[#7A8580]">No songs found</div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -13,6 +13,7 @@ from ..models import (
     get_db, User, OrganizationMember, Song, Creator,
     Contract, ContractAsset, RightsSplit,
     RoyaltyStatement, RoyaltyTransaction, RoyaltyAllocation, Payment,
+    Fee, Advance, Placement,
 )
 from ..utils.auth import get_current_user
 
@@ -1215,4 +1216,362 @@ def update_payment(
         "amount_cents": payment.amount_cents,
         "amount_dollars": payment.amount_cents / 100.0,
         "payment_date": payment.payment_date.isoformat() if payment.payment_date else None,
+    }
+
+
+class FeeCreate(BaseModel):
+    creator_id: int
+    contract_id: Optional[int] = None
+    song_id: Optional[int] = None
+    placement_id: Optional[int] = None
+    fee_type: str = "MANAGEMENT_FEE"
+    description: Optional[str] = None
+    amount_cents: int = 0
+    currency: str = "USD"
+    fee_date: Optional[date] = None
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
+    notes: Optional[str] = None
+
+
+class FeeUpdate(BaseModel):
+    fee_type: Optional[str] = None
+    description: Optional[str] = None
+    amount_cents: Optional[int] = None
+    fee_date: Optional[date] = None
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class AdvanceCreate(BaseModel):
+    creator_id: int
+    contract_id: Optional[int] = None
+    description: Optional[str] = None
+    amount_cents: int = 0
+    currency: str = "USD"
+    advance_date: Optional[date] = None
+    notes: Optional[str] = None
+
+
+class AdvanceUpdate(BaseModel):
+    description: Optional[str] = None
+    recouped_cents: Optional[int] = None
+    advance_date: Optional[date] = None
+    fully_recouped: Optional[bool] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+def fee_to_dict(f: Fee, db: Session) -> dict:
+    creator = db.query(Creator).filter(Creator.id == f.creator_id).first()
+    contract = db.query(Contract).filter(Contract.id == f.contract_id).first() if f.contract_id else None
+    song = db.query(Song).filter(Song.id == f.song_id).first() if f.song_id else None
+    return {
+        "id": f.id,
+        "creator_id": f.creator_id,
+        "creator_name": creator.display_name if creator else None,
+        "contract_id": f.contract_id,
+        "contract_title": contract.title if contract else None,
+        "song_id": f.song_id,
+        "song_title": song.title if song else None,
+        "placement_id": f.placement_id,
+        "fee_type": f.fee_type,
+        "description": f.description,
+        "amount_cents": f.amount_cents,
+        "amount_dollars": f.amount_cents / 100.0,
+        "currency": f.currency,
+        "fee_date": f.fee_date.isoformat() if f.fee_date else None,
+        "period_start": f.period_start.isoformat() if f.period_start else None,
+        "period_end": f.period_end.isoformat() if f.period_end else None,
+        "status": f.status,
+        "notes": f.notes,
+        "created_at": f.created_at.isoformat() if f.created_at else None,
+    }
+
+
+def advance_to_dict(a: Advance, db: Session) -> dict:
+    creator = db.query(Creator).filter(Creator.id == a.creator_id).first()
+    contract = db.query(Contract).filter(Contract.id == a.contract_id).first() if a.contract_id else None
+    return {
+        "id": a.id,
+        "creator_id": a.creator_id,
+        "creator_name": creator.display_name if creator else None,
+        "contract_id": a.contract_id,
+        "contract_title": contract.title if contract else None,
+        "description": a.description,
+        "amount_cents": a.amount_cents,
+        "amount_dollars": a.amount_cents / 100.0,
+        "recouped_cents": a.recouped_cents,
+        "recouped_dollars": a.recouped_cents / 100.0,
+        "remaining_cents": a.amount_cents - a.recouped_cents,
+        "remaining_dollars": (a.amount_cents - a.recouped_cents) / 100.0,
+        "recoupment_pct": round((a.recouped_cents / a.amount_cents * 100), 1) if a.amount_cents > 0 else 0,
+        "currency": a.currency,
+        "advance_date": a.advance_date.isoformat() if a.advance_date else None,
+        "fully_recouped": a.fully_recouped,
+        "status": a.status,
+        "notes": a.notes,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+    }
+
+
+@router.get("/fees/{org_id}")
+def list_fees(
+    org_id: int,
+    creator_id: Optional[int] = None,
+    fee_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    query = db.query(Fee).filter(Fee.organization_id == org_id)
+    if creator_id:
+        query = query.filter(Fee.creator_id == creator_id)
+    if fee_type:
+        query = query.filter(Fee.fee_type == fee_type)
+    fees = query.order_by(desc(Fee.created_at)).all()
+    return {"fees": [fee_to_dict(f, db) for f in fees], "total": len(fees)}
+
+
+@router.post("/fees/{org_id}")
+def create_fee(
+    org_id: int,
+    body: FeeCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    creator = db.query(Creator).filter(Creator.id == body.creator_id, Creator.organization_id == org_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+
+    fee = Fee(
+        organization_id=org_id,
+        creator_id=body.creator_id,
+        contract_id=body.contract_id,
+        song_id=body.song_id,
+        placement_id=body.placement_id,
+        fee_type=body.fee_type,
+        description=body.description,
+        amount_cents=body.amount_cents,
+        currency=body.currency,
+        fee_date=body.fee_date,
+        period_start=body.period_start,
+        period_end=body.period_end,
+        notes=body.notes,
+        created_by_user_id=current_user.id,
+    )
+    db.add(fee)
+    db.commit()
+    db.refresh(fee)
+    return fee_to_dict(fee, db)
+
+
+@router.patch("/fees/{org_id}/{fee_id}")
+def update_fee(
+    org_id: int,
+    fee_id: int,
+    body: FeeUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    fee = db.query(Fee).filter(Fee.id == fee_id, Fee.organization_id == org_id).first()
+    if not fee:
+        raise HTTPException(status_code=404, detail="Fee not found")
+    for field, value in body.dict(exclude_unset=True).items():
+        setattr(fee, field, value)
+    db.commit()
+    db.refresh(fee)
+    return fee_to_dict(fee, db)
+
+
+@router.delete("/fees/{org_id}/{fee_id}")
+def delete_fee(
+    org_id: int,
+    fee_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    fee = db.query(Fee).filter(Fee.id == fee_id, Fee.organization_id == org_id).first()
+    if not fee:
+        raise HTTPException(status_code=404, detail="Fee not found")
+    db.delete(fee)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@router.get("/advances/{org_id}")
+def list_advances(
+    org_id: int,
+    creator_id: Optional[int] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    query = db.query(Advance).filter(Advance.organization_id == org_id)
+    if creator_id:
+        query = query.filter(Advance.creator_id == creator_id)
+    if status:
+        query = query.filter(Advance.status == status)
+    advances = query.order_by(desc(Advance.created_at)).all()
+    return {"advances": [advance_to_dict(a, db) for a in advances], "total": len(advances)}
+
+
+@router.post("/advances/{org_id}")
+def create_advance(
+    org_id: int,
+    body: AdvanceCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    creator = db.query(Creator).filter(Creator.id == body.creator_id, Creator.organization_id == org_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+
+    advance = Advance(
+        organization_id=org_id,
+        creator_id=body.creator_id,
+        contract_id=body.contract_id,
+        description=body.description,
+        amount_cents=body.amount_cents,
+        currency=body.currency,
+        advance_date=body.advance_date,
+        notes=body.notes,
+        created_by_user_id=current_user.id,
+    )
+    db.add(advance)
+    db.commit()
+    db.refresh(advance)
+    return advance_to_dict(advance, db)
+
+
+@router.patch("/advances/{org_id}/{advance_id}")
+def update_advance(
+    org_id: int,
+    advance_id: int,
+    body: AdvanceUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    advance = db.query(Advance).filter(Advance.id == advance_id, Advance.organization_id == org_id).first()
+    if not advance:
+        raise HTTPException(status_code=404, detail="Advance not found")
+    for field, value in body.dict(exclude_unset=True).items():
+        setattr(advance, field, value)
+    if advance.recouped_cents >= advance.amount_cents and advance.amount_cents > 0:
+        advance.fully_recouped = True
+    db.commit()
+    db.refresh(advance)
+    return advance_to_dict(advance, db)
+
+
+@router.delete("/advances/{org_id}/{advance_id}")
+def delete_advance(
+    org_id: int,
+    advance_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    advance = db.query(Advance).filter(Advance.id == advance_id, Advance.organization_id == org_id).first()
+    if not advance:
+        raise HTTPException(status_code=404, detail="Advance not found")
+    db.delete(advance)
+    db.commit()
+    return {"status": "deleted"}
+
+
+@router.get("/creator-accounting/{org_id}/{creator_id}")
+def get_creator_accounting(
+    org_id: int,
+    creator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+
+    creator = db.query(Creator).filter(Creator.id == creator_id, Creator.organization_id == org_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+
+    allocations = db.query(RoyaltyAllocation).filter(
+        RoyaltyAllocation.organization_id == org_id,
+        RoyaltyAllocation.rights_holder_id == creator_id,
+    ).all()
+    total_royalties_cents = sum(a.allocated_cents for a in allocations)
+
+    payments = db.query(Payment).filter(
+        Payment.organization_id == org_id,
+        Payment.payee_id == creator_id,
+    ).order_by(desc(Payment.created_at)).all()
+    total_paid_cents = sum(p.amount_cents for p in payments if p.status == "PAID")
+    total_pending_cents = sum(p.amount_cents for p in payments if p.status == "PENDING")
+
+    fees = db.query(Fee).filter(Fee.organization_id == org_id, Fee.creator_id == creator_id).order_by(desc(Fee.created_at)).all()
+    total_fees_cents = sum(f.amount_cents for f in fees)
+
+    advances = db.query(Advance).filter(Advance.organization_id == org_id, Advance.creator_id == creator_id).order_by(desc(Advance.created_at)).all()
+    total_advances_cents = sum(a.amount_cents for a in advances)
+    total_recouped_cents = sum(a.recouped_cents for a in advances)
+    outstanding_advances_cents = total_advances_cents - total_recouped_cents
+
+    placements = db.query(Placement).filter(Placement.organization_id == org_id).all()
+    creator_song_ids = [s.id for s in db.query(Song).filter(Song.organization_id == org_id).all()]
+
+    placement_revenue_cents = 0
+    for p in placements:
+        if p.song_id and p.song_id in creator_song_ids and p.status == "PAID" and p.license_fee:
+            placement_revenue_cents += int(p.license_fee * 100)
+
+    net_balance_cents = total_royalties_cents + placement_revenue_cents - total_fees_cents - total_paid_cents
+
+    payment_list = []
+    for p in payments:
+        contract = db.query(Contract).filter(Contract.id == p.contract_id).first() if p.contract_id else None
+        payment_list.append({
+            "id": p.id,
+            "amount_cents": p.amount_cents,
+            "amount_dollars": p.amount_cents / 100.0,
+            "currency": p.currency,
+            "status": p.status,
+            "payment_date": p.payment_date.isoformat() if p.payment_date else None,
+            "payment_method": p.payment_method,
+            "contract_title": contract.title if contract else None,
+            "notes": p.notes,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        })
+
+    return {
+        "creator_id": creator_id,
+        "creator_name": creator.display_name,
+        "summary": {
+            "total_royalties_cents": total_royalties_cents,
+            "total_royalties_dollars": total_royalties_cents / 100.0,
+            "total_paid_cents": total_paid_cents,
+            "total_paid_dollars": total_paid_cents / 100.0,
+            "total_pending_cents": total_pending_cents,
+            "total_pending_dollars": total_pending_cents / 100.0,
+            "total_fees_cents": total_fees_cents,
+            "total_fees_dollars": total_fees_cents / 100.0,
+            "total_advances_cents": total_advances_cents,
+            "total_advances_dollars": total_advances_cents / 100.0,
+            "total_recouped_cents": total_recouped_cents,
+            "total_recouped_dollars": total_recouped_cents / 100.0,
+            "outstanding_advances_cents": outstanding_advances_cents,
+            "outstanding_advances_dollars": outstanding_advances_cents / 100.0,
+            "placement_revenue_cents": placement_revenue_cents,
+            "placement_revenue_dollars": placement_revenue_cents / 100.0,
+            "net_balance_cents": net_balance_cents,
+            "net_balance_dollars": net_balance_cents / 100.0,
+        },
+        "payments": payment_list,
+        "fees": [fee_to_dict(f, db) for f in fees],
+        "advances": [advance_to_dict(a, db) for a in advances],
     }
