@@ -39,6 +39,18 @@ def ensure_schema_updates():
             conn.commit()
             logger.info("Added hero_image_mime column to creators")
 
+        release_cols = [c['name'] for c in inspector.get_columns('releases')]
+        if 'creator_id' not in release_cols:
+            conn.execute(text("ALTER TABLE releases ADD COLUMN creator_id INTEGER REFERENCES creators(id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_releases_creator_id ON releases(creator_id)"))
+            conn.commit()
+            logger.info("Added creator_id column to releases")
+        if 'cover_art_data' not in release_cols:
+            conn.execute(text("ALTER TABLE releases ADD COLUMN cover_art_data BYTEA"))
+            conn.execute(text("ALTER TABLE releases ADD COLUMN cover_art_mime VARCHAR"))
+            conn.commit()
+            logger.info("Added cover_art_data/cover_art_mime columns to releases")
+
         song_cols = {c['name']: c for c in inspector.get_columns('songs')}
         bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
         for field in bool_to_string_fields:

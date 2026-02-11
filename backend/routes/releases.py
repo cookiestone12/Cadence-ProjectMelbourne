@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import StreamingResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from pydantic import BaseModel
@@ -30,6 +30,7 @@ class ReleaseCreate(BaseModel):
     copyright_line: Optional[str] = None
     copyright_year: Optional[int] = None
     notes: Optional[str] = None
+    creator_id: Optional[int] = None
 
 
 class ReleaseUpdate(BaseModel):
@@ -50,6 +51,7 @@ class ReleaseUpdate(BaseModel):
     notes: Optional[str] = None
     spotify_url: Optional[str] = None
     apple_music_url: Optional[str] = None
+    creator_id: Optional[int] = None
 
 
 class ReleaseTrackAdd(BaseModel):
@@ -259,6 +261,7 @@ def list_releases(
     search: Optional[str] = None,
     status: Optional[str] = None,
     release_type: Optional[str] = None,
+    creator_id: Optional[int] = None,
     limit: int = Query(default=100, le=500),
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -279,6 +282,8 @@ def list_releases(
         query = query.filter(Release.status == status)
     if release_type:
         query = query.filter(Release.release_type == release_type)
+    if creator_id:
+        query = query.filter(Release.creator_id == creator_id)
 
     total = query.count()
     releases = query.order_by(Release.created_at.desc()).offset(offset).limit(limit).all()
@@ -297,6 +302,8 @@ def list_releases(
             "release_date": r.release_date.isoformat() if r.release_date else None,
             "genre": r.genre,
             "cover_art_url": r.cover_art_url,
+            "creator_id": r.creator_id,
+            "creator_name": r.creator.display_name if r.creator else None,
             "track_count": track_count,
             "created_at": r.created_at.isoformat() if r.created_at else None,
         })
@@ -351,6 +358,8 @@ def get_release(release_id: int, db: Session = Depends(get_db), current_user: Us
         "copyright_line": release.copyright_line,
         "copyright_year": release.copyright_year,
         "notes": release.notes,
+        "creator_id": release.creator_id,
+        "creator_name": release.creator.display_name if release.creator else None,
         "spotify_url": release.spotify_url,
         "apple_music_url": release.apple_music_url,
         "tracks": tracks,
@@ -381,6 +390,7 @@ def create_release(org_id: int, data: ReleaseCreate, db: Session = Depends(get_d
         copyright_line=data.copyright_line,
         copyright_year=data.copyright_year,
         notes=data.notes,
+        creator_id=data.creator_id,
     )
     db.add(release)
     db.commit()
@@ -668,3 +678,90 @@ def export_release_json(release_id: int, db: Session = Depends(get_db), current_
         media_type="application/json",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.get("/{release_id}/artwork")
+async def get_release_artwork(
+    release_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    release = db.query(Release).filter(Release.id == release_id).first()
+    if not release:
+        raise HTTPException(status_code=404, detail="Release not found")
+    if not current_user.is_super_admin:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == release.organization_id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Not authorized")
+    if release.cover_art_data:
+        return Response(
+            content=release.cover_art_data,
+            media_type=release.cover_art_mime or "image/jpeg",
+            headers={"Cache-Control": "private, max-age=3600"}
+        )
+    raise HTTPException(status_code=404, detail="No artwork uploaded")
+
+
+@router.post("/{release_id}/artwork")
+async def upload_release_artwork(
+    release_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    release = db.query(Release).filter(Release.id == release_id).first()
+    if not release:
+        raise HTTPException(status_code=404, detail="Release not found")
+
+    if not current_user.is_super_admin:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == release.organization_id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"File type {file.content_type} not allowed. Use JPEG, PNG, WebP, or GIF.")
+
+    content = await file.read()
+    max_size = 10 * 1024 * 1024
+    if len(content) > max_size:
+        raise HTTPException(status_code=400, detail="File too large. Maximum 10MB.")
+
+    release.cover_art_data = content
+    release.cover_art_mime = file.content_type
+    release.cover_art_url = f"/api/releases/{release_id}/artwork"
+    db.commit()
+
+    return {"cover_art_url": release.cover_art_url}
+
+
+@router.delete("/{release_id}/artwork")
+async def delete_release_artwork(
+    release_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    release = db.query(Release).filter(Release.id == release_id).first()
+    if not release:
+        raise HTTPException(status_code=404, detail="Release not found")
+
+    if not current_user.is_super_admin:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == release.organization_id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+    release.cover_art_data = None
+    release.cover_art_mime = None
+    release.cover_art_url = None
+    db.commit()
+
+    return {"message": "Artwork removed"}

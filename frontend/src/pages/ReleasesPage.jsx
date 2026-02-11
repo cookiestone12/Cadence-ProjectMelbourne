@@ -5,7 +5,7 @@ import {
   TrashIcon, PencilSquareIcon, MusicalNoteIcon,
   CalendarIcon, ExclamationTriangleIcon, CheckCircleIcon,
   ChevronLeftIcon, ArrowDownTrayIcon, ArrowPathIcon,
-  ShieldCheckIcon, ClipboardDocumentCheckIcon
+  ShieldCheckIcon, ClipboardDocumentCheckIcon, PhotoIcon
 } from '@heroicons/react/24/outline'
 
 const STATUS_COLORS = {
@@ -43,22 +43,38 @@ export default function ReleasesPage() {
   const [transitionError, setTransitionError] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({ status: '', release_type: '' })
+  const [creators, setCreators] = useState([])
   const [createForm, setCreateForm] = useState({
     title: '',
     release_type: 'SINGLE',
     primary_artist: '',
     label: '',
     upc: '',
+    catalog_number: '',
     release_date: '',
     genre: '',
     copyright_line: '',
     copyright_year: '',
     description: '',
+    creator_id: '',
   })
 
   useEffect(() => {
     loadReleases()
+    loadCreators()
   }, [filters])
+
+  async function loadCreators() {
+    try {
+      const orgResponse = await axios.get('/api/organizations/current')
+      const orgId = orgResponse.data?.id
+      if (!orgId) return
+      const response = await axios.get(`/api/creators/org/${orgId}`)
+      setCreators(Array.isArray(response.data) ? response.data : [])
+    } catch (error) {
+      console.error('Failed to load creators:', error)
+    }
+  }
 
   async function loadReleases() {
     try {
@@ -102,6 +118,7 @@ export default function ReleasesPage() {
         copyright_line: response.data.copyright_line || '',
         copyright_year: response.data.copyright_year || '',
         notes: response.data.notes || '',
+        creator_id: response.data.creator_id || '',
       })
 
       if (organizationId) {
@@ -121,6 +138,8 @@ export default function ReleasesPage() {
       const payload = { ...createForm }
       if (payload.copyright_year) payload.copyright_year = parseInt(payload.copyright_year)
       if (!payload.release_date) delete payload.release_date
+      if (payload.creator_id) payload.creator_id = parseInt(payload.creator_id)
+      else delete payload.creator_id
 
       await axios.post(`/api/releases/org/${organizationId}`, payload)
       setShowCreateModal(false)
@@ -130,11 +149,13 @@ export default function ReleasesPage() {
         primary_artist: '',
         label: '',
         upc: '',
+        catalog_number: '',
         release_date: '',
         genre: '',
         copyright_line: '',
         copyright_year: '',
         description: '',
+        creator_id: '',
       })
       loadReleases()
     } catch (error) {
@@ -147,6 +168,8 @@ export default function ReleasesPage() {
       const payload = { ...editForm }
       if (payload.copyright_year) payload.copyright_year = parseInt(payload.copyright_year)
       if (!payload.release_date) delete payload.release_date
+      if (payload.creator_id) payload.creator_id = parseInt(payload.creator_id)
+      else payload.creator_id = null
 
       await axios.put(`/api/releases/${selectedRelease}`, payload)
       setEditMode(false)
@@ -277,12 +300,36 @@ export default function ReleasesPage() {
 
         <div className="flex items-start justify-between mb-6">
           <div className="flex items-center space-x-4">
-            <div className="w-20 h-20 bg-[#EEF1EC] rounded-xl flex items-center justify-center">
-              {detailData.cover_art_url ? (
-                <img src={detailData.cover_art_url} alt={detailData.title} className="w-20 h-20 rounded-xl object-cover" />
-              ) : (
-                <MusicalNoteIcon className="w-10 h-10 text-[#7A8580]" />
-              )}
+            <div className="relative group w-20 h-20">
+              <div className="w-20 h-20 bg-[#EEF1EC] rounded-xl flex items-center justify-center overflow-hidden">
+                {detailData.cover_art_url ? (
+                  <img src={detailData.cover_art_url} alt={detailData.title} className="w-20 h-20 rounded-xl object-cover" />
+                ) : (
+                  <MusicalNoteIcon className="w-10 h-10 text-[#7A8580]" />
+                )}
+              </div>
+              <label className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                <PhotoIcon className="w-6 h-6 text-white" />
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files[0]
+                    if (!file) return
+                    const formData = new FormData()
+                    formData.append('file', file)
+                    try {
+                      await axios.post(`/api/releases/${selectedRelease}/artwork`, formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' }
+                      })
+                      loadReleaseDetail(selectedRelease)
+                    } catch (err) {
+                      alert(err.response?.data?.detail || 'Failed to upload artwork')
+                    }
+                  }}
+                />
+              </label>
             </div>
             <div>
               <h1 className="text-3xl font-bold text-[#3D4A44]">{detailData.title}</h1>
@@ -360,6 +407,19 @@ export default function ReleasesPage() {
                     />
                   </div>
                   <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Assign to Client</label>
+                    <select
+                      value={editForm.creator_id}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, creator_id: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    >
+                      <option value="">— No client assigned —</option>
+                      {creators.map(c => (
+                        <option key={c.id} value={c.id}>{c.display_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-[#3D4A44] mb-1">Label</label>
                     <input
                       type="text"
@@ -374,6 +434,15 @@ export default function ReleasesPage() {
                       type="text"
                       value={editForm.upc}
                       onChange={(e) => setEditForm(prev => ({ ...prev, upc: e.target.value }))}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Catalog Number</label>
+                    <input
+                      type="text"
+                      value={editForm.catalog_number}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, catalog_number: e.target.value }))}
                       className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
                     />
                   </div>
@@ -458,6 +527,10 @@ export default function ReleasesPage() {
                   <div>
                     <p className="text-xs text-[#7A8580]">Genre</p>
                     <p className="text-sm font-medium text-[#3D4A44]">{detailData.genre || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[#7A8580]">Assigned Client</p>
+                    <p className="text-sm font-medium text-[#3D4A44]">{detailData.creator_name || 'Not assigned'}</p>
                   </div>
                   <div>
                     <p className="text-xs text-[#7A8580]">Catalog #</p>
@@ -965,6 +1038,19 @@ export default function ReleasesPage() {
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Assign to Client</label>
+                  <select
+                    value={createForm.creator_id}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, creator_id: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="">— No client assigned —</option>
+                    {creators.map(c => (
+                      <option key={c.id} value={c.id}>{c.display_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-[#3D4A44] mb-1">Label</label>
                   <input
                     type="text"
@@ -979,6 +1065,15 @@ export default function ReleasesPage() {
                     type="text"
                     value={createForm.upc}
                     onChange={(e) => setCreateForm(prev => ({ ...prev, upc: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Catalog Number</label>
+                  <input
+                    type="text"
+                    value={createForm.catalog_number}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, catalog_number: e.target.value }))}
                     className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
                   />
                 </div>

@@ -51,7 +51,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/roster', label: 'Roster', icon: UsersIcon },
     { path: '/catalog', label: 'Catalog', icon: MusicalNoteIcon },
     { path: '/works', label: 'Works', icon: DocumentTextIcon },
-    { path: '/releases', label: 'Releases', icon: RectangleStackIcon },
+    { path: '/releases', label: 'Artist Releases', icon: RectangleStackIcon },
     { path: '/contracts', label: 'Contracts', icon: ClipboardDocumentListIcon },
     { path: '/actions', label: 'Actions', icon: ClipboardDocumentCheckIcon },
     { path: '/royalties', label: 'Royalties', icon: BanknotesIcon },

@@ -339,10 +339,14 @@ class Release(Base):
     genre = Column(String, nullable=True)
     subgenre = Column(String, nullable=True)
     cover_art_url = Column(String, nullable=True)
+    cover_art_data = Column(LargeBinary, nullable=True)
+    cover_art_mime = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     copyright_line = Column(String, nullable=True)
     copyright_year = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
+
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True, index=True)
 
     spotify_url = Column(String, nullable=True)
     apple_music_url = Column(String, nullable=True)
@@ -351,6 +355,7 @@ class Release(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     organization = relationship("Organization")
+    creator = relationship("Creator", backref="releases")
     release_tracks = relationship("ReleaseTrack", back_populates="release", cascade="all, delete-orphan", order_by="ReleaseTrack.disc_number, ReleaseTrack.track_number")
 
 

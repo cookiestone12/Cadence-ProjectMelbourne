@@ -36,6 +36,7 @@ export default function CreatorDetailPage() {
   const [selectedSongs, setSelectedSongs] = useState(new Set())
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [creatorReleases, setCreatorReleases] = useState([])
   const [showEditCreatorModal, setShowEditCreatorModal] = useState(false)
   const [editingCreator, setEditingCreator] = useState(false)
   const [showSpotifyModal, setShowSpotifyModal] = useState(false)
@@ -77,6 +78,13 @@ export default function CreatorDetailPage() {
         setOrganizationId(orgId)
         
         await loadSongs(orgId)
+
+        try {
+          const relRes = await axios.get(`/api/releases/org/${orgId}?creator_id=${id}`)
+          setCreatorReleases(relRes.data.releases || relRes.data || [])
+        } catch (e) {
+          console.error('Failed to load creator releases:', e)
+        }
       } catch (error) {
         console.error('Failed to load creator:', error)
       } finally {
@@ -564,6 +572,7 @@ export default function CreatorDetailPage() {
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'records', label: `Records (${songs.length})` },
+    { id: 'releases', label: `Artist Releases (${creatorReleases.length})` },
     { id: 'actions', label: 'Actions' },
     { id: 'schedule-a', label: 'Schedule A' }
   ]
@@ -1040,6 +1049,52 @@ export default function CreatorDetailPage() {
           </div>
         )}
         
+        {activeTab === 'releases' && (
+          <div className="space-y-4">
+            {creatorReleases.length === 0 ? (
+              <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-12 text-center">
+                <MusicalNoteIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
+                <p className="text-[#7A8580] text-lg font-medium">No releases assigned yet</p>
+                <p className="text-[#7A8580] text-sm mt-1">Assign releases to this client from the Artist Releases page</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {creatorReleases.map(rel => (
+                  <Link
+                    key={rel.id}
+                    to={`/releases`}
+                    className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow group"
+                  >
+                    <div className="aspect-square bg-[#EEF1EC] flex items-center justify-center">
+                      {rel.cover_art_url ? (
+                        <img src={rel.cover_art_url} alt={rel.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <MusicalNoteIcon className="w-16 h-16 text-[#7A8580]" />
+                      )}
+                    </div>
+                    <div className="p-4">
+                      <h3 className="font-semibold text-[#3D4A44] group-hover:text-[#5B8A72] transition-colors truncate">{rel.title}</h3>
+                      <p className="text-sm text-[#7A8580] mt-0.5">{rel.primary_artist || 'No artist'}</p>
+                      <div className="flex items-center justify-between mt-2">
+                        <span className="text-xs bg-[#EEF1EC] text-[#7A8580] px-2 py-0.5 rounded-full">{rel.release_type}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          rel.status === 'RELEASED' ? 'bg-green-100 text-green-700' :
+                          rel.status === 'READY' ? 'bg-blue-100 text-blue-700' :
+                          rel.status === 'SUBMITTED' ? 'bg-amber-100 text-amber-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>{rel.status}</span>
+                      </div>
+                      {rel.release_date && (
+                        <p className="text-xs text-[#7A8580] mt-2">{new Date(rel.release_date).toLocaleDateString()}</p>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'actions' && organizationId && (
           <ActionsTab 
             creatorId={parseInt(id)} 
