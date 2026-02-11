@@ -64,6 +64,8 @@ export default function ReleasesPage() {
   const [isrcValue, setIsrcValue] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [filters, setFilters] = useState({ status: '', release_type: '' })
+  const [artworkUrls, setArtworkUrls] = useState({})
+  const [detailArtworkUrl, setDetailArtworkUrl] = useState(null)
   const [creators, setCreators] = useState([])
   const [createForm, setCreateForm] = useState({
     title: '',
@@ -84,6 +86,15 @@ export default function ReleasesPage() {
     loadReleases()
     loadCreators()
   }, [filters])
+
+  async function fetchArtworkBlob(releaseId) {
+    try {
+      const response = await axios.get(`/api/releases/${releaseId}/artwork`, { responseType: 'blob' })
+      return URL.createObjectURL(response.data)
+    } catch {
+      return null
+    }
+  }
 
   async function loadCreators() {
     try {
@@ -110,8 +121,18 @@ export default function ReleasesPage() {
       params.append('limit', '500')
 
       const response = await axios.get(`/api/releases/org/${orgId}?${params}`)
-      setReleases(response.data.releases || [])
+      const releasesData = response.data.releases || []
+      setReleases(releasesData)
       setTotalCount(response.data.total || 0)
+      const withArt = releasesData.filter(r => r.cover_art_url)
+      if (withArt.length > 0) {
+        const urls = {}
+        await Promise.all(withArt.map(async (r) => {
+          const blobUrl = await fetchArtworkBlob(r.id)
+          if (blobUrl) urls[r.id] = blobUrl
+        }))
+        setArtworkUrls(prev => ({ ...prev, ...urls }))
+      }
     } catch (error) {
       console.error('Failed to load releases:', error)
     } finally {
@@ -121,10 +142,19 @@ export default function ReleasesPage() {
 
   async function loadReleaseDetail(releaseId) {
     setDetailLoading(true)
+    setDetailArtworkUrl(null)
     try {
       const response = await axios.get(`/api/releases/${releaseId}`)
       setDetailData(response.data)
       loadReadiness(releaseId)
+      if (response.data.cover_art_url) {
+        fetchArtworkBlob(releaseId).then(url => {
+          if (url) {
+            setDetailArtworkUrl(url)
+            setArtworkUrls(prev => ({ ...prev, [releaseId]: url }))
+          }
+        })
+      }
       setEditForm({
         title: response.data.title || '',
         release_type: response.data.release_type || 'SINGLE',
@@ -340,8 +370,8 @@ export default function ReleasesPage() {
           <div className="flex items-center space-x-4">
             <div className="relative group w-20 h-20">
               <div className="w-20 h-20 bg-[#EEF1EC] rounded-xl flex items-center justify-center overflow-hidden">
-                {detailData.cover_art_url ? (
-                  <img src={detailData.cover_art_url} alt={detailData.title} className="w-20 h-20 rounded-xl object-cover" />
+                {(detailArtworkUrl || detailData.cover_art_url) ? (
+                  <img src={detailArtworkUrl || ''} alt={detailData.title} className="w-20 h-20 rounded-xl object-cover" onError={(e) => e.target.style.display='none'} />
                 ) : (
                   <MusicalNoteIcon className="w-10 h-10 text-[#7A8580]" />
                 )}
@@ -1074,8 +1104,8 @@ export default function ReleasesPage() {
             className="bg-[#FAFBF9] rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-all hover:translate-y-[-2px] overflow-hidden"
           >
             <div className="aspect-square bg-[#EEF1EC] flex items-center justify-center">
-              {release.cover_art_url ? (
-                <img src={release.cover_art_url} alt={release.title} className="w-full h-full object-cover" />
+              {(artworkUrls[release.id] || release.cover_art_url) ? (
+                <img src={artworkUrls[release.id] || ''} alt={release.title} className="w-full h-full object-cover" onError={(e) => e.target.style.display='none'} />
               ) : (
                 <MusicalNoteIcon className="w-16 h-16 text-[#7A8580]" />
               )}
