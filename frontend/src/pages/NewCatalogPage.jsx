@@ -615,7 +615,7 @@ export default function NewCatalogPage() {
       )}
       
       {selectedSong && (
-        <SongDetailModal song={selectedSong} onClose={() => setSelectedSong(null)} />
+        <SongDetailModal song={selectedSong} onClose={() => setSelectedSong(null)} onSongUpdated={loadData} />
       )}
       
       {showAddModal && organizationId && (

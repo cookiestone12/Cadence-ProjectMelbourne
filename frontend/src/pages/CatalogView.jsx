@@ -596,8 +596,9 @@ export default function CatalogView() {
 
       {selectedSongId && (
         <SongDetailModal
-          songId={selectedSongId}
+          song={{ id: selectedSongId }}
           onClose={() => setSelectedSongId(null)}
+          onSongUpdated={fetchData}
         />
       )}
       </div>

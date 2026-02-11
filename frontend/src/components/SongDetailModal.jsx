@@ -5,10 +5,10 @@ import {
   XMarkIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon,
   MusicalNoteIcon, ChartBarIcon, DocumentTextIcon, LinkIcon,
   DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon, UserIcon,
-  ScaleIcon
+  ScaleIcon, PencilSquareIcon
 } from '@heroicons/react/24/outline'
 
-export default function SongDetailModal({ song, onClose }) {
+export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [activeTab, setActiveTab] = useState('overview')
   const [songDetails, setSongDetails] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -16,6 +16,10 @@ export default function SongDetailModal({ song, onClose }) {
   const [uploading, setUploading] = useState(false)
   const [rightsData, setRightsData] = useState([])
   const [rightsLoading, setRightsLoading] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editForm, setEditForm] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [editFeedback, setEditFeedback] = useState(null)
   const fileInputRef = useRef(null)
   
   useEffect(() => {
@@ -120,6 +124,99 @@ export default function SongDetailModal({ song, onClose }) {
     const token = localStorage.getItem('token')
     window.open(`/api/contracts/download/${contractId}?token=${token}`, '_blank')
   }
+
+  function startEditing() {
+    setEditForm({
+      title: songDetails.title || '',
+      primary_artist: songDetails.primary_artist || '',
+      isrc: songDetails.isrc || '',
+      iswc: songDetails.iswc || '',
+      project_title: songDetails.project_title || '',
+      label: songDetails.label || '',
+      release_date: songDetails.release_date || '',
+      recording_code: songDetails.recording_code || '',
+      notes: songDetails.notes || '',
+      media_url: songDetails.media_url || '',
+      publishing_percentage: songDetails.publishing_percentage ?? '',
+      master_percentage: songDetails.master_percentage ?? '',
+      advance_amount: songDetails.advance_amount ?? '',
+      contract_location: songDetails.contract_location || '',
+      payment_status: songDetails.payment_status || 'PENDING',
+    })
+    setIsEditing(true)
+    setEditFeedback(null)
+  }
+
+  function cancelEditing() {
+    setIsEditing(false)
+    setEditForm({})
+    setEditFeedback(null)
+  }
+
+  async function saveEdits() {
+    setSaving(true)
+    setEditFeedback(null)
+    try {
+      const token = localStorage.getItem('token')
+      const payload = {}
+      if (editForm.title !== (songDetails.title || '')) payload.title = editForm.title
+      if (editForm.primary_artist !== (songDetails.primary_artist || '')) payload.primary_artist = editForm.primary_artist
+      if (editForm.isrc !== (songDetails.isrc || '')) payload.isrc = editForm.isrc || null
+      if (editForm.iswc !== (songDetails.iswc || '')) payload.iswc = editForm.iswc || null
+      if (editForm.project_title !== (songDetails.project_title || '')) payload.project_title = editForm.project_title || null
+      if (editForm.label !== (songDetails.label || '')) payload.label = editForm.label || null
+      if (editForm.release_date !== (songDetails.release_date || '')) payload.release_date = editForm.release_date || null
+      if (editForm.recording_code !== (songDetails.recording_code || '')) payload.recording_code = editForm.recording_code || null
+      if (editForm.notes !== (songDetails.notes || '')) payload.notes = editForm.notes || null
+      if (editForm.media_url !== (songDetails.media_url || '')) payload.media_url = editForm.media_url || null
+      if (editForm.contract_location !== (songDetails.contract_location || '')) payload.contract_location = editForm.contract_location || null
+      if (editForm.payment_status !== (songDetails.payment_status || 'PENDING')) payload.payment_status = editForm.payment_status
+
+      const pubPct = editForm.publishing_percentage === '' ? null : parseFloat(editForm.publishing_percentage)
+      if (pubPct !== (songDetails.publishing_percentage ?? null)) payload.publishing_percentage = pubPct
+
+      const masterPct = editForm.master_percentage === '' ? null : parseFloat(editForm.master_percentage)
+      if (masterPct !== (songDetails.master_percentage ?? null)) payload.master_percentage = masterPct
+
+      const advAmt = editForm.advance_amount === '' ? null : parseInt(editForm.advance_amount, 10)
+      if (advAmt !== (songDetails.advance_amount ?? null)) payload.advance_amount = advAmt
+
+      if (Object.keys(payload).length === 0) {
+        setIsEditing(false)
+        return
+      }
+
+      if (!payload.title && !songDetails.title) {
+        setEditFeedback({ type: 'error', message: 'Title is required' })
+        setSaving(false)
+        return
+      }
+      if (payload.title === '') {
+        setEditFeedback({ type: 'error', message: 'Title cannot be empty' })
+        setSaving(false)
+        return
+      }
+
+      await axios.patch(`/api/songs/${songDetails.id}`, payload, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+
+      await loadSongDetails()
+      setIsEditing(false)
+      setEditFeedback({ type: 'success', message: 'Song updated successfully' })
+      if (onSongUpdated) onSongUpdated()
+      setTimeout(() => setEditFeedback(null), 3000)
+    } catch (error) {
+      console.error('Failed to update song:', error)
+      setEditFeedback({ type: 'error', message: error.response?.data?.detail || 'Failed to update song' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleEditChange(field, value) {
+    setEditForm(prev => ({ ...prev, [field]: value }))
+  }
   
   const getStatusIcon = (value) => {
     if (value === 'Yes' || value === true) return <CheckCircleIcon className="w-5 h-5 text-[#5B9A6E]" />
@@ -159,6 +256,15 @@ export default function SongDetailModal({ song, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-6 border-b border-[rgba(59,77,67,0.08)] bg-white">
+          {editFeedback && (
+            <div className={`mb-4 px-4 py-3 rounded-[12px] text-[14px] font-medium ${
+              editFeedback.type === 'success' 
+                ? 'bg-[rgba(91,154,110,0.12)] text-[#5B9A6E] border border-[rgba(91,154,110,0.2)]' 
+                : 'bg-[rgba(196,112,104,0.12)] text-[#C47068] border border-[rgba(196,112,104,0.2)]'
+            }`}>
+              {editFeedback.message}
+            </div>
+          )}
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <h2 className="text-[28px] font-semibold text-[#3D4A44] mb-2 leading-tight">{songDetails.title}</h2>
@@ -186,12 +292,23 @@ export default function SongDetailModal({ song, onClose }) {
                 )}
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="text-[#7A8580] hover:text-[#3D4A44] transition-colors"
-            >
-              <XMarkIcon className="w-7 h-7" />
-            </button>
+            <div className="flex items-center gap-2">
+              {!isEditing && (
+                <button
+                  onClick={startEditing}
+                  className="flex items-center gap-1.5 px-4 py-2 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
+                >
+                  <PencilSquareIcon className="w-5 h-5" />
+                  <span>Edit</span>
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+              >
+                <XMarkIcon className="w-7 h-7" />
+              </button>
+            </div>
           </div>
         </div>
         
@@ -222,96 +339,288 @@ export default function SongDetailModal({ song, onClose }) {
         
         <div className="flex-1 overflow-y-auto p-6 bg-[#F5F7F4]">
           {activeTab === 'overview' && (
-            <div className="grid grid-cols-2 gap-6">
-              <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 space-y-4">
-                <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Basic Information</h3>
-                <div>
-                  <label className="text-[13px] font-medium text-[#7A8580]">Title</label>
-                  <p className="text-[#3D4A44]">{songDetails.title}</p>
+            <div className="space-y-6">
+              {isEditing && (
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    onClick={cancelEditing}
+                    disabled={saving}
+                    className="px-4 py-2 text-[#7A8580] hover:text-[#3D4A44] font-medium text-[14px] rounded-[12px] hover:bg-white transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveEdits}
+                    disabled={saving}
+                    className="px-5 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-[12px] font-medium text-[14px] hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </button>
                 </div>
-                <div>
-                  <label className="text-[13px] font-medium text-[#7A8580]">Primary Artist</label>
-                  <p className="text-[#3D4A44]">{songDetails.primary_artist}</p>
+              )}
+              <div className="grid grid-cols-2 gap-6">
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 space-y-4">
+                  <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Basic Information</h3>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Title</label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.title}
+                        onChange={(e) => handleEditChange('title', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.title}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Primary Artist</label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.primary_artist}
+                        onChange={(e) => handleEditChange('primary_artist', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.primary_artist}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Client</label>
+                    {songDetails.client_name ? (
+                      <Link 
+                        to={`/creators/${songDetails.client_id}`}
+                        onClick={onClose}
+                        className="flex items-center space-x-2 text-[#5B8A72] hover:text-[#7BA594]"
+                      >
+                        <UserIcon className="w-4 h-4" />
+                        <span className="font-medium">{songDetails.client_name}</span>
+                      </Link>
+                    ) : (
+                      <p className="text-[#7A8580]">Not assigned</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Project/Album</label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.project_title}
+                        onChange={(e) => handleEditChange('project_title', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.project_title || 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Label</label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.label}
+                        onChange={(e) => handleEditChange('label', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.label || 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Release Date</label>
+                    {isEditing ? (
+                      <input
+                        type="date"
+                        value={editForm.release_date}
+                        onChange={(e) => handleEditChange('release_date', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.release_date || 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Media URL</label>
+                    {isEditing ? (
+                      <input
+                        type="url"
+                        value={editForm.media_url}
+                        onChange={(e) => handleEditChange('media_url', e.target.value)}
+                        placeholder="https://..."
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : songDetails.media_url ? (
+                      <a 
+                        href={songDetails.media_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center space-x-2 text-[#5B8A72] hover:text-[#7BA594] mt-1"
+                      >
+                        <PlayIcon className="w-5 h-5" />
+                        <span>Listen / Download</span>
+                      </a>
+                    ) : (
+                      <p className="text-[#7A8580]">N/A</p>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <label className="text-[13px] font-medium text-[#7A8580]">Client</label>
-                  {songDetails.client_name ? (
-                    <Link 
-                      to={`/creators/${songDetails.client_id}`}
-                      onClick={onClose}
-                      className="flex items-center space-x-2 text-[#5B8A72] hover:text-[#7BA594]"
-                    >
-                      <UserIcon className="w-4 h-4" />
-                      <span className="font-medium">{songDetails.client_name}</span>
-                    </Link>
-                  ) : (
-                    <p className="text-[#7A8580]">Not assigned</p>
+                
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 space-y-4">
+                  <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Metadata</h3>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">ISRC</label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.isrc}
+                        onChange={(e) => handleEditChange('isrc', e.target.value)}
+                        placeholder="e.g. USRC17607839"
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] font-mono focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44] font-mono">{songDetails.isrc || 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">ISWC</label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.iswc}
+                        onChange={(e) => handleEditChange('iswc', e.target.value)}
+                        placeholder="e.g. T-345246800-1"
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] font-mono focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44] font-mono">{songDetails.iswc || 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Recording Code</label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.recording_code}
+                        onChange={(e) => handleEditChange('recording_code', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] font-mono focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44] font-mono">{songDetails.recording_code || 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Health Score</label>
+                    <div className="flex items-center space-x-3 mt-1">
+                      <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594]"
+                          style={{ width: `${songDetails.status_health_score || 0}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-[13px] font-semibold text-[#3D4A44]">
+                        {Math.round(songDetails.status_health_score || 0)}%
+                      </span>
+                    </div>
+                  </div>
+                  {isEditing && (
+                    <>
+                      <div>
+                        <label className="text-[13px] font-medium text-[#7A8580]">Publishing %</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={editForm.publishing_percentage}
+                          onChange={(e) => handleEditChange('publishing_percentage', e.target.value)}
+                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[13px] font-medium text-[#7A8580]">Master %</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={editForm.master_percentage}
+                          onChange={(e) => handleEditChange('master_percentage', e.target.value)}
+                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[13px] font-medium text-[#7A8580]">Advance Amount ($)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={editForm.advance_amount}
+                          onChange={(e) => handleEditChange('advance_amount', e.target.value)}
+                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[13px] font-medium text-[#7A8580]">Contract Location</label>
+                        <input
+                          type="text"
+                          value={editForm.contract_location}
+                          onChange={(e) => handleEditChange('contract_location', e.target.value)}
+                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[13px] font-medium text-[#7A8580]">Payment Status</label>
+                        <select
+                          value={editForm.payment_status}
+                          onChange={(e) => handleEditChange('payment_status', e.target.value)}
+                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
+                        >
+                          <option value="PENDING">Pending</option>
+                          <option value="INVOICED">Invoiced</option>
+                          <option value="PAID">Paid</option>
+                          <option value="OVERDUE">Overdue</option>
+                        </select>
+                      </div>
+                    </>
                   )}
                 </div>
-                <div>
-                  <label className="text-[13px] font-medium text-[#7A8580]">Project/Album</label>
-                  <p className="text-[#3D4A44]">{songDetails.project_title || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-[13px] font-medium text-[#7A8580]">Label</label>
-                  <p className="text-[#3D4A44]">{songDetails.label || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-[13px] font-medium text-[#7A8580]">Release Date</label>
-                  <p className="text-[#3D4A44]">{songDetails.release_date || 'N/A'}</p>
-                </div>
-                {songDetails.media_url && (
-                  <div>
-                    <label className="text-[13px] font-medium text-[#7A8580]">Audio File</label>
-                    <a 
-                      href={songDetails.media_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center space-x-2 text-[#5B8A72] hover:text-[#7BA594] mt-1"
-                    >
-                      <PlayIcon className="w-5 h-5" />
-                      <span>Listen / Download</span>
-                    </a>
-                  </div>
-                )}
-              </div>
-              
-              <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 space-y-4">
-                <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Metadata</h3>
-                <div>
-                  <label className="text-[13px] font-medium text-[#7A8580]">ISRC</label>
-                  <p className="text-[#3D4A44] font-mono">{songDetails.isrc || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-[13px] font-medium text-[#7A8580]">ISWC</label>
-                  <p className="text-[#3D4A44] font-mono">{songDetails.iswc || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-[13px] font-medium text-[#7A8580]">Recording Code</label>
-                  <p className="text-[#3D4A44] font-mono">{songDetails.recording_code || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="text-[13px] font-medium text-[#7A8580]">Health Score</label>
-                  <div className="flex items-center space-x-3 mt-1">
-                    <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594]"
-                        style={{ width: `${songDetails.status_health_score || 0}%` }}
-                      ></div>
-                    </div>
-                    <span className="text-[13px] font-semibold text-[#3D4A44]">
-                      {Math.round(songDetails.status_health_score || 0)}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              {songDetails.notes && (
+                
                 <div className="col-span-2 bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
                   <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-2">Notes</h3>
-                  <div className="bg-[rgba(196,149,107,0.08)] border border-[rgba(196,149,107,0.15)] rounded-[12px] p-4">
-                    <p className="text-[15px] text-[#3D4A44] whitespace-pre-wrap">{songDetails.notes}</p>
-                  </div>
+                  {isEditing ? (
+                    <textarea
+                      value={editForm.notes}
+                      onChange={(e) => handleEditChange('notes', e.target.value)}
+                      rows={4}
+                      placeholder="Add notes about this song..."
+                      className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent resize-y"
+                    />
+                  ) : songDetails.notes ? (
+                    <div className="bg-[rgba(196,149,107,0.08)] border border-[rgba(196,149,107,0.15)] rounded-[12px] p-4">
+                      <p className="text-[15px] text-[#3D4A44] whitespace-pre-wrap">{songDetails.notes}</p>
+                    </div>
+                  ) : (
+                    <p className="text-[#7A8580] text-[15px]">No notes added</p>
+                  )}
+                </div>
+              </div>
+              {isEditing && (
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    onClick={cancelEditing}
+                    disabled={saving}
+                    className="px-4 py-2 text-[#7A8580] hover:text-[#3D4A44] font-medium text-[14px] rounded-[12px] hover:bg-white transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveEdits}
+                    disabled={saving}
+                    className="px-5 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-[12px] font-medium text-[14px] hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </button>
                 </div>
               )}
             </div>
