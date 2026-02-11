@@ -3,6 +3,14 @@ from typing import List, Dict
 from ..models import Song, SongCredit, SongDSPLink, ActionItem, Creator, SongContract
 
 
+def _is_numeric(val: str) -> bool:
+    try:
+        float(val)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
 def analyze_creator_catalog_gaps(db: Session, creator_id: int) -> List[Dict]:
     creator = db.query(Creator).filter(Creator.id == creator_id).first()
     if not creator:
@@ -77,7 +85,9 @@ def analyze_creator_catalog_gaps(db: Session, creator_id: int) -> List[Dict]:
                     "priority": 2
                 })
         
-        if song.is_registered_with_dsp not in ("Yes", "N/A"):
+        dsp_val = str(song.is_registered_with_dsp or "").strip()
+        dsp_complete = dsp_val in ("Yes", "N/A") or (dsp_val != "" and dsp_val not in ("No", "false", "False") and _is_numeric(dsp_val))
+        if not dsp_complete:
             dsp_links = db.query(SongDSPLink).filter(SongDSPLink.song_id == song.id).count()
             if dsp_links == 0:
                 key = ("DSP_REGISTRATION", song.id)

@@ -40,8 +40,14 @@ def get_user_organization_id(db: Session, user: User) -> int:
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id
     ).first()
-    if not membership:
+    if not membership and not user.is_super_admin:
         raise HTTPException(status_code=403, detail="No organization membership")
+    if not membership and user.is_super_admin:
+        from ..models import Organization
+        first_org = db.query(Organization).first()
+        if first_org:
+            return first_org.id
+        raise HTTPException(status_code=403, detail="No organizations exist")
     return membership.organization_id
 
 
@@ -138,7 +144,7 @@ def get_organization_actions(
         OrganizationMember.organization_id == org_id
     ).first()
     
-    if not membership:
+    if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     query = db.query(ActionItem).filter(ActionItem.organization_id == org_id)
@@ -188,7 +194,7 @@ def get_creator_actions(
         OrganizationMember.organization_id == creator.organization_id
     ).first()
     
-    if not membership:
+    if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     query = db.query(ActionItem).filter(ActionItem.creator_id == creator_id)
@@ -220,7 +226,7 @@ def create_action_item(
         OrganizationMember.organization_id == org_id
     ).first()
     
-    if not membership:
+    if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     new_action = ActionItem(
@@ -268,7 +274,7 @@ def update_action_item(
         OrganizationMember.organization_id == action.organization_id
     ).first()
     
-    if not membership:
+    if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     update_data = updates.dict(exclude_unset=True)
@@ -300,7 +306,7 @@ def delete_action_item(
         OrganizationMember.organization_id == action.organization_id
     ).first()
     
-    if not membership:
+    if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     db.delete(action)
@@ -324,7 +330,7 @@ def complete_action_item(
         OrganizationMember.organization_id == action.organization_id
     ).first()
     
-    if not membership:
+    if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     action.status = "COMPLETED"
@@ -353,7 +359,7 @@ def generate_suggested_actions(
         OrganizationMember.organization_id == creator.organization_id
     ).first()
     
-    if not membership:
+    if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     created_count = generate_actions_from_gaps(
@@ -386,7 +392,7 @@ def get_catalog_gaps(
         OrganizationMember.organization_id == creator.organization_id
     ).first()
     
-    if not membership:
+    if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     gaps = analyze_creator_catalog_gaps(db, creator_id)
@@ -406,7 +412,7 @@ def generate_org_actions(
         OrganizationMember.organization_id == org_id
     ).first()
     
-    if not membership:
+    if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
@@ -440,7 +446,7 @@ def generate_cross_module_actions(
         OrganizationMember.organization_id == org_id
     ).first()
 
-    if not membership:
+    if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
 
     created_count = generate_cross_module_tasks(db, org_id, current_user.id)
@@ -462,7 +468,7 @@ def get_action_summary(
         OrganizationMember.organization_id == org_id
     ).first()
     
-    if not membership:
+    if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized")
     
     now = datetime.utcnow()
