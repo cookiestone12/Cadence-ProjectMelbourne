@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from typing import List, Optional
-from ..models import get_db, Creator, OrganizationMember, User, Song, SongCredit
+from ..models import get_db, Creator, CreativeContact, OrganizationMember, User, Song, SongCredit
 from ..utils.auth import get_current_user
 import os
 import uuid
@@ -48,6 +48,8 @@ class CreatorUpdateRequest(BaseModel):
     primary_pro: Optional[str] = None
     primary_ipi: Optional[str] = None
     hero_image_url: Optional[str] = None
+    publisher_contact_id: Optional[int] = None
+    admin_contact_id: Optional[int] = None
 
 class CreatorDetailResponse(BaseModel):
     id: int
@@ -63,6 +65,10 @@ class CreatorDetailResponse(BaseModel):
     song_count: int
     avg_health_score: float
     placement_count: int
+    publisher_contact_id: Optional[int] = None
+    publisher_contact: Optional[dict] = None
+    admin_contact_id: Optional[int] = None
+    admin_contact: Optional[dict] = None
     
     class Config:
         from_attributes = True
@@ -149,6 +155,22 @@ def create_creator(
     db.add(creator)
     db.commit()
     db.refresh(creator)
+
+    creative_contact = CreativeContact(
+        organization_id=org_id,
+        creator_id=creator.id,
+        display_name=creator.display_name,
+        legal_name=creator.legal_name,
+        email=creator.email,
+        pro=creator.primary_pro,
+        ipi=creator.primary_ipi,
+        publisher_name=creator.publisher_name,
+        roles=creator.roles or [],
+        phone=creator.phone,
+        territory=creator.primary_territory,
+    )
+    db.add(creative_contact)
+    db.commit()
     
     return {
         "id": creator.id,
@@ -201,6 +223,18 @@ def get_creator(
         Song.is_paid == "Yes"
     ).scalar() or 0
     
+    publisher_contact = None
+    if creator.publisher_contact_id:
+        pc = db.query(CreativeContact).filter(CreativeContact.id == creator.publisher_contact_id).first()
+        if pc:
+            publisher_contact = {"id": pc.id, "display_name": pc.display_name, "company": pc.publisher_name, "primary_role": (pc.roles or [None])[0] if pc.roles else None}
+    
+    admin_contact = None
+    if creator.admin_contact_id:
+        ac = db.query(CreativeContact).filter(CreativeContact.id == creator.admin_contact_id).first()
+        if ac:
+            admin_contact = {"id": ac.id, "display_name": ac.display_name, "company": ac.publisher_name, "primary_role": (ac.roles or [None])[0] if ac.roles else None}
+    
     return {
         "id": creator.id,
         "display_name": creator.display_name,
@@ -214,7 +248,11 @@ def get_creator(
         "linked_user_id": creator.linked_user_id,
         "song_count": song_count,
         "avg_health_score": float(avg_health) if avg_health else 0.0,
-        "placement_count": placement_count
+        "placement_count": placement_count,
+        "publisher_contact_id": creator.publisher_contact_id,
+        "publisher_contact": publisher_contact,
+        "admin_contact_id": creator.admin_contact_id,
+        "admin_contact": admin_contact
     }
 
 @router.put("/{creator_id}", response_model=CreatorResponse)
@@ -256,6 +294,10 @@ def update_creator(
         creator.primary_ipi = request.primary_ipi
     if request.hero_image_url is not None:
         creator.hero_image_url = request.hero_image_url
+    if request.publisher_contact_id is not None:
+        creator.publisher_contact_id = request.publisher_contact_id if request.publisher_contact_id != 0 else None
+    if request.admin_contact_id is not None:
+        creator.admin_contact_id = request.admin_contact_id if request.admin_contact_id != 0 else None
     
     db.commit()
     db.refresh(creator)

@@ -69,6 +69,7 @@ export default function CreatorDetailPage() {
   const [advanceForm, setAdvanceForm] = useState({ description: '', amount: '', advance_date: '', notes: '' })
   const [savingFee, setSavingFee] = useState(false)
   const [savingAdvance, setSavingAdvance] = useState(false)
+  const [directoryContacts, setDirectoryContacts] = useState([])
   const [creatorForm, setCreatorForm] = useState({
     display_name: '',
     legal_name: '',
@@ -76,7 +77,9 @@ export default function CreatorDetailPage() {
     roles: [],
     primary_territory: '',
     primary_pro: '',
-    primary_ipi: ''
+    primary_ipi: '',
+    publisher_contact_id: null,
+    admin_contact_id: null
   })
   
   const loadSongs = async (orgId) => {
@@ -110,6 +113,13 @@ export default function CreatorDetailPage() {
           setCreatorReleases(relRes.data.releases || relRes.data || [])
         } catch (e) {
           console.error('Failed to load creator releases:', e)
+        }
+
+        try {
+          const contactsRes = await axios.get(`/api/creative-directory/org/${orgId}`)
+          setDirectoryContacts(contactsRes.data)
+        } catch (e) {
+          console.error('Failed to load directory contacts:', e)
         }
       } catch (error) {
         console.error('Failed to load creator:', error)
@@ -449,7 +459,9 @@ export default function CreatorDetailPage() {
       roles: creator.roles || [],
       primary_territory: creator.primary_territory || '',
       primary_pro: creator.primary_pro || '',
-      primary_ipi: creator.primary_ipi || ''
+      primary_ipi: creator.primary_ipi || '',
+      publisher_contact_id: creator.publisher_contact_id || null,
+      admin_contact_id: creator.admin_contact_id || null
     })
     setShowEditCreatorModal(true)
   }
@@ -957,6 +969,22 @@ export default function CreatorDetailPage() {
                     <div>
                       <p className="text-[#7A8580]">IPI</p>
                       <p className="font-medium text-[#3D4A44]">{creator.primary_ipi}</p>
+                    </div>
+                  )}
+                  {creator.publisher_contact && (
+                    <div className="flex items-center justify-between py-2 border-b border-[rgba(59,77,67,0.06)]">
+                      <span className="text-[13px] text-[#7A8580]">Publisher</span>
+                      <Link to="/directory" className="text-[13px] font-medium text-[#5B8A72] hover:underline">
+                        {creator.publisher_contact.display_name}{creator.publisher_contact.company ? ` (${creator.publisher_contact.company})` : ''}
+                      </Link>
+                    </div>
+                  )}
+                  {creator.admin_contact && (
+                    <div className="flex items-center justify-between py-2 border-b border-[rgba(59,77,67,0.06)]">
+                      <span className="text-[13px] text-[#7A8580]">Administrator</span>
+                      <Link to="/directory" className="text-[13px] font-medium text-[#5B8A72] hover:underline">
+                        {creator.admin_contact.display_name}{creator.admin_contact.company ? ` (${creator.admin_contact.company})` : ''}
+                      </Link>
                     </div>
                   )}
                 </div>
@@ -2152,6 +2180,52 @@ export default function CreatorDetailPage() {
                   className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                   placeholder="IPI/CAE Number"
                 />
+              </div>
+
+              <div>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Publisher Contact</label>
+                <select
+                  value={creatorForm.publisher_contact_id || ''}
+                  onChange={(e) => setCreatorForm({...creatorForm, publisher_contact_id: e.target.value ? parseInt(e.target.value) : 0})}
+                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                >
+                  <option value="">No publisher linked</option>
+                  {directoryContacts.filter(c => (c.primary_role || '').toLowerCase().includes('publisher') || (c.primary_role || '').toLowerCase().includes('admin')).length > 0 && (
+                    <optgroup label="Publishers">
+                      {directoryContacts.filter(c => (c.primary_role || '').toLowerCase().includes('publisher')).map(c => (
+                        <option key={c.id} value={c.id}>{c.display_name}{c.company ? ` (${c.company})` : ''}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="All Contacts">
+                    {directoryContacts.map(c => (
+                      <option key={c.id} value={c.id}>{c.display_name}{c.company ? ` (${c.company})` : ''}</option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Administrator Contact</label>
+                <select
+                  value={creatorForm.admin_contact_id || ''}
+                  onChange={(e) => setCreatorForm({...creatorForm, admin_contact_id: e.target.value ? parseInt(e.target.value) : 0})}
+                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                >
+                  <option value="">No administrator linked</option>
+                  {directoryContacts.filter(c => (c.primary_role || '').toLowerCase().includes('admin')).length > 0 && (
+                    <optgroup label="Administrators">
+                      {directoryContacts.filter(c => (c.primary_role || '').toLowerCase().includes('admin')).map(c => (
+                        <option key={c.id} value={c.id}>{c.display_name}{c.company ? ` (${c.company})` : ''}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="All Contacts">
+                    {directoryContacts.map(c => (
+                      <option key={c.id} value={c.id}>{c.display_name}{c.company ? ` (${c.company})` : ''}</option>
+                    ))}
+                  </optgroup>
+                </select>
               </div>
 
               <div className="flex gap-3 pt-4">

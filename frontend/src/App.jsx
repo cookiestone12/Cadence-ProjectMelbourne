@@ -20,6 +20,8 @@ import PlacementsPage from './pages/PlacementsPage'
 import SearchPage from './pages/SearchPage'
 import UserGuidePage from './pages/UserGuidePage'
 import TenantAdminPage from './pages/TenantAdminPage'
+import CreativeDirectoryPage from './pages/CreativeDirectoryPage'
+import RegistrationReportPage from './pages/RegistrationReportPage'
 import Sidebar from './components/Sidebar'
 
 function App() {
@@ -127,6 +129,7 @@ function App() {
             <Route path="/search" element={<SearchPage />} />
             <Route path="/roster" element={<RosterPage />} />
             <Route path="/roster/:id" element={<CreatorDetailPage />} />
+            <Route path="/directory" element={<CreativeDirectoryPage />} />
             <Route path="/catalog" element={<NewCatalogPage />} />
             <Route path="/works" element={<WorksPage />} />
             <Route path="/releases" element={<ReleasesPage />} />
@@ -136,6 +139,7 @@ function App() {
             <Route path="/placements" element={<PlacementsPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/valuation" element={<ValuationPage />} />
+            <Route path="/registration-reports" element={<RegistrationReportPage />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/guide" element={<UserGuidePage />} />
             <Route path="/org-admin" element={<TenantAdminPage />} />

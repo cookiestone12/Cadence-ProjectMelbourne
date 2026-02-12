@@ -183,6 +183,8 @@ class Creator(Base):
     spotify_artist_id = Column(String, nullable=True)
     apple_music_id = Column(String, nullable=True)
     assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    publisher_contact_id = Column(Integer, nullable=True)
+    admin_contact_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -191,6 +193,35 @@ class Creator(Base):
     work_credits = relationship("WorkCredit", back_populates="creator")
     linked_user = relationship("User", foreign_keys=[linked_user_id])
     assigned_user = relationship("User", foreign_keys=[assigned_to_user_id])
+
+class CreativeContact(Base):
+    __tablename__ = "creative_contacts"
+    __table_args__ = (
+        Index('ix_creative_contacts_organization_id', 'organization_id'),
+        Index('ix_creative_contacts_creator_id', 'creator_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
+    display_name = Column(String, nullable=False, index=True)
+    legal_name = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    pro = Column(String, nullable=True)
+    ipi = Column(String, nullable=True)
+    isni = Column(String, nullable=True)
+    publisher_name = Column(String, nullable=True)
+    publisher_ipi = Column(String, nullable=True)
+    publisher_pro = Column(String, nullable=True)
+    roles = Column(JSON, default=list)
+    representation_name = Column(String, nullable=True)
+    representation_email = Column(String, nullable=True)
+    representation_phone = Column(String, nullable=True)
+    territory = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class Song(Base):
     __tablename__ = "songs"
@@ -312,6 +343,7 @@ class WorkCredit(Base):
     role = Column(String, nullable=False)
     share_percentage = Column(Float, nullable=True)
     publisher_name = Column(String, nullable=True)
+    creative_contact_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     work = relationship("Work", back_populates="credits")
@@ -390,6 +422,7 @@ class SongCredit(Base):
     creator_id = Column(Integer, ForeignKey("creators.id"), nullable=False, index=True)
     role = Column(String, nullable=False)
     share_percentage = Column(Float, nullable=True)
+    creative_contact_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     song = relationship("Song", back_populates="credits")

@@ -17,7 +17,8 @@ import {
   ClipboardDocumentCheckIcon,
   BanknotesIcon,
   FilmIcon,
-  BuildingOfficeIcon
+  BuildingOfficeIcon,
+  UserGroupIcon
 } from '@heroicons/react/24/outline'
 import NotificationBell from './NotificationBell'
 
@@ -54,6 +55,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/', label: 'Home', icon: HomeIcon },
     { path: '/search', label: 'Search', icon: MagnifyingGlassIcon },
     { path: '/roster', label: 'Roster', icon: UsersIcon, requiresRoster: true },
+    { path: '/directory', label: 'Directory', icon: UserGroupIcon },
     { path: '/catalog', label: 'Catalog', icon: MusicalNoteIcon },
     { path: '/works', label: 'Works', icon: DocumentTextIcon },
     { path: '/releases', label: 'Artist Releases', icon: RectangleStackIcon },
@@ -61,6 +63,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/actions', label: 'Actions', icon: ClipboardDocumentCheckIcon },
     { path: '/royalties', label: 'Royalties', icon: BanknotesIcon },
     { path: '/placements', label: 'Sync Placements', icon: FilmIcon },
+    { path: '/registration-reports', label: 'Registration Reports', icon: DocumentTextIcon },
     { path: '/reports', label: 'Reports', icon: ChartBarIcon },
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
   ]
