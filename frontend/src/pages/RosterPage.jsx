@@ -63,11 +63,12 @@ export default function RosterPage() {
       if (!currentOrgId) { setLoading(false); return }
       setOrgId(currentOrgId)
       
-      const creatorsResponse = await axios.get(`/api/creators/org/${currentOrgId}`)
-      setCreators(creatorsResponse.data)
+      axios.get(`/api/creators/org/${currentOrgId}`)
+        .then(res => setCreators(res.data || []))
+        .catch(err => console.error('Failed to load creators:', err))
+        .finally(() => setLoading(false))
     } catch (error) {
       console.error('Failed to load roster:', error)
-    } finally {
       setLoading(false)
     }
   }

@@ -61,16 +61,16 @@ export default function NewCatalogPage() {
       if (filters.status) params.append('status', filters.status)
       params.append('limit', '1000')
       
-      const [songsResponse, creatorsResponse] = await Promise.all([
-        axios.get(`/api/songs/org/${orgId}?${params}`),
-        axios.get(`/api/creators/org/${orgId}`)
-      ])
-      
-      setSongs(songsResponse.data)
-      setCreators(creatorsResponse.data)
+      axios.get(`/api/songs/org/${orgId}?${params}`)
+        .then(res => setSongs(res.data || []))
+        .catch(err => console.error('Failed to load songs:', err))
+        .finally(() => setLoading(false))
+
+      axios.get(`/api/creators/org/${orgId}`)
+        .then(res => setCreators(res.data || []))
+        .catch(err => console.error('Failed to load creators:', err))
     } catch (error) {
       console.error('Failed to load catalog:', error)
-    } finally {
       setLoading(false)
     }
   }

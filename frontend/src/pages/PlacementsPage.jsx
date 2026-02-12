@@ -138,10 +138,15 @@ export default function PlacementsPage() {
       const id = orgResponse.data?.id
       if (!id) { setLoading(false); return }
       setOrgId(id)
-      await Promise.all([loadPlacements(id), loadSummary(id)])
+
+      loadPlacements(id)
+        .catch(err => console.error('Failed to load placements:', err))
+        .finally(() => setLoading(false))
+
+      loadSummary(id)
+        .catch(err => console.error('Failed to load summary:', err))
     } catch (err) {
       console.error('Failed to load data:', err)
-    } finally {
       setLoading(false)
     }
   }

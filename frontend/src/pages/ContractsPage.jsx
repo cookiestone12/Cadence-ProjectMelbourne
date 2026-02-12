@@ -86,20 +86,25 @@ export default function ContractsPage() {
       if (!orgId) { setLoading(false); return }
       setOrganizationId(orgId)
 
-      const [contractsResponse, songsResponse, worksResponse, creatorsResponse] = await Promise.all([
-        axios.get(`/api/rights/contracts/org/${orgId}`),
-        axios.get(`/api/songs/org/${orgId}?limit=1000`),
-        axios.get(`/api/works/org/${orgId}?limit=500`),
-        axios.get(`/api/creators/org/${orgId}`)
-      ])
+      axios.get(`/api/rights/contracts/org/${orgId}`).then(res => {
+        const data = res.data
+        setContracts(Array.isArray(data) ? data : data.contracts || [])
+      }).catch(e => console.error('Failed to load contracts:', e))
+        .finally(() => setLoading(false))
 
-      setContracts(Array.isArray(contractsResponse.data) ? contractsResponse.data : contractsResponse.data.contracts || [])
-      setSongs(Array.isArray(songsResponse.data) ? songsResponse.data : [])
-      setWorks(worksResponse.data.works || [])
-      setCreators(Array.isArray(creatorsResponse.data) ? creatorsResponse.data : [])
+      axios.get(`/api/songs/org/${orgId}?limit=1000`).then(res => {
+        setSongs(Array.isArray(res.data) ? res.data : [])
+      }).catch(e => console.error('Failed to load songs:', e))
+
+      axios.get(`/api/works/org/${orgId}?limit=500`).then(res => {
+        setWorks(res.data?.works || (Array.isArray(res.data) ? res.data : []))
+      }).catch(e => console.error('Failed to load works:', e))
+
+      axios.get(`/api/creators/org/${orgId}`).then(res => {
+        setCreators(Array.isArray(res.data) ? res.data : [])
+      }).catch(e => console.error('Failed to load creators:', e))
     } catch (error) {
-      console.error('Failed to load contracts:', error)
-    } finally {
+      console.error('Failed to load contracts page:', error)
       setLoading(false)
     }
   }
