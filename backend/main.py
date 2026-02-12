@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from .models import Base, engine
 from .routes import (
     auth, catalog, settings,
     organizations, creators, songs, credits,
@@ -12,8 +11,6 @@ from .routes import (
     tenant_admin
 )
 from .utils.logging_config import logger
-from .models.database import SessionLocal
-from .models.models import User
 import os
 import time
 import uuid
@@ -22,138 +19,6 @@ from pathlib import Path
 
 if not os.getenv("SESSION_SECRET"):
     raise RuntimeError("SESSION_SECRET environment variable must be set for production use")
-
-Base.metadata.create_all(bind=engine)
-
-def ensure_schema_updates():
-    from sqlalchemy import text, inspect
-    with engine.connect() as conn:
-        inspector = inspect(engine)
-        cols = [c['name'] for c in inspector.get_columns('creators')]
-        if 'hero_image_data' not in cols:
-            conn.execute(text("ALTER TABLE creators ADD COLUMN hero_image_data BYTEA"))
-            conn.commit()
-            logger.info("Added hero_image_data column to creators")
-        if 'hero_image_mime' not in cols:
-            conn.execute(text("ALTER TABLE creators ADD COLUMN hero_image_mime VARCHAR"))
-            conn.commit()
-            logger.info("Added hero_image_mime column to creators")
-
-        release_cols = [c['name'] for c in inspector.get_columns('releases')]
-        if 'creator_id' not in release_cols:
-            conn.execute(text("ALTER TABLE releases ADD COLUMN creator_id INTEGER REFERENCES creators(id)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_releases_creator_id ON releases(creator_id)"))
-            conn.commit()
-            logger.info("Added creator_id column to releases")
-        if 'cover_art_data' not in release_cols:
-            conn.execute(text("ALTER TABLE releases ADD COLUMN cover_art_data BYTEA"))
-            conn.execute(text("ALTER TABLE releases ADD COLUMN cover_art_mime VARCHAR"))
-            conn.commit()
-            logger.info("Added cover_art_data/cover_art_mime columns to releases")
-
-        if 'song_contracts' in inspector.get_table_names():
-            sc_cols = [c['name'] for c in inspector.get_columns('song_contracts')]
-            if 'contract_id' not in sc_cols:
-                conn.execute(text("ALTER TABLE song_contracts ADD COLUMN contract_id INTEGER REFERENCES contracts(id)"))
-                conn.commit()
-                logger.info("Added contract_id column to song_contracts")
-
-        song_cols = {c['name']: c for c in inspector.get_columns('songs')}
-        if 'audio_file_url' not in song_cols:
-            conn.execute(text("ALTER TABLE songs ADD COLUMN audio_file_url VARCHAR"))
-            conn.commit()
-            logger.info("Added audio_file_url column to songs")
-        if 'lyrics' not in song_cols:
-            conn.execute(text("ALTER TABLE songs ADD COLUMN lyrics TEXT"))
-            conn.commit()
-            logger.info("Added lyrics column to songs")
-        if 'contract_documents' not in inspector.get_table_names():
-            from .models.models import ContractDocument
-            ContractDocument.__table__.create(bind=engine)
-            logger.info("Created contract_documents table")
-
-        if 'contracts' in inspector.get_table_names():
-            contract_cols = [c['name'] for c in inspector.get_columns('contracts')]
-            if 'creator_id' not in contract_cols:
-                conn.execute(text("ALTER TABLE contracts ADD COLUMN creator_id INTEGER REFERENCES creators(id)"))
-                conn.commit()
-                logger.info("Added creator_id column to contracts")
-
-        bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
-        for field in bool_to_string_fields:
-            if field in song_cols:
-                col_type = str(song_cols[field]['type'])
-                if 'BOOLEAN' in col_type.upper() or 'BOOL' in col_type.upper():
-                    conn.execute(text(f"""
-                        ALTER TABLE songs ALTER COLUMN {field} TYPE VARCHAR
-                        USING CASE
-                            WHEN {field} = true THEN 'Yes'
-                            WHEN {field} = false THEN 'No'
-                            ELSE 'No'
-                        END
-                    """))
-                    conn.execute(text(f"ALTER TABLE songs ALTER COLUMN {field} SET DEFAULT 'No'"))
-                    conn.commit()
-                    logger.info(f"Converted songs.{field} from BOOLEAN to VARCHAR")
-
-try:
-    ensure_schema_updates()
-except Exception as e:
-    logger.warning(f"Schema update check: {e}")
-
-def seed_super_admin():
-    from .utils.auth import get_password_hash
-    from .models.models import Organization, OrganizationMember
-    db = SessionLocal()
-    try:
-        from sqlalchemy import func
-        existing = db.query(User).filter(func.lower(User.username) == 'masterpadmin').first()
-        if not existing:
-            admin = User(
-                username='MasterPAdmin',
-                email='admin@rythm.app',
-                hashed_password=get_password_hash('Male50Cent!'),
-                is_admin=True,
-                is_super_admin=True,
-            )
-            db.add(admin)
-            db.commit()
-            db.refresh(admin)
-            logger.info("MasterPAdmin super admin account created")
-            existing = admin
-
-        if existing:
-            has_membership = db.query(OrganizationMember).filter(
-                OrganizationMember.user_id == existing.id
-            ).first()
-            if not has_membership:
-                first_org = db.query(Organization).order_by(Organization.id).first()
-                if not first_org:
-                    first_org = Organization(
-                        name="Rythm",
-                        display_name="Rythm",
-                        type="LABEL",
-                        account_type="ENTERPRISE",
-                    )
-                    db.add(first_org)
-                    db.commit()
-                    db.refresh(first_org)
-                    logger.info(f"Created default organization '{first_org.name}'")
-                membership = OrganizationMember(
-                    organization_id=first_org.id,
-                    user_id=existing.id,
-                    role="OWNER"
-                )
-                db.add(membership)
-                db.commit()
-                logger.info(f"Added MasterPAdmin to organization '{first_org.name}' as OWNER")
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error seeding super admin: {e}")
-    finally:
-        db.close()
-
-seed_super_admin()
 
 app = FastAPI(title="Rythm Catalog Intelligence API")
 
@@ -253,6 +118,9 @@ else:
     async def serve_root_fallback():
         return {"status": "healthy", "service": "Rythm Catalog Intelligence", "note": "Frontend not built yet"}
 
+
 if __name__ == "__main__":
+    from .db_setup import main as db_setup_main
+    db_setup_main()
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
