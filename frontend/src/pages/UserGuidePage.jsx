@@ -1,7 +1,7 @@
 import React, { useRef } from 'react'
 import { ArrowDownTrayIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 
-const VERSION = '1.0'
+const VERSION = '2.0'
 const LAST_UPDATED = 'February 2026'
 
 const sections = [
@@ -274,6 +274,18 @@ export default function UserGuidePage() {
           <FeatureCard title="Bulk CSV Import" description="Upload a CSV file to bulk-add songs for this creator. Supports AI-powered column mapping." />
         </div>
 
+        <SubHeading>Creator Accounting Tab</SubHeading>
+        <p className="text-[#7A8580] mb-3">
+          Each creator profile includes an <strong>Accounting</strong> tab showing their complete financial summary:
+        </p>
+        <ul className="list-disc pl-5 text-[#7A8580] space-y-1 mb-3">
+          <li>Royalty earnings from all sources</li>
+          <li>Placement revenue from sync deals</li>
+          <li>Fees breakdown (management, admin, distribution, sync, legal)</li>
+          <li>Advance tracking with recoupment progress</li>
+          <li>Payment history and net balance</li>
+        </ul>
+
         <SubHeading>CSV Import with AI Mapping</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           When uploading a CSV for a creator, the system uses AI to automatically map your CSV columns to the correct fields (title, ISRC, release date, etc.). You can review and adjust the mappings before importing. The system also provides fallback pattern matching if AI mapping is unavailable.
@@ -294,6 +306,9 @@ export default function UserGuidePage() {
           <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">50-79% Needs Work</span>
           <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">0-49% Critical</span>
         </div>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Click any column header to sort the table by that field. Click again to reverse the sort direction. An arrow indicator shows the current sort direction.
+        </p>
 
         <SubHeading>Filtering & Tabs</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
@@ -322,6 +337,31 @@ export default function UserGuidePage() {
           <FeatureCard title="Contracts Tab" description="View and upload contract documents (PDF) associated with this song. Download or delete existing contracts." />
           <FeatureCard title="Rights & Splits Tab" description="View and manage rights splits for this song. See who owns what percentage of which rights type." />
         </div>
+
+        <SubHeading>Direct Song Splits</SubHeading>
+        <p className="text-[#7A8580] mb-3">
+          You can add ownership splits directly to any song without creating a formal contract first. Navigate to a song's <strong>Rights & Splits</strong> tab and click <strong>Add Split</strong>.
+        </p>
+        <ul className="list-disc pl-5 text-[#7A8580] space-y-1 mb-3">
+          <li>Select a rights holder from your roster or type an external contributor's name</li>
+          <li>Choose the rights type (Publishing, Master, Performance, Mechanical, Distribution, Sync, or Other)</li>
+          <li>Enter the share percentage — the system prevents totals exceeding 100% per rights type</li>
+          <li>Optionally add notes for each split entry</li>
+          <li>Remove splits at any time using the delete button</li>
+        </ul>
+        <Tip>Direct splits automatically create a lightweight "Split Sheet" contract behind the scenes, keeping your data organized and exportable.</Tip>
+
+        <SubHeading>Split Sheet PDF Export</SubHeading>
+        <p className="text-[#7A8580] mb-3">
+          Once splits are defined for a song, a <strong>Split Sheet PDF</strong> button appears in the Rights & Splits tab. Click it to download a branded PDF document containing all ownership information, ready for signing. The PDF includes:
+        </p>
+        <ul className="list-disc pl-5 text-[#7A8580] space-y-1 mb-3">
+          <li>Rythm branding and contract metadata</li>
+          <li>Complete split breakdown by rights type with percentage totals</li>
+          <li>Rights holder details (PRO affiliation, IPI number, publisher)</li>
+          <li>Signature blocks for all parties</li>
+        </ul>
+        <Tip>You can also download split sheets from the Contracts page — use the download icon on any contract to choose publishing-only, master-only, or combined split sheets.</Tip>
 
         <SubHeading>Health Score System</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
@@ -432,6 +472,10 @@ export default function UserGuidePage() {
           'Save the contract.',
         ]} />
 
+        <p className="text-[#7A8580] mb-3">
+          <strong>Split Sheet Contracts:</strong> When you add splits directly to a song (from the song detail modal), the system automatically creates a SPLIT_SHEET type contract. These appear in your contracts list and can be managed like any other contract.
+        </p>
+
         <SubHeading>Rights Splits</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           For each asset linked to a contract, you can define rights splits:
@@ -509,6 +553,17 @@ export default function UserGuidePage() {
         <p className="text-sm text-[#7A8580] mb-3">
           The calculation engine applies contract splits to matched transactions, handles advance recoupment, and generates per-holder allocations. Multi-currency support with exchange rate conversion is included.
         </p>
+
+        <SubHeading>Fees & Advances</SubHeading>
+        <p className="text-[#7A8580] mb-3">
+          The <strong>Fees & Advances</strong> tab in the Royalties page provides organization-wide financial tracking:
+        </p>
+        <ul className="list-disc pl-5 text-[#7A8580] space-y-1 mb-3">
+          <li><strong>Fees:</strong> Track management, administration, distribution, sync, and legal fees per creator</li>
+          <li><strong>Advances:</strong> Record advances with amounts, dates, and recoupment tracking</li>
+          <li>View recoupment progress bars showing how much of each advance has been recovered</li>
+          <li>Filter by creator to see individual financial summaries</li>
+        </ul>
 
         {/* ===== 12. PLACEMENTS ===== */}
         <SectionHeading id="placements">12. Placements</SectionHeading>

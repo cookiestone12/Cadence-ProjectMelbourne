@@ -5,7 +5,7 @@ import {
   XMarkIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon,
   MusicalNoteIcon, ChartBarIcon, DocumentTextIcon, LinkIcon,
   DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon, UserIcon,
-  ScaleIcon, PencilSquareIcon
+  ScaleIcon, PencilSquareIcon, PlusIcon
 } from '@heroicons/react/24/outline'
 
 export default function SongDetailModal({ song, onClose, onSongUpdated }) {
@@ -22,12 +22,19 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [saving, setSaving] = useState(false)
   const [editFeedback, setEditFeedback] = useState(null)
   const fileInputRef = useRef(null)
+  const [songSplits, setSongSplits] = useState([])
+  const [showSplitForm, setShowSplitForm] = useState(false)
+  const [splitForm, setSplitForm] = useState({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '' })
+  const [splitSaving, setSplitSaving] = useState(false)
+  const [splitCreators, setSplitCreators] = useState([])
   
   useEffect(() => {
     loadSongDetails()
     loadContracts()
     loadLinkedContracts()
     loadRightsData()
+    loadSongSplits()
+    loadSplitCreators()
   }, [song.id])
   
   async function loadSongDetails() {
@@ -82,7 +89,90 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       setRightsLoading(false)
     }
   }
-  
+
+  async function loadSongSplits() {
+    try {
+      const response = await axios.get(`/api/rights/song-splits/${song.id}`)
+      setSongSplits(response.data.splits || [])
+    } catch (error) {
+      console.error('Failed to load song splits:', error)
+    }
+  }
+
+  async function loadSplitCreators() {
+    try {
+      const orgResponse = await axios.get('/api/organizations/current')
+      const orgId = orgResponse.data.id
+      const response = await axios.get(`/api/creators/org/${orgId}`)
+      setSplitCreators(response.data || [])
+    } catch (error) {
+      console.error('Failed to load creators:', error)
+    }
+  }
+
+  async function handleAddSongSplit() {
+    if (!splitForm.rights_holder_id && !splitForm.rights_holder_name) return
+    if (!splitForm.share_percentage) return
+    setSplitSaving(true)
+    try {
+      const payload = {
+        rights_type: splitForm.rights_type,
+        share_percentage: parseFloat(splitForm.share_percentage),
+        notes: splitForm.notes || ''
+      }
+      if (splitForm.rights_holder_id) {
+        payload.rights_holder_id = parseInt(splitForm.rights_holder_id)
+      } else {
+        payload.rights_holder_name = splitForm.rights_holder_name
+      }
+      await axios.post(`/api/rights/song-splits/${song.id}`, payload)
+      setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '' })
+      setShowSplitForm(false)
+      loadSongSplits()
+      loadRightsData()
+    } catch (error) {
+      console.error('Failed to add split:', error)
+      alert(error.response?.data?.detail || 'Failed to add split')
+    } finally {
+      setSplitSaving(false)
+    }
+  }
+
+  async function handleDownloadSplitSheet() {
+    const standaloneSplit = songSplits.find(s => s.is_standalone && s.contract_id)
+    const contractIds = [...new Set(songSplits.filter(s => s.contract_id).map(s => s.contract_id))]
+    const downloadContractId = standaloneSplit ? standaloneSplit.contract_id : contractIds[0]
+    if (!downloadContractId) return
+    try {
+      const response = await axios.get(`/api/rights/contracts/${downloadContractId}/split-sheet`, {
+        params: { split_type: 'both' },
+        responseType: 'blob',
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `Split_Sheet_${song.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to download split sheet:', error)
+      alert('Failed to download split sheet PDF')
+    }
+  }
+
+  async function handleDeleteSongSplit(splitId) {
+    if (!confirm('Remove this split?')) return
+    try {
+      await axios.delete(`/api/rights/song-splits/${splitId}`)
+      loadSongSplits()
+      loadRightsData()
+    } catch (error) {
+      console.error('Failed to delete split:', error)
+    }
+  }
+
   async function handleContractUpload(event) {
     const file = event.target.files[0]
     if (!file) return
@@ -728,83 +818,221 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
           
           {activeTab === 'rights' && (
             <div className="space-y-6">
-              {rightsLoading ? (
-                <div className="text-center py-12 text-[#7A8580]">Loading rights data...</div>
-              ) : rightsData.length === 0 ? (
-                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-8 text-center">
-                  <ScaleIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
-                  <p className="text-[#3D4A44] font-medium">No rights or contracts assigned</p>
-                  <p className="text-[13px] text-[#7A8580] mt-1">
-                    Link this song to a contract in the Contracts page to define rights splits
-                  </p>
+              <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[17px] font-semibold text-[#3D4A44]">Song Splits</h3>
+                  <div className="flex items-center space-x-2">
+                    {songSplits.length > 0 && (
+                      <button
+                        onClick={handleDownloadSplitSheet}
+                        className="flex items-center space-x-1 px-3 py-1.5 border border-[rgba(59,77,67,0.12)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] transition-colors text-sm"
+                      >
+                        <ArrowDownTrayIcon className="w-4 h-4" />
+                        <span>Split Sheet PDF</span>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowSplitForm(true)}
+                      className="flex items-center space-x-1 px-3 py-1.5 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm"
+                    >
+                      <PlusIcon className="w-4 h-4" />
+                      <span>Add Split</span>
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                rightsData.map((contractInfo, idx) => (
-                  <div key={idx} className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
-                    <div className="flex items-center justify-between mb-4">
+
+                {showSplitForm && (
+                  <div className="mb-4 p-4 bg-[#F5F7F4] rounded-[12px] space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <h3 className="text-[17px] font-semibold text-[#3D4A44]">{contractInfo.contract_title}</h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${
-                            contractInfo.contract_type === 'MASTER' ? 'bg-purple-100 text-purple-700' :
-                            contractInfo.contract_type === 'PUBLISHING' ? 'bg-blue-100 text-blue-700' :
-                            contractInfo.contract_type === 'SYNC_LICENSE' ? 'bg-teal-100 text-teal-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
-                            {(contractInfo.contract_type || '').replace(/_/g, ' ')}
-                          </span>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${
-                            contractInfo.contract_status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
-                            contractInfo.contract_status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
-                            contractInfo.contract_status === 'EXPIRED' ? 'bg-red-100 text-red-700' :
-                            'bg-gray-100 text-gray-700'
-                          }`}>
-                            {contractInfo.contract_status}
-                          </span>
-                        </div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Rights Holder</label>
+                        <select
+                          value={splitForm.rights_holder_id}
+                          onChange={(e) => setSplitForm(prev => ({ ...prev, rights_holder_id: e.target.value, rights_holder_name: e.target.value ? '' : prev.rights_holder_name }))}
+                          className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                        >
+                          <option value="">Select from roster...</option>
+                          {splitCreators.map(c => (
+                            <option key={c.id} value={c.id}>{c.display_name}</option>
+                          ))}
+                        </select>
+                        {!splitForm.rights_holder_id && (
+                          <input
+                            type="text"
+                            placeholder="Or type external contributor name"
+                            value={splitForm.rights_holder_name}
+                            onChange={(e) => setSplitForm(prev => ({ ...prev, rights_holder_name: e.target.value }))}
+                            className="w-full mt-2 border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                          />
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Rights Type</label>
+                        <select
+                          value={splitForm.rights_type}
+                          onChange={(e) => setSplitForm(prev => ({ ...prev, rights_type: e.target.value }))}
+                          className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                        >
+                          <option value="PUBLISHING">Publishing</option>
+                          <option value="MASTER">Master</option>
+                          <option value="PERFORMANCE">Performance</option>
+                          <option value="MECHANICAL">Mechanical</option>
+                          <option value="DISTRIBUTION">Distribution</option>
+                          <option value="SYNC">Sync</option>
+                          <option value="OTHER">Other</option>
+                        </select>
                       </div>
                     </div>
-                    
-                    {contractInfo.splits && contractInfo.splits.length > 0 ? (
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-4 gap-4 px-3 py-2 text-[12px] font-medium text-[#7A8580] uppercase tracking-wider">
-                          <span>Rights Holder</span>
-                          <span>Rights Type</span>
-                          <span>Share</span>
-                          <span>Notes</span>
-                        </div>
-                        {contractInfo.splits.map((split, sidx) => (
-                          <div key={sidx} className="grid grid-cols-4 gap-4 px-3 py-3 bg-[#F5F7F4] rounded-[12px] items-center">
-                            <span className="font-medium text-[#3D4A44] text-[14px]">{split.rights_holder_name}</span>
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-medium w-fit ${
-                              split.rights_type === 'MASTER' ? 'bg-purple-50 text-purple-600' :
-                              split.rights_type === 'PUBLISHING' ? 'bg-blue-50 text-blue-600' :
-                              split.rights_type === 'PERFORMANCE' ? 'bg-amber-50 text-amber-600' :
-                              split.rights_type === 'MECHANICAL' ? 'bg-indigo-50 text-indigo-600' :
-                              'bg-gray-50 text-gray-600'
-                            }`}>
-                              {split.rights_type}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden max-w-[80px]">
-                                <div
-                                  className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full"
-                                  style={{ width: `${Math.min(split.share_percentage, 100)}%` }}
-                                ></div>
-                              </div>
-                              <span className="text-[14px] font-semibold text-[#3D4A44]">{split.share_percentage}%</span>
-                            </div>
-                            <span className="text-[13px] text-[#7A8580] truncate">{split.notes || '-'}</span>
-                          </div>
-                        ))}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Share Percentage</label>
+                        <input
+                          type="number"
+                          placeholder="e.g. 50"
+                          value={splitForm.share_percentage}
+                          onChange={(e) => setSplitForm(prev => ({ ...prev, share_percentage: e.target.value }))}
+                          className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                          min="0" max="100" step="0.1"
+                        />
                       </div>
-                    ) : (
-                      <p className="text-[13px] text-[#7A8580] py-4 text-center bg-[#F5F7F4] rounded-[12px]">
-                        No splits defined for this asset yet
-                      </p>
-                    )}
+                      <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Notes</label>
+                        <input
+                          type="text"
+                          placeholder="Optional notes"
+                          value={splitForm.notes}
+                          onChange={(e) => setSplitForm(prev => ({ ...prev, notes: e.target.value }))}
+                          className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex justify-end space-x-2">
+                      <button
+                        onClick={() => { setShowSplitForm(false); setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '' }) }}
+                        className="px-4 py-2 text-sm text-[#7A8580] border border-[rgba(59,77,67,0.12)] rounded-lg hover:bg-[#EEF1EC] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleAddSongSplit}
+                        disabled={splitSaving || (!splitForm.rights_holder_id && !splitForm.rights_holder_name) || !splitForm.share_percentage}
+                        className="px-4 py-2 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                      >
+                        {splitSaving ? 'Saving...' : 'Save Split'}
+                      </button>
+                    </div>
                   </div>
-                ))
+                )}
+
+                {songSplits.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-5 gap-4 px-3 py-2 text-[12px] font-medium text-[#7A8580] uppercase tracking-wider">
+                      <span>Rights Holder</span>
+                      <span>Rights Type</span>
+                      <span>Share</span>
+                      <span>Notes</span>
+                      <span></span>
+                    </div>
+                    {songSplits.map((split) => (
+                      <div key={split.id} className="grid grid-cols-5 gap-4 px-3 py-3 bg-[#F5F7F4] rounded-[12px] items-center">
+                        <span className="font-medium text-[#3D4A44] text-[14px]">{split.rights_holder_name}</span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-medium w-fit ${
+                          split.rights_type === 'MASTER' ? 'bg-purple-50 text-purple-600' :
+                          split.rights_type === 'PUBLISHING' ? 'bg-blue-50 text-blue-600' :
+                          split.rights_type === 'PERFORMANCE' ? 'bg-amber-50 text-amber-600' :
+                          split.rights_type === 'MECHANICAL' ? 'bg-indigo-50 text-indigo-600' :
+                          'bg-gray-50 text-gray-600'
+                        }`}>
+                          {split.rights_type}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden max-w-[80px]">
+                            <div className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full" style={{ width: `${Math.min(split.share_percentage, 100)}%` }}></div>
+                          </div>
+                          <span className="text-[14px] font-semibold text-[#3D4A44]">{split.share_percentage}%</span>
+                        </div>
+                        <span className="text-[13px] text-[#7A8580] truncate">{split.notes || '-'}</span>
+                        <div className="flex justify-end">
+                          <button onClick={() => handleDeleteSongSplit(split.id)} className="p-1 text-[#7A8580] hover:text-[#C47068] rounded transition-colors" title="Remove split">
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : !showSplitForm ? (
+                  <div className="text-center py-6 bg-[#F5F7F4] rounded-[12px]">
+                    <ScaleIcon className="w-10 h-10 text-[#7A8580] mx-auto mb-2" />
+                    <p className="text-[#3D4A44] font-medium text-sm">No splits defined yet</p>
+                    <p className="text-[12px] text-[#7A8580] mt-1">Click "Add Split" to define ownership percentages</p>
+                  </div>
+                ) : null}
+              </div>
+
+              {rightsData.length > 0 && (
+                <div>
+                  <h3 className="text-[13px] font-semibold text-[#7A8580] uppercase tracking-wide mb-3">Contract-Based Splits</h3>
+                  {rightsData.map((contractInfo, idx) => (
+                    <div key={idx} className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 mb-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h3 className="text-[17px] font-semibold text-[#3D4A44]">{contractInfo.contract_title}</h3>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${
+                              contractInfo.contract_type === 'MASTER' ? 'bg-purple-100 text-purple-700' :
+                              contractInfo.contract_type === 'PUBLISHING' ? 'bg-blue-100 text-blue-700' :
+                              contractInfo.contract_type === 'SYNC_LICENSE' ? 'bg-teal-100 text-teal-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {(contractInfo.contract_type || '').replace(/_/g, ' ')}
+                            </span>
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${
+                              contractInfo.contract_status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                              contractInfo.contract_status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
+                              contractInfo.contract_status === 'EXPIRED' ? 'bg-red-100 text-red-700' :
+                              'bg-gray-100 text-gray-700'
+                            }`}>
+                              {contractInfo.contract_status}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      {contractInfo.splits && contractInfo.splits.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-4 gap-4 px-3 py-2 text-[12px] font-medium text-[#7A8580] uppercase tracking-wider">
+                            <span>Rights Holder</span>
+                            <span>Rights Type</span>
+                            <span>Share</span>
+                            <span>Notes</span>
+                          </div>
+                          {contractInfo.splits.map((split, sidx) => (
+                            <div key={sidx} className="grid grid-cols-4 gap-4 px-3 py-3 bg-[#F5F7F4] rounded-[12px] items-center">
+                              <span className="font-medium text-[#3D4A44] text-[14px]">{split.rights_holder_name}</span>
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-medium w-fit ${
+                                split.rights_type === 'MASTER' ? 'bg-purple-50 text-purple-600' :
+                                split.rights_type === 'PUBLISHING' ? 'bg-blue-50 text-blue-600' :
+                                split.rights_type === 'PERFORMANCE' ? 'bg-amber-50 text-amber-600' :
+                                split.rights_type === 'MECHANICAL' ? 'bg-indigo-50 text-indigo-600' :
+                                'bg-gray-50 text-gray-600'
+                              }`}>
+                                {split.rights_type}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden max-w-[80px]">
+                                  <div className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full" style={{ width: `${Math.min(split.share_percentage, 100)}%` }}></div>
+                                </div>
+                                <span className="text-[14px] font-semibold text-[#3D4A44]">{split.share_percentage}%</span>
+                              </div>
+                              <span className="text-[13px] text-[#7A8580] truncate">{split.notes || '-'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[13px] text-[#7A8580] py-4 text-center bg-[#F5F7F4] rounded-[12px]">No splits defined for this asset yet</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           )}

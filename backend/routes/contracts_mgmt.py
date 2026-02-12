@@ -244,6 +244,203 @@ def get_contracts_for_song(
     } for c in contracts]}
 
 
+@router.get("/song-splits/{song_id}")
+def get_song_splits(
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+    verify_org_access(current_user, song.organization_id, db)
+
+    asset_links = db.query(ContractAsset).filter(
+        ContractAsset.asset_type == "SONG",
+        ContractAsset.asset_id == song_id,
+    ).all()
+
+    splits = []
+    for ca in asset_links:
+        ca_splits = db.query(RightsSplit).filter(RightsSplit.contract_asset_id == ca.id).all()
+        contract = db.query(Contract).filter(Contract.id == ca.contract_id).first()
+        for s in ca_splits:
+            if s.rights_holder_id:
+                holder = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
+                h_name = holder.display_name if holder else (s.rights_holder_name or "Unknown")
+            else:
+                h_name = s.rights_holder_name or "Unknown"
+            splits.append({
+                "id": s.id,
+                "contract_asset_id": s.contract_asset_id,
+                "rights_holder_id": s.rights_holder_id,
+                "rights_holder_name": h_name,
+                "rights_type": s.rights_type,
+                "share_percentage": s.share_percentage,
+                "notes": s.notes,
+                "contract_title": contract.title if contract else None,
+                "contract_id": contract.id if contract else None,
+            })
+
+    standalone_contract = db.query(Contract).filter(
+        Contract.organization_id == song.organization_id,
+        Contract.title == f"Song Splits: {song.title}",
+        Contract.contract_type == "SPLIT_SHEET",
+    ).first()
+
+    if standalone_contract:
+        standalone_ca = db.query(ContractAsset).filter(
+            ContractAsset.contract_id == standalone_contract.id,
+            ContractAsset.asset_type == "SONG",
+            ContractAsset.asset_id == song_id,
+        ).first()
+        if standalone_ca:
+            standalone_splits = db.query(RightsSplit).filter(
+                RightsSplit.contract_asset_id == standalone_ca.id
+            ).all()
+            for s in standalone_splits:
+                if any(existing["id"] == s.id for existing in splits):
+                    continue
+                if s.rights_holder_id:
+                    holder = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
+                    h_name = holder.display_name if holder else (s.rights_holder_name or "Unknown")
+                else:
+                    h_name = s.rights_holder_name or "Unknown"
+                splits.append({
+                    "id": s.id,
+                    "contract_asset_id": s.contract_asset_id,
+                    "rights_holder_id": s.rights_holder_id,
+                    "rights_holder_name": h_name,
+                    "rights_type": s.rights_type,
+                    "share_percentage": s.share_percentage,
+                    "notes": s.notes,
+                    "contract_title": standalone_contract.title,
+                    "contract_id": standalone_contract.id,
+                    "is_standalone": True,
+                })
+
+    return {"splits": splits}
+
+
+@router.post("/song-splits/{song_id}")
+def add_song_split(
+    song_id: int,
+    data: SplitCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+    verify_org_access(current_user, song.organization_id, db)
+
+    if not data.rights_holder_id and not data.rights_holder_name:
+        raise HTTPException(status_code=400, detail="Either rights_holder_id or rights_holder_name is required")
+
+    allowed_rights_types = {"MASTER", "PUBLISHING", "PERFORMANCE", "MECHANICAL", "DISTRIBUTION", "SYNC", "OTHER"}
+    if data.rights_type not in allowed_rights_types:
+        raise HTTPException(status_code=400, detail=f"Invalid rights type. Must be one of: {', '.join(sorted(allowed_rights_types))}")
+
+    if data.share_percentage <= 0 or data.share_percentage > 100:
+        raise HTTPException(status_code=400, detail="Share percentage must be between 0.01 and 100")
+
+    contract = db.query(Contract).filter(
+        Contract.organization_id == song.organization_id,
+        Contract.title == f"Song Splits: {song.title}",
+        Contract.contract_type == "SPLIT_SHEET",
+    ).first()
+
+    if not contract:
+        contract = Contract(
+            organization_id=song.organization_id,
+            title=f"Song Splits: {song.title}",
+            contract_type="SPLIT_SHEET",
+            status="ACTIVE",
+            created_by_user_id=current_user.id,
+        )
+        db.add(contract)
+        db.flush()
+
+    ca = db.query(ContractAsset).filter(
+        ContractAsset.contract_id == contract.id,
+        ContractAsset.asset_type == "SONG",
+        ContractAsset.asset_id == song_id,
+    ).first()
+
+    if not ca:
+        ca = ContractAsset(
+            contract_id=contract.id,
+            asset_type="SONG",
+            asset_id=song_id,
+        )
+        db.add(ca)
+        db.flush()
+
+    existing_total = db.query(func.coalesce(func.sum(RightsSplit.share_percentage), 0)).filter(
+        RightsSplit.contract_asset_id == ca.id,
+        RightsSplit.rights_type == data.rights_type,
+    ).scalar()
+
+    if existing_total + data.share_percentage > 100:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Total {data.rights_type} splits would exceed 100% (existing: {existing_total}%, new: {data.share_percentage}%)"
+        )
+
+    holder_name = data.rights_holder_name
+    if data.rights_holder_id:
+        holder = db.query(Creator).filter(
+            Creator.id == data.rights_holder_id,
+            Creator.organization_id == song.organization_id,
+        ).first()
+        if not holder:
+            raise HTTPException(status_code=404, detail="Rights holder not found in this organization")
+        holder_name = holder_name or holder.display_name
+
+    split = RightsSplit(
+        contract_asset_id=ca.id,
+        rights_holder_id=data.rights_holder_id,
+        rights_holder_name=holder_name,
+        rights_type=data.rights_type,
+        share_percentage=data.share_percentage,
+        notes=data.notes,
+    )
+    db.add(split)
+    db.commit()
+    db.refresh(split)
+
+    return {
+        "id": split.id,
+        "rights_holder_name": holder_name,
+        "rights_type": split.rights_type,
+        "share_percentage": split.share_percentage,
+        "message": "Split added successfully",
+    }
+
+
+@router.delete("/song-splits/{split_id}")
+def delete_song_split(
+    split_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    split = db.query(RightsSplit).filter(RightsSplit.id == split_id).first()
+    if not split:
+        raise HTTPException(status_code=404, detail="Split not found")
+
+    ca = db.query(ContractAsset).filter(ContractAsset.id == split.contract_asset_id).first()
+    if not ca:
+        raise HTTPException(status_code=404, detail="Contract asset not found")
+
+    contract = db.query(Contract).filter(Contract.id == ca.contract_id).first()
+    if contract:
+        verify_org_access(current_user, contract.organization_id, db)
+
+    db.delete(split)
+    db.commit()
+    return {"message": "Split deleted successfully"}
+
+
 @router.get("/contracts/org/{org_id}")
 def list_contracts(
     org_id: int,
@@ -812,11 +1009,14 @@ def export_split_sheet(
                 continue
             if split_type == "master" and s.rights_type not in master_types:
                 continue
-            holder = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
-            party = db.query(ContractParty).filter(
-                ContractParty.contract_id == contract.id,
-                ContractParty.creator_id == s.rights_holder_id,
-            ).first()
+            holder = None
+            party = None
+            if s.rights_holder_id:
+                holder = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
+                party = db.query(ContractParty).filter(
+                    ContractParty.contract_id == contract.id,
+                    ContractParty.creator_id == s.rights_holder_id,
+                ).first()
             filtered_splits.append({
                 "holder": holder,
                 "party": party,
@@ -914,7 +1114,7 @@ def export_split_sheet(
             holder = entry["holder"]
             party = entry["party"]
             s = entry["split"]
-            holder_name = holder.display_name if holder else "Unknown"
+            holder_name = holder.display_name if holder else (s.rights_holder_name or "Unknown")
             party_role = party.party_role if party else "—"
             pro = (holder.primary_pro if holder and holder.primary_pro else "—")
             ipi = (holder.primary_ipi if holder and holder.primary_ipi else "—")
@@ -957,15 +1157,21 @@ def export_split_sheet(
     ))
     elements.append(Spacer(1, 12))
 
-    holders_list = list(all_holders.values())
+    all_external_names = set()
+    for asset in assets_data:
+        for entry in asset["splits"]:
+            if not entry["holder"] and entry["split"].rights_holder_name:
+                all_external_names.add(entry["split"].rights_holder_name)
+
+    signer_names = [h.display_name for h in all_holders.values()] + list(all_external_names)
     sig_rows = []
-    for i in range(0, len(holders_list), 2):
+    for i in range(0, len(signer_names), 2):
         row = []
         for j in range(2):
-            if i + j < len(holders_list):
-                h = holders_list[i + j]
+            if i + j < len(signer_names):
+                name = signer_names[i + j]
                 sig_block = (
-                    f"<b>{h.display_name}</b><br/><br/>"
+                    f"<b>{name}</b><br/><br/>"
                     f"Name: ______________________________<br/><br/>"
                     f"Signature: __________________________<br/><br/>"
                     f"Date: ______________________________"

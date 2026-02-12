@@ -27,6 +27,8 @@ export default function NewCatalogPage() {
     status: ''
   })
   const [showFilters, setShowFilters] = useState(false)
+  const [sortField, setSortField] = useState('title')
+  const [sortDirection, setSortDirection] = useState('asc')
 
   const [selectedSongIds, setSelectedSongIds] = useState(new Set())
   const [showBulkEditModal, setShowBulkEditModal] = useState(false)
@@ -88,6 +90,18 @@ export default function NewCatalogPage() {
     
     return matchesSearch && matchesTab
   })
+
+  const sortedSongs = [...filteredSongs].sort((a, b) => {
+    const dir = sortDirection === 'asc' ? 1 : -1
+    const valA = a[sortField]
+    const valB = b[sortField]
+    if (valA == null && valB == null) return 0
+    if (valA == null) return 1
+    if (valB == null) return -1
+    if (typeof valA === 'string') return valA.localeCompare(valB) * dir
+    if (typeof valA === 'boolean') return ((valA ? 1 : 0) - (valB ? 1 : 0)) * dir
+    return (valA - valB) * dir
+  })
   
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }))
@@ -101,6 +115,15 @@ export default function NewCatalogPage() {
       max_health: '',
       status: ''
     })
+  }
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(field)
+      setSortDirection('asc')
+    }
   }
   
   const getStatusIcon = (value) => {
@@ -473,19 +496,100 @@ export default function NewCatalogPage() {
                     className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
                   />
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Song</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Artist</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Label</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Pub %</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Health</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Released</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Spotify</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Contract</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">PRO</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('title')}>
+                  <div className="flex items-center space-x-1">
+                    <span>Song</span>
+                    {sortField === 'title' ? (
+                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-[#7A8580]">↕</span>
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('primary_artist')}>
+                  <div className="flex items-center space-x-1">
+                    <span>Artist</span>
+                    {sortField === 'primary_artist' ? (
+                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-[#7A8580]">↕</span>
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('label')}>
+                  <div className="flex items-center space-x-1">
+                    <span>Label</span>
+                    {sortField === 'label' ? (
+                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-[#7A8580]">↕</span>
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('publishing_percentage')}>
+                  <div className="flex items-center space-x-1">
+                    <span>Pub %</span>
+                    {sortField === 'publishing_percentage' ? (
+                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-[#7A8580]">↕</span>
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('status_health_score')}>
+                  <div className="flex items-center space-x-1">
+                    <span>Health</span>
+                    {sortField === 'status_health_score' ? (
+                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-[#7A8580]">↕</span>
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('is_released')}>
+                  <div className="flex items-center justify-center space-x-1">
+                    <span>Released</span>
+                    {sortField === 'is_released' ? (
+                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-[#7A8580]">↕</span>
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('spotify_link')}>
+                  <div className="flex items-center space-x-1">
+                    <span>Spotify</span>
+                    {sortField === 'spotify_link' ? (
+                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-[#7A8580]">↕</span>
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('has_contract_executed')}>
+                  <div className="flex items-center space-x-1">
+                    <span>Contract</span>
+                    {sortField === 'has_contract_executed' ? (
+                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-[#7A8580]">↕</span>
+                    )}
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('is_registered_with_pro')}>
+                  <div className="flex items-center space-x-1">
+                    <span>PRO</span>
+                    {sortField === 'is_registered_with_pro' ? (
+                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    ) : (
+                      <span className="text-[#7A8580]">↕</span>
+                    )}
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
-              {filteredSongs.map((song) => (
+              {sortedSongs.map((song) => (
                 <tr 
                   key={song.id} 
                   onClick={() => setSelectedSong(song)}
