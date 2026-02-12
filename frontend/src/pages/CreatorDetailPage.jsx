@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import axios from 'axios'
-import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon, CloudArrowUpIcon, PaperClipIcon } from '@heroicons/react/24/outline'
 import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/24/solid'
 import ActionsTab from '../components/ActionsTab'
 
@@ -47,6 +47,22 @@ export default function CreatorDetailPage() {
   const [accountingLoading, setAccountingLoading] = useState(false)
   const [creatorContracts, setCreatorContracts] = useState([])
   const [contractsLoading, setContractsLoading] = useState(false)
+  const [showCreateContractModal, setShowCreateContractModal] = useState(false)
+  const [createContractForm, setCreateContractForm] = useState({
+    title: '', contract_type: 'MASTER', payment_direction: 'INCOMING', status: 'DRAFT',
+    reference_number: '', start_date: '', end_date: '', territory: '',
+    advance_amount: '', advance_currency: 'USD', notes: '', terms_summary: ''
+  })
+  const [createContractParties, setCreateContractParties] = useState([])
+  const [createContractPartyForm, setCreateContractPartyForm] = useState({ party_name: '', party_role: 'ARTIST', contact_email: '' })
+  const [createContractError, setCreateContractError] = useState('')
+  const [createContractLoading, setCreateContractLoading] = useState(false)
+  const [showUploadDocModal, setShowUploadDocModal] = useState(false)
+  const [uploadDocFile, setUploadDocFile] = useState(null)
+  const [uploadDocContractId, setUploadDocContractId] = useState('')
+  const [uploadDocDescription, setUploadDocDescription] = useState('')
+  const [uploadDocError, setUploadDocError] = useState('')
+  const [uploadDocLoading, setUploadDocLoading] = useState(false)
   const [showAddFeeModal, setShowAddFeeModal] = useState(false)
   const [showAddAdvanceModal, setShowAddAdvanceModal] = useState(false)
   const [feeForm, setFeeForm] = useState({ fee_type: 'MANAGEMENT_FEE', description: '', amount: '', fee_date: '', notes: '' })
@@ -679,6 +695,86 @@ export default function CreatorDetailPage() {
     }
   }
 
+  const PARTY_ROLES = ['LICENSOR', 'LICENSEE', 'PUBLISHER', 'ARTIST', 'LABEL', 'MANAGER', 'PRODUCER', 'OTHER']
+
+  const handleCreateContract = async () => {
+    if (!createContractForm.title.trim()) {
+      setCreateContractError('Please enter a contract title.')
+      return
+    }
+    setCreateContractError('')
+    setCreateContractLoading(true)
+    try {
+      const payload = { ...createContractForm }
+      if (payload.advance_amount) payload.advance_amount = parseFloat(payload.advance_amount)
+      else delete payload.advance_amount
+      if (!payload.start_date) delete payload.start_date
+      if (!payload.end_date) delete payload.end_date
+      if (!payload.reference_number) delete payload.reference_number
+      if (payload.territory && typeof payload.territory === 'string') {
+        payload.territory = payload.territory.split(',').map(t => t.trim()).filter(Boolean)
+      } else {
+        payload.territory = []
+      }
+      payload.creator_id = parseInt(id)
+      const creatorName = creator?.display_name || creator?.legal_name || 'Client'
+      const defaultParty = { party_name: creatorName, party_role: 'ARTIST', creator_id: parseInt(id) }
+      const allParties = [defaultParty, ...createContractParties.map(p => {
+        const cleaned = { ...p }
+        if (!cleaned.contact_email) delete cleaned.contact_email
+        return cleaned
+      })]
+      payload.parties = allParties
+      await axios.post(`/api/rights/contracts/org/${organizationId}`, payload)
+      setShowCreateContractModal(false)
+      setCreateContractForm({
+        title: '', contract_type: 'MASTER', payment_direction: 'INCOMING', status: 'DRAFT',
+        reference_number: '', start_date: '', end_date: '', territory: '',
+        advance_amount: '', advance_currency: 'USD', notes: '', terms_summary: ''
+      })
+      setCreateContractParties([])
+      setCreateContractError('')
+      await loadContracts()
+    } catch (error) {
+      const detail = error.response?.data?.detail
+      setCreateContractError(typeof detail === 'string' ? detail : 'Failed to create contract. Please try again.')
+    } finally {
+      setCreateContractLoading(false)
+    }
+  }
+
+  const handleUploadDoc = async () => {
+    if (!uploadDocFile) {
+      setUploadDocError('Please select a file to upload.')
+      return
+    }
+    if (!uploadDocContractId) {
+      setUploadDocError('Please select which contract to attach this document to.')
+      return
+    }
+    setUploadDocError('')
+    setUploadDocLoading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadDocFile)
+      formData.append('description', uploadDocDescription || uploadDocFile.name)
+      await axios.post(`/api/rights/contracts/${uploadDocContractId}/documents`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setShowUploadDocModal(false)
+      setUploadDocFile(null)
+      setUploadDocContractId('')
+      setUploadDocDescription('')
+      setUploadDocError('')
+      await loadContracts()
+    } catch (error) {
+      const detail = error.response?.data?.detail
+      setUploadDocError(typeof detail === 'string' ? detail : 'Failed to upload document.')
+    } finally {
+      setUploadDocLoading(false)
+    }
+  }
+
   const tabs = [
     { id: 'overview', label: 'Overview' },
     { id: 'records', label: `Records (${songs.length})` },
@@ -1209,19 +1305,56 @@ export default function CreatorDetailPage() {
 
         {activeTab === 'contracts' && (
           <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-[#3D4A44] text-lg">Contracts & Agreements</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setShowUploadDocModal(true); setUploadDocError(''); setUploadDocFile(null); setUploadDocContractId(''); setUploadDocDescription('') }}
+                  disabled={creatorContracts.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  title={creatorContracts.length === 0 ? 'Create a contract first' : 'Upload a document to an existing contract'}
+                >
+                  <CloudArrowUpIcon className="w-4 h-4" />
+                  <span>Upload Document</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setCreateContractForm({ title: '', contract_type: 'MASTER', payment_direction: 'INCOMING', status: 'DRAFT', reference_number: '', start_date: '', end_date: '', territory: '', advance_amount: '', advance_currency: 'USD', notes: '', terms_summary: '' })
+                    setCreateContractParties([])
+                    setCreateContractPartyForm({ party_name: '', party_role: 'ARTIST', contact_email: '' })
+                    setCreateContractError('')
+                    setShowCreateContractModal(true)
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  <span>New Contract</span>
+                </button>
+              </div>
+            </div>
             {contractsLoading ? (
               <div className="text-center py-12 text-[#7A8580]">Loading contracts...</div>
             ) : creatorContracts.length === 0 ? (
               <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.08)] p-12 text-center">
                 <DocumentTextIcon className="w-12 h-12 text-[#B0BDB4] mx-auto mb-3" />
                 <p className="text-[#7A8580] mb-1">No contracts found</p>
-                <p className="text-xs text-[#B0BDB4]">Contracts where {creator.display_name || creator.legal_name} is a party or assigned client will appear here.</p>
+                <p className="text-xs text-[#B0BDB4] mb-4">Contracts where {creator.display_name || creator.legal_name} is a party or assigned client will appear here.</p>
+                <button
+                  onClick={() => {
+                    setCreateContractForm({ title: '', contract_type: 'MASTER', payment_direction: 'INCOMING', status: 'DRAFT', reference_number: '', start_date: '', end_date: '', territory: '', advance_amount: '', advance_currency: 'USD', notes: '', terms_summary: '' })
+                    setCreateContractParties([])
+                    setCreateContractPartyForm({ party_name: '', party_role: 'ARTIST', contact_email: '' })
+                    setCreateContractError('')
+                    setShowCreateContractModal(true)
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  <span>Create First Contract</span>
+                </button>
               </div>
             ) : (
               <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.08)] overflow-hidden">
-                <div className="px-6 py-4 border-b border-[rgba(59,77,67,0.08)]">
-                  <h3 className="font-semibold text-[#3D4A44]">Contracts & Agreements</h3>
-                </div>
                 <div className="divide-y divide-[rgba(59,77,67,0.06)]">
                   {creatorContracts.map(contract => (
                     <Link
@@ -2146,6 +2279,306 @@ export default function CreatorDetailPage() {
                 className="flex-1 px-4 py-3 bg-[#C47068] text-white rounded-xl font-medium hover:bg-[#B05E56] transition-colors disabled:opacity-50"
               >
                 {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreateContractModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <div>
+                <h3 className="text-lg font-semibold text-[#3D4A44]">New Contract</h3>
+                <p className="text-sm text-[#7A8580] mt-0.5">{creator.display_name || creator.legal_name} will be added as a party automatically</p>
+              </div>
+              <button onClick={() => setShowCreateContractModal(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Contract Title *</label>
+                  <input
+                    type="text"
+                    value={createContractForm.title}
+                    onChange={(e) => setCreateContractForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    placeholder="e.g., Master Recording Agreement"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Type</label>
+                  <select
+                    value={createContractForm.contract_type}
+                    onChange={(e) => setCreateContractForm(prev => ({ ...prev, contract_type: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="MASTER">Master</option>
+                    <option value="PUBLISHING">Publishing</option>
+                    <option value="SYNC_LICENSE">Sync License</option>
+                    <option value="DISTRIBUTION">Distribution</option>
+                    <option value="MANAGEMENT">Management</option>
+                    <option value="SPLIT_SHEET">Split Sheet</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Direction</label>
+                  <select
+                    value={createContractForm.payment_direction}
+                    onChange={(e) => setCreateContractForm(prev => ({ ...prev, payment_direction: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="INCOMING">Incoming (Revenue)</option>
+                    <option value="OUTGOING">Outgoing (Expense)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Status</label>
+                  <select
+                    value={createContractForm.status}
+                    onChange={(e) => setCreateContractForm(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="DRAFT">Draft</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="EXPIRED">Expired</option>
+                    <option value="TERMINATED">Terminated</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Reference #</label>
+                  <input
+                    type="text"
+                    value={createContractForm.reference_number}
+                    onChange={(e) => setCreateContractForm(prev => ({ ...prev, reference_number: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    placeholder="e.g., AGR-2026-001"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={createContractForm.start_date}
+                    onChange={(e) => setCreateContractForm(prev => ({ ...prev, start_date: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={createContractForm.end_date}
+                    onChange={(e) => setCreateContractForm(prev => ({ ...prev, end_date: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Territory</label>
+                  <input
+                    type="text"
+                    value={createContractForm.territory}
+                    onChange={(e) => setCreateContractForm(prev => ({ ...prev, territory: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    placeholder="e.g., Worldwide, US, UK"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Advance</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={createContractForm.advance_currency}
+                      onChange={(e) => setCreateContractForm(prev => ({ ...prev, advance_currency: e.target.value }))}
+                      className="w-20 border border-[rgba(59,77,67,0.12)] rounded-lg px-2 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44] text-sm"
+                    >
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                      <option value="GBP">GBP</option>
+                    </select>
+                    <input
+                      type="number"
+                      value={createContractForm.advance_amount}
+                      onChange={(e) => setCreateContractForm(prev => ({ ...prev, advance_amount: e.target.value }))}
+                      className="flex-1 border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Notes</label>
+                  <textarea
+                    value={createContractForm.notes}
+                    onChange={(e) => setCreateContractForm(prev => ({ ...prev, notes: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    rows={2}
+                    placeholder="Additional notes..."
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-[rgba(59,77,67,0.08)] pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-semibold text-[#3D4A44]">Additional Parties</h4>
+                </div>
+                <div className="mb-2 p-2 bg-[#EEF1EC] rounded-lg flex items-center gap-2">
+                  <span className="text-sm text-[#3D4A44] flex-1">{creator.display_name || creator.legal_name}</span>
+                  <span className="text-xs px-2 py-0.5 bg-[#5B8A72] text-white rounded-full">ARTIST</span>
+                  <span className="text-xs text-[#7A8580] italic">auto-added</span>
+                </div>
+                {createContractParties.map((p, idx) => (
+                  <div key={idx} className="flex items-center space-x-2 mb-2 p-2 bg-[#F5F7F4] rounded-lg">
+                    <span className="text-sm text-[#3D4A44] flex-1">{p.party_name}</span>
+                    <span className="text-xs px-2 py-0.5 bg-[#EEF1EC] rounded-full text-[#7A8580]">{p.party_role}</span>
+                    {p.contact_email && <span className="text-xs text-[#7A8580]">{p.contact_email}</span>}
+                    <button onClick={() => setCreateContractParties(prev => prev.filter((_, i) => i !== idx))} className="text-[#7A8580] hover:text-red-500">
+                      <XMarkIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                <div className="grid grid-cols-4 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Name"
+                    value={createContractPartyForm.party_name}
+                    onChange={(e) => setCreateContractPartyForm(prev => ({ ...prev, party_name: e.target.value }))}
+                    className="border border-[rgba(59,77,67,0.12)] rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                  <select
+                    value={createContractPartyForm.party_role}
+                    onChange={(e) => setCreateContractPartyForm(prev => ({ ...prev, party_role: e.target.value }))}
+                    className="border border-[rgba(59,77,67,0.12)] rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    {PARTY_ROLES.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={createContractPartyForm.contact_email}
+                    onChange={(e) => setCreateContractPartyForm(prev => ({ ...prev, contact_email: e.target.value }))}
+                    className="border border-[rgba(59,77,67,0.12)] rounded-lg px-2 py-1.5 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!createContractPartyForm.party_name.trim()) return
+                      setCreateContractParties(prev => [...prev, { ...createContractPartyForm }])
+                      setCreateContractPartyForm({ party_name: '', party_role: 'ARTIST', contact_email: '' })
+                    }}
+                    className="px-3 py-1.5 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+            {createContractError && (
+              <div className="mx-6 mb-0 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {createContractError}
+              </div>
+            )}
+            <div className="flex justify-end space-x-3 p-6 border-t border-[rgba(59,77,67,0.08)]">
+              <button
+                onClick={() => { setShowCreateContractModal(false) }}
+                className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateContract}
+                disabled={!createContractForm.title.trim() || createContractLoading}
+                className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {createContractLoading ? 'Creating...' : 'Create Contract'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUploadDocModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-lg font-semibold text-[#3D4A44]">Upload Contract Document</h3>
+              <button onClick={() => setShowUploadDocModal(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="border-2 border-dashed border-[rgba(59,77,67,0.2)] rounded-lg p-6 text-center hover:border-[#5B8A72] transition-colors">
+                {uploadDocFile ? (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <PaperClipIcon className="w-5 h-5 text-[#5B8A72]" />
+                      <span className="text-sm text-[#3D4A44] truncate max-w-[250px]">{uploadDocFile.name}</span>
+                      <span className="text-xs text-[#7A8580]">({(uploadDocFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+                    </div>
+                    <button onClick={() => setUploadDocFile(null)} className="text-[#7A8580] hover:text-red-500">
+                      <XMarkIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer">
+                    <CloudArrowUpIcon className="w-10 h-10 text-[#7A8580] mx-auto mb-2" />
+                    <p className="text-sm text-[#5B8A72] font-medium">Click to select a contract file</p>
+                    <p className="text-xs text-[#7A8580] mt-1">PDF, DOC, DOCX, Excel, or images (max 50MB)</p>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                      onChange={(e) => { if (e.target.files[0]) setUploadDocFile(e.target.files[0]) }}
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Attach to Contract *</label>
+                <select
+                  value={uploadDocContractId}
+                  onChange={(e) => setUploadDocContractId(e.target.value)}
+                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                >
+                  <option value="">Select a contract...</option>
+                  {creatorContracts.map(c => (
+                    <option key={c.id} value={c.id}>{c.title}{c.reference_number ? ` (${c.reference_number})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description (optional)</label>
+                <input
+                  type="text"
+                  value={uploadDocDescription}
+                  onChange={(e) => setUploadDocDescription(e.target.value)}
+                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  placeholder="e.g., Signed master agreement"
+                />
+              </div>
+            </div>
+            {uploadDocError && (
+              <div className="mx-6 mb-0 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {uploadDocError}
+              </div>
+            )}
+            <div className="flex justify-end space-x-3 p-6 border-t border-[rgba(59,77,67,0.08)]">
+              <button
+                onClick={() => setShowUploadDocModal(false)}
+                className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUploadDoc}
+                disabled={!uploadDocFile || !uploadDocContractId || uploadDocLoading}
+                className="flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CloudArrowUpIcon className="w-5 h-5" />
+                <span>{uploadDocLoading ? 'Uploading...' : 'Upload Document'}</span>
               </button>
             </div>
           </div>
