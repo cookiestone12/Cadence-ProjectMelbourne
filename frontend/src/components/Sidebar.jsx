@@ -203,10 +203,6 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
             <span className="text-[14px]">Settings</span>
           </Link>
           
-          <div className="flex items-center justify-center pt-2 pb-1 opacity-40">
-            <img src="/rythm-logo.png" alt="Powered by Rythm" className="h-6 w-auto object-contain" />
-          </div>
-          
           <button 
             onClick={onLogout}
             className="w-full px-3 py-2.5 text-am-text-secondary hover:text-am-error hover:bg-red-50 rounded-xl transition-all duration-150 text-left flex items-center gap-3 group"

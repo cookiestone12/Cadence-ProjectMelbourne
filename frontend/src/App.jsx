@@ -148,6 +148,9 @@ function App() {
             )}
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
+          <div className="flex items-center justify-center py-6 opacity-30">
+            <img src="/rythm-logo.png" alt="Powered by Rythm" className="h-6 w-auto object-contain" />
+          </div>
         </main>
       </div>
     </Router>
