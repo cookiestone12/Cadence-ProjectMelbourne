@@ -65,18 +65,20 @@ class ResendProvider(EmailProvider):
         try:
             credentials = _get_resend_credentials()
             resend.api_key = credentials["api_key"]
-            sender = from_email or credentials.get("from_email") or "noreply@rythm.app"
+            connector_from = credentials.get("from_email")
+            sender = from_email or connector_from or "onboarding@resend.dev"
 
-            resend.Emails.send({
+            logger.info(f"Attempting to send email to {to} from {sender}")
+            result = resend.Emails.send({
                 "from": sender,
                 "to": [to],
                 "subject": subject,
                 "html": html_body,
             })
-            logger.info(f"Email sent to {to}: {subject}")
+            logger.info(f"Email sent to {to}: {subject} (result: {result})")
             return True
         except Exception as e:
-            logger.error(f"Failed to send email to {to}: {e}")
+            logger.error(f"Failed to send email to {to}: {e}", exc_info=True)
             return False
 
 

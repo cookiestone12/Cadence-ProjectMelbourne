@@ -63,6 +63,10 @@ def ensure_schema_updates():
                 conn.execute(text("ALTER TABLE contracts ADD COLUMN creator_id INTEGER REFERENCES creators(id)"))
                 conn.commit()
                 logger.info("Added creator_id column to contracts")
+            if 'payment_direction' not in contract_cols:
+                conn.execute(text("ALTER TABLE contracts ADD COLUMN payment_direction VARCHAR DEFAULT 'INCOMING'"))
+                conn.commit()
+                logger.info("Added payment_direction column to contracts")
 
         if 'rights_splits' in inspector.get_table_names():
             rs_cols = [c['name'] for c in inspector.get_columns('rights_splits')]
@@ -82,6 +86,12 @@ def ensure_schema_updates():
                         except Exception:
                             pass
                     break
+
+        om_cols = [c['name'] for c in inspector.get_columns('organization_members')]
+        if 'can_manage_roster' not in om_cols:
+            conn.execute(text("ALTER TABLE organization_members ADD COLUMN can_manage_roster BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+            logger.info("Added can_manage_roster column to organization_members")
 
         bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
         for field in bool_to_string_fields:

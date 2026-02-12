@@ -25,6 +25,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
   const location = useLocation()
   const [orgBranding, setOrgBranding] = useState(null)
   const [isOrgAdmin, setIsOrgAdmin] = useState(false)
+  const [canManageRoster, setCanManageRoster] = useState(false)
 
   useEffect(() => {
     const fetchOrgData = async () => {
@@ -34,7 +35,11 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
           axios.get('/api/organizations/current/membership')
         ])
         setOrgBranding(orgRes.data)
-        setIsOrgAdmin(memberRes.data.role === 'OWNER' || memberRes.data.role === 'ADMIN')
+        const role = memberRes.data.role
+        setIsOrgAdmin(role === 'OWNER' || role === 'ADMIN')
+        setCanManageRoster(
+          role === 'OWNER' || role === 'ADMIN' || memberRes.data.can_manage_roster === true
+        )
       } catch {}
     }
     fetchOrgData()
@@ -45,10 +50,10 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     return location.pathname.startsWith(path)
   }
   
-  const navItems = [
+  const allNavItems = [
     { path: '/', label: 'Home', icon: HomeIcon },
     { path: '/search', label: 'Search', icon: MagnifyingGlassIcon },
-    { path: '/roster', label: 'Roster', icon: UsersIcon },
+    { path: '/roster', label: 'Roster', icon: UsersIcon, requiresRoster: true },
     { path: '/catalog', label: 'Catalog', icon: MusicalNoteIcon },
     { path: '/works', label: 'Works', icon: DocumentTextIcon },
     { path: '/releases', label: 'Artist Releases', icon: RectangleStackIcon },
@@ -59,6 +64,11 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/reports', label: 'Reports', icon: ChartBarIcon },
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
   ]
+
+  const navItems = allNavItems.filter(item => {
+    if (item.requiresRoster) return canManageRoster
+    return true
+  })
   
   return (
     <>
@@ -83,7 +93,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
                 <img 
                   src={orgBranding.logo_url} 
                   alt={orgBranding.display_name || orgBranding.name || 'Rythm'} 
-                  className="h-12 w-auto object-contain"
+                  className="h-10 max-w-[140px] object-contain"
                 />
               ) : (
                 <img 
@@ -189,6 +199,10 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
             <Cog6ToothIcon className="w-[20px] h-[20px] stroke-[1.5]" />
             <span className="text-[14px]">Settings</span>
           </Link>
+          
+          <div className="flex items-center justify-center pt-2 pb-1 opacity-40">
+            <img src="/rythm-logo.png" alt="Powered by Rythm" className="h-6 w-auto object-contain" />
+          </div>
           
           <button 
             onClick={onLogout}

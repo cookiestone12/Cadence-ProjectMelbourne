@@ -125,6 +125,7 @@ class OrganizationMember(Base):
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     role = Column(String, nullable=False)
+    can_manage_roster = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     organization = relationship("Organization", back_populates="members")
@@ -877,6 +878,7 @@ class Contract(Base):
 
     title = Column(String, nullable=False, index=True)
     contract_type = Column(String, nullable=False, default="OTHER")
+    payment_direction = Column(String, nullable=True, default="INCOMING")
     status = Column(String, nullable=False, default="DRAFT")
     reference_number = Column(String, nullable=True)
 

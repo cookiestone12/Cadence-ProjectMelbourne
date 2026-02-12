@@ -140,7 +140,7 @@ const RIGHTS_TYPES = ['MECHANICAL', 'PERFORMANCE', 'SYNC', 'MASTER', 'PUBLISHING
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY']
 
 const emptyCreateForm = {
-  title: '', contract_type: 'MASTER', status: 'DRAFT', reference_number: '',
+  title: '', contract_type: 'MASTER', payment_direction: 'INCOMING', status: 'DRAFT', reference_number: '',
   start_date: '', end_date: '', territory: '', advance_amount: '', advance_currency: 'USD',
   notes: '', terms_summary: '', creator_id: '',
 }
@@ -258,6 +258,7 @@ function ContractsPageInner() {
       setEditForm({
         title: res.data.title || '',
         contract_type: res.data.contract_type || 'MASTER',
+        payment_direction: res.data.payment_direction || 'INCOMING',
         status: res.data.status || 'DRAFT',
         reference_number: res.data.reference_number || '',
         start_date: res.data.start_date || '',
@@ -741,9 +742,12 @@ function ContractsPageInner() {
                 <span>{contract.creator_name}</span>
               </p>
             )}
-            <div className="flex items-center space-x-2 mb-3">
+            <div className="flex items-center space-x-2 mb-3 flex-wrap gap-y-1">
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTypeBadgeClass(contract.contract_type)}`}>
                 {TYPE_LABELS[contract.contract_type] || contract.contract_type}
+              </span>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${contract.payment_direction === 'OUTGOING' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                {contract.payment_direction === 'OUTGOING' ? '↑ Outgoing' : '↓ Incoming'}
               </span>
               {contract.territory && (Array.isArray(contract.territory) ? contract.territory.length > 0 : contract.territory) && (
                 <span className="px-2 py-0.5 rounded-full text-xs bg-[#EEF1EC] text-[#7A8580]">
@@ -825,6 +829,17 @@ function ContractsPageInner() {
                     {Object.keys(STATUS_COLORS).map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Payment Direction</label>
+                  <select
+                    value={createForm.payment_direction}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, payment_direction: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="INCOMING">Receiving (Income)</option>
+                    <option value="OUTGOING">Paying Out (Expense)</option>
                   </select>
                 </div>
                 <div>
@@ -1251,6 +1266,17 @@ function ContractsPageInner() {
                         </select>
                       </div>
                       <div>
+                        <label className="block text-sm font-medium text-[#3D4A44] mb-1">Payment Direction</label>
+                        <select
+                          value={editForm.payment_direction}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, payment_direction: e.target.value }))}
+                          className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                        >
+                          <option value="INCOMING">Receiving (Income)</option>
+                          <option value="OUTGOING">Paying Out (Expense)</option>
+                        </select>
+                      </div>
+                      <div>
                         <label className="block text-sm font-medium text-[#3D4A44] mb-1">Client</label>
                         <select
                           value={editForm.creator_id}
@@ -1375,6 +1401,12 @@ function ContractsPageInner() {
                         <p className="text-xs font-medium text-[#7A8580] mb-1">Status</p>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(contractDetail.status)}`}>
                           {contractDetail.status}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-[#7A8580] mb-1">Payment Direction</p>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${contractDetail.payment_direction === 'OUTGOING' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                          {contractDetail.payment_direction === 'OUTGOING' ? '↑ Outgoing (Expense)' : '↓ Incoming (Income)'}
                         </span>
                       </div>
                       <div>

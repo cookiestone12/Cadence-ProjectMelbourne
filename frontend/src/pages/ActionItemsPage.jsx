@@ -122,6 +122,12 @@ export default function ActionItemsPage() {
   const [feedback, setFeedback] = useState(null)
   const [pushingEmail, setPushingEmail] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
+  const [emailForm, setEmailForm] = useState({
+    creator_id: '',
+    send_to: 'me',
+    custom_email: ''
+  })
   const [newAction, setNewAction] = useState({
     action_type: 'GENERAL',
     title: '',
@@ -336,12 +342,35 @@ export default function ActionItemsPage() {
 
   const uniqueTypes = [...new Set(actions.map(a => a.action_type))]
 
-  const handlePushEmail = async (sendToCreator = false) => {
-    if (!filterCreator) return
+  const openEmailModal = () => {
+    setEmailForm({
+      creator_id: filterCreator || '',
+      send_to: 'me',
+      custom_email: ''
+    })
+    setShowEmailModal(true)
+  }
+
+  const handleSendEmail = async () => {
+    if (!emailForm.creator_id) {
+      setFeedback({ type: 'error', msg: 'Please select a creator' })
+      setTimeout(() => setFeedback(null), 4000)
+      return
+    }
+    if (emailForm.send_to === 'custom' && !emailForm.custom_email) {
+      setFeedback({ type: 'error', msg: 'Please enter an email address' })
+      setTimeout(() => setFeedback(null), 4000)
+      return
+    }
     setPushingEmail(true)
     try {
-      const response = await axios.post(`/api/notifications/push-email/creator/${filterCreator}?send_to_creator=${sendToCreator}`)
+      const response = await axios.post('/api/notifications/push-email', {
+        creator_id: parseInt(emailForm.creator_id),
+        send_to: emailForm.send_to,
+        custom_email: emailForm.send_to === 'custom' ? emailForm.custom_email : undefined
+      })
       setFeedback({ type: 'success', msg: response.data.message })
+      setShowEmailModal(false)
       setTimeout(() => setFeedback(null), 4000)
     } catch (error) {
       setFeedback({ type: 'error', msg: error.response?.data?.detail || 'Failed to send email' })
@@ -436,28 +465,14 @@ export default function ActionItemsPage() {
               <ArrowDownTrayIcon className="w-5 h-5" />
               <span>{downloadingPdf ? 'Downloading...' : 'Download Report'}</span>
             </button>
-            {filterCreator && (
-              <button
-                onClick={() => handlePushEmail(false)}
-                disabled={pushingEmail}
-                className="inline-flex items-center space-x-2 px-4 py-2.5 bg-white border border-[rgba(59,77,67,0.2)] text-[#3D4A44] rounded-xl hover:bg-[#EEF1EC] transition-colors disabled:opacity-50 shadow-sm"
-                title="Email this creator's action items to yourself"
-              >
-                <EnvelopeIcon className="w-5 h-5" />
-                <span>{pushingEmail ? 'Sending...' : 'Email Report'}</span>
-              </button>
-            )}
-            {filterCreator && creators.find(c => c.id === parseInt(filterCreator))?.email && (
-              <button
-                onClick={() => handlePushEmail(true)}
-                disabled={pushingEmail}
-                className="inline-flex items-center space-x-2 px-4 py-2.5 bg-[#5A8A9A] text-white rounded-xl hover:bg-[#4A7A8A] transition-colors disabled:opacity-50 shadow-sm"
-                title="Send action items directly to this creator's email"
-              >
-                <EnvelopeIcon className="w-5 h-5" />
-                <span>{pushingEmail ? 'Sending...' : 'Push to Creator'}</span>
-              </button>
-            )}
+            <button
+              onClick={openEmailModal}
+              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-white border border-[rgba(59,77,67,0.2)] text-[#3D4A44] rounded-xl hover:bg-[#EEF1EC] transition-colors shadow-sm"
+              title="Email action items report"
+            >
+              <EnvelopeIcon className="w-5 h-5" />
+              <span>Email Report</span>
+            </button>
             <button
               onClick={handleGenerateCrossModule}
               disabled={generatingCrossModule}
@@ -682,6 +697,85 @@ export default function ActionItemsPage() {
             </span>
           )}
         </div>
+
+        {showEmailModal && (
+          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+              <div className="p-6 border-b border-[rgba(59,77,67,0.1)]">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-[#3D4A44]">Email Action Items</h3>
+                  <button onClick={() => setShowEmailModal(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
+                    <XMarkIcon className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 space-y-5">
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1.5">Creator</label>
+                  <select
+                    value={emailForm.creator_id}
+                    onChange={(e) => setEmailForm({...emailForm, creator_id: e.target.value})}
+                    className="w-full px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="">Select a creator...</option>
+                    {creators.map(c => (
+                      <option key={c.id} value={c.id}>{c.display_name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-2">Send To</label>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-3 p-3 rounded-xl border border-[rgba(59,77,67,0.15)] hover:bg-[#F5F7F4] cursor-pointer transition-colors">
+                      <input type="radio" name="send_to" value="me" checked={emailForm.send_to === 'me'} onChange={(e) => setEmailForm({...emailForm, send_to: e.target.value})} className="accent-[#5B8A72]" />
+                      <div>
+                        <p className="text-sm font-medium text-[#3D4A44]">Send to me (manager)</p>
+                        <p className="text-xs text-[#7A8580]">Receive the report at your account email</p>
+                      </div>
+                    </label>
+                    {emailForm.creator_id && creators.find(c => c.id === parseInt(emailForm.creator_id))?.email && (
+                      <label className="flex items-center gap-3 p-3 rounded-xl border border-[rgba(59,77,67,0.15)] hover:bg-[#F5F7F4] cursor-pointer transition-colors">
+                        <input type="radio" name="send_to" value="creator" checked={emailForm.send_to === 'creator'} onChange={(e) => setEmailForm({...emailForm, send_to: e.target.value})} className="accent-[#5B8A72]" />
+                        <div>
+                          <p className="text-sm font-medium text-[#3D4A44]">Send to creator</p>
+                          <p className="text-xs text-[#7A8580]">{creators.find(c => c.id === parseInt(emailForm.creator_id))?.email}</p>
+                        </div>
+                      </label>
+                    )}
+                    <label className="flex items-center gap-3 p-3 rounded-xl border border-[rgba(59,77,67,0.15)] hover:bg-[#F5F7F4] cursor-pointer transition-colors">
+                      <input type="radio" name="send_to" value="custom" checked={emailForm.send_to === 'custom'} onChange={(e) => setEmailForm({...emailForm, send_to: e.target.value})} className="accent-[#5B8A72]" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-[#3D4A44]">Send to custom email</p>
+                        {emailForm.send_to === 'custom' && (
+                          <input
+                            type="email"
+                            placeholder="email@example.com"
+                            value={emailForm.custom_email}
+                            onChange={(e) => setEmailForm({...emailForm, custom_email: e.target.value})}
+                            className="mt-2 w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        )}
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 border-t border-[rgba(59,77,67,0.1)] flex justify-end gap-3">
+                <button onClick={() => setShowEmailModal(false)} className="px-4 py-2.5 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
+                <button
+                  onClick={handleSendEmail}
+                  disabled={pushingEmail || !emailForm.creator_id}
+                  className="inline-flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:from-[#4A7862] hover:to-[#6A9484] transition-all disabled:opacity-50 shadow-sm text-sm font-medium"
+                >
+                  <EnvelopeIcon className="w-4 h-4" />
+                  <span>{pushingEmail ? 'Sending...' : 'Send Email'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showAddForm && (
           <div className="bg-white rounded-[18px] border border-[#5B8A72] shadow-sm p-6 mb-6">

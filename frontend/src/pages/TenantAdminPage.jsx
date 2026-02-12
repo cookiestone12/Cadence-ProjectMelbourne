@@ -12,7 +12,9 @@ import {
   PhotoIcon,
   SwatchIcon,
   UserGroupIcon,
-  BuildingOfficeIcon
+  BuildingOfficeIcon,
+  EyeIcon,
+  EyeSlashIcon
 } from '@heroicons/react/24/outline'
 
 export default function TenantAdminPage() {
@@ -57,6 +59,16 @@ export default function TenantAdminPage() {
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  const handleToggleRoster = async (userId, value) => {
+    try {
+      await axios.patch(`/api/tenant-admin/members/${userId}/permissions`, { can_manage_roster: value })
+      setMembers(prev => prev.map(m => m.id === userId ? { ...m, can_manage_roster: value } : m))
+      showMsg(value ? 'Roster access granted' : 'Roster access revoked')
+    } catch (err) {
+      showMsg(err.response?.data?.detail || 'Failed to update permissions', true)
+    }
+  }
 
   const handleDeleteMember = async (userId, username) => {
     if (!confirm(`Remove ${username} from this organization?`)) return
@@ -125,6 +137,7 @@ export default function TenantAdminPage() {
           onDelete={handleDeleteMember}
           onResetPassword={setResetPasswordUser}
           onAssignCreators={setAssignCreatorsUser}
+          onToggleRoster={handleToggleRoster}
         />
       )}
 
@@ -160,7 +173,7 @@ export default function TenantAdminPage() {
   )
 }
 
-function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPassword, onAssignCreators }) {
+function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPassword, onAssignCreators, onToggleRoster }) {
   const roleColors = {
     OWNER: 'bg-purple-100 text-purple-700',
     ADMIN: 'bg-blue-100 text-blue-700',
@@ -184,6 +197,7 @@ function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPasswor
               <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">User</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Role</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Status</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider hidden md:table-cell">Roster Access</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider hidden md:table-cell">Assigned Clients</th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider hidden lg:table-cell">Last Login</th>
               <th className="text-right px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Actions</th>
@@ -213,6 +227,24 @@ function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPasswor
                     <span className={`w-1.5 h-1.5 rounded-full ${member.is_active ? 'bg-green-500' : 'bg-red-400'}`} />
                     {member.is_active ? 'Active' : 'Disabled'}
                   </span>
+                </td>
+                <td className="px-4 py-3 hidden md:table-cell">
+                  {member.role === 'OWNER' || member.role === 'ADMIN' ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                      Always
+                    </span>
+                  ) : (
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={member.can_manage_roster || false}
+                        onChange={() => onToggleRoster(member.id, !member.can_manage_roster)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-[#5B8A72] rounded-full peer peer-checked:bg-[#5B8A72] after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+                    </label>
+                  )}
                 </td>
                 <td className="px-4 py-3 hidden md:table-cell">
                   {member.assigned_creators?.length > 0 ? (
@@ -380,6 +412,8 @@ function AddEditMemberModal({ member, onClose, onSave }) {
 function ResetPasswordModal({ user, onClose, onSuccess }) {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [showNewPw, setShowNewPw] = useState(false)
+  const [showConfirmPw, setShowConfirmPw] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -419,11 +453,21 @@ function ResetPasswordModal({ user, onClose, onSuccess }) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-[#3D4A44] mb-1">New Password</label>
-            <input type="password" required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" placeholder="Min 6 characters" />
+            <div className="relative">
+              <input type={showNewPw ? "text" : "password"} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full px-3 py-2 pr-10 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" placeholder="Min 6 characters" />
+              <button type="button" onClick={() => setShowNewPw(!showNewPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-[#7A8580] hover:text-[#5B8A72] transition-colors">
+                {showNewPw ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-[#3D4A44] mb-1">Confirm Password</label>
-            <input type="password" required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+            <div className="relative">
+              <input type={showConfirmPw ? "text" : "password"} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full px-3 py-2 pr-10 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+              <button type="button" onClick={() => setShowConfirmPw(!showConfirmPw)} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-[#7A8580] hover:text-[#5B8A72] transition-colors">
+                {showConfirmPw ? <EyeSlashIcon className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg">Cancel</button>

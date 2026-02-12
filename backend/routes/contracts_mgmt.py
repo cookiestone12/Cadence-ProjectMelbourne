@@ -36,6 +36,7 @@ class PartyCreate(BaseModel):
 class ContractCreate(BaseModel):
     title: str
     contract_type: str = "OTHER"
+    payment_direction: str = "INCOMING"
     status: str = "DRAFT"
     reference_number: Optional[str] = None
     start_date: Optional[date] = None
@@ -52,6 +53,7 @@ class ContractCreate(BaseModel):
 class ContractUpdate(BaseModel):
     title: Optional[str] = None
     contract_type: Optional[str] = None
+    payment_direction: Optional[str] = None
     status: Optional[str] = None
     reference_number: Optional[str] = None
     start_date: Optional[date] = None
@@ -111,6 +113,7 @@ def _contract_to_dict(contract: Contract, db: Session, include_details: bool = F
         "organization_id": contract.organization_id,
         "title": contract.title,
         "contract_type": contract.contract_type,
+        "payment_direction": contract.payment_direction,
         "status": contract.status,
         "reference_number": contract.reference_number,
         "start_date": contract.start_date.isoformat() if contract.start_date else None,
@@ -474,6 +477,7 @@ def create_contract(
         organization_id=org_id,
         title=data.title,
         contract_type=data.contract_type,
+        payment_direction=data.payment_direction,
         status=data.status,
         reference_number=data.reference_number,
         start_date=data.start_date,

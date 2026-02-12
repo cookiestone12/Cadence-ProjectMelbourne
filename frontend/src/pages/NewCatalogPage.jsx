@@ -43,6 +43,8 @@ export default function NewCatalogPage() {
   const [spotifyPreviewLoading, setSpotifyPreviewLoading] = useState(false)
   const [spotifyImportLoading, setSpotifyImportLoading] = useState(false)
   const [spotifyImportResult, setSpotifyImportResult] = useState(null)
+  const [showQuickCreator, setShowQuickCreator] = useState(false)
+  const [quickCreatorName, setQuickCreatorName] = useState('')
   
   useEffect(() => {
     loadData()
@@ -313,6 +315,26 @@ export default function NewCatalogPage() {
     setSpotifyPreviewTracks(null)
     setSpotifySelectedTracks(new Set())
     setSpotifyImportResult(null)
+    setShowQuickCreator(false)
+    setQuickCreatorName('')
+  }
+
+  const handleQuickCreatorCreate = async () => {
+    if (!organizationId || !quickCreatorName.trim()) return
+    try {
+      const res = await axios.post(`/api/creators/org/${organizationId}`, {
+        display_name: quickCreatorName.trim(),
+        roles: ['ARTIST']
+      })
+      const newCreator = res.data
+      const creatorsRes = await axios.get(`/api/creators/org/${organizationId}`)
+      setCreators(creatorsRes.data || [])
+      setSpotifyCreatorId(String(newCreator.id))
+      setShowQuickCreator(false)
+      setQuickCreatorName('')
+    } catch (error) {
+      console.error('Failed to create creator:', error)
+    }
   }
   
   if (loading) {
@@ -947,22 +969,56 @@ export default function NewCatalogPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Assign to Creator (optional)</label>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Assign to Creator <span className="text-red-500">*</span></label>
                     <select
                       value={spotifyCreatorId}
-                      onChange={(e) => setSpotifyCreatorId(e.target.value)}
+                      onChange={(e) => {
+                        if (e.target.value === 'new') {
+                          setShowQuickCreator(true)
+                          setSpotifyCreatorId('')
+                        } else {
+                          setSpotifyCreatorId(e.target.value)
+                          setShowQuickCreator(false)
+                        }
+                      }}
                       className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
                     >
-                      <option value="">No creator assigned</option>
+                      <option value="">Select a creator...</option>
                       {creators.map(creator => (
                         <option key={creator.id} value={creator.id}>{creator.display_name}</option>
                       ))}
+                      <option value="new">+ Create New Creator</option>
                     </select>
+                    {showQuickCreator && (
+                      <div className="mt-2 flex items-center space-x-2">
+                        <input
+                          type="text"
+                          value={quickCreatorName}
+                          onChange={(e) => setQuickCreatorName(e.target.value)}
+                          placeholder="Creator name..."
+                          className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] text-sm"
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleQuickCreatorCreate() }}
+                        />
+                        <button
+                          onClick={handleQuickCreatorCreate}
+                          disabled={!quickCreatorName.trim()}
+                          className="px-3 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm disabled:opacity-50"
+                        >
+                          Create
+                        </button>
+                        <button
+                          onClick={() => { setShowQuickCreator(false); setQuickCreatorName('') }}
+                          className="px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <button
                     onClick={handleSpotifyPreview}
-                    disabled={spotifyPreviewLoading || !spotifyPlaylistUrl}
+                    disabled={spotifyPreviewLoading || !spotifyPlaylistUrl || !spotifyCreatorId}
                     className="px-4 py-2 bg-[#1DB954] text-white rounded-lg hover:bg-[#1aa34a] transition-colors disabled:opacity-50 flex items-center space-x-2"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -1044,7 +1100,7 @@ export default function NewCatalogPage() {
                   {spotifyPreviewTracks && (
                     <button
                       onClick={handleSpotifyImport}
-                      disabled={spotifyImportLoading || spotifySelectedTracks.size === 0}
+                      disabled={spotifyImportLoading || spotifySelectedTracks.size === 0 || !spotifyCreatorId}
                       className="px-4 py-2 bg-[#1DB954] text-white rounded-lg hover:bg-[#1aa34a] transition-colors disabled:opacity-50 flex items-center space-x-2"
                     >
                       <span>{spotifyImportLoading ? 'Importing...' : `Import Selected (${spotifySelectedTracks.size})`}</span>

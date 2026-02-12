@@ -112,6 +112,11 @@ def get_organization_creators(
     
     return result
 
+def check_roster_permission(membership):
+    if membership.role in ("OWNER", "ADMIN"):
+        return True
+    return getattr(membership, 'can_manage_roster', False) or False
+
 @router.post("/org/{org_id}", response_model=CreatorResponse)
 def create_creator(
     org_id: int,
@@ -126,6 +131,9 @@ def create_creator(
     
     if not membership:
         raise HTTPException(status_code=403, detail="Not authorized to access this organization")
+
+    if not check_roster_permission(membership):
+        raise HTTPException(status_code=403, detail="You do not have permission to manage the roster")
     
     creator = Creator(
         organization_id=org_id,
@@ -228,6 +236,9 @@ def update_creator(
     
     if not membership:
         raise HTTPException(status_code=403, detail="Not authorized to update this creator")
+
+    if not check_roster_permission(membership):
+        raise HTTPException(status_code=403, detail="You do not have permission to manage the roster")
     
     if request.display_name is not None:
         creator.display_name = request.display_name
@@ -335,6 +346,9 @@ async def upload_creator_image(
     ).first()
     if not membership:
         raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not check_roster_permission(membership):
+        raise HTTPException(status_code=403, detail="You do not have permission to manage the roster")
 
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Invalid image type. Use JPEG, PNG, WebP, or GIF.")

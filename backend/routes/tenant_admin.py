@@ -40,12 +40,17 @@ class TenantUserResponse(BaseModel):
     email: str
     role: str
     is_active: bool
+    can_manage_roster: bool = False
     created_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
     assigned_creators: List[dict] = []
 
     class Config:
         from_attributes = True
+
+
+class UpdatePermissionsRequest(BaseModel):
+    can_manage_roster: Optional[bool] = None
 
 
 class CreateTenantUserRequest(BaseModel):
@@ -105,6 +110,7 @@ def list_tenant_members(
             email=user.email,
             role=member.role,
             is_active=user.is_active if hasattr(user, 'is_active') else True,
+            can_manage_roster=getattr(member, 'can_manage_roster', False) or False,
             created_at=user.created_at,
             last_login_at=user.last_login_at if hasattr(user, 'last_login_at') else None,
             assigned_creators=[{"id": c.id, "name": c.name} for c in creators]
@@ -284,6 +290,50 @@ def remove_tenant_member(
     db.commit()
 
     return {"message": "Member removed from organization"}
+
+
+@router.patch("/members/{user_id}/permissions")
+def update_member_permissions(
+    user_id: int,
+    request: UpdatePermissionsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    org_id, _ = get_org_admin(db, current_user)
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.organization_id == org_id,
+        OrganizationMember.user_id == user_id
+    ).first()
+
+    if not membership:
+        raise HTTPException(status_code=404, detail="User not found in this organization")
+
+    if request.can_manage_roster is not None:
+        membership.can_manage_roster = request.can_manage_roster
+
+    db.commit()
+    db.refresh(membership)
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    assigned = db.query(Creator).filter(
+        Creator.organization_id == org_id,
+        Creator.assigned_to_user_id == user_id
+    ).all()
+    creators_list = [{"id": c.id, "name": c.name} for c in assigned]
+
+    return TenantUserResponse(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        role=membership.role,
+        is_active=user.is_active if hasattr(user, 'is_active') else True,
+        can_manage_roster=getattr(membership, 'can_manage_roster', False) or False,
+        created_at=user.created_at,
+        last_login_at=user.last_login_at if hasattr(user, 'last_login_at') else None,
+        assigned_creators=creators_list
+    )
 
 
 @router.post("/members/{user_id}/assign-creators")

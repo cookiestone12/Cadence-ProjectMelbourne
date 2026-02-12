@@ -117,6 +117,12 @@ export default function ValuationPage() {
 
   return (
     <div className="p-4 sm:p-8">
+      <div className="fixed inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden" style={{opacity: 0.04}}>
+        <div className="text-[#5B8A72] font-bold text-[120px] tracking-[0.3em] select-none whitespace-nowrap" style={{transform: 'rotate(-30deg)'}}>
+          RYTHM
+        </div>
+      </div>
+
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Catalog Valuation</h1>

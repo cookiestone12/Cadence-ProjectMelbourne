@@ -404,10 +404,18 @@ def send_test_digest(
     return {"message": f"Test digest email sent to {current_user.email}"}
 
 
-@router.post("/push-email/creator/{creator_id}")
-def send_creator_action_items_email(
-    creator_id: int,
-    send_to_creator: bool = False,
+class PushEmailRequest(BaseModel):
+    creator_id: int
+    send_to: str = "me"
+    custom_email: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.post("/push-email")
+def send_action_items_email(
+    request: PushEmailRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -415,31 +423,26 @@ def send_creator_action_items_email(
     from ..utils.priority_engine import sort_by_urgency, group_by_priority, calculate_priority_score
     from ..templates.email_digest import generate_digest_html
     from ..services.email_provider import get_email_provider
-    
-    # Fetch the creator
-    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+
+    creator = db.query(Creator).filter(Creator.id == request.creator_id).first()
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
-    
-    # Validate the creator belongs to the user's organization
+
     user_membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == current_user.id,
         OrganizationMember.organization_id == creator.organization_id
     ).first()
     if not user_membership:
         raise HTTPException(status_code=403, detail="Not authorized to access this creator")
-    
-    # Query ActionItem filtered by creator_id AND status IN ("PENDING", "IN_PROGRESS")
+
     actions = db.query(ActionItem).filter(
-        ActionItem.creator_id == creator_id,
+        ActionItem.creator_id == request.creator_id,
         ActionItem.status.in_(["PENDING", "IN_PROGRESS"])
     ).all()
-    
-    # Sort and group by priority
+
     sorted_actions = sort_by_urgency(actions)
     grouped = group_by_priority(sorted_actions)
-    
-    # Build grouped_items dict for template
+
     now = datetime.utcnow()
     grouped_items = {}
     for level, items in grouped.items():
@@ -452,8 +455,7 @@ def send_creator_action_items_email(
             "action_type": a.action_type,
             "priority_score": calculate_priority_score(a),
         } for a in items]
-    
-    # Build summary stats
+
     overdue_count = sum(1 for a in actions if a.deadline and a.deadline < now)
     summary_stats = {
         "total_items": len(actions),
@@ -461,31 +463,47 @@ def send_creator_action_items_email(
         "critical_count": len(grouped.get("critical", [])),
         "high_count": len(grouped.get("high", [])),
     }
-    
-    # Generate HTML email with creator's display_name in the greeting
+
     user_name = f"Action Items for {creator.display_name}"
     html_body = generate_digest_html(user_name, grouped_items, summary_stats)
-    
-    # Determine recipient email
-    recipient_email = current_user.email
-    if send_to_creator and creator.email:
+
+    if request.send_to == "creator":
         recipient_email = creator.email
-    
+        if not recipient_email:
+            raise HTTPException(status_code=400, detail="This creator does not have an email address on file")
+    elif request.send_to == "custom" and request.custom_email:
+        recipient_email = request.custom_email
+    else:
+        recipient_email = current_user.email
+
     if not recipient_email:
         raise HTTPException(status_code=400, detail="No valid email address to send to")
-    
-    # Send email
+
     provider = get_email_provider()
     success = provider.send_email(
         to=recipient_email,
         subject=f"Rythm - Action Items for {creator.display_name}",
         html_body=html_body,
     )
-    
+
     if not success:
-        raise HTTPException(status_code=500, detail="Failed to send email")
-    
+        raise HTTPException(status_code=500, detail="Failed to send email. Check your email configuration.")
+
     return {"message": f"Email sent to {recipient_email}", "email": recipient_email}
+
+
+@router.post("/push-email/creator/{creator_id}")
+def send_creator_action_items_email_legacy(
+    creator_id: int,
+    send_to_creator: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    request = PushEmailRequest(
+        creator_id=creator_id,
+        send_to="creator" if send_to_creator else "me"
+    )
+    return send_action_items_email(request, db, current_user)
 
 
 @router.get("/digest-pdf")

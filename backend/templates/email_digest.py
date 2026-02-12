@@ -254,8 +254,8 @@ def generate_digest_html(user_name, grouped_items, summary_stats, platform_url="
                         <td align="center" style="padding:30px 0 20px 0;">
                             <table cellpadding="0" cellspacing="0" border="0">
                                 <tr>
-                                    <td align="center" style="font-size:32px;font-weight:bold;color:#5B8A72;font-family:Georgia,'Times New Roman',serif;letter-spacing:2px;">
-                                        Rythm
+                                    <td align="center">
+                                        <img src="https://rythm-app.replit.app/rythm-logo.png" alt="Rythm Logo" style="height:50px;display:block;margin:0 auto;" />
                                     </td>
                                 </tr>
                                 <tr>
@@ -300,7 +300,12 @@ def generate_digest_html(user_name, grouped_items, summary_stats, platform_url="
                         <td align="center" style="padding:30px 20px 10px 20px;">
                             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #d4ddd8;">
                                 <tr>
-                                    <td align="center" style="padding:20px 0 6px 0;font-size:12px;color:#7A8580;font-family:Arial,sans-serif;line-height:1.5;">
+                                    <td align="center" style="padding:20px 0 0 0;">
+                                        <img src="https://rythm-app.replit.app/rythm-logo.png" alt="Rythm Logo" style="height:30px;display:block;margin:0 auto;" />
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="padding:12px 0 6px 0;font-size:12px;color:#7A8580;font-family:Arial,sans-serif;line-height:1.5;">
                                         You received this because you have email digest enabled in Rythm settings.
                                     </td>
                                 </tr>
