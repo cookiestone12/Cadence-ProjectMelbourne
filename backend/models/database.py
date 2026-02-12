@@ -5,14 +5,19 @@ import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/mimedb")
 
+connect_args = {}
+if DATABASE_URL.startswith("postgresql://"):
+    connect_args["connect_timeout"] = 10
+    if "neon" in DATABASE_URL or "replit" in DATABASE_URL:
+        connect_args["sslmode"] = "require"
+
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
     pool_recycle=300,
-    connect_args={
-        "sslmode": "require",
-        "connect_timeout": 10
-    } if DATABASE_URL.startswith("postgresql://") and "neon" in DATABASE_URL else {}
+    pool_size=5,
+    max_overflow=10,
+    connect_args=connect_args,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
