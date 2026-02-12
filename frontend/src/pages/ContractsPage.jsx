@@ -41,7 +41,7 @@ const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY']
 const emptyCreateForm = {
   title: '', contract_type: 'MASTER', status: 'DRAFT', reference_number: '',
   start_date: '', end_date: '', territory: '', advance_amount: '', advance_currency: 'USD',
-  notes: '', terms_summary: '',
+  notes: '', terms_summary: '', creator_id: '',
 }
 
 const emptyPartyForm = { party_name: '', party_role: 'ARTIST', creator_id: '', contact_email: '' }
@@ -155,6 +155,7 @@ export default function ContractsPage() {
         advance_currency: res.data.advance_currency || 'USD',
         notes: res.data.notes || '',
         terms_summary: res.data.terms_summary || '',
+        creator_id: res.data.creator_id || '',
       })
       loadDocuments(contract.id)
     } catch (error) {
@@ -259,6 +260,8 @@ export default function ContractsPage() {
       } else if (!payload.territory) {
         payload.territory = []
       }
+      if (payload.creator_id) payload.creator_id = parseInt(payload.creator_id)
+      else delete payload.creator_id
       if (createParties.length > 0) payload.parties = createParties
       await axios.post(`/api/rights/contracts/org/${organizationId}`, payload)
       setShowCreateModal(false)
@@ -285,6 +288,8 @@ export default function ContractsPage() {
       } else if (!payload.territory) {
         payload.territory = []
       }
+      if (payload.creator_id) payload.creator_id = parseInt(payload.creator_id)
+      else payload.creator_id = null
       await axios.put(`/api/rights/contracts/${contractDetail.id}`, payload)
       setEditMode(false)
       await loadData()
@@ -522,6 +527,12 @@ export default function ContractsPage() {
                 {contract.status}
               </span>
             </div>
+            {contract.creator_name && (
+              <p className="text-xs text-[#5B8A72] font-medium mb-2 flex items-center space-x-1">
+                <UserGroupIcon className="w-3.5 h-3.5" />
+                <span>{contract.creator_name}</span>
+              </p>
+            )}
             <div className="flex items-center space-x-2 mb-3">
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTypeBadgeClass(contract.contract_type)}`}>
                 {TYPE_LABELS[contract.contract_type] || contract.contract_type}
@@ -605,6 +616,19 @@ export default function ContractsPage() {
                   >
                     {Object.keys(STATUS_COLORS).map(s => (
                       <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Client</label>
+                  <select
+                    value={createForm.creator_id}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, creator_id: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="">None</option>
+                    {creators.map(c => (
+                      <option key={c.id} value={c.id}>{c.display_name || c.legal_name || c.name}</option>
                     ))}
                   </select>
                 </div>
@@ -872,6 +896,19 @@ export default function ContractsPage() {
                         </select>
                       </div>
                       <div>
+                        <label className="block text-sm font-medium text-[#3D4A44] mb-1">Client</label>
+                        <select
+                          value={editForm.creator_id}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, creator_id: e.target.value }))}
+                          className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                        >
+                          <option value="">None</option>
+                          {creators.map(c => (
+                            <option key={c.id} value={c.id}>{c.display_name || c.legal_name || c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
                         <label className="block text-sm font-medium text-[#3D4A44] mb-1">Reference Number</label>
                         <input
                           type="text"
@@ -984,6 +1021,10 @@ export default function ContractsPage() {
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadgeClass(contractDetail.status)}`}>
                           {contractDetail.status}
                         </span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-[#7A8580] mb-1">Client</p>
+                        <p className="text-sm text-[#3D4A44]">{contractDetail.creator_name || '-'}</p>
                       </div>
                       <div>
                         <p className="text-xs font-medium text-[#7A8580] mb-1">Start Date</p>

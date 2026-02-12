@@ -72,6 +72,13 @@ def ensure_schema_updates():
             ContractDocument.__table__.create(bind=engine)
             logger.info("Created contract_documents table")
 
+        if 'contracts' in inspector.get_table_names():
+            contract_cols = [c['name'] for c in inspector.get_columns('contracts')]
+            if 'creator_id' not in contract_cols:
+                conn.execute(text("ALTER TABLE contracts ADD COLUMN creator_id INTEGER REFERENCES creators(id)"))
+                conn.commit()
+                logger.info("Added creator_id column to contracts")
+
         bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
         for field in bool_to_string_fields:
             if field in song_cols:

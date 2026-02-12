@@ -870,12 +870,15 @@ class Contract(Base):
     notes = Column(Text, nullable=True)
     terms_summary = Column(Text, nullable=True)
 
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     organization = relationship("Organization")
     created_by = relationship("User")
+    creator = relationship("Creator")
     parties = relationship("ContractParty", back_populates="contract", cascade="all, delete-orphan")
     assets = relationship("ContractAsset", back_populates="contract", cascade="all, delete-orphan")
     documents = relationship("ContractDocument", back_populates="contract", cascade="all, delete-orphan")

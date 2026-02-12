@@ -43,6 +43,7 @@ class ContractCreate(BaseModel):
     advance_currency: str = "USD"
     notes: Optional[str] = None
     terms_summary: Optional[str] = None
+    creator_id: Optional[int] = None
     parties: Optional[List[PartyCreate]] = []
 
 
@@ -59,6 +60,7 @@ class ContractUpdate(BaseModel):
     advance_recouped: Optional[float] = None
     notes: Optional[str] = None
     terms_summary: Optional[str] = None
+    creator_id: Optional[int] = None
 
 
 class AssetLink(BaseModel):
@@ -94,6 +96,12 @@ def _contract_to_dict(contract: Contract, db: Session, include_details: bool = F
             "created_at": p.created_at.isoformat() if p.created_at else None,
         })
 
+    creator_name = None
+    if contract.creator_id:
+        creator = db.query(Creator).filter(Creator.id == contract.creator_id).first()
+        if creator:
+            creator_name = creator.display_name or creator.legal_name
+
     result = {
         "id": contract.id,
         "organization_id": contract.organization_id,
@@ -109,6 +117,8 @@ def _contract_to_dict(contract: Contract, db: Session, include_details: bool = F
         "advance_recouped": contract.advance_recouped,
         "notes": contract.notes,
         "terms_summary": contract.terms_summary,
+        "creator_id": contract.creator_id,
+        "creator_name": creator_name,
         "created_at": contract.created_at.isoformat() if contract.created_at else None,
         "updated_at": contract.updated_at.isoformat() if contract.updated_at else None,
         "created_by_user_id": contract.created_by_user_id,
@@ -199,6 +209,7 @@ def create_contract(
         advance_currency=data.advance_currency,
         notes=data.notes,
         terms_summary=data.terms_summary,
+        creator_id=data.creator_id,
         created_by_user_id=current_user.id,
     )
     db.add(contract)
