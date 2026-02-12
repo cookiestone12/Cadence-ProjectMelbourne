@@ -52,6 +52,10 @@ localPort = 5001
 externalPort = 3002
 
 [[ports]]
+localPort = 5555
+externalPort = 3001
+
+[[ports]]
 localPort = 8000
 externalPort = 8000
 
@@ -65,7 +69,7 @@ packages = ["cargo", "freetype", "glibcLocales", "libiconv", "libxcrypt", "opens
 
 [deployment]
 build = ["sh", "-c", "cd frontend && npm run build && cd .. && python -m backend.db_setup"]
-run = ["gunicorn", "backend.production:app", "-c", "backend/gunicorn_config.py"]
+run = ["uvicorn", "backend.production:app", "--host", "0.0.0.0", "--port", "5000"]
 deploymentTarget = "vm"
 
 [userenv]
