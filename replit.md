@@ -31,7 +31,7 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Cross-Module Task Auto-Generation**: Automated task creation for contract expirations, release readiness gaps, and placement follow-ups.
 - **Core Catalog & Creator Management**: Expanded data models for `Works` (compositions) and `Releases` (albums/EPs) with `work_type` and `IPAssetType` enum for broader IP management.
 - **Creative Directory**: A contact management system for industry collaborators with CRUD functionality, searchable UI, role filtering, and PDF export.
-- **Registration Reports**: Generates PRO registration readiness reports for works and songs, validating credits, IPIs, affiliations, and share percentages, with CSV and branded PDF export.
+- **Registration Reports**: Operational PRO registration workflow. Tracks `is_registered_with_pro` flag on Songs and Works. Supports Outstanding/Registered filtering, creator grouping, checkbox selection for aggregating items into reports. Generates branded PDF reports for selected items. Includes direct email-to-admin feature via Resend with PDF attachment, plus CSV and manual PDF download options.
 - **Spotify Integration**: Integrates with the Spotify API for playlist import and track search.
 - **Alembic Migrations**: Manages database migrations.
 - **Production Server**: Configured with Gunicorn and Uvicorn workers for production deployment.
