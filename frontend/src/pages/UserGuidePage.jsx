@@ -1,7 +1,7 @@
 import React, { useRef } from 'react'
 import { ArrowDownTrayIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 
-const VERSION = '2.0'
+const VERSION = '2.1'
 const LAST_UPDATED = 'February 2026'
 
 const sections = [
@@ -158,9 +158,10 @@ export default function UserGuidePage() {
         </p>
 
         <SubHeading>User Roles</SubHeading>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 my-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
           <FeatureCard title="Member" description="Standard access to all catalog management features within your organization." />
-          <FeatureCard title="Admin" description="Full access plus organization settings, user management, and configuration." />
+          <FeatureCard title="Admin" description="Full access plus organization settings, user management, and team configuration via the Org Admin panel." />
+          <FeatureCard title="Owner" description="Highest organization-level role with all Admin capabilities plus the ability to transfer ownership and manage billing." />
           <FeatureCard title="Super Admin" description="Platform-wide access for managing all organizations and users (platform operators only)." />
         </div>
 
@@ -390,12 +391,24 @@ export default function UserGuidePage() {
           Works represent the underlying musical compositions, separate from their recorded versions (songs/tracks). A single work can have multiple recordings. This distinction is important for publishing rights management.
         </p>
 
+        <SubHeading>Work Types</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Each work has a type that indicates its nature:
+        </p>
+        <div className="flex gap-3 my-3 flex-wrap">
+          <span className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">DEMO — Song with lyrics and melodies</span>
+          <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">TRACK — Instrumental or beat</span>
+        </div>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Work types appear as color-coded badges in the works list. You can filter works by type using the filter controls on the Works page.
+        </p>
+
         <SubHeading>Managing Works</SubHeading>
         <StepList steps={[
           'Navigate to the Works page from the sidebar.',
-          'View all works in a searchable list with title, ISWC, and associated track count.',
+          'View all works in a searchable list with title, ISWC, type badge, and associated track count.',
           'Click + Add Work to create a new composition record.',
-          'Fill in the work title, ISWC (if available), alternative titles, and other metadata.',
+          'Fill in the work title, type (Demo or Track), ISWC (if available), alternative titles, and other metadata.',
           'Save the work, then link recordings (songs) and add credits.',
         ]} />
 
@@ -453,8 +466,13 @@ export default function UserGuidePage() {
 
         <SubHeading>Metadata Export</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          Once ready, export your release metadata in CSV or JSON format for submission to distribution partners. Use the export buttons in the Release Builder view.
+          Once ready, export your release metadata for submission to distribution partners. Three export formats are available in the Release Builder:
         </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 my-4">
+          <FeatureCard title="CSV Export" description="Spreadsheet-compatible format for easy editing and distribution system import." />
+          <FeatureCard title="JSON Export" description="Structured data format for automated distribution pipelines and API integrations." />
+          <FeatureCard title="PDF Export" description="Branded PDF document with full release metadata, track listing with audio links, lyrics, credits, and readiness summary." />
+        </div>
 
         {/* ===== 9. CONTRACTS ===== */}
         <SectionHeading id="contracts">9. Contracts & Rights</SectionHeading>
@@ -544,10 +562,12 @@ export default function UserGuidePage() {
           'Navigate to the Royalties page.',
           'Click "Upload Statement" to import a royalty statement.',
           'Upload a CSV or Excel file containing transaction data.',
-          'The system automatically matches transactions to your catalog using ISRC, title, and artist name (fuzzy matching).',
+          'The system auto-detects the PRO source (BMI, ASCAP, SESAC, SoundExchange, SOCAN, PRS) and maps columns accordingly.',
+          'Transactions are automatically matched to your catalog using ISRC, title, and artist name (fuzzy matching).',
           'Review matches and resolve any unmatched transactions.',
           'Confirmed transactions are processed through the calculation engine.',
         ]} />
+        <Tip>The system supports statements from all major PROs. If your statement format is not auto-detected, you can manually map columns during the upload process.</Tip>
 
         <SubHeading>Royalty Calculation</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
@@ -655,6 +675,32 @@ export default function UserGuidePage() {
           Customize which events trigger notifications. You can enable or disable notifications for various event types at both the user level (your personal preferences) and the organization level (defaults for all members). Available notification channels include in-app notifications and email.
         </p>
 
+        <SubHeading>Email Digest</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Email Digest tab lets you configure automated email summaries of your action items. When enabled, the system sends branded HTML emails to your registered email address on a schedule you choose.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Toggle On/Off" description="Enable or disable email digest notifications with a single click." />
+          <FeatureCard title="Frequency" description="Choose how often you receive digests: Daily, Every 3 Days, Weekly, Biweekly, or Monthly." />
+          <FeatureCard title="Priority Threshold" description="Filter which action items appear in your digest: Critical Only, High & Above, Medium & Above, or All priorities." />
+          <FeatureCard title="Delivery Time" description="Set your preferred hour of the day (in UTC) for receiving digest emails." />
+        </div>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Each digest email groups your pending action items by priority level (Critical, High, Medium, Low), includes overdue warnings, and provides a summary of total items, overdue counts, and priority breakdowns. Use the <ButtonRef label="Send Test Email" color="green" /> button to preview what your digest will look like with your current settings and filters.
+        </p>
+        <Tip>Set your digest frequency to match your workflow. Daily digests work well for active catalog managers, while weekly digests suit periodic reviewers. The priority threshold filter helps you focus only on what matters most.</Tip>
+
+        <SubHeading>Organization Admin Panel</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Users with Owner or Admin roles can access the Organization Admin panel from the sidebar. This panel provides team and branding management:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Team Management" description="Invite new members, assign roles (Member, Admin, Owner), and remove users from your organization." />
+          <FeatureCard title="Password Resets" description="Reset passwords for team members who are locked out of their accounts." />
+          <FeatureCard title="Client/Creator Assignment" description="Assign specific clients or creators to individual team members for workload management." />
+          <FeatureCard title="Organization Branding" description="Customize your organization's logo, display name, and primary color theme." />
+        </div>
+
         <SubHeading>Account Linking</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           Link Individual accounts to Enterprise organizations for creators who work across multiple labels or publishers. Account linking requires mutual consent from both parties and enables cross-organization visibility where permitted.
@@ -689,6 +735,7 @@ export default function UserGuidePage() {
           <Tip>Use the Home Dashboard as your daily starting point. It surfaces the most urgent items across all modules.</Tip>
           <Tip>Keep the Action Items inbox clean by completing or updating tasks regularly. Use priority and due date to triage effectively.</Tip>
           <Tip>Run the Catalog Valuation tool quarterly to track your catalog's value growth and build a data-driven case for investment.</Tip>
+          <Tip>Enable Email Digests in Settings to receive scheduled summaries of your action items. Set the priority threshold to "High & Above" to focus on critical tasks without inbox overload.</Tip>
         </div>
 
         {/* ===== 17. GLOSSARY ===== */}
@@ -714,6 +761,11 @@ export default function UserGuidePage() {
             ['Work', 'A musical composition — the underlying song as written, separate from any particular recording of it.'],
             ['Release', 'A package of recordings (single, EP, album, compilation) delivered to streaming platforms and retailers.'],
             ['Rights Split', 'The percentage allocation of specific rights types (master, publishing, sync, etc.) among rights holders for a given asset.'],
+            ['Split Sheet', 'A document that records the ownership percentages of a song among its creators, typically signed by all parties before release.'],
+            ['Email Digest', 'An automated, scheduled email summarizing your pending action items, grouped by priority level, sent at your chosen frequency.'],
+            ['Advance', 'An upfront payment to a creator or rights holder, recouped from future royalty earnings before additional payments are made.'],
+            ['Fee', 'A charge deducted from earnings for services such as management, administration, distribution, sync licensing, or legal representation.'],
+            ['Demo', 'A work type indicating a song with lyrics and melodies, as opposed to a purely instrumental track.'],
           ].map(([term, definition]) => (
             <div key={term} className="flex gap-3">
               <span className="font-semibold text-[#3D4A44] min-w-[160px] text-sm">{term}</span>
