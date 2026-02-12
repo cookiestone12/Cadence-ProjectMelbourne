@@ -178,7 +178,7 @@ def import_playlist_tracks(
             credited_creator_ids.add(creator.id)
             credits_created += 1
 
-        if track_data.all_artists:
+        if track_data.all_artists and not creator:
             for idx, artist_name in enumerate(track_data.all_artists):
                 if not artist_name:
                     continue
