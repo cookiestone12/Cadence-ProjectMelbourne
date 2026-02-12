@@ -61,15 +61,20 @@ def preview_playlist_import(
 ):
     verify_org_access(current_user, org_id, db)
 
-    from ..services.spotify_service import SpotifyForbiddenError, SpotifyAuthError
+    from ..services.spotify_service import SpotifyForbiddenError, SpotifyAuthError, SpotifyNotFoundError
 
     try:
         tracks = spotify_service.get_playlist_tracks(data.playlist_url)
+    except SpotifyNotFoundError as e:
+        logger.warning(f"Spotify 404 for org {org_id}: {e}")
+        raise HTTPException(status_code=404, detail=str(e))
     except SpotifyForbiddenError as e:
         logger.error(f"Spotify 403 for org {org_id}: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except SpotifyAuthError as e:
         logger.error(f"Spotify auth error for org {org_id}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Spotify playlist preview error for org {org_id}: {e}", exc_info=True)
@@ -82,7 +87,7 @@ def preview_playlist_import(
             raise HTTPException(status_code=400, detail="Spotify is not connected. Please reconnect the Spotify integration in your project settings, or set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables.")
 
         logger.warning(f"Spotify playlist preview: empty result for org {org_id}, playlist URL: {data.playlist_url}")
-        raise HTTPException(status_code=400, detail="Could not fetch playlist tracks. Please check that the playlist URL is correct and the playlist is public or accessible.")
+        raise HTTPException(status_code=400, detail="Could not fetch playlist tracks. The playlist may be empty or not accessible.")
 
     existing_isrcs = set()
     existing_songs = db.query(Song.isrc).filter(

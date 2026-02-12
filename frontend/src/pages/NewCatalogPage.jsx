@@ -999,7 +999,7 @@ export default function NewCatalogPage() {
               </svg>
               <span>Import from Spotify</span>
             </h3>
-            <p className="text-sm text-[#7A8580] mb-4">Import tracks from a Spotify playlist into your catalog.</p>
+            <p className="text-sm text-[#7A8580] mb-4">Import tracks from a Spotify playlist, artist, or album into your catalog.</p>
 
             {spotifyImportResult ? (
               <div className="flex-1 flex flex-col items-center justify-center py-8">
@@ -1048,12 +1048,12 @@ export default function NewCatalogPage() {
               <>
                 <div className="space-y-4 mb-4">
                   <div>
-                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Spotify Playlist URL</label>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Spotify URL</label>
                     <input
                       type="url"
                       value={spotifyPlaylistUrl}
                       onChange={(e) => setSpotifyPlaylistUrl(e.target.value)}
-                      placeholder="https://open.spotify.com/playlist/..."
+                      placeholder="https://open.spotify.com/playlist/... or artist/... or album/..."
                       className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
                     />
                   </div>

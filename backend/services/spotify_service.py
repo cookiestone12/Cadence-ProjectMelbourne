@@ -136,6 +136,10 @@ def _get_access_token() -> Optional[str]:
     return None
 
 
+class SpotifyNotFoundError(Exception):
+    pass
+
+
 def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dict]:
     import logging
     logger = logging.getLogger("rythm")
@@ -154,11 +158,14 @@ def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dic
         if resp.status_code == 401:
             logger.error(f"Spotify API 401 Unauthorized: token may be expired")
             raise SpotifyAuthError("Spotify token has expired. Please reconnect the Spotify integration.")
+        if resp.status_code == 404:
+            logger.error(f"Spotify API 404 Not Found: {endpoint}")
+            raise SpotifyNotFoundError(f"Resource not found: {endpoint}")
         if resp.status_code != 200:
             logger.error(f"Spotify API error: status={resp.status_code} body={resp.text[:500]}")
         resp.raise_for_status()
         return resp.json()
-    except (SpotifyForbiddenError, SpotifyAuthError):
+    except (SpotifyForbiddenError, SpotifyAuthError, SpotifyNotFoundError):
         raise
     except Exception as e:
         logger.error(f"Spotify API exception: {e}")
@@ -247,45 +254,216 @@ def _fetch_playlist_with_token(playlist_id: str, token: str, logger) -> List[Dic
     return tracks
 
 
+def _extract_spotify_url_type(url: str):
+    import re
+    url = url.strip()
+
+    web_pattern = re.compile(r'spotify\.com/(?:[a-z]{2}(?:-[a-z]{2})?/)?(?:intl-[a-z]+/)?(playlist|artist|album|track)/([A-Za-z0-9]+)')
+    m = web_pattern.search(url)
+    if m:
+        return m.group(1), m.group(2)
+
+    uri_pattern = re.compile(r'^spotify:(playlist|artist|album|track):([A-Za-z0-9]+)$')
+    m = uri_pattern.match(url)
+    if m:
+        return m.group(1), m.group(2)
+
+    if re.match(r'^[A-Za-z0-9]{22}$', url):
+        return "playlist", url
+
+    return "unknown", None
+
+
+def _fetch_artist_tracks(artist_id: str, token: str, logger) -> List[Dict[str, Any]]:
+    artist_data = _spotify_get(f"artists/{artist_id}", token)
+    artist_name = artist_data.get("name", "Unknown") if artist_data else "Unknown"
+
+    all_albums = []
+    offset = 0
+    while True:
+        albums_data = _spotify_get(f"artists/{artist_id}/albums", token, {
+            "include_groups": "album,single",
+            "limit": 50,
+            "offset": offset,
+        })
+        if not albums_data or not albums_data.get("items"):
+            break
+        all_albums.extend(albums_data["items"])
+        if not albums_data.get("next"):
+            break
+        offset += 50
+
+    if not all_albums:
+        return []
+
+    tracks = []
+    seen_names = set()
+    for album in all_albums:
+        album_id = album.get("id")
+        album_name = album.get("name", "")
+        release_date = album.get("release_date", "")
+        album_art = album.get("images", [{}])[0].get("url") if album.get("images") else None
+
+        album_detail = _spotify_get(f"albums/{album_id}", token)
+        if not album_detail:
+            continue
+
+        label = album_detail.get("label", "")
+
+        for t in album_detail.get("tracks", {}).get("items", []):
+            track_name = t.get("name", "")
+            dedup_key = f"{track_name.lower().strip()}|{artist_name.lower().strip()}"
+            if dedup_key in seen_names:
+                continue
+            seen_names.add(dedup_key)
+
+            artists = [a.get("name") for a in t.get("artists", [])]
+            spotify_url = t.get("external_urls", {}).get("spotify")
+
+            tracks.append({
+                "title": track_name,
+                "primary_artist": artists[0] if artists else artist_name,
+                "all_artists": artists if artists else [artist_name],
+                "isrc": None,
+                "album_name": album_name,
+                "release_date": release_date,
+                "spotify_url": spotify_url,
+                "spotify_id": t.get("id"),
+                "duration_ms": t.get("duration_ms"),
+                "popularity": None,
+                "album_art": album_art,
+                "label": label,
+                "track_number": t.get("track_number"),
+                "disc_number": t.get("disc_number"),
+                "explicit": t.get("explicit"),
+            })
+
+    return tracks
+
+
+def _fetch_album_tracks(album_id: str, token: str, logger) -> List[Dict[str, Any]]:
+    album_detail = _spotify_get(f"albums/{album_id}", token)
+    if not album_detail:
+        return []
+
+    album_name = album_detail.get("name", "")
+    release_date = album_detail.get("release_date", "")
+    label = album_detail.get("label", "")
+    album_art = album_detail.get("images", [{}])[0].get("url") if album_detail.get("images") else None
+    album_artists = [a.get("name") for a in album_detail.get("artists", [])]
+
+    tracks = []
+    for t in album_detail.get("tracks", {}).get("items", []):
+        artists = [a.get("name") for a in t.get("artists", [])]
+        track_name = t.get("name", "")
+        primary = artists[0] if artists else (album_artists[0] if album_artists else "Unknown")
+
+        isrc = None
+        try:
+            search_results = _spotify_get("search", token, {"q": f"track:{track_name} artist:{primary}", "type": "track", "limit": 1})
+            if search_results and search_results.get("tracks", {}).get("items"):
+                sr = search_results["tracks"]["items"][0]
+                isrc = sr.get("external_ids", {}).get("isrc")
+        except Exception:
+            pass
+
+        tracks.append({
+            "title": track_name,
+            "primary_artist": primary,
+            "all_artists": artists if artists else album_artists,
+            "isrc": isrc,
+            "album_name": album_name,
+            "release_date": release_date,
+            "spotify_url": t.get("external_urls", {}).get("spotify"),
+            "spotify_id": t.get("id"),
+            "duration_ms": t.get("duration_ms"),
+            "popularity": None,
+            "album_art": album_art,
+            "label": label,
+            "track_number": t.get("track_number"),
+            "disc_number": t.get("disc_number"),
+            "explicit": t.get("explicit"),
+        })
+
+    return tracks
+
+
 def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
     import logging
     logger = logging.getLogger("rythm")
 
-    playlist_id = None
-    if "spotify.com/playlist/" in playlist_url:
-        playlist_id = playlist_url.split("spotify.com/playlist/")[-1].split("?")[0].split("/")[0]
-    elif playlist_url.startswith("spotify:playlist:"):
-        playlist_id = playlist_url.split("spotify:playlist:")[-1]
-    else:
-        playlist_id = playlist_url.strip()
+    url_type, resource_id = _extract_spotify_url_type(playlist_url)
 
-    if not playlist_id:
-        logger.error(f"Spotify: Could not extract playlist ID from URL: {playlist_url}")
-        return []
+    if not resource_id or url_type == "unknown":
+        raise ValueError("Could not recognize that Spotify URL. Please paste a valid Spotify playlist, artist, or album link.")
 
-    logger.info(f"Spotify: Fetching playlist {playlist_id} from URL: {playlist_url}")
+    if url_type == "track":
+        raise ValueError("That looks like a single track URL. Please paste a playlist, artist, or album link to import multiple tracks.")
+
+    logger.info(f"Spotify: Detected URL type '{url_type}' with ID '{resource_id}' from: {playlist_url}")
 
     cc_token = _get_client_credentials_token()
     connector_token = _get_replit_access_token()
 
-    for token_name, token in [("client_credentials", cc_token), ("connector", connector_token)]:
-        if not token:
-            continue
+    tokens = [(n, t) for n, t in [("client_credentials", cc_token), ("connector", connector_token)] if t]
+
+    if not tokens:
+        raise SpotifyAuthError("Spotify is not connected. Please check your Spotify credentials.")
+
+    if url_type == "artist":
+        for token_name, token in tokens:
+            try:
+                logger.info(f"Spotify: Fetching artist discography with {token_name} token")
+                tracks = _fetch_artist_tracks(resource_id, token, logger)
+                if tracks:
+                    logger.info(f"Spotify: Got {len(tracks)} tracks from artist discography")
+                    return tracks
+            except (SpotifyNotFoundError, SpotifyForbiddenError, SpotifyAuthError) as e:
+                logger.warning(f"Spotify: {token_name} failed for artist: {e}")
+                continue
+        raise SpotifyNotFoundError("Could not find this artist on Spotify. Please check the URL.")
+
+    if url_type == "album":
+        for token_name, token in tokens:
+            try:
+                logger.info(f"Spotify: Fetching album tracks with {token_name} token")
+                tracks = _fetch_album_tracks(resource_id, token, logger)
+                if tracks:
+                    logger.info(f"Spotify: Got {len(tracks)} tracks from album")
+                    return tracks
+            except (SpotifyNotFoundError, SpotifyForbiddenError, SpotifyAuthError) as e:
+                logger.warning(f"Spotify: {token_name} failed for album: {e}")
+                continue
+        raise SpotifyNotFoundError("Could not find this album on Spotify. Please check the URL.")
+
+    all_404 = True
+    for token_name, token in tokens:
         try:
             logger.info(f"Spotify: Trying playlist fetch with {token_name} token")
-            tracks = _fetch_playlist_with_token(playlist_id, token, logger)
+            tracks = _fetch_playlist_with_token(resource_id, token, logger)
+            all_404 = False
             if tracks:
                 logger.info(f"Spotify: Got {len(tracks)} tracks with {token_name} token")
                 return tracks
+        except SpotifyNotFoundError as e:
+            logger.warning(f"Spotify: {token_name} token got 404 for playlist {resource_id}: {e}")
+            continue
         except (SpotifyForbiddenError, SpotifyAuthError) as e:
+            all_404 = False
             logger.warning(f"Spotify: {token_name} token failed for playlist: {e}")
             continue
         except Exception as e:
+            all_404 = False
             logger.warning(f"Spotify: {token_name} token error for playlist: {e}")
             continue
 
-    if not cc_token and not connector_token:
-        logger.error("Spotify: No access token available from any source")
+    if all_404:
+        raise SpotifyNotFoundError(
+            "This playlist could not be accessed via the Spotify API. "
+            "Spotify's auto-generated playlists (like 'This Is...' or 'Daily Mix') "
+            "are often not available through the API. "
+            "Try pasting an artist URL, album URL, or a user-created playlist instead."
+        )
 
     return []
 
