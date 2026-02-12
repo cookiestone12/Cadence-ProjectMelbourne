@@ -8,7 +8,7 @@ from .routes import (
     checklist, exports, valuations, valuation_reports, schedule_a,
     contracts, contracts_mgmt, contract_docs, account_links, admin, notifications, actions, csv_upload,
     works, releases, bulk, spotify_import, royalties, placements, analytics,
-    tenant_admin, creative_directory, registration_reports
+    tenant_admin, creative_directory, registration_reports, audit_log
 )
 from .utils.logging_config import logger
 import os
@@ -106,6 +106,7 @@ app.include_router(analytics.router)
 app.include_router(tenant_admin.router)
 app.include_router(creative_directory.router)
 app.include_router(registration_reports.router)
+app.include_router(audit_log.router)
 
 uploads_dir = Path(__file__).parent / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)

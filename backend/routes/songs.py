@@ -381,16 +381,134 @@ def bulk_delete_songs(
             OrganizationMember.user_id == current_user.id,
             OrganizationMember.organization_id == org_id
         ).first()
-        if not membership:
+        if not membership and not current_user.is_super_admin:
             raise HTTPException(status_code=403, detail="Not authorized to delete songs from this organization")
+
+    from ..models import Placement, RoyaltyTransaction, ContractAsset
+    db.query(Placement).filter(Placement.song_id.in_(request.song_ids)).update(
+        {Placement.song_id: None}, synchronize_session=False
+    )
+    db.query(RoyaltyTransaction).filter(RoyaltyTransaction.song_id.in_(request.song_ids)).update(
+        {RoyaltyTransaction.song_id: None}, synchronize_session=False
+    )
+    db.query(ContractAsset).filter(ContractAsset.song_id.in_(request.song_ids)).update(
+        {ContractAsset.song_id: None}, synchronize_session=False
+    )
 
     deleted_count = 0
     for song in songs:
+        from ..services.audit_service import log_action
+        log_action(db, song.organization_id, current_user.id, "DELETE", "SONG", song.id, song.title)
         db.delete(song)
         deleted_count += 1
 
     db.commit()
     return {"deleted": deleted_count}
+
+@router.delete("/{song_id}")
+def delete_song(
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == song.organization_id
+    ).first()
+    if not membership and not current_user.is_super_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this song")
+
+    from ..models import Placement, RoyaltyTransaction, ContractAsset
+    db.query(Placement).filter(Placement.song_id == song_id).update(
+        {Placement.song_id: None}, synchronize_session=False
+    )
+    db.query(RoyaltyTransaction).filter(RoyaltyTransaction.song_id == song_id).update(
+        {RoyaltyTransaction.song_id: None}, synchronize_session=False
+    )
+    db.query(ContractAsset).filter(ContractAsset.song_id == song_id).update(
+        {ContractAsset.song_id: None}, synchronize_session=False
+    )
+
+    from ..services.audit_service import log_action
+    log_action(db, song.organization_id, current_user.id, "DELETE", "SONG", song.id, song.title)
+    db.delete(song)
+    db.commit()
+    return {"message": "Song deleted successfully"}
+
+@router.get("/org/{org_id}/duplicates")
+def find_duplicates(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from difflib import SequenceMatcher
+    
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+    if not membership and not current_user.is_super_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    songs = db.query(Song).filter(Song.organization_id == org_id).order_by(Song.title).all()
+    
+    duplicate_groups = []
+    processed = set()
+    
+    for i, song_a in enumerate(songs):
+        if song_a.id in processed:
+            continue
+        group = []
+        title_a = (song_a.title or "").lower().strip()
+        artist_a = (song_a.primary_artist or "").lower().strip()
+        
+        for j in range(i + 1, len(songs)):
+            song_b = songs[j]
+            if song_b.id in processed:
+                continue
+            title_b = (song_b.title or "").lower().strip()
+            artist_b = (song_b.primary_artist or "").lower().strip()
+            
+            title_sim = SequenceMatcher(None, title_a, title_b).ratio()
+            artist_sim = SequenceMatcher(None, artist_a, artist_b).ratio()
+            combined = (title_sim * 0.7) + (artist_sim * 0.3)
+            
+            if combined >= 0.75 and title_sim >= 0.6:
+                if not group:
+                    group.append({
+                        "id": song_a.id,
+                        "title": song_a.title,
+                        "primary_artist": song_a.primary_artist,
+                        "isrc": song_a.isrc,
+                        "is_released": song_a.is_released,
+                        "release_date": str(song_a.release_date) if song_a.release_date else None,
+                        "status_health_score": song_a.status_health_score,
+                        "has_contract_executed": song_a.has_contract_executed,
+                        "is_registered_with_pro": song_a.is_registered_with_pro,
+                    })
+                group.append({
+                    "id": song_b.id,
+                    "title": song_b.title,
+                    "primary_artist": song_b.primary_artist,
+                    "isrc": song_b.isrc,
+                    "is_released": song_b.is_released,
+                    "release_date": str(song_b.release_date) if song_b.release_date else None,
+                    "status_health_score": song_b.status_health_score,
+                    "has_contract_executed": song_b.has_contract_executed,
+                    "is_registered_with_pro": song_b.is_registered_with_pro,
+                    "similarity": round(combined, 2),
+                })
+                processed.add(song_b.id)
+        
+        if group:
+            processed.add(song_a.id)
+            duplicate_groups.append(group)
+    
+    return {"groups": duplicate_groups, "total_groups": len(duplicate_groups)}
 
 @router.post("/org/{org_id}", response_model=SongResponse)
 def create_song(
@@ -445,6 +563,8 @@ def create_song(
         )
         db.add(status)
     
+    from ..services.audit_service import log_action
+    log_action(db, org_id, current_user.id, "CREATE", "SONG", song.id, song.title)
     db.commit()
     db.refresh(song)
     

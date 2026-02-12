@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { 
   FunnelIcon, MagnifyingGlassIcon, PlusIcon, ArrowUpTrayIcon,
-  CheckCircleIcon, XCircleIcon, MinusCircleIcon, LinkIcon
+  CheckCircleIcon, XCircleIcon, MinusCircleIcon, LinkIcon, TrashIcon
 } from '@heroicons/react/24/outline'
 import SongDetailModal from '../components/SongDetailModal'
 import AddSongModal from '../components/AddSongModal'
@@ -45,6 +45,9 @@ export default function NewCatalogPage() {
   const [spotifyImportResult, setSpotifyImportResult] = useState(null)
   const [showQuickCreator, setShowQuickCreator] = useState(false)
   const [quickCreatorName, setQuickCreatorName] = useState('')
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false)
+  const [duplicateGroups, setDuplicateGroups] = useState([])
+  const [duplicateLoading, setDuplicateLoading] = useState(false)
   
   useEffect(() => {
     loadData()
@@ -243,6 +246,57 @@ export default function NewCatalogPage() {
     }
   }
 
+  const handleDeleteSong = async (songId, songTitle) => {
+    if (!window.confirm(`Are you sure you want to delete "${songTitle}"? This cannot be undone.`)) return
+    try {
+      await axios.delete(`/api/songs/${songId}`)
+      loadData()
+    } catch (error) {
+      console.error('Failed to delete song:', error)
+      alert(error.response?.data?.detail || 'Failed to delete song')
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    const count = selectedSongIds.size
+    if (!window.confirm(`Are you sure you want to delete ${count} song${count !== 1 ? 's' : ''}? This cannot be undone.`)) return
+    try {
+      await axios.post('/api/songs/bulk-delete', { song_ids: Array.from(selectedSongIds) })
+      setSelectedSongIds(new Set())
+      loadData()
+    } catch (error) {
+      console.error('Failed to delete songs:', error)
+      alert(error.response?.data?.detail || 'Failed to delete songs')
+    }
+  }
+
+  const handleFindDuplicates = async () => {
+    if (!organizationId) return
+    setDuplicateLoading(true)
+    setShowDuplicateModal(true)
+    try {
+      const res = await axios.get(`/api/songs/org/${organizationId}/duplicates`)
+      setDuplicateGroups(res.data.groups || [])
+    } catch (error) {
+      console.error('Failed to find duplicates:', error)
+    } finally {
+      setDuplicateLoading(false)
+    }
+  }
+
+  const handleDeleteDuplicate = async (songId, songTitle) => {
+    if (!window.confirm(`Delete "${songTitle}"?`)) return
+    try {
+      await axios.delete(`/api/songs/${songId}`)
+      setDuplicateGroups(prev => 
+        prev.map(group => group.filter(s => s.id !== songId)).filter(g => g.length > 1)
+      )
+      loadData()
+    } catch (error) {
+      alert(error.response?.data?.detail || 'Failed to delete')
+    }
+  }
+
   const handleSpotifyPreview = async () => {
     if (!organizationId || !spotifyPlaylistUrl) return
     setSpotifyPreviewLoading(true)
@@ -252,11 +306,7 @@ export default function NewCatalogPage() {
         playlist_url: spotifyPlaylistUrl
       })
       setSpotifyPreviewTracks(res.data.tracks)
-      const selected = new Set()
-      res.data.tracks.forEach((t, i) => {
-        if (!t.already_exists) selected.add(i)
-      })
-      setSpotifySelectedTracks(selected)
+      setSpotifySelectedTracks(new Set(res.data.tracks.map((t, i) => (!t.already_exists && !t.potential_duplicate) ? i : null).filter(i => i !== null)))
     } catch (error) {
       console.error('Spotify preview failed:', error)
       const message = error?.response?.data?.detail || error?.message || 'Failed to load playlist. Please check the URL and try again.'
@@ -373,6 +423,15 @@ export default function NewCatalogPage() {
           >
             <ArrowUpTrayIcon className="w-4 h-4 sm:w-5 sm:h-5" />
             <span>Schedule A</span>
+          </button>
+          <button
+            onClick={handleFindDuplicates}
+            className="px-4 py-2.5 bg-[#EEF1EC] text-[#3D4A44] rounded-xl text-sm font-medium hover:bg-[#D8DDD6] transition-colors flex items-center space-x-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" />
+            </svg>
+            <span>Duplicates</span>
           </button>
           <button 
             className="flex items-center space-x-1.5 px-2.5 py-1.5 sm:px-4 sm:py-2 bg-[#1DB954] text-white rounded-lg hover:bg-[#1aa34a] transition-colors text-xs sm:text-sm whitespace-nowrap"
@@ -615,6 +674,7 @@ export default function NewCatalogPage() {
                     )}
                   </div>
                 </th>
+                <th className="px-3 py-4 text-center text-sm font-semibold text-[#3D4A44] w-10"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
@@ -622,7 +682,7 @@ export default function NewCatalogPage() {
                 <tr 
                   key={song.id} 
                   onClick={() => setSelectedSong(song)}
-                  className={`hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors ${
+                  className={`group hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors ${
                     selectedSongIds.has(song.id) ? 'bg-[rgba(91,138,114,0.08)]' : ''
                   }`}
                 >
@@ -705,6 +765,15 @@ export default function NewCatalogPage() {
                   </td>
                   <td className="px-4 py-3">{getStatusIcon(song.has_contract_executed ? 'Yes' : 'No')}</td>
                   <td className="px-4 py-3">{getStatusIcon(song.is_registered_with_pro ? 'Yes' : 'No')}</td>
+                  <td className="px-3 py-3 text-center">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteSong(song.id, song.title) }}
+                      className="p-1.5 rounded-lg text-[#9CA8A3] hover:text-[#C47068] hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                      title="Delete song"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  </td>
                 </tr>
               ))}
               
@@ -730,6 +799,12 @@ export default function NewCatalogPage() {
               className="px-4 py-1.5 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7A62] transition-colors"
             >
               Bulk Edit
+            </button>
+            <button
+              onClick={handleBulkDelete}
+              className="px-4 py-1.5 bg-[#C47068] text-white rounded-lg text-sm font-medium hover:bg-[#B45F58] transition-colors"
+            >
+              Delete
             </button>
             <button
               onClick={selectAllSongs}
@@ -1096,7 +1171,11 @@ export default function NewCatalogPage() {
                               <td className="px-3 py-2">
                                 {track.already_exists ? (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#FFF3CD] text-[#856404]">
-                                    Already exists
+                                    Exact match
+                                  </span>
+                                ) : track.potential_duplicate ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#FFE0DE] text-[#9B2C2C]" title={track.duplicate_matches?.[0] ? `Similar to: ${track.duplicate_matches[0].existing_title} by ${track.duplicate_matches[0].existing_artist} (${Math.round(track.duplicate_matches[0].similarity * 100)}%)` : ''}>
+                                    Possible duplicate
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#D4EDDA] text-[#155724]">
@@ -1130,6 +1209,71 @@ export default function NewCatalogPage() {
                   )}
                 </div>
               </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showDuplicateModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-[#3D4A44]">Duplicate Review</h3>
+                <p className="text-sm text-[#7A8580]">
+                  {duplicateLoading ? 'Scanning...' : `${duplicateGroups.length} potential duplicate group${duplicateGroups.length !== 1 ? 's' : ''} found`}
+                </p>
+              </div>
+              <button onClick={() => setShowDuplicateModal(false)} className="p-2 hover:bg-[#EEF1EC] rounded-lg transition-colors">
+                <XCircleIcon className="w-5 h-5 text-[#7A8580]" />
+              </button>
+            </div>
+            
+            {duplicateLoading ? (
+              <div className="flex-1 flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#5B8A72] border-t-transparent"></div>
+              </div>
+            ) : duplicateGroups.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center py-12">
+                <CheckCircleIcon className="w-12 h-12 text-[#5B8A72] mb-3" />
+                <p className="text-[#3D4A44] font-medium">No duplicates found</p>
+                <p className="text-sm text-[#7A8580]">Your catalog is clean!</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto space-y-4">
+                {duplicateGroups.map((group, gi) => (
+                  <div key={gi} className="border border-[rgba(59,77,67,0.12)] rounded-xl overflow-hidden">
+                    <div className="bg-[#FFF8F0] px-4 py-2 text-xs font-medium text-[#856404]">
+                      Duplicate group — {group.length} matching songs
+                    </div>
+                    {group.map((song, si) => (
+                      <div key={song.id} className={`px-4 py-3 flex items-center justify-between ${si > 0 ? 'border-t border-[rgba(59,77,67,0.08)]' : ''}`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-[#3D4A44] truncate">{song.title}</span>
+                            {song.isrc && <span className="text-xs text-[#7A8580] font-mono">{song.isrc}</span>}
+                            {song.similarity && <span className="text-xs text-[#9CA8A3]">{Math.round(song.similarity * 100)}% match</span>}
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <span className="text-xs text-[#7A8580]">{song.primary_artist}</span>
+                            {song.is_released && <span className="text-xs text-[#5B9A6E]">Released</span>}
+                            {song.has_contract_executed && <span className="text-xs text-[#5A8A9A]">Contract</span>}
+                            {song.is_registered_with_pro && <span className="text-xs text-[#5B8A72]">PRO</span>}
+                            <span className="text-xs text-[#7A8580]">Health: {song.status_health_score?.toFixed(0) || 0}%</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteDuplicate(song.id, song.title)}
+                          className="ml-3 p-1.5 rounded-lg text-[#9CA8A3] hover:text-[#C47068] hover:bg-red-50 transition-colors flex-shrink-0"
+                          title="Delete this version"
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

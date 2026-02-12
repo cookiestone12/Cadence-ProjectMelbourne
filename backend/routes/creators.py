@@ -153,6 +153,9 @@ def create_creator(
         hero_image_url=request.hero_image_url
     )
     db.add(creator)
+    db.flush()
+    from ..services.audit_service import log_action
+    log_action(db, org_id, current_user.id, "CREATE", "CREATOR", creator.id, creator.display_name)
     db.commit()
     db.refresh(creator)
 
@@ -351,6 +354,8 @@ def delete_creator(
     db.query(SongCredit).filter(SongCredit.creator_id == creator_id).delete()
     db.query(WorkCredit).filter(WorkCredit.creator_id == creator_id).delete()
 
+    from ..services.audit_service import log_action
+    log_action(db, creator.organization_id, current_user.id, "DELETE", "CREATOR", creator.id, creator.display_name)
     db.delete(creator)
     db.commit()
     return {"message": "Creator deleted successfully"}

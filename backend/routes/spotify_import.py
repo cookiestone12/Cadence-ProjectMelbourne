@@ -1,4 +1,5 @@
 import logging
+from difflib import SequenceMatcher
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -92,6 +93,34 @@ def preview_playlist_import(
 
     for track in tracks:
         track["already_exists"] = track.get("isrc") in existing_isrcs if track.get("isrc") else False
+
+    all_songs = db.query(Song).filter(Song.organization_id == org_id).all()
+    existing_titles = [(s.id, s.title.lower().strip(), (s.primary_artist or '').lower().strip()) for s in all_songs]
+
+    for track in tracks:
+        if track.get("already_exists"):
+            continue
+        track_title = (track.get("title") or "").lower().strip()
+        track_artist = (track.get("primary_artist") or "").lower().strip()
+
+        potential_matches = []
+        for sid, etitle, eartist in existing_titles:
+            title_sim = SequenceMatcher(None, track_title, etitle).ratio()
+            artist_sim = SequenceMatcher(None, track_artist, eartist).ratio()
+            combined = (title_sim * 0.7) + (artist_sim * 0.3)
+            if combined >= 0.75 and title_sim >= 0.6:
+                potential_matches.append({
+                    "existing_song_id": sid,
+                    "existing_title": etitle,
+                    "existing_artist": eartist,
+                    "similarity": round(combined, 2),
+                })
+        if potential_matches:
+            potential_matches.sort(key=lambda x: x["similarity"], reverse=True)
+            track["potential_duplicate"] = True
+            track["duplicate_matches"] = potential_matches[:3]
+        else:
+            track["potential_duplicate"] = False
 
     return {
         "tracks": tracks,
@@ -210,6 +239,8 @@ def import_playlist_tracks(
 
         imported += 1
 
+    from ..services.audit_service import log_action
+    log_action(db, org_id, current_user.id, "IMPORT", "SONG", None, f"Spotify import: {imported} tracks", {"imported": imported, "skipped": skipped})
     db.commit()
     return {
         "message": f"Imported {imported} tracks, skipped {skipped} duplicates",

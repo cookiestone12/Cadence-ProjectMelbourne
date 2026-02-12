@@ -1337,3 +1337,26 @@ class Placement(Base):
     contract = relationship("Contract")
     assigned_to = relationship("User", foreign_keys=[assigned_to_user_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index('ix_audit_logs_org_id', 'organization_id'),
+        Index('ix_audit_logs_created_at', 'created_at'),
+        Index('ix_audit_logs_action', 'action'),
+        Index('ix_audit_logs_entity_type', 'entity_type'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    action = Column(String, nullable=False)
+    entity_type = Column(String, nullable=False)
+    entity_id = Column(Integer, nullable=True)
+    entity_name = Column(String, nullable=True)
+    details = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    organization = relationship("Organization")
+    user = relationship("User")

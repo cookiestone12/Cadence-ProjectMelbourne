@@ -14,7 +14,8 @@ import {
   UserGroupIcon,
   BuildingOfficeIcon,
   EyeIcon,
-  EyeSlashIcon
+  EyeSlashIcon,
+  ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline'
 
 export default function TenantAdminPage() {
@@ -84,6 +85,7 @@ export default function TenantAdminPage() {
   const tabs = [
     { id: 'members', label: 'Team Members', icon: UsersIcon },
     { id: 'branding', label: 'Organization Branding', icon: BuildingOfficeIcon },
+    { id: 'audit', label: 'Activity Log', icon: ClipboardDocumentListIcon },
   ]
 
   if (loading) {
@@ -144,6 +146,8 @@ export default function TenantAdminPage() {
       {activeTab === 'branding' && (
         <BrandingTab branding={branding} onSave={(b) => { setBranding(b); showMsg('Branding updated') }} onError={(e) => showMsg(e, true)} />
       )}
+
+      {activeTab === 'audit' && <AuditLogTab />}
 
       {showAddModal && (
         <AddEditMemberModal
@@ -715,6 +719,136 @@ function BrandingTab({ branding, onSave, onError }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function AuditLogTab() {
+  const [logs, setLogs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [filterAction, setFilterAction] = useState('')
+  const [filterEntity, setFilterEntity] = useState('')
+  const limit = 50
+
+  useEffect(() => {
+    loadLogs()
+  }, [offset, filterAction, filterEntity])
+
+  const loadLogs = async () => {
+    setLoading(true)
+    try {
+      const orgRes = await axios.get('/api/organizations/current')
+      const orgId = orgRes.data?.id
+      if (!orgId) return
+      const params = new URLSearchParams()
+      params.append('limit', limit)
+      params.append('offset', offset)
+      if (filterAction) params.append('action', filterAction)
+      if (filterEntity) params.append('entity_type', filterEntity)
+      const res = await axios.get(`/api/audit-log/org/${orgId}?${params}`)
+      setLogs(res.data.logs || [])
+      setTotal(res.data.total || 0)
+    } catch (err) {
+      console.error('Failed to load audit logs:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const actionColors = {
+    CREATE: 'bg-[#D4EDDA] text-[#155724]',
+    DELETE: 'bg-[#FFE0DE] text-[#9B2C2C]',
+    UPDATE: 'bg-[#D6EAF8] text-[#1B4F72]',
+    IMPORT: 'bg-[#FFF3CD] text-[#856404]',
+  }
+
+  const formatDate = (iso) => {
+    if (!iso) return '-'
+    const d = new Date(iso)
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4">
+        <select
+          value={filterAction}
+          onChange={(e) => { setFilterAction(e.target.value); setOffset(0) }}
+          className="px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-sm bg-white text-[#3D4A44]"
+        >
+          <option value="">All Actions</option>
+          <option value="CREATE">Create</option>
+          <option value="UPDATE">Update</option>
+          <option value="DELETE">Delete</option>
+          <option value="IMPORT">Import</option>
+        </select>
+        <select
+          value={filterEntity}
+          onChange={(e) => { setFilterEntity(e.target.value); setOffset(0) }}
+          className="px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-sm bg-white text-[#3D4A44]"
+        >
+          <option value="">All Types</option>
+          <option value="SONG">Song</option>
+          <option value="CREATOR">Creator</option>
+          <option value="PLACEMENT">Placement</option>
+          <option value="CONTRACT">Contract</option>
+        </select>
+        <span className="text-sm text-[#7A8580] ml-auto">{total} total entries</span>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#5B8A72] border-t-transparent"></div>
+        </div>
+      ) : logs.length === 0 ? (
+        <div className="text-center py-12 text-[#7A8580]">
+          <ClipboardDocumentListIcon className="w-12 h-12 mx-auto mb-3 opacity-40" />
+          <p className="font-medium">No activity recorded yet</p>
+          <p className="text-sm mt-1">Actions like creating, editing, or deleting items will appear here.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-[#EEF1EC]">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">When</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">User</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Action</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Item</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Details</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+              {logs.map((log) => (
+                <tr key={log.id} className="hover:bg-[#FAFBF9]">
+                  <td className="px-4 py-3 text-xs text-[#7A8580] whitespace-nowrap">{formatDate(log.created_at)}</td>
+                  <td className="px-4 py-3 text-sm text-[#3D4A44]">{log.user_name}</td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${actionColors[log.action] || 'bg-[#EEF1EC] text-[#3D4A44]'}`}>
+                      {log.action}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-[#7A8580]">{log.entity_type}</td>
+                  <td className="px-4 py-3 text-sm text-[#3D4A44] truncate max-w-[200px]">{log.entity_name || '-'}</td>
+                  <td className="px-4 py-3 text-xs text-[#7A8580] truncate max-w-[200px]">
+                    {log.details ? JSON.stringify(log.details) : '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {total > limit && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-[rgba(59,77,67,0.08)]">
+              <button onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0} className="px-3 py-1.5 text-sm border border-[rgba(59,77,67,0.12)] rounded-lg disabled:opacity-40 hover:bg-[#EEF1EC] transition-colors">Previous</button>
+              <span className="text-sm text-[#7A8580]">{offset + 1}–{Math.min(offset + limit, total)} of {total}</span>
+              <button onClick={() => setOffset(offset + limit)} disabled={offset + limit >= total} className="px-3 py-1.5 text-sm border border-[rgba(59,77,67,0.12)] rounded-lg disabled:opacity-40 hover:bg-[#EEF1EC] transition-colors">Next</button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

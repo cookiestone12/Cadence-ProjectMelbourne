@@ -16,6 +16,7 @@ from .models import (
     RoyaltyStatement, RoyaltyTransaction, RoyaltyAllocation, Payment,
     Fee, Advance, FeeType,
     Placement,
+    AuditLog,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "RoyaltyStatement", "RoyaltyTransaction", "RoyaltyAllocation", "Payment",
     "Fee", "Advance", "FeeType",
     "Placement",
+    "AuditLog",
 ]
