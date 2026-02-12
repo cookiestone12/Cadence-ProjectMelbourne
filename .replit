@@ -68,9 +68,9 @@ channel = "stable-25_05"
 packages = ["cargo", "freetype", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "imagemagick"]
 
 [deployment]
-build = ["sh", "-c", "cd frontend && npm run build && cd .. && python -m backend.db_setup"]
+build = ["sh", "-c", "cd frontend && npm run build && cd .. && python -m backend.db_setup && python -m compileall -q backend/"]
 run = ["uvicorn", "backend.production:app", "--host", "0.0.0.0", "--port", "5000"]
-deploymentTarget = "vm"
+deploymentTarget = "autoscale"
 
 [userenv]
 

@@ -1,62 +1,59 @@
-"""Production ASGI entry point with instant health check response.
+"""Production ASGI entry point.
 
-Serves frontend static files and health checks immediately while the
-full FastAPI application loads in a background thread.
+Returns 200 for health checks immediately while loading the full app
+in a background thread. Once loaded, all requests go to the real app.
 """
-import json
 import mimetypes
 import threading
 from pathlib import Path
 
-_app = None
-_app_loaded = threading.Event()
+_real_app = None
+_loaded = threading.Event()
 
-HEALTH_BODY = b'{"status":"healthy","service":"Rythm Catalog Intelligence"}'
 DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
-_index_cache = None
+HEALTH_JSON = b'{"status":"healthy","service":"Rythm Catalog Intelligence"}'
 
 
-def _get_index_html():
-    global _index_cache
-    if _index_cache is None:
-        index_path = DIST_DIR / "index.html"
-        if index_path.exists():
-            _index_cache = index_path.read_bytes()
-    return _index_cache
-
-
-def _load_app():
-    global _app
+def _load():
+    global _real_app
     try:
-        from backend.main import app
-        _app = app
+        from backend.main import app as real
+        _real_app = real
     except Exception as e:
-        import sys
-        print(f"FATAL: Failed to load app: {e}", file=sys.stderr)
-        import traceback
+        import sys, traceback
+        print(f"FATAL: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
     finally:
-        _app_loaded.set()
+        _loaded.set()
 
 
-_loader = threading.Thread(target=_load_app, daemon=True)
-_loader.start()
+threading.Thread(target=_load, daemon=True).start()
 
 
-def _try_serve_static(path: str):
-    """Try to resolve a static file from frontend/dist."""
+async def _drain(receive):
+    while True:
+        msg = await receive()
+        if msg.get("type") == "http.request":
+            if not msg.get("more_body", False):
+                break
+
+
+async def _reply(send, status, ctype, body, extra_headers=None):
+    headers = [[b"content-type", ctype]]
+    if extra_headers:
+        headers.extend(extra_headers)
+    await send({"type": "http.response.start", "status": status, "headers": headers})
+    await send({"type": "http.response.body", "body": body})
+
+
+def _static(path):
     if not DIST_DIR.exists():
         return None, None
-    clean = path.lstrip("/")
-    if not clean:
-        return _get_index_html(), b"text/html; charset=utf-8"
-    file_path = (DIST_DIR / clean).resolve()
-    if not file_path.is_relative_to(DIST_DIR.resolve()):
+    fp = (DIST_DIR / path.lstrip("/")).resolve()
+    if not fp.is_relative_to(DIST_DIR.resolve()) or not fp.is_file():
         return None, None
-    if file_path.is_file():
-        ct = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-        return file_path.read_bytes(), ct.encode()
-    return None, None
+    ct = (mimetypes.guess_type(str(fp))[0] or "application/octet-stream").encode()
+    return fp.read_bytes(), ct
 
 
 async def app(scope, receive, send):
@@ -70,59 +67,37 @@ async def app(scope, receive, send):
         return
 
     if scope["type"] != "http":
-        if _app_loaded.is_set() and _app:
-            await _app(scope, receive, send)
+        if _loaded.is_set() and _real_app:
+            await _real_app(scope, receive, send)
         return
 
     path = scope.get("path", "/")
 
-    if _app_loaded.is_set() and _app is not None:
-        await _app(scope, receive, send)
+    if _loaded.is_set() and _real_app is not None:
+        await _real_app(scope, receive, send)
         return
 
-    if path == "/api/health":
-        await _send(send, 200, b"application/json", HEALTH_BODY)
-        return
+    await _drain(receive)
 
-    if path == "/":
-        html = _get_index_html()
-        if html:
-            await _send(send, 200, b"text/html; charset=utf-8", html)
-        else:
-            await _send(send, 200, b"application/json", HEALTH_BODY)
+    if path == "/api/health" or path == "/":
+        if path == "/" and DIST_DIR.exists():
+            idx = DIST_DIR / "index.html"
+            if idx.exists():
+                await _reply(send, 200, b"text/html; charset=utf-8", idx.read_bytes(),
+                             [[b"cache-control", b"no-cache"]])
+                return
+        await _reply(send, 200, b"application/json", HEALTH_JSON)
         return
 
     if not path.startswith("/api/"):
-        body, ct = _try_serve_static(path)
+        body, ct = _static(path)
         if body is not None:
-            cache = b"public, max-age=31536000, immutable" if path.startswith("/assets/") else b"no-cache"
-            await _send_with_cache(send, 200, ct, body, cache)
+            cc = b"public, max-age=31536000, immutable" if "/assets/" in path else b"no-cache"
+            await _reply(send, 200, ct, body, [[b"cache-control", cc]])
             return
 
-    _app_loaded.wait(timeout=30)
-    if _app is not None:
-        await _app(scope, receive, send)
+    _loaded.wait(timeout=30)
+    if _real_app is not None:
+        await _real_app(scope, receive, send)
     else:
-        await _send(send, 503, b"application/json",
-                    b'{"error":"Application failed to load"}')
-
-
-async def _send(send, status, content_type, body):
-    await send({
-        "type": "http.response.start",
-        "status": status,
-        "headers": [[b"content-type", content_type]],
-    })
-    await send({"type": "http.response.body", "body": body})
-
-
-async def _send_with_cache(send, status, content_type, body, cache_control):
-    await send({
-        "type": "http.response.start",
-        "status": status,
-        "headers": [
-            [b"content-type", content_type],
-            [b"cache-control", cache_control],
-        ],
-    })
-    await send({"type": "http.response.body", "body": body})
+        await _reply(send, 503, b"application/json", b'{"error":"app failed to load"}')
