@@ -355,11 +355,11 @@ export default function ContractsPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <div>
-            <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Contracts & Rights</h1>
+            <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Contracts & Rights</h1>
             <p className="text-[#7A8580]">
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#EEF1EC] text-[#3D4A44] mr-2">
                 {contracts.length}

@@ -83,9 +83,9 @@ export default function CatalogPage() {
   }
   
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <div className="mb-6">
-        <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Catalog</h1>
+        <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Catalog</h1>
         <p className="text-[#7A8580]">{songs.length} songs in your catalog</p>
       </div>
       

@@ -113,7 +113,7 @@ export default function UserGuidePage() {
       <div ref={contentRef} className="max-w-4xl mx-auto px-6 py-8 print:max-w-none print:px-12 print:py-8">
         <div className="text-center mb-12 print:mb-16">
           <img src="/rythm-logo.png" alt="Rythm" className="h-24 w-auto mx-auto mb-6" />
-          <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Rythm</h1>
+          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Rythm</h1>
           <p className="text-xl text-[#5B8A72] font-medium mb-1">Catalog Intelligence</p>
           <p className="text-lg text-[#7A8580]">User Guide & Reference Manual</p>
           <div className="mt-4 text-sm text-[#7A8580]">

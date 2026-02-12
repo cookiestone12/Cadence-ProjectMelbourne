@@ -82,7 +82,7 @@ export default function ValuationPage() {
 
   if (loading) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-8">
         <div className="animate-pulse">
           <div className="h-8 bg-[#EEF1EC] rounded w-1/4 mb-4"></div>
           <div className="h-4 bg-[#EEF1EC] rounded w-1/3 mb-8"></div>
@@ -98,8 +98,8 @@ export default function ValuationPage() {
 
   if (!catalogData) {
     return (
-      <div className="p-8">
-        <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Catalog Valuation</h1>
+      <div className="p-4 sm:p-8">
+        <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Catalog Valuation</h1>
         <div className="mt-8 bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] rounded-xl shadow-sm p-12 text-center">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full mb-6">
             <CurrencyDollarIcon className="w-10 h-10 text-white" />
@@ -116,10 +116,10 @@ export default function ValuationPage() {
   const hasData = catalogData.top_songs && catalogData.top_songs.length > 0
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Catalog Valuation</h1>
+          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Catalog Valuation</h1>
           <p className="text-[#7A8580]">{catalogData.organization_name}</p>
         </div>
         <button

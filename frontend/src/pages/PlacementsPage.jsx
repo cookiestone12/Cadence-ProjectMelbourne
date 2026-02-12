@@ -334,7 +334,7 @@ export default function PlacementsPage() {
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold">Sync Placements</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold">Sync Placements</h1>
               <p className="mt-1 text-white/80">Sync licensing, film, TV & advertising pipeline</p>
             </div>
             <button

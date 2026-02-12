@@ -78,10 +78,10 @@ export default function SearchPage() {
   const hasSearched = results !== null
 
   return (
-    <div className="p-8 pb-24 min-h-screen" style={{ backgroundColor: '#F5F7F4' }}>
+    <div className="p-4 sm:p-8 pb-24 min-h-screen" style={{ backgroundColor: '#F5F7F4' }}>
       <div className="max-w-4xl mx-auto">
         <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Search</h1>
+          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Search</h1>
           <p className="text-[#7A8580]">Find songs, works, releases, and creators across your catalog</p>
         </div>
 

@@ -126,14 +126,14 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <div className="mb-8">
-        <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Admin Dashboard</h1>
+        <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Admin Dashboard</h1>
         <p className="text-[#7A8580]">Manage users, organizations, and system settings</p>
       </div>
 
-      <div className="mb-6 border-b border-[rgba(59,77,67,0.08)]">
-        <div className="flex space-x-8">
+      <div className="mb-6 border-b border-[rgba(59,77,67,0.08)] overflow-x-auto">
+        <div className="flex space-x-4 sm:space-x-8 min-w-max">
           {['overview', 'users', 'organizations', 'api-config'].map((tab) => (
             <button
               key={tab}

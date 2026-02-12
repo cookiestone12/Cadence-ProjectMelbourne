@@ -210,10 +210,10 @@ export default function WorksPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Works</h1>
+          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Works</h1>
           <p className="text-[#7A8580]">{works.length} total works</p>
         </div>
         <div className="flex items-center space-x-3">

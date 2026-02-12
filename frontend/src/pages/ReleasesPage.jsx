@@ -374,7 +374,7 @@ export default function ReleasesPage() {
     const availableSongs = songs.filter(s => !existingTrackSongIds.includes(s.id))
 
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-8">
         <button
           onClick={() => { setSelectedRelease(null); setDetailData(null); setEditMode(false) }}
           className="flex items-center space-x-2 text-[#7A8580] hover:text-[#3D4A44] mb-6 transition-colors"
@@ -417,7 +417,7 @@ export default function ReleasesPage() {
               </label>
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-[#3D4A44]">{detailData.title}</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-[#3D4A44]">{detailData.title}</h1>
               <div className="flex items-center space-x-3 mt-1">
                 <span className="text-[#7A8580]">{detailData.primary_artist || 'No artist'}</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[detailData.status] || STATUS_COLORS.DRAFT}`}>
@@ -1093,10 +1093,10 @@ export default function ReleasesPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-[#3D4A44] mb-2">Releases</h1>
+          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Releases</h1>
           <p className="text-[#7A8580]">{totalCount} total releases</p>
         </div>
         <div className="flex items-center space-x-3">
@@ -1110,8 +1110,8 @@ export default function ReleasesPage() {
         </div>
       </div>
 
-      <div className="mb-6 border-b border-[rgba(59,77,67,0.08)]">
-        <div className="flex space-x-8">
+      <div className="mb-6 border-b border-[rgba(59,77,67,0.08)] overflow-x-auto">
+        <div className="flex space-x-4 sm:space-x-8 min-w-max">
           {['ALL', 'DRAFT', 'READY', 'SUBMITTED', 'RELEASED'].map(status => (
             <button
               key={status}

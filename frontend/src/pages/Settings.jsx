@@ -208,8 +208,8 @@ export default function Settings() {
           <p className="text-[17px] text-[#7A8580] mt-1">Manage your preferences and integrations</p>
         </div>
 
-        <div className="mb-6 border-b border-[rgba(59,77,67,0.08)]">
-          <div className="flex space-x-8">
+        <div className="mb-6 border-b border-[rgba(59,77,67,0.08)] overflow-x-auto">
+          <div className="flex space-x-4 sm:space-x-8 min-w-max">
             {isSuperAdmin && (
               <button
                 onClick={() => setActiveTab('api')}
