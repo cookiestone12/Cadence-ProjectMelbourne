@@ -4,7 +4,7 @@ import {
   MagnifyingGlassIcon, PlusIcon, XMarkIcon, TrashIcon,
   PencilIcon, UserGroupIcon, LinkIcon, DocumentTextIcon,
   MusicalNoteIcon, CalendarIcon, CurrencyDollarIcon,
-  ChevronDownIcon
+  ChevronDownIcon, ArrowDownTrayIcon, PaperClipIcon, CloudArrowUpIcon
 } from '@heroicons/react/24/outline'
 
 const STATUS_COLORS = {
@@ -74,6 +74,11 @@ export default function ContractsPage() {
   const [splitForms, setSplitForms] = useState({})
   const [editingSplit, setEditingSplit] = useState(null)
   const [editSplitForm, setEditSplitForm] = useState({})
+  const [contractDocuments, setContractDocuments] = useState([])
+  const [docUploading, setDocUploading] = useState(false)
+  const [docDescription, setDocDescription] = useState('')
+  const [docLinkType, setDocLinkType] = useState('')
+  const [docLinkId, setDocLinkId] = useState('')
 
   useEffect(() => {
     loadData()
@@ -103,6 +108,10 @@ export default function ContractsPage() {
       axios.get(`/api/creators/org/${orgId}`).then(res => {
         setCreators(Array.isArray(res.data) ? res.data : [])
       }).catch(e => console.error('Failed to load creators:', e))
+
+      axios.get(`/api/releases/org/${orgId}?limit=500`).then(res => {
+        setReleases(res.data?.releases || (Array.isArray(res.data) ? res.data : []))
+      }).catch(e => console.error('Failed to load releases:', e))
     } catch (error) {
       console.error('Failed to load contracts page:', error)
       setLoading(false)
@@ -127,6 +136,10 @@ export default function ContractsPage() {
     setEditMode(false)
     setSplitForms({})
     setEditingSplit(null)
+    setContractDocuments([])
+    setDocDescription('')
+    setDocLinkType('')
+    setDocLinkId('')
     try {
       const res = await axios.get(`/api/rights/contracts/${contract.id}`)
       setContractDetail(res.data)
@@ -143,6 +156,7 @@ export default function ContractsPage() {
         notes: res.data.notes || '',
         terms_summary: res.data.terms_summary || '',
       })
+      loadDocuments(contract.id)
     } catch (error) {
       console.error('Failed to load contract detail:', error)
     } finally {
@@ -159,6 +173,72 @@ export default function ContractsPage() {
       console.error('Failed to refresh contract detail:', error)
     }
   }
+
+  async function loadDocuments(contractId) {
+    try {
+      const res = await axios.get(`/api/rights/contracts/${contractId}/documents`)
+      setContractDocuments(Array.isArray(res.data) ? res.data : [])
+    } catch (error) {
+      console.error('Failed to load documents:', error)
+    }
+  }
+
+  async function handleUploadDocument(file) {
+    if (!contractDetail) return
+    setDocUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      if (docDescription.trim()) formData.append('description', docDescription.trim())
+      if (docLinkType === 'song' && docLinkId) formData.append('song_id', docLinkId)
+      if (docLinkType === 'work' && docLinkId) formData.append('work_id', docLinkId)
+      if (docLinkType === 'release' && docLinkId) formData.append('release_id', docLinkId)
+      await axios.post(`/api/rights/contracts/${contractDetail.id}/documents`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setDocDescription('')
+      setDocLinkType('')
+      setDocLinkId('')
+      loadDocuments(contractDetail.id)
+      refreshDetail()
+    } catch (error) {
+      console.error('Failed to upload document:', error)
+      alert(error.response?.data?.detail || 'Failed to upload document')
+    } finally {
+      setDocUploading(false)
+    }
+  }
+
+  async function handleDownloadDocument(doc) {
+    try {
+      const res = await axios.get(`/api/rights/contracts/documents/${doc.id}/download`, {
+        responseType: 'blob'
+      })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', doc.file_name)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to download document:', error)
+    }
+  }
+
+  async function handleDeleteDocument(docId) {
+    if (!confirm('Delete this document?')) return
+    try {
+      await axios.delete(`/api/rights/contracts/documents/${docId}`)
+      loadDocuments(contractDetail.id)
+      refreshDetail()
+    } catch (error) {
+      console.error('Failed to delete document:', error)
+    }
+  }
+
+  const [releases, setReleases] = useState([])
 
   async function handleCreateContract() {
     if (!createForm.title.trim()) {
@@ -730,7 +810,7 @@ export default function ContractsPage() {
 
             <div className="border-b border-[rgba(59,77,67,0.08)]">
               <div className="flex space-x-6 px-6">
-                {['overview', 'parties', 'assets'].map(tab => (
+                {['overview', 'parties', 'assets', 'documents'].map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveDetailTab(tab)}
@@ -742,7 +822,8 @@ export default function ContractsPage() {
                   >
                     {tab === 'overview' ? 'Overview' :
                      tab === 'parties' ? `Parties (${contractDetail?.parties?.length || 0})` :
-                     `Assets & Splits (${contractDetail?.assets?.length || 0})`}
+                     tab === 'assets' ? `Assets & Splits (${contractDetail?.assets?.length || 0})` :
+                     `Documents (${contractDocuments.length})`}
                   </button>
                 ))}
               </div>
@@ -1288,6 +1369,141 @@ export default function ContractsPage() {
                       </div>
                     )
                   })}
+                </div>
+              )}
+
+              {contractDetail && activeDetailTab === 'documents' && (
+                <div className="space-y-4">
+                  <div className="bg-[#F5F7F4] rounded-xl p-4">
+                    <h4 className="text-sm font-medium text-[#3D4A44] mb-3 flex items-center space-x-2">
+                      <CloudArrowUpIcon className="w-4 h-4" />
+                      <span>Upload Document</span>
+                    </h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs text-[#7A8580] mb-1">Description (optional)</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Signed master agreement"
+                          value={docDescription}
+                          onChange={(e) => setDocDescription(e.target.value)}
+                          className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs text-[#7A8580] mb-1">Link to (optional)</label>
+                          <select
+                            value={docLinkType}
+                            onChange={(e) => { setDocLinkType(e.target.value); setDocLinkId('') }}
+                            className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                          >
+                            <option value="">None</option>
+                            <option value="song">Song</option>
+                            <option value="work">Work</option>
+                            <option value="release">Release</option>
+                          </select>
+                        </div>
+                        {docLinkType && (
+                          <div>
+                            <label className="block text-xs text-[#7A8580] mb-1">
+                              {docLinkType === 'song' ? 'Select Song' : docLinkType === 'work' ? 'Select Work' : 'Select Release'}
+                            </label>
+                            <select
+                              value={docLinkId}
+                              onChange={(e) => setDocLinkId(e.target.value)}
+                              className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                            >
+                              <option value="">Choose...</option>
+                              {docLinkType === 'song' && songs.map(s => (
+                                <option key={s.id} value={s.id}>{s.title}</option>
+                              ))}
+                              {docLinkType === 'work' && works.map(w => (
+                                <option key={w.id} value={w.id}>{w.title}</option>
+                              ))}
+                              {docLinkType === 'release' && releases.map(r => (
+                                <option key={r.id} value={r.id}>{r.title || r.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label
+                          className={`flex items-center justify-center space-x-2 px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                            docUploading
+                              ? 'border-[rgba(59,77,67,0.12)] bg-gray-50 text-[#7A8580]'
+                              : 'border-[rgba(91,138,114,0.3)] hover:border-[#5B8A72] hover:bg-[#F0F5F2] text-[#5B8A72]'
+                          }`}
+                        >
+                          <CloudArrowUpIcon className="w-5 h-5" />
+                          <span className="text-sm font-medium">
+                            {docUploading ? 'Uploading...' : 'Choose file to upload'}
+                          </span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            disabled={docUploading}
+                            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.xls,.xlsx"
+                            onChange={(e) => {
+                              if (e.target.files[0]) handleUploadDocument(e.target.files[0])
+                              e.target.value = ''
+                            }}
+                          />
+                        </label>
+                        <p className="text-xs text-[#7A8580] mt-1">PDF, DOC, DOCX, images, or Excel files up to 50MB</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {contractDocuments.length === 0 ? (
+                    <p className="text-sm text-[#7A8580] text-center py-4">No documents uploaded yet</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {contractDocuments.map(doc => (
+                        <div key={doc.id} className="flex items-center justify-between bg-[#F5F7F4] rounded-xl p-3">
+                          <div className="flex items-center space-x-3 min-w-0 flex-1">
+                            <div className="w-8 h-8 rounded-lg bg-[#EEF1EC] flex items-center justify-center flex-shrink-0">
+                              <PaperClipIcon className="w-4 h-4 text-[#7A8580]" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-[#3D4A44] truncate">{doc.file_name}</p>
+                              <div className="flex items-center space-x-2 text-xs text-[#7A8580]">
+                                {doc.description && <span>{doc.description}</span>}
+                                {doc.file_size_bytes && (
+                                  <span>{(doc.file_size_bytes / 1024).toFixed(0)} KB</span>
+                                )}
+                                {doc.linked_asset_name && (
+                                  <span className="px-1.5 py-0.5 bg-[#EEF1EC] rounded text-xs">
+                                    {doc.linked_asset_type}: {doc.linked_asset_name}
+                                  </span>
+                                )}
+                                {doc.created_at && (
+                                  <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-1 ml-2">
+                            <button
+                              onClick={() => handleDownloadDocument(doc)}
+                              className="p-1.5 text-[#5B8A72] hover:bg-[#EEF1EC] rounded-lg transition-colors"
+                              title="Download"
+                            >
+                              <ArrowDownTrayIcon className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteDocument(doc.id)}
+                              className="p-1.5 text-[#7A8580] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

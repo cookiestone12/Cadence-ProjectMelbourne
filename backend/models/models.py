@@ -878,6 +878,7 @@ class Contract(Base):
     created_by = relationship("User")
     parties = relationship("ContractParty", back_populates="contract", cascade="all, delete-orphan")
     assets = relationship("ContractAsset", back_populates="contract", cascade="all, delete-orphan")
+    documents = relationship("ContractDocument", back_populates="contract", cascade="all, delete-orphan")
 
 
 class ContractParty(Base):
@@ -919,6 +920,34 @@ class ContractAsset(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     contract = relationship("Contract", back_populates="assets")
+
+
+class ContractDocument(Base):
+    __tablename__ = "contract_documents"
+    __table_args__ = (
+        Index('ix_contract_documents_contract_id', 'contract_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+
+    file_name = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    file_size_bytes = Column(Integer, nullable=True)
+    mime_type = Column(String, nullable=True)
+    description = Column(String, nullable=True)
+
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    work_id = Column(Integer, ForeignKey("works.id"), nullable=True)
+    release_id = Column(Integer, ForeignKey("releases.id"), nullable=True)
+
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    contract = relationship("Contract", back_populates="documents")
+    organization = relationship("Organization")
+    uploaded_by = relationship("User")
 
 
 class RightsSplit(Base):

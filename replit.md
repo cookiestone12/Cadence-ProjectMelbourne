@@ -46,7 +46,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Released Status & Spotify Links**: Mark songs as released and prompt for Spotify links.
 - **Reports & Analytics**: Comprehensive tabbed analytics dashboard (Overview, Catalog Health, Revenue, Creators, Placements, Rights Coverage) with Recharts visualizations including area charts, pie charts, bar charts, line charts, funnel views, coverage progress bars, top earners tables, and gap analysis. Backend analytics API aggregates data across all modules.
 - **Schedule A Export**: CSV generation of creator catalogs.
-- **Contract Management**: Secure PDF upload, download, and deletion linked to songs with access control. Full deal-level contract tracking with parties, assets, rights splits, territory, and advance management via Contracts page.
+- **Contract Management**: Secure PDF upload, download, and deletion linked to songs with access control. Full deal-level contract tracking with parties, assets, rights splits, territory, and advance management via Contracts page. Contract document upload with optional linking to songs, works, or releases; Documents tab in contract detail panel with upload, download, and delete capabilities.
 - **Rights & Splits**: Per-asset rights splits with percentage validation. Rights query by asset or rights holder. Rights & Splits tab in song detail modal and works detail panel.
 - **Account Linking**: Secure linking between Individual and Enterprise organizations with mutual consent.
 - **Master Admin System**: Super admin role for platform-wide management (user/organization management, impersonation, system statistics).

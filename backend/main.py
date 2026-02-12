@@ -7,7 +7,7 @@ from .routes import (
     auth, catalog, settings,
     organizations, creators, songs, credits,
     checklist, exports, valuations, valuation_reports, schedule_a,
-    contracts, contracts_mgmt, account_links, admin, notifications, actions, csv_upload,
+    contracts, contracts_mgmt, contract_docs, account_links, admin, notifications, actions, csv_upload,
     works, releases, bulk, spotify_import, royalties, placements, analytics,
     tenant_admin
 )
@@ -67,6 +67,11 @@ def ensure_schema_updates():
             conn.execute(text("ALTER TABLE songs ADD COLUMN lyrics TEXT"))
             conn.commit()
             logger.info("Added lyrics column to songs")
+        if 'contract_documents' not in inspector.get_table_names():
+            from .models.models import ContractDocument
+            ContractDocument.__table__.create(bind=engine)
+            logger.info("Created contract_documents table")
+
         bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
         for field in bool_to_string_fields:
             if field in song_cols:
@@ -183,6 +188,7 @@ app.include_router(valuation_reports.router)
 app.include_router(schedule_a.router)
 app.include_router(contracts.router)
 app.include_router(contracts_mgmt.router)
+app.include_router(contract_docs.router)
 app.include_router(account_links.router)
 app.include_router(admin.router)
 app.include_router(notifications.router)

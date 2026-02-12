@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import date, datetime
 from ..models import (
-    get_db, Contract, ContractParty, ContractAsset, RightsSplit,
+    get_db, Contract, ContractParty, ContractAsset, ContractDocument, RightsSplit,
     Song, Work, Creator, OrganizationMember, User
 )
 from ..utils.auth import get_current_user
@@ -81,6 +81,7 @@ class SplitUpdate(BaseModel):
 
 def _contract_to_dict(contract: Contract, db: Session, include_details: bool = False):
     asset_count = db.query(ContractAsset).filter(ContractAsset.contract_id == contract.id).count()
+    document_count = db.query(ContractDocument).filter(ContractDocument.contract_id == contract.id).count()
     parties = []
     for p in contract.parties:
         parties.append({
@@ -113,6 +114,7 @@ def _contract_to_dict(contract: Contract, db: Session, include_details: bool = F
         "created_by_user_id": contract.created_by_user_id,
         "parties": parties,
         "asset_count": asset_count,
+        "document_count": document_count,
     }
 
     if include_details:
