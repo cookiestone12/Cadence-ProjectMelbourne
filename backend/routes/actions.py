@@ -51,81 +51,76 @@ def get_user_organization_id(db: Session, user: User) -> int:
     return membership.organization_id
 
 
+def _build_lookup(db, model, ids, name_attr):
+    if not ids:
+        return {}
+    items = db.query(model).filter(model.id.in_(ids)).all()
+    return {item.id: getattr(item, name_attr, None) for item in items}
+
+
+def enrich_actions_batch(actions: list, db: Session, now: datetime) -> list:
+    creator_ids = {a.creator_id for a in actions if a.creator_id}
+    song_ids = {a.song_id for a in actions if a.song_id}
+    work_ids = {a.work_id for a in actions if a.work_id}
+    release_ids = {a.release_id for a in actions if a.release_id}
+    contract_ids = {a.contract_id for a in actions if a.contract_id}
+    placement_ids = {a.placement_id for a in actions if a.placement_id}
+    user_ids = {a.assigned_to_user_id for a in actions if a.assigned_to_user_id}
+
+    creators = _build_lookup(db, Creator, creator_ids, 'display_name')
+    songs = _build_lookup(db, Song, song_ids, 'title')
+    works = _build_lookup(db, Work, work_ids, 'title')
+    releases = _build_lookup(db, Release, release_ids, 'title')
+    contracts = _build_lookup(db, Contract, contract_ids, 'title')
+    placements = _build_lookup(db, Placement, placement_ids, 'title')
+    users = _build_lookup(db, User, user_ids, 'username')
+
+    results = []
+    for action in actions:
+        days_until = None
+        is_overdue = False
+        if action.deadline:
+            delta = (action.deadline - now).days
+            days_until = delta
+            is_overdue = delta < 0 and action.status != "COMPLETED"
+
+        results.append({
+            "id": action.id,
+            "organization_id": action.organization_id,
+            "creator_id": action.creator_id,
+            "song_id": action.song_id,
+            "work_id": action.work_id,
+            "release_id": action.release_id,
+            "contract_id": action.contract_id,
+            "placement_id": action.placement_id,
+            "entity_type": action.entity_type,
+            "entity_label": action.entity_label,
+            "action_type": action.action_type,
+            "title": action.title,
+            "description": action.description,
+            "priority": action.priority,
+            "status": action.status,
+            "deadline": action.deadline,
+            "reminder_days_before": action.reminder_days_before,
+            "assigned_to_user_id": action.assigned_to_user_id,
+            "created_at": action.created_at,
+            "updated_at": action.updated_at,
+            "creator_name": creators.get(action.creator_id),
+            "song_title": songs.get(action.song_id),
+            "work_title": works.get(action.work_id),
+            "release_title": releases.get(action.release_id),
+            "contract_title": contracts.get(action.contract_id),
+            "placement_title": placements.get(action.placement_id),
+            "assigned_to_name": users.get(action.assigned_to_user_id),
+            "days_until_deadline": days_until,
+            "is_overdue": is_overdue,
+            "is_auto_generated": getattr(action, 'is_auto_generated', False),
+        })
+    return results
+
+
 def enrich_action(action: ActionItem, db: Session, now: datetime) -> dict:
-    creator_name = None
-    if action.creator_id:
-        creator = db.query(Creator).filter(Creator.id == action.creator_id).first()
-        creator_name = creator.display_name if creator else None
-
-    song_title = None
-    if action.song_id:
-        song = db.query(Song).filter(Song.id == action.song_id).first()
-        song_title = song.title if song else None
-
-    work_title = None
-    if action.work_id:
-        work = db.query(Work).filter(Work.id == action.work_id).first()
-        work_title = work.title if work else None
-
-    release_title = None
-    if action.release_id:
-        release = db.query(Release).filter(Release.id == action.release_id).first()
-        release_title = release.title if release else None
-
-    contract_title = None
-    if action.contract_id:
-        contract = db.query(Contract).filter(Contract.id == action.contract_id).first()
-        contract_title = contract.title if contract else None
-
-    placement_title = None
-    if action.placement_id:
-        placement = db.query(Placement).filter(Placement.id == action.placement_id).first()
-        placement_title = placement.title if placement else None
-
-    assigned_to_name = None
-    if action.assigned_to_user_id:
-        assigned = db.query(User).filter(User.id == action.assigned_to_user_id).first()
-        assigned_to_name = assigned.username if assigned else None
-
-    days_until = None
-    is_overdue = False
-    if action.deadline:
-        delta = (action.deadline - now).days
-        days_until = delta
-        is_overdue = delta < 0 and action.status != "COMPLETED"
-
-    return {
-        "id": action.id,
-        "organization_id": action.organization_id,
-        "creator_id": action.creator_id,
-        "song_id": action.song_id,
-        "work_id": action.work_id,
-        "release_id": action.release_id,
-        "contract_id": action.contract_id,
-        "placement_id": action.placement_id,
-        "entity_type": action.entity_type,
-        "entity_label": action.entity_label,
-        "action_type": action.action_type,
-        "title": action.title,
-        "description": action.description,
-        "priority": action.priority,
-        "status": action.status,
-        "deadline": action.deadline,
-        "reminder_days_before": action.reminder_days_before,
-        "assigned_to_user_id": action.assigned_to_user_id,
-        "created_at": action.created_at,
-        "updated_at": action.updated_at,
-        "creator_name": creator_name,
-        "song_title": song_title,
-        "work_title": work_title,
-        "release_title": release_title,
-        "contract_title": contract_title,
-        "placement_title": placement_title,
-        "assigned_to_name": assigned_to_name,
-        "days_until_deadline": days_until,
-        "is_overdue": is_overdue,
-        "is_auto_generated": getattr(action, 'is_auto_generated', False),
-    }
+    return enrich_actions_batch([action], db, now)[0] if action else {}
 
 
 @router.get("/org/{org_id}")
@@ -175,7 +170,7 @@ def get_organization_actions(
     )
     
     actions = query.all()
-    return [enrich_action(a, db, now) for a in actions]
+    return enrich_actions_batch(actions, db, now)
 
 
 @router.get("/creator/{creator_id}")
@@ -211,7 +206,7 @@ def get_creator_actions(
     )
     
     actions = query.all()
-    return [enrich_action(a, db, now) for a in actions]
+    return enrich_actions_batch(actions, db, now)
 
 
 @router.post("/org/{org_id}")
