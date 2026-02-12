@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, asc
+from sqlalchemy import desc, asc, or_
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, date
-from ..models import get_db, Placement, Song, Work, Contract, OrganizationMember, User
+from ..models import get_db, Placement, Song, Work, Contract, OrganizationMember, User, Release, ReleaseTrack, Creator, SongCredit, WorkCredit
 from ..utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/placements", tags=["placements"])
@@ -32,6 +32,7 @@ class PlacementCreate(BaseModel):
     placement_type: str = "SYNC"
     song_id: Optional[int] = None
     work_id: Optional[int] = None
+    release_id: Optional[int] = None
     contract_id: Optional[int] = None
     client_name: Optional[str] = None
     project_name: Optional[str] = None
@@ -54,6 +55,7 @@ class PlacementUpdate(BaseModel):
     placement_type: Optional[str] = None
     song_id: Optional[int] = None
     work_id: Optional[int] = None
+    release_id: Optional[int] = None
     contract_id: Optional[int] = None
     client_name: Optional[str] = None
     project_name: Optional[str] = None
@@ -94,6 +96,11 @@ def placement_to_dict(p: Placement, db: Session) -> dict:
         work = db.query(Work).filter(Work.id == p.work_id).first()
         work_title = work.title if work else None
 
+    release_title = None
+    if p.release_id:
+        release = db.query(Release).filter(Release.id == p.release_id).first()
+        release_title = release.title if release else None
+
     contract_title = None
     if p.contract_id:
         contract = db.query(Contract).filter(Contract.id == p.contract_id).first()
@@ -103,6 +110,20 @@ def placement_to_dict(p: Placement, db: Session) -> dict:
     if p.assigned_to_user_id:
         user = db.query(User).filter(User.id == p.assigned_to_user_id).first()
         assigned_to_name = user.username if user else None
+
+    creator_names = []
+    if p.song_id:
+        credits = db.query(SongCredit).filter(SongCredit.song_id == p.song_id).all()
+        for c in credits:
+            creator = db.query(Creator).filter(Creator.id == c.creator_id).first()
+            if creator and creator.display_name not in creator_names:
+                creator_names.append(creator.display_name)
+    if p.work_id:
+        credits = db.query(WorkCredit).filter(WorkCredit.work_id == p.work_id).all()
+        for c in credits:
+            creator = db.query(Creator).filter(Creator.id == c.creator_id).first()
+            if creator and creator.display_name not in creator_names:
+                creator_names.append(creator.display_name)
 
     return {
         "id": p.id,
@@ -115,6 +136,8 @@ def placement_to_dict(p: Placement, db: Session) -> dict:
         "song_title": song_title,
         "work_id": p.work_id,
         "work_title": work_title,
+        "release_id": p.release_id,
+        "release_title": release_title,
         "contract_id": p.contract_id,
         "contract_title": contract_title,
         "client_name": p.client_name,
@@ -134,6 +157,7 @@ def placement_to_dict(p: Placement, db: Session) -> dict:
         "notes": p.notes,
         "assigned_to_user_id": p.assigned_to_user_id,
         "assigned_to_name": assigned_to_name,
+        "creator_names": creator_names,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }
@@ -145,6 +169,8 @@ def get_placements(
     status: Optional[str] = None,
     placement_type: Optional[str] = None,
     song_id: Optional[int] = None,
+    client_name: Optional[str] = None,
+    creator_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -158,6 +184,20 @@ def get_placements(
         query = query.filter(Placement.placement_type == placement_type)
     if song_id:
         query = query.filter(Placement.song_id == song_id)
+    if client_name:
+        query = query.filter(Placement.client_name.ilike(f"%{client_name}%"))
+    if creator_id:
+        creator_song_ids = [r[0] for r in db.query(SongCredit.song_id).filter(SongCredit.creator_id == creator_id).all()]
+        creator_work_ids = [r[0] for r in db.query(WorkCredit.work_id).filter(WorkCredit.creator_id == creator_id).all()]
+        conditions = []
+        if creator_song_ids:
+            conditions.append(Placement.song_id.in_(creator_song_ids))
+        if creator_work_ids:
+            conditions.append(Placement.work_id.in_(creator_work_ids))
+        if conditions:
+            query = query.filter(or_(*conditions))
+        else:
+            return []
 
     query = query.order_by(desc(Placement.updated_at))
     placements = query.all()
@@ -199,6 +239,49 @@ def get_placement_summary(
     }
 
 
+@router.get("/org/{org_id}/creators")
+def get_placement_creators(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_org_access(db, current_user, org_id)
+    creators = db.query(Creator).filter(Creator.organization_id == org_id).order_by(Creator.display_name).all()
+    return [{"id": c.id, "name": c.display_name} for c in creators]
+
+
+@router.get("/org/{org_id}/search/works")
+def search_works(
+    org_id: int,
+    search: str = "",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import Work
+    verify_org_access(db, current_user, org_id)
+    query = db.query(Work).filter(Work.organization_id == org_id)
+    if search:
+        query = query.filter(Work.title.ilike(f"%{search}%"))
+    works = query.order_by(Work.title).limit(20).all()
+    return [{"id": w.id, "title": w.title, "iswc": w.iswc} for w in works]
+
+
+@router.get("/org/{org_id}/search/releases")
+def search_releases(
+    org_id: int,
+    search: str = "",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import Release
+    verify_org_access(db, current_user, org_id)
+    query = db.query(Release).filter(Release.organization_id == org_id)
+    if search:
+        query = query.filter(Release.title.ilike(f"%{search}%"))
+    releases = query.order_by(Release.title).limit(20).all()
+    return [{"id": r.id, "title": r.title, "primary_artist": r.primary_artist, "upc": r.upc} for r in releases]
+
+
 @router.get("/{placement_id}")
 def get_placement(
     placement_id: int,
@@ -234,6 +317,7 @@ def create_placement(
         status="PITCHED",
         song_id=data.song_id,
         work_id=data.work_id,
+        release_id=data.release_id,
         contract_id=data.contract_id,
         client_name=data.client_name,
         project_name=data.project_name,
@@ -311,6 +395,44 @@ def transition_placement(
         placement.delivery_date = now.date()
     elif target_status == "AIRED" and not placement.air_date:
         placement.air_date = now.date()
+
+    if target_status == "PAID" and placement.license_fee and placement.license_fee > 0 and placement.song_id:
+        from ..models import RoyaltyStatement, RoyaltyTransaction
+        from sqlalchemy import func
+
+        stmt = RoyaltyStatement(
+            organization_id=placement.organization_id,
+            source_name=f"Sync Placement: {placement.title}",
+            source_type="SYNC_PLACEMENT",
+            period_start=placement.pitched_date,
+            period_end=now.date(),
+            currency=placement.license_currency or "USD",
+            total_revenue_cents=int(placement.license_fee * 100),
+            total_transactions=1,
+            matched_transactions=1 if placement.song_id else 0,
+            unmatched_transactions=0 if placement.song_id else 1,
+            status="PROCESSED",
+            processing_notes=f"Auto-generated from placement #{placement.id}: {placement.title}",
+            uploaded_by_user_id=current_user.id,
+        )
+        db.add(stmt)
+        db.flush()
+
+        tx = RoyaltyTransaction(
+            statement_id=stmt.id,
+            organization_id=placement.organization_id,
+            original_track_title=placement.title,
+            song_id=placement.song_id,
+            match_status="MATCHED" if placement.song_id else "UNMATCHED",
+            match_confidence=1.0 if placement.song_id else 0.0,
+            revenue_cents=int(placement.license_fee * 100),
+            currency=placement.license_currency or "USD",
+            quantity=1,
+            territory=placement.territory,
+            platform=f"Sync: {placement.client_name or 'Unknown'}",
+            revenue_type="SYNC_FEE",
+        )
+        db.add(tx)
 
     db.commit()
     db.refresh(placement)

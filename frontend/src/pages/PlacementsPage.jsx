@@ -86,6 +86,7 @@ const emptyCreateForm = {
   song_id: '',
   work_id: '',
   contract_id: '',
+  release_id: '',
   client_name: '',
   project_name: '',
   media_type: '',
@@ -121,6 +122,13 @@ export default function PlacementsPage() {
   const [error, setError] = useState('')
   const [createSongTitle, setCreateSongTitle] = useState('')
   const [editSongTitle, setEditSongTitle] = useState('')
+  const [filterClient, setFilterClient] = useState('')
+  const [creators, setCreators] = useState([])
+  const [filterCreator, setFilterCreator] = useState('')
+  const [createWorkTitle, setCreateWorkTitle] = useState('')
+  const [editWorkTitle, setEditWorkTitle] = useState('')
+  const [createReleaseTitle, setCreateReleaseTitle] = useState('')
+  const [editReleaseTitle, setEditReleaseTitle] = useState('')
 
   useEffect(() => {
     loadInitialData()
@@ -130,7 +138,7 @@ export default function PlacementsPage() {
     if (orgId) {
       loadPlacements()
     }
-  }, [filterStatus, filterType, orgId])
+  }, [filterStatus, filterType, filterClient, filterCreator, orgId])
 
   const loadInitialData = async () => {
     try {
@@ -145,6 +153,10 @@ export default function PlacementsPage() {
 
       loadSummary(id)
         .catch(err => console.error('Failed to load summary:', err))
+
+      axios.get(`/api/placements/org/${id}/creators`)
+        .then(res => setCreators(res.data || []))
+        .catch(() => {})
     } catch (err) {
       console.error('Failed to load data:', err)
       setLoading(false)
@@ -158,6 +170,8 @@ export default function PlacementsPage() {
       const params = new URLSearchParams()
       if (filterStatus) params.append('status', filterStatus)
       if (filterType) params.append('placement_type', filterType)
+      if (filterClient) params.append('client_name', filterClient)
+      if (filterCreator) params.append('creator_id', filterCreator)
       const response = await axios.get(`/api/placements/org/${oid}?${params}`)
       setPlacements(response.data)
     } catch (err) {
@@ -183,12 +197,15 @@ export default function PlacementsPage() {
       const response = await axios.get(`/api/placements/${placementId}`)
       setDetailData(response.data)
       setEditSongTitle(response.data.song_title || '')
+      setEditWorkTitle(response.data.work_title || '')
+      setEditReleaseTitle(response.data.release_title || '')
       setEditForm({
         title: response.data.title || '',
         description: response.data.description || '',
         placement_type: response.data.placement_type || 'SYNC',
         song_id: response.data.song_id || '',
         work_id: response.data.work_id || '',
+        release_id: response.data.release_id || '',
         contract_id: response.data.contract_id || '',
         client_name: response.data.client_name || '',
         project_name: response.data.project_name || '',
@@ -231,6 +248,8 @@ export default function PlacementsPage() {
       else delete payload.song_id
       if (payload.work_id) payload.work_id = parseInt(payload.work_id)
       else delete payload.work_id
+      if (payload.release_id) payload.release_id = parseInt(payload.release_id)
+      else delete payload.release_id
       if (payload.contract_id) payload.contract_id = parseInt(payload.contract_id)
       else delete payload.contract_id
       if (payload.assigned_to_user_id) payload.assigned_to_user_id = parseInt(payload.assigned_to_user_id)
@@ -253,6 +272,8 @@ export default function PlacementsPage() {
       setShowCreateModal(false)
       setCreateForm({ ...emptyCreateForm })
       setCreateSongTitle('')
+      setCreateWorkTitle('')
+      setCreateReleaseTitle('')
       await Promise.all([loadPlacements(), loadSummary()])
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create placement')
@@ -270,6 +291,8 @@ export default function PlacementsPage() {
       else payload.song_id = null
       if (payload.work_id) payload.work_id = parseInt(payload.work_id)
       else payload.work_id = null
+      if (payload.release_id) payload.release_id = parseInt(payload.release_id)
+      else payload.release_id = null
       if (payload.contract_id) payload.contract_id = parseInt(payload.contract_id)
       else payload.contract_id = null
       if (payload.assigned_to_user_id) payload.assigned_to_user_id = parseInt(payload.assigned_to_user_id)
@@ -320,7 +343,7 @@ export default function PlacementsPage() {
     .filter(([s]) => !['DECLINED', 'CANCELLED', 'PAID'].includes(s))
     .reduce((sum, [, c]) => sum + c, 0)
 
-  const hasActiveFilters = filterStatus || filterType
+  const hasActiveFilters = filterStatus || filterType || filterClient || filterCreator
 
   if (loading) {
     return (
@@ -425,13 +448,13 @@ export default function PlacementsPage() {
             Filters
             {hasActiveFilters && (
               <span className="ml-1 bg-white/30 rounded-full px-1.5 text-xs">
-                {(filterStatus ? 1 : 0) + (filterType ? 1 : 0)}
+                {(filterStatus ? 1 : 0) + (filterType ? 1 : 0) + (filterClient ? 1 : 0) + (filterCreator ? 1 : 0)}
               </span>
             )}
           </button>
           {hasActiveFilters && (
             <button
-              onClick={() => { setFilterStatus(''); setFilterType('') }}
+              onClick={() => { setFilterStatus(''); setFilterType(''); setFilterClient(''); setFilterCreator('') }}
               className="text-sm text-[#C47068] hover:underline"
             >
               Clear filters
@@ -474,6 +497,31 @@ export default function PlacementsPage() {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="block text-xs font-medium text-[#7A8580] mb-1">Client</label>
+              <input
+                type="text"
+                value={filterClient}
+                onChange={(e) => setFilterClient(e.target.value)}
+                placeholder="Filter by client..."
+                className="border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30"
+              />
+            </div>
+            {creators.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Creator</label>
+                <select
+                  value={filterCreator}
+                  onChange={(e) => setFilterCreator(e.target.value)}
+                  className="border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30"
+                >
+                  <option value="">All Creators</option>
+                  {creators.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
 
@@ -520,6 +568,13 @@ export default function PlacementsPage() {
                   <div className="flex items-center gap-1.5 mb-2">
                     <MusicalNoteIcon className="w-3.5 h-3.5 text-[#7A8580]" />
                     <span className="text-xs text-[#7A8580]">{p.song_title}</span>
+                  </div>
+                )}
+
+                {p.creator_names && p.creator_names.length > 0 && (
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <UserIcon className="w-3.5 h-3.5 text-[#7A8580]" />
+                    <span className="text-xs text-[#7A8580]">{p.creator_names.join(', ')}</span>
                   </div>
                 )}
 
@@ -635,6 +690,7 @@ export default function PlacementsPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <InfoField label="Song" value={detailData.song_title} icon={<MusicalNoteIcon className="w-3.5 h-3.5" />} />
                         <InfoField label="Work" value={detailData.work_title} />
+                        <InfoField label="Release" value={detailData.release_title} />
                         <InfoField label="Contract" value={detailData.contract_title} />
                       </div>
                     </div>
@@ -724,7 +780,38 @@ export default function PlacementsPage() {
                         onChange={(id, title) => { setEditForm({ ...editForm, song_id: id }); setEditSongTitle(title) }}
                         onClear={() => { setEditForm({ ...editForm, song_id: '' }); setEditSongTitle('') }}
                       />
-                      <FormField label="Work ID" value={editForm.work_id} onChange={(v) => setEditForm({ ...editForm, work_id: v })} type="number" />
+                      <CatalogSearchField
+                        label="Linked Work"
+                        orgId={orgId}
+                        searchUrl={`/api/placements/org/${orgId}/search/works`}
+                        value={editForm.work_id}
+                        displayTitle={editWorkTitle}
+                        onChange={(item) => { setEditForm({ ...editForm, work_id: item.id }); setEditWorkTitle(item.title) }}
+                        onClear={() => { setEditForm({ ...editForm, work_id: '' }); setEditWorkTitle('') }}
+                        placeholder="Search works..."
+                        renderItem={(item) => (
+                          <>
+                            <span className="font-medium text-[#3D4A44]">{item.title}</span>
+                            {item.iswc && <span className="text-[#7A8580]"> — {item.iswc}</span>}
+                          </>
+                        )}
+                      />
+                      <CatalogSearchField
+                        label="Linked Release"
+                        orgId={orgId}
+                        searchUrl={`/api/placements/org/${orgId}/search/releases`}
+                        value={editForm.release_id}
+                        displayTitle={editReleaseTitle}
+                        onChange={(item) => { setEditForm({ ...editForm, release_id: item.id }); setEditReleaseTitle(item.title) }}
+                        onClear={() => { setEditForm({ ...editForm, release_id: '' }); setEditReleaseTitle('') }}
+                        placeholder="Search releases..."
+                        renderItem={(item) => (
+                          <>
+                            <span className="font-medium text-[#3D4A44]">{item.title}</span>
+                            {item.primary_artist && <span className="text-[#7A8580]"> — {item.primary_artist}</span>}
+                          </>
+                        )}
+                      />
                       <div className="grid grid-cols-2 gap-4">
                         <FormField label="Contract ID" value={editForm.contract_id} onChange={(v) => setEditForm({ ...editForm, contract_id: v })} type="number" />
                         <FormField label="Assigned User ID" value={editForm.assigned_to_user_id} onChange={(v) => setEditForm({ ...editForm, assigned_to_user_id: v })} type="number" />
@@ -803,6 +890,38 @@ export default function PlacementsPage() {
                 songTitle={createSongTitle}
                 onChange={(id, title) => { setCreateForm({ ...createForm, song_id: id }); setCreateSongTitle(title) }}
                 onClear={() => { setCreateForm({ ...createForm, song_id: '' }); setCreateSongTitle('') }}
+              />
+              <CatalogSearchField
+                label="Linked Work"
+                orgId={orgId}
+                searchUrl={`/api/placements/org/${orgId}/search/works`}
+                value={createForm.work_id}
+                displayTitle={createWorkTitle}
+                onChange={(item) => { setCreateForm({ ...createForm, work_id: item.id }); setCreateWorkTitle(item.title) }}
+                onClear={() => { setCreateForm({ ...createForm, work_id: '' }); setCreateWorkTitle('') }}
+                placeholder="Search works..."
+                renderItem={(item) => (
+                  <>
+                    <span className="font-medium text-[#3D4A44]">{item.title}</span>
+                    {item.iswc && <span className="text-[#7A8580]"> — {item.iswc}</span>}
+                  </>
+                )}
+              />
+              <CatalogSearchField
+                label="Linked Release"
+                orgId={orgId}
+                searchUrl={`/api/placements/org/${orgId}/search/releases`}
+                value={createForm.release_id}
+                displayTitle={createReleaseTitle}
+                onChange={(item) => { setCreateForm({ ...createForm, release_id: item.id }); setCreateReleaseTitle(item.title) }}
+                onClear={() => { setCreateForm({ ...createForm, release_id: '' }); setCreateReleaseTitle('') }}
+                placeholder="Search releases..."
+                renderItem={(item) => (
+                  <>
+                    <span className="font-medium text-[#3D4A44]">{item.title}</span>
+                    {item.primary_artist && <span className="text-[#7A8580]"> — {item.primary_artist}</span>}
+                  </>
+                )}
               />
               <FormField label="Pitched Date" value={createForm.pitched_date} onChange={(v) => setCreateForm({ ...createForm, pitched_date: v })} type="date" />
               <FormField label="Contact Name" value={createForm.contact_name} onChange={(v) => setCreateForm({ ...createForm, contact_name: v })} />
@@ -961,6 +1080,117 @@ function SongSearchField({ label, orgId, value, songTitle, onChange, onClear }) 
         {showDropdown && query.length >= 2 && !loading && results.length === 0 && (
           <div className="absolute z-50 w-full mt-1 bg-white border border-[rgba(59,77,67,0.15)] rounded-lg shadow-lg">
             <div className="px-3 py-2 text-sm text-[#7A8580]">No songs found</div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CatalogSearchField({ label, orgId, searchUrl, value, displayTitle, onChange, onClear, placeholder, renderItem }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [showDropdown, setShowDropdown] = useState(false)
+  const debounceRef = useRef(null)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleSearch = (searchQuery) => {
+    setQuery(searchQuery)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (searchQuery.length < 2) {
+      setResults([])
+      setShowDropdown(false)
+      return
+    }
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const response = await axios.get(`${searchUrl}?search=${encodeURIComponent(searchQuery)}`)
+        setResults(response.data || [])
+        setShowDropdown(true)
+      } catch (err) {
+        setResults([])
+      } finally {
+        setLoading(false)
+      }
+    }, 300)
+  }
+
+  const handleSelect = (item) => {
+    onChange(item)
+    setQuery('')
+    setResults([])
+    setShowDropdown(false)
+  }
+
+  const handleClear = () => {
+    onClear()
+    setQuery('')
+    setResults([])
+    setShowDropdown(false)
+  }
+
+  const inputCls = "w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30 placeholder:text-[#7A8580]/50"
+
+  return (
+    <div ref={containerRef}>
+      <label className="block text-xs font-medium text-[#7A8580] mb-1">{label}</label>
+      <div className="relative">
+        {value && displayTitle ? (
+          <div className={`${inputCls} flex items-center justify-between`}>
+            <span className="truncate">{displayTitle}</span>
+            <button
+              type="button"
+              onClick={handleClear}
+              className="ml-2 flex-shrink-0 p-0.5 rounded hover:bg-[#EEF1EC] text-[#7A8580] hover:text-[#C47068] transition-colors"
+            >
+              <XMarkIcon className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => handleSearch(e.target.value)}
+            onFocus={() => { if (results.length > 0) setShowDropdown(true) }}
+            placeholder={placeholder || 'Search...'}
+            className={inputCls}
+          />
+        )}
+        {loading && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-[#5B8A72] border-t-transparent"></div>
+          </div>
+        )}
+        {showDropdown && results.length > 0 && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-[rgba(59,77,67,0.15)] rounded-lg shadow-lg max-h-48 overflow-y-auto">
+            {results.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => handleSelect(item)}
+                className="px-3 py-2 text-sm hover:bg-[#EEF1EC] cursor-pointer"
+              >
+                {renderItem ? renderItem(item) : (
+                  <span className="font-medium text-[#3D4A44]">{item.title}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {showDropdown && query.length >= 2 && !loading && results.length === 0 && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-[rgba(59,77,67,0.15)] rounded-lg shadow-lg">
+            <div className="px-3 py-2 text-sm text-[#7A8580]">No results found</div>
           </div>
         )}
       </div>

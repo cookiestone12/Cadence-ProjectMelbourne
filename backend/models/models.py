@@ -1287,6 +1287,7 @@ class Placement(Base):
         Index('ix_placements_org_id', 'organization_id'),
         Index('ix_placements_status', 'status'),
         Index('ix_placements_song_id', 'song_id'),
+        Index('ix_placements_release_id', 'release_id'),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1300,6 +1301,7 @@ class Placement(Base):
 
     song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
     work_id = Column(Integer, ForeignKey("works.id"), nullable=True)
+    release_id = Column(Integer, ForeignKey("releases.id"), nullable=True)
     contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
 
     client_name = Column(String, nullable=True)
@@ -1331,6 +1333,7 @@ class Placement(Base):
     organization = relationship("Organization")
     song = relationship("Song")
     work = relationship("Work")
+    release = relationship("Release")
     contract = relationship("Contract")
     assigned_to = relationship("User", foreign_keys=[assigned_to_user_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
