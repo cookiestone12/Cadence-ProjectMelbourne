@@ -40,14 +40,14 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 
 ### Feature Specifications
 - **Creator Roster Management**: Visual cards with stats and detailed profiles, supporting manual addition.
-- **Advanced Catalog View**: Spreadsheet-style with robust filtering.
+- **Advanced Catalog View**: Spreadsheet-style with robust filtering and sortable columns (click column headers to sort by Song, Artist, Label, Pub %, Health, Released, Spotify, Contract, PRO).
 - **Song Management**: Manual and bulk CSV upload (with AI mapping) of songs with full metadata.
 - **Placement Tracking**: Full placement management page with summary cards (total, pipeline value, paid, active pitches), status filters, detail panel with status transitions, CRUD operations, and contract linking. Visual pipeline from PITCHED through to PAID. Song linking via type-ahead search dropdown in New/Edit Placement forms.
 - **Released Status & Spotify Links**: Mark songs as released and prompt for Spotify links.
 - **Reports & Analytics**: Comprehensive tabbed analytics dashboard (Overview, Catalog Health, Revenue, Creators, Placements, Rights Coverage) with Recharts visualizations including area charts, pie charts, bar charts, line charts, funnel views, coverage progress bars, top earners tables, and gap analysis. Backend analytics API aggregates data across all modules.
 - **Schedule A Export**: CSV generation of creator catalogs.
 - **Contract Management**: Secure PDF upload, download, and deletion linked to songs with access control. Full deal-level contract tracking with parties, assets, rights splits, territory, and advance management via Contracts page. Contract document upload with optional linking to songs, works, or releases; Documents tab in contract detail panel with upload, download, and delete capabilities.
-- **Rights & Splits**: Per-asset rights splits with percentage validation. Rights query by asset or rights holder. Rights & Splits tab in song detail modal and works detail panel.
+- **Rights & Splits**: Per-asset rights splits with percentage validation. Rights query by asset or rights holder. Rights & Splits tab in song detail modal and works detail panel. Direct split management allows adding splits to songs without creating contracts first (auto-creates SPLIT_SHEET contracts). Split Sheet PDF export with Rythm branding, rights holder details, and signature blocks available from both song detail and contracts page.
 - **Account Linking**: Secure linking between Individual and Enterprise organizations with mutual consent.
 - **Master Admin System**: Super admin role for platform-wide management (user/organization management, impersonation, system statistics).
 - **Global Search**: Unified search across songs, works, releases, and creators.
