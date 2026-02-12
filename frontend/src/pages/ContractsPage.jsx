@@ -301,7 +301,15 @@ function ContractsPageInner() {
       }
       if (payload.creator_id) payload.creator_id = parseInt(payload.creator_id)
       else delete payload.creator_id
-      if (createParties.length > 0) payload.parties = createParties
+      if (createParties.length > 0) {
+        payload.parties = createParties.map(p => {
+          const cleaned = { ...p }
+          if (cleaned.creator_id) cleaned.creator_id = parseInt(cleaned.creator_id)
+          else delete cleaned.creator_id
+          if (!cleaned.contact_email) delete cleaned.contact_email
+          return cleaned
+        })
+      }
       await axios.post(`/api/rights/contracts/org/${organizationId}`, payload)
       setShowCreateModal(false)
       setCreateForm({ ...emptyCreateForm })
