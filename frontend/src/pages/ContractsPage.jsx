@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Component } from 'react'
+import React, { useState, useEffect, useRef, Component } from 'react'
 import axios from 'axios'
 import {
   MagnifyingGlassIcon, PlusIcon, XMarkIcon, TrashIcon,
@@ -6,6 +6,75 @@ import {
   MusicalNoteIcon, CalendarIcon, CurrencyDollarIcon,
   ChevronDownIcon, ArrowDownTrayIcon, PaperClipIcon, CloudArrowUpIcon
 } from '@heroicons/react/24/outline'
+
+function SearchableSelect({ options, value, onChange, placeholder, className }) {
+  const [search, setSearch] = useState('')
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const selectedOption = options.find(o => String(o.id) === String(value))
+
+  const filtered = options
+    .filter(o => {
+      if (!search) return true
+      const term = search.toLowerCase()
+      return o.label.toLowerCase().includes(term) || (o.sublabel && o.sublabel.toLowerCase().includes(term))
+    })
+    .sort((a, b) => a.label.localeCompare(b.label))
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div className="relative">
+        <input
+          type="text"
+          placeholder={selectedOption ? selectedOption.label : (placeholder || 'Search...')}
+          value={selectedOption && !isOpen ? '' : search}
+          onChange={(e) => { setSearch(e.target.value); setIsOpen(true) }}
+          onFocus={() => setIsOpen(true)}
+          className={className || 'w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]'}
+        />
+        {selectedOption && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onChange(''); setSearch(''); setIsOpen(false) }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-[#7A8580] hover:text-[#3D4A44]"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-[rgba(59,77,67,0.12)] rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-[#7A8580]">No results found</div>
+          ) : (
+            filtered.map(o => (
+              <button
+                key={o.id}
+                type="button"
+                onClick={() => { onChange(String(o.id)); setSearch(''); setIsOpen(false) }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-[#EEF1EC] transition-colors ${String(o.id) === String(value) ? 'bg-[#F0F5F2] text-[#5B8A72] font-medium' : 'text-[#3D4A44]'}`}
+              >
+                <div>{o.label}</div>
+                {o.sublabel && <div className="text-xs text-[#7A8580]">{o.sublabel}</div>}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 class ContractsErrorBoundary extends Component {
   constructor(props) {
@@ -120,6 +189,8 @@ function ContractsPageInner() {
   const [uploadLoading, setUploadLoading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [uploadContractId, setUploadContractId] = useState('')
+  const [showSplitSheetMenu, setShowSplitSheetMenu] = useState(false)
+  const splitSheetRef = useRef(null)
 
   useEffect(() => {
     loadData()
@@ -362,6 +433,38 @@ function ContractsPageInner() {
       setUploadLoading(false)
     }
   }
+
+  async function handleDownloadSplitSheet(splitType) {
+    if (!contractDetail) return
+    setShowSplitSheetMenu(false)
+    try {
+      const response = await axios.get(`/api/rights/contracts/${contractDetail.id}/split-sheet`, {
+        params: { split_type: splitType },
+        responseType: 'blob'
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `Split_Sheet_${contractDetail.title.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to download split sheet:', error)
+      alert('Failed to generate split sheet. Make sure the contract has linked assets with splits.')
+    }
+  }
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (splitSheetRef.current && !splitSheetRef.current.contains(e.target)) {
+        setShowSplitSheetMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const filteredSongsForUpload = songs.filter(s => {
     if (!uploadCreatorId) return true
@@ -957,16 +1060,13 @@ function ContractsPageInner() {
 
               <div>
                 <label className="block text-sm font-medium text-[#3D4A44] mb-1">Song (optional)</label>
-                <select
+                <SearchableSelect
+                  options={filteredSongsForUpload.map(s => ({ id: s.id, label: s.title, sublabel: s.artist || s.primary_artist }))}
                   value={uploadSongId}
-                  onChange={(e) => setUploadSongId(e.target.value)}
+                  onChange={(val) => setUploadSongId(val)}
+                  placeholder="Search songs..."
                   className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                >
-                  <option value="">None</option>
-                  {filteredSongsForUpload.map(s => (
-                    <option key={s.id} value={s.id}>{s.title}{s.artist ? ` — ${s.artist}` : ''}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>
@@ -1027,6 +1127,38 @@ function ContractsPageInner() {
               <div className="flex items-center space-x-2">
                 {!editMode && contractDetail && (
                   <>
+                    <div className="relative" ref={splitSheetRef}>
+                      <button
+                        onClick={() => setShowSplitSheetMenu(!showSplitSheetMenu)}
+                        className="p-2 text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#EEF1EC] rounded-lg transition-colors"
+                        title="Download Split Sheet"
+                      >
+                        <ArrowDownTrayIcon className="w-5 h-5" />
+                      </button>
+                      {showSplitSheetMenu && (
+                        <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-lg border border-[rgba(59,77,67,0.12)] z-20 py-1">
+                          <p className="px-3 py-1.5 text-xs font-medium text-[#7A8580]">Download Split Sheet</p>
+                          <button
+                            onClick={() => handleDownloadSplitSheet('both')}
+                            className="w-full text-left px-3 py-2 text-sm text-[#3D4A44] hover:bg-[#F5F7F4] transition-colors"
+                          >
+                            Publishing & Master
+                          </button>
+                          <button
+                            onClick={() => handleDownloadSplitSheet('publishing')}
+                            className="w-full text-left px-3 py-2 text-sm text-[#3D4A44] hover:bg-[#F5F7F4] transition-colors"
+                          >
+                            Publishing Only
+                          </button>
+                          <button
+                            onClick={() => handleDownloadSplitSheet('master')}
+                            className="w-full text-left px-3 py-2 text-sm text-[#3D4A44] hover:bg-[#F5F7F4] transition-colors"
+                          >
+                            Master Only
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     <button
                       onClick={() => setEditMode(true)}
                       className="p-2 text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#EEF1EC] rounded-lg transition-colors"
@@ -1617,13 +1749,29 @@ function ContractsPageInner() {
                             </div>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => setSplitForms(prev => ({ ...prev, [asset.id]: { rights_holder_id: '', rights_type: '', share_percentage: '', notes: '' } }))}
-                            className="text-xs text-[#5B8A72] hover:text-[#4A7A62] font-medium flex items-center space-x-1"
-                          >
-                            <PlusIcon className="w-3.5 h-3.5" />
-                            <span>Add Split</span>
-                          </button>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => setSplitForms(prev => ({ ...prev, [asset.id]: { rights_holder_id: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '' } }))}
+                              className="text-xs text-[#5B8A72] hover:text-[#4A7A62] font-medium flex items-center space-x-1 border border-[#5B8A72] rounded-lg px-2 py-1 hover:bg-[rgba(91,138,114,0.08)] transition-colors"
+                            >
+                              <PlusIcon className="w-3.5 h-3.5" />
+                              <span>Add Publishing Split</span>
+                            </button>
+                            <button
+                              onClick={() => setSplitForms(prev => ({ ...prev, [asset.id]: { rights_holder_id: '', rights_type: 'MASTER', share_percentage: '', notes: '' } }))}
+                              className="text-xs text-[#5B8A72] hover:text-[#4A7A62] font-medium flex items-center space-x-1 border border-[#5B8A72] rounded-lg px-2 py-1 hover:bg-[rgba(91,138,114,0.08)] transition-colors"
+                            >
+                              <PlusIcon className="w-3.5 h-3.5" />
+                              <span>Add Master Split</span>
+                            </button>
+                            <button
+                              onClick={() => setSplitForms(prev => ({ ...prev, [asset.id]: { rights_holder_id: '', rights_type: '', share_percentage: '', notes: '' } }))}
+                              className="text-xs text-[#5B8A72] hover:text-[#4A7A62] font-medium flex items-center space-x-1"
+                            >
+                              <PlusIcon className="w-3.5 h-3.5" />
+                              <span>Add Split</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     )
@@ -1668,22 +1816,19 @@ function ContractsPageInner() {
                             <label className="block text-xs text-[#7A8580] mb-1">
                               {docLinkType === 'song' ? 'Select Song' : docLinkType === 'work' ? 'Select Work' : 'Select Release'}
                             </label>
-                            <select
+                            <SearchableSelect
+                              options={
+                                docLinkType === 'song'
+                                  ? songs.map(s => ({ id: s.id, label: s.title, sublabel: s.artist || s.primary_artist }))
+                                  : docLinkType === 'work'
+                                    ? works.map(w => ({ id: w.id, label: w.title }))
+                                    : releases.map(r => ({ id: r.id, label: r.title || r.name }))
+                              }
                               value={docLinkId}
-                              onChange={(e) => setDocLinkId(e.target.value)}
+                              onChange={(val) => setDocLinkId(val)}
+                              placeholder="Search..."
                               className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                            >
-                              <option value="">Choose...</option>
-                              {docLinkType === 'song' && songs.map(s => (
-                                <option key={s.id} value={s.id}>{s.title}</option>
-                              ))}
-                              {docLinkType === 'work' && works.map(w => (
-                                <option key={w.id} value={w.id}>{w.title}</option>
-                              ))}
-                              {docLinkType === 'release' && releases.map(r => (
-                                <option key={r.id} value={r.id}>{r.title || r.name}</option>
-                              ))}
-                            </select>
+                            />
                           </div>
                         )}
                       </div>

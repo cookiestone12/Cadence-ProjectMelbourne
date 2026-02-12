@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import date, datetime
+import io
 from ..models import (
     get_db, Contract, ContractParty, ContractAsset, ContractDocument, RightsSplit,
     Song, Work, Creator, OrganizationMember, User
@@ -672,3 +674,246 @@ def get_holder_rights(
         "creator_name": creator.display_name,
         "contracts": list(contracts_map.values()),
     }
+
+
+@router.get("/contracts/{contract_id}/split-sheet")
+def export_split_sheet(
+    contract_id: int,
+    split_type: str = Query(default="both"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, HRFlowable
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    import os
+
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+    verify_org_access(current_user, contract.organization_id, db)
+
+    contract_assets = db.query(ContractAsset).filter(ContractAsset.contract_id == contract.id).all()
+
+    publishing_types = ("PUBLISHING", "PERFORMANCE", "MECHANICAL")
+    master_types = ("MASTER", "DISTRIBUTION")
+
+    assets_data = []
+    all_holders = {}
+    for ca in contract_assets:
+        asset_title = None
+        asset_isrc = None
+        asset_artist = None
+        if ca.asset_type == "SONG":
+            song = db.query(Song).filter(Song.id == ca.asset_id).first()
+            if song:
+                asset_title = song.title
+                asset_isrc = song.isrc
+                asset_artist = song.primary_artist
+        elif ca.asset_type == "WORK":
+            work = db.query(Work).filter(Work.id == ca.asset_id).first()
+            if work:
+                asset_title = work.title
+
+        splits = db.query(RightsSplit).filter(RightsSplit.contract_asset_id == ca.id).all()
+        filtered_splits = []
+        for s in splits:
+            if split_type == "publishing" and s.rights_type not in publishing_types:
+                continue
+            if split_type == "master" and s.rights_type not in master_types:
+                continue
+            holder = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
+            party = db.query(ContractParty).filter(
+                ContractParty.contract_id == contract.id,
+                ContractParty.creator_id == s.rights_holder_id,
+            ).first()
+            filtered_splits.append({
+                "holder": holder,
+                "party": party,
+                "split": s,
+            })
+            if holder and holder.id not in all_holders:
+                all_holders[holder.id] = holder
+
+        assets_data.append({
+            "asset_type": ca.asset_type,
+            "asset_title": asset_title or "Untitled",
+            "asset_isrc": asset_isrc,
+            "asset_artist": asset_artist,
+            "splits": filtered_splits,
+        })
+
+    sage = colors.HexColor("#5B8A72")
+    sage_light = colors.HexColor("#E8F0EB")
+    dark_text = colors.HexColor("#3D4A44")
+    muted = colors.HexColor("#7A8580")
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter,
+                            topMargin=0.5*inch, bottomMargin=0.5*inch,
+                            leftMargin=0.6*inch, rightMargin=0.6*inch)
+
+    styles = getSampleStyleSheet()
+    style_title = ParagraphStyle('SSTitle', parent=styles['Title'], fontSize=22, textColor=dark_text, spaceAfter=4)
+    style_subtitle = ParagraphStyle('SSSub', parent=styles['Normal'], fontSize=11, textColor=muted, spaceAfter=12)
+    style_heading = ParagraphStyle('SSHead', parent=styles['Heading2'], fontSize=14, textColor=sage, spaceBefore=16, spaceAfter=8)
+    style_normal = ParagraphStyle('SSNorm', parent=styles['Normal'], fontSize=10, textColor=dark_text, leading=14)
+    style_small = ParagraphStyle('SSSmall', parent=styles['Normal'], fontSize=8, textColor=muted, leading=11)
+    style_center = ParagraphStyle('SSCenter', parent=styles['Normal'], fontSize=8, textColor=muted, alignment=TA_CENTER)
+    style_agreement = ParagraphStyle('SSAgree', parent=styles['Normal'], fontSize=10, textColor=dark_text, leading=14, spaceBefore=16, spaceAfter=12)
+
+    elements = []
+
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'frontend', 'public', 'rythm-logo.png')
+    if os.path.exists(logo_path):
+        logo = Image(logo_path, width=1.2*inch, height=1.2*inch)
+        logo.hAlign = 'LEFT'
+        elements.append(logo)
+        elements.append(Spacer(1, 6))
+
+    elements.append(Paragraph("SPLIT SHEET", style_title))
+    if split_type == "publishing":
+        subtitle_text = "Publishing Rights Only"
+    elif split_type == "master":
+        subtitle_text = "Master Rights Only"
+    else:
+        subtitle_text = "Publishing & Master Rights"
+    elements.append(Paragraph(subtitle_text, style_subtitle))
+
+    elements.append(HRFlowable(width="100%", thickness=1, color=sage_light, spaceAfter=12))
+
+    elements.append(Paragraph("Contract Information", style_heading))
+    territory_str = ", ".join(contract.territory) if contract.territory else "—"
+    meta_data = [
+        ["Title", contract.title or "—", "Reference #", contract.reference_number or "—"],
+        ["Type", contract.contract_type or "—", "Status", contract.status or "—"],
+        ["Territory", territory_str, "Start Date", contract.start_date.strftime("%B %d, %Y") if contract.start_date else "—"],
+        ["", "", "End Date", contract.end_date.strftime("%B %d, %Y") if contract.end_date else "—"],
+    ]
+    meta_table = Table(meta_data, colWidths=[1.2*inch, 2.3*inch, 1.2*inch, 2.3*inch])
+    meta_table.setStyle(TableStyle([
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TEXTCOLOR', (0, 0), (0, -1), muted),
+        ('TEXTCOLOR', (2, 0), (2, -1), muted),
+        ('TEXTCOLOR', (1, 0), (1, -1), dark_text),
+        ('TEXTCOLOR', (3, 0), (3, -1), dark_text),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+    elements.append(meta_table)
+    elements.append(Spacer(1, 8))
+
+    for asset in assets_data:
+        elements.append(Paragraph(asset["asset_title"], style_heading))
+        detail_parts = []
+        if asset["asset_isrc"]:
+            detail_parts.append(f"ISRC: {asset['asset_isrc']}")
+        if asset["asset_artist"]:
+            detail_parts.append(f"Artist: {asset['asset_artist']}")
+        if detail_parts:
+            elements.append(Paragraph(" · ".join(detail_parts), style_small))
+            elements.append(Spacer(1, 6))
+
+        header_row = ["Rights Holder", "Role", "PRO", "IPI #", "Publisher", "Rights Type", "Share %"]
+        table_data = [header_row]
+        totals_by_type = {}
+        for entry in asset["splits"]:
+            holder = entry["holder"]
+            party = entry["party"]
+            s = entry["split"]
+            holder_name = holder.display_name if holder else "Unknown"
+            party_role = party.party_role if party else "—"
+            pro = (holder.primary_pro if holder and holder.primary_pro else "—")
+            ipi = (holder.primary_ipi if holder and holder.primary_ipi else "—")
+            publisher = (holder.publisher_name if holder and holder.publisher_name else "—")
+            rights_type = s.rights_type
+            share = f"{s.share_percentage}%"
+            table_data.append([holder_name, party_role, pro, ipi, publisher, rights_type, share])
+            if rights_type not in totals_by_type:
+                totals_by_type[rights_type] = 0.0
+            totals_by_type[rights_type] += s.share_percentage
+
+        for rt_name, rt_total in totals_by_type.items():
+            table_data.append(["", "", "", "", "Total", rt_name, f"{rt_total}%"])
+
+        col_widths = [1.3*inch, 0.8*inch, 0.7*inch, 0.7*inch, 1.0*inch, 1.0*inch, 0.7*inch]
+        split_table = Table(table_data, colWidths=col_widths)
+        split_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), sage),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('GRID', (0, 0), (-1, -1), 0.5, sage_light),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, sage_light]),
+            ('FONTNAME', (0, -len(totals_by_type)), (-1, -1), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -len(totals_by_type)), (-1, -1), sage_light),
+            ('TEXTCOLOR', (0, 1), (-1, -1), dark_text),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+        ]))
+        elements.append(split_table)
+        elements.append(Spacer(1, 12))
+
+    elements.append(HRFlowable(width="100%", thickness=1, color=sage_light, spaceAfter=12))
+    elements.append(Paragraph("Agreement", style_heading))
+    elements.append(Paragraph(
+        "By signing below, all parties acknowledge and agree to the ownership splits documented above.",
+        style_agreement,
+    ))
+    elements.append(Spacer(1, 12))
+
+    holders_list = list(all_holders.values())
+    sig_rows = []
+    for i in range(0, len(holders_list), 2):
+        row = []
+        for j in range(2):
+            if i + j < len(holders_list):
+                h = holders_list[i + j]
+                sig_block = (
+                    f"<b>{h.display_name}</b><br/><br/>"
+                    f"Name: ______________________________<br/><br/>"
+                    f"Signature: __________________________<br/><br/>"
+                    f"Date: ______________________________"
+                )
+                row.append(Paragraph(sig_block, style_normal))
+            else:
+                row.append("")
+        sig_rows.append(row)
+
+    if sig_rows:
+        sig_table = Table(sig_rows, colWidths=[3.3*inch, 3.3*inch])
+        sig_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('TOPPADDING', (0, 0), (-1, -1), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(sig_table)
+
+    elements.append(Spacer(1, 20))
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=sage_light, spaceAfter=8))
+    elements.append(Paragraph(
+        f"Generated by Rythm Catalog Intelligence · {datetime.utcnow().strftime('%B %d, %Y')}",
+        style_center,
+    ))
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    safe_title = "".join(c if c.isalnum() or c in (" ", "-", "_") else "" for c in (contract.title or "Untitled")).strip().replace(" ", "_")
+    filename = f"Split_Sheet_{safe_title}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
