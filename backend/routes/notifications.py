@@ -255,6 +255,155 @@ def create_notification(
     return notification
 
 
+class EmailDigestPreferenceRequest(BaseModel):
+    email_digest_enabled: bool = False
+    schedule_interval: str = "weekly"
+    min_priority_threshold: int = 3
+    preferred_hour: int = 9
+
+class EmailDigestPreferenceResponse(BaseModel):
+    id: int
+    email_digest_enabled: bool
+    schedule_interval: str
+    min_priority_threshold: int
+    preferred_hour: int
+    last_email_sent_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/email-digest")
+def get_email_digest_preference(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models.models import EmailDigestPreference
+    pref = db.query(EmailDigestPreference).filter(
+        EmailDigestPreference.user_id == current_user.id
+    ).first()
+
+    if not pref:
+        return {
+            "id": 0,
+            "email_digest_enabled": False,
+            "schedule_interval": "weekly",
+            "min_priority_threshold": 3,
+            "preferred_hour": 9,
+            "last_email_sent_at": None,
+        }
+
+    return {
+        "id": pref.id,
+        "email_digest_enabled": pref.email_digest_enabled,
+        "schedule_interval": pref.schedule_interval,
+        "min_priority_threshold": pref.min_priority_threshold,
+        "preferred_hour": pref.preferred_hour,
+        "last_email_sent_at": pref.last_email_sent_at,
+    }
+
+
+@router.put("/email-digest")
+def update_email_digest_preference(
+    request: EmailDigestPreferenceRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models.models import EmailDigestPreference
+    pref = db.query(EmailDigestPreference).filter(
+        EmailDigestPreference.user_id == current_user.id
+    ).first()
+
+    if pref:
+        pref.email_digest_enabled = request.email_digest_enabled
+        pref.schedule_interval = request.schedule_interval
+        pref.min_priority_threshold = request.min_priority_threshold
+        pref.preferred_hour = request.preferred_hour
+        pref.updated_at = datetime.utcnow()
+    else:
+        pref = EmailDigestPreference(
+            user_id=current_user.id,
+            email_digest_enabled=request.email_digest_enabled,
+            schedule_interval=request.schedule_interval,
+            min_priority_threshold=request.min_priority_threshold,
+            preferred_hour=request.preferred_hour,
+        )
+        db.add(pref)
+
+    db.commit()
+    return {"message": "Email digest preference updated"}
+
+
+@router.post("/email-digest/send-test")
+def send_test_digest(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import OrganizationMember, ActionItem
+    from ..utils.priority_engine import sort_by_urgency, group_by_priority, calculate_priority_score
+    from ..templates.email_digest import generate_digest_html
+    from ..services.email_provider import get_email_provider
+
+    if not current_user.email:
+        raise HTTPException(status_code=400, detail="No email address on your account")
+
+    from ..models.models import EmailDigestPreference
+    digest_pref = db.query(EmailDigestPreference).filter(
+        EmailDigestPreference.user_id == current_user.id
+    ).first()
+    min_priority = digest_pref.min_priority_threshold if digest_pref else 4
+
+    memberships = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).all()
+    org_ids = [m.organization_id for m in memberships]
+
+    actions = db.query(ActionItem).filter(
+        ActionItem.organization_id.in_(org_ids),
+        ActionItem.status.in_(["PENDING", "IN_PROGRESS"]),
+        ActionItem.priority <= min_priority,
+    ).all() if org_ids else []
+
+    sorted_actions = sort_by_urgency(actions)
+    grouped = group_by_priority(sorted_actions)
+
+    now = datetime.utcnow()
+    grouped_items = {}
+    for level, items in grouped.items():
+        grouped_items[level] = [{
+            "title": a.title,
+            "description": a.description,
+            "deadline": a.deadline,
+            "entity_type": a.entity_type,
+            "entity_label": a.entity_label,
+            "action_type": a.action_type,
+            "priority_score": calculate_priority_score(a),
+        } for a in items]
+
+    overdue_count = sum(1 for a in actions if a.deadline and a.deadline < now)
+    summary_stats = {
+        "total_items": len(actions),
+        "overdue_count": overdue_count,
+        "critical_count": len(grouped.get("critical", [])),
+        "high_count": len(grouped.get("high", [])),
+    }
+
+    user_name = current_user.username or "User"
+    html_body = generate_digest_html(user_name, grouped_items, summary_stats)
+
+    provider = get_email_provider()
+    success = provider.send_email(
+        to=current_user.email,
+        subject="[Test] Rythm Action Items Digest",
+        html_body=html_body,
+    )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send test email")
+
+    return {"message": f"Test digest email sent to {current_user.email}"}
+
+
 @router.get("/org/{org_id}/settings", response_model=List[OrgNotificationSettingResponse])
 def get_org_notification_settings(
     org_id: int,

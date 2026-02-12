@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon } from '@heroicons/react/24/outline'
+import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon, ClockIcon } from '@heroicons/react/24/outline'
 
 const NOTIFICATION_TYPES = {
   MISSING_ISRC: { label: 'Missing ISRC', description: 'Alert when songs are missing ISRC codes' },
@@ -32,11 +32,21 @@ export default function Settings() {
   const [passwordError, setPasswordError] = useState('')
   const [passwordSuccess, setPasswordSuccess] = useState('')
   const [changingPassword, setChangingPassword] = useState(false)
+  const [emailDigest, setEmailDigest] = useState({
+    email_digest_enabled: false,
+    schedule_interval: 'weekly',
+    min_priority_threshold: 3,
+    preferred_hour: 9,
+    last_email_sent_at: null,
+  })
+  const [sendingTest, setSendingTest] = useState(false)
+  const [savingDigest, setSavingDigest] = useState(false)
 
   useEffect(() => {
     fetchUserInfo()
     fetchPreferences()
     fetchOrgData()
+    fetchEmailDigest()
   }, [])
 
   const fetchUserInfo = async () => {
@@ -170,6 +180,49 @@ export default function Settings() {
     }
   }
 
+  const fetchEmailDigest = async () => {
+    try {
+      const response = await axios.get('/api/notifications/email-digest')
+      setEmailDigest(response.data)
+    } catch (error) {
+      console.error('Error fetching email digest preferences:', error)
+    }
+  }
+
+  const updateEmailDigest = async (updates) => {
+    const updated = { ...emailDigest, ...updates }
+    setSavingDigest(true)
+    try {
+      await axios.put('/api/notifications/email-digest', {
+        email_digest_enabled: updated.email_digest_enabled,
+        schedule_interval: updated.schedule_interval,
+        min_priority_threshold: updated.min_priority_threshold,
+        preferred_hour: updated.preferred_hour,
+      })
+      setEmailDigest(updated)
+      setMessage('Email digest settings saved')
+      setTimeout(() => setMessage(''), 2000)
+    } catch (error) {
+      console.error('Error updating email digest:', error)
+      setMessage('Failed to save email digest settings')
+    } finally {
+      setSavingDigest(false)
+    }
+  }
+
+  const sendTestEmail = async () => {
+    setSendingTest(true)
+    try {
+      const response = await axios.post('/api/notifications/email-digest/send-test')
+      setMessage(response.data.message || 'Test email sent successfully')
+      setTimeout(() => setMessage(''), 4000)
+    } catch (error) {
+      setMessage(error.response?.data?.detail || 'Failed to send test email')
+    } finally {
+      setSendingTest(false)
+    }
+  }
+
   const handleChangePassword = async (e) => {
     e.preventDefault()
     setPasswordError('')
@@ -244,6 +297,17 @@ export default function Settings() {
             >
               <LockClosedIcon className="w-5 h-5" />
               <span>Password</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('email-digest')}
+              className={`flex items-center space-x-2 pb-3 px-1 border-b-2 font-medium transition-colors ${
+                activeTab === 'email-digest'
+                  ? 'border-[#5B8A72] text-[#5B8A72]'
+                  : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
+              }`}
+            >
+              <ClockIcon className="w-5 h-5" />
+              <span>Email Digest</span>
             </button>
             {isOrgAdmin && (
               <button
@@ -481,6 +545,129 @@ export default function Settings() {
                   </ul>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'email-digest' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-[22px] font-medium text-[#3D4A44]">Email Digest</h2>
+                  <p className="text-[15px] text-[#7A8580] mt-1">Get scheduled email summaries of your action items</p>
+                </div>
+                <button
+                  onClick={() => updateEmailDigest({ email_digest_enabled: !emailDigest.email_digest_enabled })}
+                  className={`w-14 h-8 rounded-full transition-colors relative ${
+                    emailDigest.email_digest_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                  }`}
+                >
+                  <span className={`absolute top-1.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    emailDigest.email_digest_enabled ? 'left-8' : 'left-1.5'
+                  }`} />
+                </button>
+              </div>
+
+              {emailDigest.email_digest_enabled && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Frequency</label>
+                      <select
+                        value={emailDigest.schedule_interval}
+                        onChange={(e) => updateEmailDigest({ schedule_interval: e.target.value })}
+                        className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[15px] bg-white text-[#3D4A44]"
+                      >
+                        <option value="daily">Daily</option>
+                        <option value="every_3_days">Every 3 Days</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="biweekly">Every 2 Weeks</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                      <p className="text-[13px] text-[#7A8580] mt-1">How often you want to receive the digest</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Delivery Time (UTC)</label>
+                      <select
+                        value={emailDigest.preferred_hour}
+                        onChange={(e) => updateEmailDigest({ preferred_hour: parseInt(e.target.value) })}
+                        className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[15px] bg-white text-[#3D4A44]"
+                      >
+                        {[...Array(24)].map((_, i) => (
+                          <option key={i} value={i}>
+                            {i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[13px] text-[#7A8580] mt-1">When to send your digest each day</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Minimum Priority</label>
+                    <div className="grid grid-cols-4 gap-3">
+                      {[
+                        { value: 1, label: 'Critical', color: 'bg-[rgba(196,112,104,0.15)] text-[#C47068] border-[#C47068]' },
+                        { value: 2, label: 'High', color: 'bg-[rgba(196,149,107,0.15)] text-[#C4956B] border-[#C4956B]' },
+                        { value: 3, label: 'Medium', color: 'bg-[rgba(91,138,114,0.15)] text-[#5B8A72] border-[#5B8A72]' },
+                        { value: 4, label: 'All', color: 'bg-[rgba(122,133,128,0.15)] text-[#7A8580] border-[#7A8580]' },
+                      ].map(({ value, label, color }) => (
+                        <button
+                          key={value}
+                          onClick={() => updateEmailDigest({ min_priority_threshold: value })}
+                          className={`py-3 px-4 rounded-xl text-[14px] font-medium border-2 transition-all ${
+                            emailDigest.min_priority_threshold === value
+                              ? `${color} border-opacity-100`
+                              : 'bg-[#FAFBF9] text-[#7A8580] border-transparent hover:bg-[#EEF1EC]'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[13px] text-[#7A8580] mt-2">
+                      {emailDigest.min_priority_threshold === 1 && 'Only critical items will be included'}
+                      {emailDigest.min_priority_threshold === 2 && 'Critical and high priority items will be included'}
+                      {emailDigest.min_priority_threshold === 3 && 'Critical, high, and medium priority items will be included'}
+                      {emailDigest.min_priority_threshold === 4 && 'All items regardless of priority will be included'}
+                    </p>
+                  </div>
+
+                  {emailDigest.last_email_sent_at && (
+                    <div className="flex items-center space-x-2 text-[13px] text-[#7A8580]">
+                      <ClockIcon className="w-4 h-4" />
+                      <span>Last digest sent: {new Date(emailDigest.last_email_sent_at).toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+              <h3 className="text-[17px] font-medium text-[#3D4A44] mb-2">Test Email</h3>
+              <p className="text-[15px] text-[#7A8580] mb-4">
+                Send a test digest email to your account email address to preview what you will receive.
+              </p>
+              <button
+                onClick={sendTestEmail}
+                disabled={sendingTest}
+                className="px-6 py-3 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50 flex items-center space-x-2"
+              >
+                <EnvelopeIcon className="w-5 h-5" />
+                <span>{sendingTest ? 'Sending...' : 'Send Test Digest'}</span>
+              </button>
+            </div>
+
+            <div className="bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] rounded-[18px] p-6 border-l-4 border-[#5B8A72]">
+              <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-3">About Email Digests</h3>
+              <ul className="space-y-2 text-[15px] text-[#7A8580]">
+                <li>Digest emails summarize your pending action items grouped by priority</li>
+                <li>Overdue items are highlighted so you can quickly identify what needs attention</li>
+                <li>You can change the email provider in your platform settings without losing preferences</li>
+                <li>The digest includes items from all organizations you are a member of</li>
+              </ul>
             </div>
           </div>
         )}

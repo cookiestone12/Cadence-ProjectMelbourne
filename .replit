@@ -1,7 +1,7 @@
 modules = ["nodejs-20", "python-3.11", "postgresql-16"]
 [agent]
 expertMode = true
-integrations = ["python_database:1.0.0", "python_openai_ai_integrations:1.0.0", "spotify:1.0.0"]
+integrations = ["python_database:1.0.0", "python_openai_ai_integrations:1.0.0", "spotify:1.0.0", "resend:1.0.0"]
 
 [workflows]
 runButton = "Project"
@@ -65,7 +65,7 @@ externalPort = 3000
 
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "freetype", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "imagemagick"]
+packages = ["cargo", "freetype", "glibcLocales", "imagemagick", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc"]
 
 [deployment]
 build = ["bash", "-c", "cd frontend && npm run build"]

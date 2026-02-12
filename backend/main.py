@@ -22,6 +22,24 @@ if not os.getenv("SESSION_SECRET"):
 
 app = FastAPI(title="Rythm Catalog Intelligence API")
 
+
+@app.on_event("startup")
+def startup_event():
+    try:
+        from .services.email_scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        logging.getLogger("rythm").warning(f"Email scheduler failed to start: {e}")
+
+
+@app.on_event("shutdown")
+def shutdown_event():
+    try:
+        from .services.email_scheduler import shutdown_scheduler
+        shutdown_scheduler()
+    except Exception:
+        pass
+
 allowed_origins = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,

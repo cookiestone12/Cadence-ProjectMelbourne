@@ -53,6 +53,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Global Search**: Unified search across songs, works, releases, and creators.
 - **Bulk Operations**: Bulk update songs and assign credits.
 - **Notification Center**: In-app notification bell with unread count badge, dropdown panel with read/unread states, mark-all-read, and per-notification delete. User and org-level notification preferences in Settings.
+- **Scheduled Email Digests**: Automated email notifications for action items with configurable frequency (daily, every 3 days, weekly, biweekly, monthly), priority-based filtering (critical/high/medium/all), preferred delivery time, and branded HTML digest emails. Provider-agnostic email abstraction layer (currently Resend via Replit connector) with swappable providers. Priority scoring engine with overdue multipliers, deadline proximity bonuses, and status-based boosts. APScheduler background task checks every 15 minutes for users due to receive digests. "Email Digest" tab in Settings with toggle, schedule controls, priority threshold selector, and Send Test button. `EmailDigestPreference` model stores per-user preferences.
 - **Unified Tasks Inbox**: Upgraded Action Items page serving as cross-module task inbox with entity-type filtering (songs, works, releases, contracts, placements, royalties), clickable entity links navigating to related pages, module breakdown widgets, and cross-module task auto-generation.
 - **Enhanced Home Dashboard**: Homepage shows urgent action items widget, recent notifications summary, action item summary cards with overdue/priority badges, placement pipeline summary (total, pipeline value, paid, active pitches), tasks-by-module breakdown, alongside existing needs-attention songs and top creators.
 - **Royalty Accounting System**: Full financial engine with statement ingestion (CSV/Excel upload), asset matching (ISRC/title/artist fuzzy matching), royalty calculation engine applying contract splits, advance recoupment tracking, per-holder allocations, and payment management. Dashboard with revenue charts, top earning tracks, recoupment progress bars, and earnings breakdowns by rights holder, contract, and track. Supports multi-currency with exchange rate conversion. PRO statement support (BMI, ASCAP, SESAC, SoundExchange, SOCAN, PRS) with auto-detection.
@@ -74,6 +75,8 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **OpenAI**: Used for AI-powered CSV column mapping.
 - **Alembic**: Database migration tool for SQLAlchemy.
 - **Gunicorn**: Production WSGI/ASGI server with Uvicorn workers.
+- **Resend**: Email delivery service (via Replit connector).
+- **APScheduler**: Background task scheduling for email digests.
 
 ## User Guide
 - **User Guide Page**: Accessible at `/guide` without authentication, covering all 17 sections of the platform with table of contents, feature documentation, step-by-step instructions, tips, and glossary.

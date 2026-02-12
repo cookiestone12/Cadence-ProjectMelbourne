@@ -700,6 +700,28 @@ class OrgNotificationSetting(Base):
     organization = relationship("Organization")
 
 
+class EmailDigestPreference(Base):
+    __tablename__ = "email_digest_preferences"
+    __table_args__ = (
+        UniqueConstraint('user_id', name='uq_user_email_digest'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+
+    email_digest_enabled = Column(Boolean, default=False)
+    schedule_interval = Column(String, default="weekly")
+    min_priority_threshold = Column(Integer, default=3)
+    preferred_hour = Column(Integer, default=9)
+
+    last_email_sent_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User")
+
+
 class ActionItem(Base):
     __tablename__ = "action_items"
     __table_args__ = (
