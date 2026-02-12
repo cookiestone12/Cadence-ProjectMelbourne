@@ -122,10 +122,18 @@ def _get_client_credentials_token() -> Optional[str]:
 
 
 def _get_access_token() -> Optional[str]:
-    token = _get_replit_access_token()
-    if token:
-        return token
-    return _get_client_credentials_token()
+    import logging
+    logger = logging.getLogger("rythm")
+    cc_token = _get_client_credentials_token()
+    if cc_token:
+        logger.info("Spotify: Using client credentials token")
+        return cc_token
+    connector_token = _get_replit_access_token()
+    if connector_token:
+        logger.info("Spotify: Using Replit connector token")
+        return connector_token
+    logger.warning("Spotify: No access token available from any source")
+    return None
 
 
 def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dict]:
@@ -196,28 +204,7 @@ def get_track_data(spotify_link: str = None) -> Dict[str, Any]:
     }
 
 
-def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
-    import logging
-    logger = logging.getLogger("rythm")
-    token = _get_access_token()
-    if not token:
-        logger.error("Spotify: No access token available")
-        return []
-
-    playlist_id = None
-    if "spotify.com/playlist/" in playlist_url:
-        playlist_id = playlist_url.split("spotify.com/playlist/")[-1].split("?")[0].split("/")[0]
-    elif playlist_url.startswith("spotify:playlist:"):
-        playlist_id = playlist_url.split("spotify:playlist:")[-1]
-    else:
-        playlist_id = playlist_url.strip()
-
-    if not playlist_id:
-        logger.error(f"Spotify: Could not extract playlist ID from URL: {playlist_url}")
-        return []
-
-    logger.info(f"Spotify: Fetching playlist {playlist_id} from URL: {playlist_url}")
-
+def _fetch_playlist_with_token(playlist_id: str, token: str, logger) -> List[Dict[str, Any]]:
     tracks = []
     offset = 0
     limit = 100
@@ -258,6 +245,49 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
         offset += limit
 
     return tracks
+
+
+def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
+    import logging
+    logger = logging.getLogger("rythm")
+
+    playlist_id = None
+    if "spotify.com/playlist/" in playlist_url:
+        playlist_id = playlist_url.split("spotify.com/playlist/")[-1].split("?")[0].split("/")[0]
+    elif playlist_url.startswith("spotify:playlist:"):
+        playlist_id = playlist_url.split("spotify:playlist:")[-1]
+    else:
+        playlist_id = playlist_url.strip()
+
+    if not playlist_id:
+        logger.error(f"Spotify: Could not extract playlist ID from URL: {playlist_url}")
+        return []
+
+    logger.info(f"Spotify: Fetching playlist {playlist_id} from URL: {playlist_url}")
+
+    cc_token = _get_client_credentials_token()
+    connector_token = _get_replit_access_token()
+
+    for token_name, token in [("client_credentials", cc_token), ("connector", connector_token)]:
+        if not token:
+            continue
+        try:
+            logger.info(f"Spotify: Trying playlist fetch with {token_name} token")
+            tracks = _fetch_playlist_with_token(playlist_id, token, logger)
+            if tracks:
+                logger.info(f"Spotify: Got {len(tracks)} tracks with {token_name} token")
+                return tracks
+        except (SpotifyForbiddenError, SpotifyAuthError) as e:
+            logger.warning(f"Spotify: {token_name} token failed for playlist: {e}")
+            continue
+        except Exception as e:
+            logger.warning(f"Spotify: {token_name} token error for playlist: {e}")
+            continue
+
+    if not cc_token and not connector_token:
+        logger.error("Spotify: No access token available from any source")
+
+    return []
 
 
 def search_tracks(query: str, limit: int = 10) -> List[Dict[str, Any]]:
