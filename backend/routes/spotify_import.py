@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -5,6 +6,8 @@ from typing import List, Optional
 from ..models import get_db, Song, Creator, SongCredit, SongDSPLink, OrganizationMember, User
 from ..utils.auth import get_current_user
 from ..services import spotify_service
+
+logger = logging.getLogger("rythm")
 
 router = APIRouter(prefix="/api/spotify", tags=["spotify"])
 
@@ -21,6 +24,11 @@ class SpotifyTrackSelect(BaseModel):
     release_date: Optional[str] = None
     spotify_url: Optional[str] = None
     album_name: Optional[str] = None
+    all_artists: Optional[List[str]] = []
+    explicit: Optional[bool] = None
+    track_number: Optional[int] = None
+    duration_ms: Optional[int] = None
+    popularity: Optional[int] = None
 
 
 class PlaylistImportConfirm(BaseModel):
@@ -52,25 +60,27 @@ def preview_playlist_import(
 ):
     verify_org_access(current_user, org_id, db)
 
+    from ..services.spotify_service import SpotifyForbiddenError, SpotifyAuthError
+
     try:
         tracks = spotify_service.get_playlist_tracks(data.playlist_url)
+    except SpotifyForbiddenError as e:
+        logger.error(f"Spotify 403 for org {org_id}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except SpotifyAuthError as e:
+        logger.error(f"Spotify auth error for org {org_id}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        logger.error(f"Spotify playlist preview error for org {org_id}: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=f"Spotify error: {str(e)}")
 
     if tracks is None or (isinstance(tracks, list) and len(tracks) == 0):
         token = spotify_service._get_access_token()
         if not token:
-            raise HTTPException(status_code=400, detail="Spotify is not connected. Please set up the Spotify integration in your project settings, or provide SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables.")
+            logger.warning(f"Spotify playlist preview: no token available for org {org_id}")
+            raise HTTPException(status_code=400, detail="Spotify is not connected. Please reconnect the Spotify integration in your project settings, or set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables.")
 
-        import requests
-        test = requests.get(
-            "https://api.spotify.com/v1/browse/new-releases?limit=1",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        if test.status_code == 403:
-            raise HTTPException(status_code=400, detail="Spotify API access is restricted. The Spotify app may be in development mode. Please go to developer.spotify.com/dashboard, select your app, go to Settings > User Management, and add your Spotify email address. Then reconnect the Spotify integration.")
-
+        logger.warning(f"Spotify playlist preview: empty result for org {org_id}, playlist URL: {data.playlist_url}")
         raise HTTPException(status_code=400, detail="Could not fetch playlist tracks. Please check that the playlist URL is correct and the playlist is public or accessible.")
 
     existing_isrcs = set()
@@ -109,6 +119,8 @@ def import_playlist_tracks(
 
     imported = 0
     skipped = 0
+    credits_created = 0
+    creators_created = 0
 
     for track_data in data.tracks:
         if track_data.isrc:
@@ -154,6 +166,8 @@ def import_playlist_tracks(
             )
             db.add(dsp_link)
 
+        credited_creator_ids = set()
+
         if creator:
             credit = SongCredit(
                 song_id=song.id,
@@ -161,6 +175,38 @@ def import_playlist_tracks(
                 role="ARTIST",
             )
             db.add(credit)
+            credited_creator_ids.add(creator.id)
+            credits_created += 1
+
+        if track_data.all_artists:
+            for idx, artist_name in enumerate(track_data.all_artists):
+                if not artist_name:
+                    continue
+                artist_creator = db.query(Creator).filter(
+                    Creator.organization_id == org_id,
+                    Creator.display_name == artist_name
+                ).first()
+                if not artist_creator:
+                    artist_creator = Creator(
+                        organization_id=org_id,
+                        display_name=artist_name,
+                        roles=["ARTIST"],
+                        contributor_type="ARTIST",
+                    )
+                    db.add(artist_creator)
+                    db.flush()
+                    creators_created += 1
+
+                if artist_creator.id not in credited_creator_ids:
+                    role = "ARTIST" if idx == 0 else "FEATURED_ARTIST"
+                    artist_credit = SongCredit(
+                        song_id=song.id,
+                        creator_id=artist_creator.id,
+                        role=role,
+                    )
+                    db.add(artist_credit)
+                    credited_creator_ids.add(artist_creator.id)
+                    credits_created += 1
 
         imported += 1
 
@@ -169,6 +215,8 @@ def import_playlist_tracks(
         "message": f"Imported {imported} tracks, skipped {skipped} duplicates",
         "imported": imported,
         "skipped": skipped,
+        "credits_created": credits_created,
+        "creators_created": creators_created,
     }
 
 

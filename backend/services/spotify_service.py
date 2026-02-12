@@ -23,7 +23,11 @@ def _get_replit_access_token() -> Optional[str]:
     hostname = os.getenv("REPLIT_CONNECTORS_HOSTNAME")
     x_replit_token = _get_replit_connector_header()
 
-    if not hostname or not x_replit_token:
+    if not hostname:
+        logger.info("Spotify connector: REPLIT_CONNECTORS_HOSTNAME not set")
+        return None
+    if not x_replit_token:
+        logger.info("Spotify connector: no REPL_IDENTITY or WEB_REPL_RENEWAL token available")
         return None
 
     try:
@@ -39,7 +43,7 @@ def _get_replit_access_token() -> Optional[str]:
         data = resp.json()
         item = data.get("items", [None])[0] if data.get("items") else None
         if not item:
-            logger.warning("Spotify connector: no connection items found")
+            logger.warning("Spotify connector: no connection items found in connector response")
             return None
 
         settings = item.get("settings", {})
@@ -49,41 +53,28 @@ def _get_replit_access_token() -> Optional[str]:
         access_token = settings.get("access_token") or creds.get("access_token")
         refresh_token = creds.get("refresh_token")
         client_id = creds.get("client_id")
-        expires_at = creds.get("expires_at")
 
-        if expires_at:
-            from datetime import datetime, timezone
-            try:
-                exp_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-                if exp_time.timestamp() < datetime.now(timezone.utc).timestamp():
-                    logger.info("Spotify token expired, attempting refresh")
-                    access_token = None
-            except (ValueError, TypeError):
-                pass
+        logger.info(
+            f"Spotify connector credentials: "
+            f"access_token={'present (' + str(len(access_token)) + ' chars)' if access_token else 'missing'}, "
+            f"refresh_token={'present (' + str(len(refresh_token)) + ' chars)' if refresh_token else 'missing'}, "
+            f"client_id={'present (' + str(len(client_id)) + ' chars)' if client_id else 'missing'}"
+        )
 
-        if not access_token and refresh_token and client_id:
+        if refresh_token and client_id:
+            logger.info("Spotify connector: attempting token refresh to get a fresh access token")
             refreshed = _refresh_spotify_token(refresh_token, client_id)
             if refreshed:
+                logger.info("Spotify connector: using freshly refreshed token")
                 return refreshed
+            logger.warning("Spotify connector: token refresh failed, falling back to existing token")
 
         if access_token:
-            test_resp = requests.get(
-                "https://api.spotify.com/v1/browse/new-releases?limit=1",
-                headers={"Authorization": f"Bearer {access_token}"},
-                timeout=10,
-            )
-            if test_resp.status_code == 401 and refresh_token and client_id:
-                logger.info("Spotify token invalid (401), refreshing")
-                refreshed = _refresh_spotify_token(refresh_token, client_id)
-                if refreshed:
-                    return refreshed
-            elif test_resp.status_code == 403 and refresh_token and client_id:
-                logger.info("Spotify token forbidden (403), trying refresh")
-                refreshed = _refresh_spotify_token(refresh_token, client_id)
-                if refreshed:
-                    return refreshed
+            logger.info("Spotify connector: using existing access token from connector")
+            return access_token
 
-        return access_token
+        logger.warning("Spotify connector: no access token available and refresh failed or not possible")
+        return None
     except Exception as e:
         logger.error(f"Spotify connector error: {e}")
         return None
@@ -149,13 +140,28 @@ def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dic
             params=params,
             timeout=15,
         )
+        if resp.status_code == 403:
+            logger.error(f"Spotify API 403 Forbidden: {resp.text[:500]}")
+            raise SpotifyForbiddenError("Spotify API access is restricted. The connected Spotify app may be in development mode. Please try disconnecting and reconnecting the Spotify integration, or set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables from your own Spotify Developer app.")
+        if resp.status_code == 401:
+            logger.error(f"Spotify API 401 Unauthorized: token may be expired")
+            raise SpotifyAuthError("Spotify token has expired. Please reconnect the Spotify integration.")
         if resp.status_code != 200:
             logger.error(f"Spotify API error: status={resp.status_code} body={resp.text[:500]}")
         resp.raise_for_status()
         return resp.json()
+    except (SpotifyForbiddenError, SpotifyAuthError):
+        raise
     except Exception as e:
         logger.error(f"Spotify API exception: {e}")
         return None
+
+
+class SpotifyForbiddenError(Exception):
+    pass
+
+class SpotifyAuthError(Exception):
+    pass
 
 
 def get_track_data(spotify_link: str = None) -> Dict[str, Any]:
@@ -241,6 +247,10 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
                 "duration_ms": track.get("duration_ms"),
                 "popularity": track.get("popularity"),
                 "album_art": album.get("images", [{}])[0].get("url") if album.get("images") else None,
+                "label": album.get("label"),
+                "track_number": track.get("track_number"),
+                "disc_number": track.get("disc_number"),
+                "explicit": track.get("explicit"),
             })
 
         if not data.get("next"):

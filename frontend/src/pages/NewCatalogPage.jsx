@@ -286,11 +286,16 @@ export default function NewCatalogPage() {
         const t = spotifyPreviewTracks[i]
         return {
           title: t.title || t.name,
-          primary_artist: t.primary_artist || t.artist || t.artists?.join(', ') || '',
+          primary_artist: t.primary_artist || t.artist || (t.all_artists && t.all_artists[0]) || '',
+          all_artists: t.all_artists || [],
           isrc: t.isrc || null,
           release_date: t.release_date || null,
           spotify_url: t.spotify_url || t.external_url || null,
-          album_name: t.album_name || t.album || null
+          album_name: t.album_name || t.album || null,
+          explicit: t.explicit || false,
+          track_number: t.track_number || null,
+          duration_ms: t.duration_ms || null,
+          popularity: t.popularity || null
         }
       })
       const res = await axios.post(`/api/spotify/playlist/import/${organizationId}`, {
@@ -303,6 +308,8 @@ export default function NewCatalogPage() {
       await loadData()
     } catch (error) {
       console.error('Spotify import failed:', error)
+      const message = error?.response?.data?.detail || error?.message || 'Import failed. Please try again.'
+      setSpotifyImportResult({ error: true, message })
     } finally {
       setSpotifyImportLoading(false)
     }
@@ -944,7 +951,15 @@ export default function NewCatalogPage() {
                     </div>
                     <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Import Complete</h4>
                     <p className="text-sm text-[#7A8580] mb-1">{spotifyImportResult.imported} track{spotifyImportResult.imported !== 1 ? 's' : ''} imported</p>
-                    <p className="text-sm text-[#7A8580]">{spotifyImportResult.skipped} track{spotifyImportResult.skipped !== 1 ? 's' : ''} skipped (already exist)</p>
+                    {spotifyImportResult.skipped > 0 && (
+                      <p className="text-sm text-[#7A8580] mb-1">{spotifyImportResult.skipped} skipped (already exist)</p>
+                    )}
+                    {spotifyImportResult.credits_created > 0 && (
+                      <p className="text-sm text-[#7A8580] mb-1">{spotifyImportResult.credits_created} credit{spotifyImportResult.credits_created !== 1 ? 's' : ''} linked</p>
+                    )}
+                    {spotifyImportResult.creators_created > 0 && (
+                      <p className="text-sm text-[#9CA8A3]">{spotifyImportResult.creators_created} new creator profile{spotifyImportResult.creators_created !== 1 ? 's' : ''} auto-created</p>
+                    )}
                     <button
                       onClick={closeSpotifyImportModal}
                       className="mt-6 px-6 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
@@ -1052,7 +1067,8 @@ export default function NewCatalogPage() {
                               />
                             </th>
                             <th className="px-3 py-2 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
-                            <th className="px-3 py-2 text-left text-xs font-semibold text-[#3D4A44]">Artist</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-[#3D4A44]">Artist(s)</th>
+                            <th className="px-3 py-2 text-left text-xs font-semibold text-[#3D4A44]">Album</th>
                             <th className="px-3 py-2 text-left text-xs font-semibold text-[#3D4A44]">ISRC</th>
                             <th className="px-3 py-2 text-left text-xs font-semibold text-[#3D4A44]">Status</th>
                           </tr>
@@ -1069,7 +1085,13 @@ export default function NewCatalogPage() {
                                 />
                               </td>
                               <td className="px-3 py-2 text-sm text-[#3D4A44] font-medium">{track.title || track.name}</td>
-                              <td className="px-3 py-2 text-sm text-[#7A8580]">{track.primary_artist || track.artist || (track.artists && track.artists.join(', ')) || '-'}</td>
+                              <td className="px-3 py-2 text-sm text-[#7A8580]">
+                                {track.all_artists && track.all_artists.length > 1
+                                  ? <span>{track.all_artists[0]} <span className="text-xs text-[#9CA8A3]">+{track.all_artists.length - 1} more</span></span>
+                                  : track.primary_artist || track.artist || '-'
+                                }
+                              </td>
+                              <td className="px-3 py-2 text-xs text-[#7A8580] truncate max-w-[120px]">{track.album_name || '-'}</td>
                               <td className="px-3 py-2 text-xs text-[#7A8580] font-mono">{track.isrc || '-'}</td>
                               <td className="px-3 py-2">
                                 {track.already_exists ? (
