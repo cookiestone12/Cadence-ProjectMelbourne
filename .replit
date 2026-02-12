@@ -61,5 +61,5 @@ packages = ["cargo", "freetype", "glibcLocales", "libiconv", "libxcrypt", "opens
 
 [deployment]
 build = ["npm", "run", "build"]
-run = ["bash", "-c", "python -m uvicorn backend.main:app --host 0.0.0.0 --port 5000"]
-deploymentTarget = "autoscale"
+run = ["bash", "run_production.sh"]
+deploymentTarget = "vm"

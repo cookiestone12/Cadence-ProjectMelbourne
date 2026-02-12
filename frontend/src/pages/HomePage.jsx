@@ -66,6 +66,13 @@ const getNotificationTypeColor = (type) => {
   return colors[type] || '#7A8580'
 }
 
+const SectionSkeleton = ({ height = 'h-32' }) => (
+  <div className={`bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 ${height} animate-pulse`}>
+    <div className="h-4 bg-[#EEF1EC] rounded w-1/3 mb-3"></div>
+    <div className="h-8 bg-[#EEF1EC] rounded w-1/4"></div>
+  </div>
+)
+
 export default function HomePage() {
   const [org, setOrg] = useState(null)
   const [recentSongs, setRecentSongs] = useState([])
@@ -75,7 +82,14 @@ export default function HomePage() {
   const [urgentActions, setUrgentActions] = useState([])
   const [recentNotifications, setRecentNotifications] = useState([])
   const [placementSummary, setPlacementSummary] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [orgLoading, setOrgLoading] = useState(true)
+  const [sectionsLoaded, setSectionsLoaded] = useState({
+    songs: false,
+    creators: false,
+    actions: false,
+    notifications: false,
+    placements: false
+  })
 
   const storedUser = localStorage.getItem('user')
   let userName = 'User'
@@ -90,41 +104,36 @@ export default function HomePage() {
       try {
         const orgResponse = await axios.get('/api/organizations/current')
         const orgId = orgResponse.data?.id
-        if (!orgId) { setLoading(false); return }
+        if (!orgId) { setOrgLoading(false); return }
         setOrg(orgResponse.data)
+        setOrgLoading(false)
         
-        const [songsResponse, creatorsResponse, summaryResponse, actionsResponse, notificationsResponse, placementRes] = await Promise.allSettled([
-          axios.get(`/api/songs/org/${orgId}`),
-          axios.get(`/api/creators/org/${orgId}`),
-          axios.get(`/api/actions/summary/org/${orgId}`),
-          axios.get(`/api/actions/org/${orgId}?status=PENDING`),
-          axios.get('/api/notifications?limit=5'),
-          axios.get(`/api/placements/org/${orgId}/summary`)
-        ])
-        
-        if (songsResponse.status === 'fulfilled') {
-          const songs = songsResponse.value.data
+        axios.get(`/api/songs/org/${orgId}`).then(res => {
+          const songs = res.data
           setRecentSongs(songs.slice(0, 5))
           const lowHealth = songs
             .filter(s => s.status_health_score < 50)
             .sort((a, b) => a.status_health_score - b.status_health_score)
             .slice(0, 5)
           setNeedsAttention(lowHealth)
-        }
-        
-        if (creatorsResponse.status === 'fulfilled') {
-          const creators = creatorsResponse.value.data
+        }).catch(e => console.error('Songs load failed:', e))
+          .finally(() => setSectionsLoaded(p => ({ ...p, songs: true })))
+
+        axios.get(`/api/creators/org/${orgId}`).then(res => {
+          const creators = res.data
             .sort((a, b) => b.song_count - a.song_count)
             .slice(0, 4)
           setTopCreators(creators)
-        }
-        
-        if (summaryResponse.status === 'fulfilled') {
-          setActionSummary(summaryResponse.value.data)
-        }
-        
-        if (actionsResponse.status === 'fulfilled') {
-          const actions = actionsResponse.value.data
+        }).catch(e => console.error('Creators load failed:', e))
+          .finally(() => setSectionsLoaded(p => ({ ...p, creators: true })))
+
+        axios.get(`/api/actions/summary/org/${orgId}`).then(res => {
+          setActionSummary(res.data)
+        }).catch(e => console.error('Action summary load failed:', e))
+          .finally(() => setSectionsLoaded(p => ({ ...p, actions: true })))
+
+        axios.get(`/api/actions/org/${orgId}?status=PENDING`).then(res => {
+          const actions = res.data
           const urgent = actions
             .filter(a => a.is_overdue || (a.days_until_deadline !== null && a.days_until_deadline <= 7))
             .sort((a, b) => {
@@ -134,19 +143,21 @@ export default function HomePage() {
             })
             .slice(0, 5)
           setUrgentActions(urgent)
-        }
-        
-        if (notificationsResponse.status === 'fulfilled') {
-          setRecentNotifications(notificationsResponse.value.data)
-        }
+        }).catch(e => console.error('Actions load failed:', e))
 
-        if (placementRes.status === 'fulfilled') {
-          setPlacementSummary(placementRes.value.data)
-        }
+        axios.get('/api/notifications?limit=5').then(res => {
+          setRecentNotifications(res.data)
+        }).catch(e => console.error('Notifications load failed:', e))
+          .finally(() => setSectionsLoaded(p => ({ ...p, notifications: true })))
+
+        axios.get(`/api/placements/org/${orgId}/summary`).then(res => {
+          setPlacementSummary(res.data)
+        }).catch(e => console.error('Placements load failed:', e))
+          .finally(() => setSectionsLoaded(p => ({ ...p, placements: true })))
+
       } catch (error) {
         console.error('Failed to load dashboard:', error)
-      } finally {
-        setLoading(false)
+        setOrgLoading(false)
       }
     }
     
@@ -168,12 +179,21 @@ export default function HomePage() {
     }
   }
   
-  if (loading) {
+  if (orgLoading) {
     return (
-      <div className="min-h-screen bg-[#F5F7F4] flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-[#5B8A72] border-t-transparent"></div>
-          <p className="mt-4 text-[#7A8580]">Loading dashboard...</p>
+      <div className="min-h-screen bg-[#F5F7F4] p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-8 animate-pulse">
+            <div className="h-8 bg-[#EEF1EC] rounded w-72 mb-2"></div>
+            <div className="h-5 bg-[#EEF1EC] rounded w-64"></div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            {[1,2,3,4].map(i => <SectionSkeleton key={i} />)}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <SectionSkeleton height="h-64" />
+            <SectionSkeleton height="h-64" />
+          </div>
         </div>
       </div>
     )
@@ -213,11 +233,17 @@ export default function HomePage() {
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#C47068] to-[#C4956B]"></div>
             <p className="text-[13px] text-[#7A8580] mb-1">Pending Actions</p>
             <div className="flex items-end justify-between">
-              <p className="text-[40px] font-semibold text-[#3D4A44]">{actionSummary?.total_pending || 0}</p>
-              {actionSummary?.overdue > 0 && (
-                <span className="mb-2 px-2 py-0.5 bg-[rgba(196,112,104,0.15)] text-[#C47068] rounded-full text-[12px] font-medium">
-                  {actionSummary.overdue} overdue
-                </span>
+              {sectionsLoaded.actions ? (
+                <>
+                  <p className="text-[40px] font-semibold text-[#3D4A44]">{actionSummary?.total_pending || 0}</p>
+                  {actionSummary?.overdue > 0 && (
+                    <span className="mb-2 px-2 py-0.5 bg-[rgba(196,112,104,0.15)] text-[#C47068] rounded-full text-[12px] font-medium">
+                      {actionSummary.overdue} overdue
+                    </span>
+                  )}
+                </>
+              ) : (
+                <div className="h-12 w-16 bg-[#EEF1EC] rounded animate-pulse"></div>
               )}
             </div>
           </Link>
@@ -226,17 +252,23 @@ export default function HomePage() {
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#5B9A6E] to-[#6BAA7E]"></div>
             <p className="text-[13px] text-[#7A8580] mb-1">Due This Week</p>
             <div className="flex items-end justify-between">
-              <p className="text-[40px] font-semibold text-[#3D4A44]">{actionSummary?.due_this_week || 0}</p>
-              {actionSummary?.high_priority > 0 && (
-                <span className="mb-2 px-2 py-0.5 bg-[rgba(196,112,104,0.15)] text-[#C47068] rounded-full text-[12px] font-medium">
-                  {actionSummary.high_priority} high priority
-                </span>
+              {sectionsLoaded.actions ? (
+                <>
+                  <p className="text-[40px] font-semibold text-[#3D4A44]">{actionSummary?.due_this_week || 0}</p>
+                  {actionSummary?.high_priority > 0 && (
+                    <span className="mb-2 px-2 py-0.5 bg-[rgba(196,112,104,0.15)] text-[#C47068] rounded-full text-[12px] font-medium">
+                      {actionSummary.high_priority} high priority
+                    </span>
+                  )}
+                </>
+              ) : (
+                <div className="h-12 w-16 bg-[#EEF1EC] rounded animate-pulse"></div>
               )}
             </div>
           </div>
         </div>
 
-        {(placementSummary && placementSummary.total_placements > 0) && (
+        {sectionsLoaded.placements && placementSummary && placementSummary.total_placements > 0 && (
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-2">
@@ -283,7 +315,7 @@ export default function HomePage() {
           </div>
         )}
 
-        {actionSummary?.by_entity_type && Object.keys(actionSummary.by_entity_type).length > 0 && (
+        {sectionsLoaded.actions && actionSummary?.by_entity_type && Object.keys(actionSummary.by_entity_type).length > 0 && (
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 mb-6">
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-2">
@@ -380,32 +412,43 @@ export default function HomePage() {
               </Link>
             </div>
             
-            <div className="space-y-3">
-              {needsAttention.map((song) => (
-                <div key={song.id} className="flex items-center justify-between p-4 bg-[#EEF1EC] rounded-xl">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-[#3D4A44] truncate">{song.title}</p>
-                    <p className="text-[13px] text-[#7A8580]">{song.primary_artist}</p>
+            {!sectionsLoaded.songs ? (
+              <div className="space-y-3">
+                {[1,2,3].map(i => (
+                  <div key={i} className="flex items-center justify-between p-4 bg-[#EEF1EC] rounded-xl animate-pulse">
+                    <div className="flex-1"><div className="h-4 bg-[#D1D5DB] rounded w-2/3 mb-2"></div><div className="h-3 bg-[#D1D5DB] rounded w-1/3"></div></div>
+                    <div className="h-6 w-12 bg-[#D1D5DB] rounded-full"></div>
                   </div>
-                  <div className="ml-4">
-                    <span className="px-3 py-1 bg-[rgba(196,112,104,0.15)] text-[#C47068] rounded-full text-[13px] font-medium">
-                      {song.status_health_score.toFixed(0)}%
-                    </span>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {needsAttention.map((song) => (
+                  <div key={song.id} className="flex items-center justify-between p-4 bg-[#EEF1EC] rounded-xl">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-[#3D4A44] truncate">{song.title}</p>
+                      <p className="text-[13px] text-[#7A8580]">{song.primary_artist}</p>
+                    </div>
+                    <div className="ml-4">
+                      <span className="px-3 py-1 bg-[rgba(196,112,104,0.15)] text-[#C47068] rounded-full text-[13px] font-medium">
+                        {song.status_health_score.toFixed(0)}%
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
-              
-              {needsAttention.length === 0 && (
-                <div className="text-center py-8">
-                  <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[rgba(91,154,110,0.15)] flex items-center justify-center">
-                    <svg className="w-6 h-6 text-[#5B9A6E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
+                ))}
+                
+                {needsAttention.length === 0 && (
+                  <div className="text-center py-8">
+                    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[rgba(91,154,110,0.15)] flex items-center justify-center">
+                      <svg className="w-6 h-6 text-[#5B9A6E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <p className="text-[#7A8580]">All songs in good health!</p>
                   </div>
-                  <p className="text-[#7A8580]">All songs in good health!</p>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
@@ -419,33 +462,44 @@ export default function HomePage() {
               </Link>
             </div>
             
-            <div className="space-y-2">
-              {recentNotifications.length > 0 ? (
-                recentNotifications.map(n => (
-                  <div
-                    key={n.id}
-                    className={`p-3 rounded-xl transition-colors ${!n.is_read ? 'bg-[rgba(91,138,114,0.06)]' : 'bg-[#FAFBF9]'}`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span
-                        className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
-                        style={{ backgroundColor: getNotificationTypeColor(n.notification_type) }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[#3D4A44] truncate">{n.title}</p>
-                        <p className="text-xs text-[#7A8580] mt-0.5 line-clamp-1">{n.message}</p>
-                        <p className="text-xs text-[#A0A5A2] mt-1">{getTimeAgo(n.created_at)}</p>
+            {!sectionsLoaded.notifications ? (
+              <div className="space-y-2">
+                {[1,2,3].map(i => (
+                  <div key={i} className="p-3 rounded-xl bg-[#FAFBF9] animate-pulse">
+                    <div className="h-4 bg-[#D1D5DB] rounded w-3/4 mb-2"></div>
+                    <div className="h-3 bg-[#D1D5DB] rounded w-1/2"></div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {recentNotifications.length > 0 ? (
+                  recentNotifications.map(n => (
+                    <div
+                      key={n.id}
+                      className={`p-3 rounded-xl transition-colors ${!n.is_read ? 'bg-[rgba(91,138,114,0.06)]' : 'bg-[#FAFBF9]'}`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span
+                          className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
+                          style={{ backgroundColor: getNotificationTypeColor(n.notification_type) }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-[#3D4A44] truncate">{n.title}</p>
+                          <p className="text-xs text-[#7A8580] mt-0.5 line-clamp-1">{n.message}</p>
+                          <p className="text-xs text-[#A0A5A2] mt-1">{getTimeAgo(n.created_at)}</p>
+                        </div>
                       </div>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <BellIcon className="w-12 h-12 mx-auto text-[#D1D5DB] mb-3" />
+                    <p className="text-[#7A8580]">No notifications yet</p>
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-8">
-                  <BellIcon className="w-12 h-12 mx-auto text-[#D1D5DB] mb-3" />
-                  <p className="text-[#7A8580]">No notifications yet</p>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -457,36 +511,47 @@ export default function HomePage() {
             </Link>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {topCreators.map((creator) => (
-              <Link
-                key={creator.id}
-                to={`/roster/${creator.id}`}
-                className="flex items-center space-x-4 p-4 bg-[#EEF1EC] rounded-xl hover:bg-[#E5E5EA] transition-colors"
-              >
-                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] flex items-center justify-center text-white font-semibold shadow-md">
-                  {creator.display_name.charAt(0).toUpperCase()}
+          {!sectionsLoaded.creators ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="flex items-center space-x-4 p-4 bg-[#EEF1EC] rounded-xl animate-pulse">
+                  <div className="w-12 h-12 rounded-full bg-[#D1D5DB]"></div>
+                  <div className="flex-1"><div className="h-4 bg-[#D1D5DB] rounded w-2/3 mb-2"></div><div className="h-3 bg-[#D1D5DB] rounded w-1/3"></div></div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-[#3D4A44] truncate">{creator.display_name}</p>
-                  <p className="text-[13px] text-[#7A8580]">{creator.song_count} songs</p>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {topCreators.map((creator) => (
+                <Link
+                  key={creator.id}
+                  to={`/roster/${creator.id}`}
+                  className="flex items-center space-x-4 p-4 bg-[#EEF1EC] rounded-xl hover:bg-[#E5E5EA] transition-colors"
+                >
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] flex items-center justify-center text-white font-semibold shadow-md">
+                    {creator.display_name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-[#3D4A44] truncate">{creator.display_name}</p>
+                    <p className="text-[13px] text-[#7A8580]">{creator.song_count} songs</p>
+                  </div>
+                  <div className={`text-[15px] font-medium ${
+                    creator.avg_health_score >= 80 ? 'text-[#5B9A6E]' :
+                    creator.avg_health_score >= 60 ? 'text-[#C4956B]' :
+                    'text-[#C47068]'
+                  }`}>
+                    {creator.avg_health_score?.toFixed(0) || 0}%
+                  </div>
+                </Link>
+              ))}
+              
+              {topCreators.length === 0 && (
+                <div className="text-center py-8 col-span-full">
+                  <p className="text-[#7A8580]">No creators yet</p>
                 </div>
-                <div className={`text-[15px] font-medium ${
-                  creator.avg_health_score >= 80 ? 'text-[#5B9A6E]' :
-                  creator.avg_health_score >= 60 ? 'text-[#C4956B]' :
-                  'text-[#C47068]'
-                }`}>
-                  {creator.avg_health_score?.toFixed(0) || 0}%
-                </div>
-              </Link>
-            ))}
-            
-            {topCreators.length === 0 && (
-              <div className="text-center py-8 col-span-full">
-                <p className="text-[#7A8580]">No creators yet</p>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
