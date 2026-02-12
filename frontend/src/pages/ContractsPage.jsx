@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Component } from 'react'
 import axios from 'axios'
 import {
   MagnifyingGlassIcon, PlusIcon, XMarkIcon, TrashIcon,
@@ -6,6 +6,38 @@ import {
   MusicalNoteIcon, CalendarIcon, CurrencyDollarIcon,
   ChevronDownIcon, ArrowDownTrayIcon, PaperClipIcon, CloudArrowUpIcon
 } from '@heroicons/react/24/outline'
+
+class ContractsErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+  componentDidCatch(error, info) {
+    console.error('ContractsPage error:', error, info)
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full p-8">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
+            <h2 className="text-lg font-semibold text-red-700 mb-2">Something went wrong</h2>
+            <p className="text-sm text-red-600 mb-4">{this.state.error?.message || 'An unexpected error occurred'}</p>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload() }}
+              className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62]"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 const STATUS_COLORS = {
   DRAFT: 'bg-gray-100 text-gray-700',
@@ -46,7 +78,7 @@ const emptyCreateForm = {
 
 const emptyPartyForm = { party_name: '', party_role: 'ARTIST', creator_id: '', contact_email: '' }
 
-export default function ContractsPage() {
+function ContractsPageInner() {
   const [contracts, setContracts] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -79,6 +111,7 @@ export default function ContractsPage() {
   const [docDescription, setDocDescription] = useState('')
   const [docLinkType, setDocLinkType] = useState('')
   const [docLinkId, setDocLinkId] = useState('')
+  const [releases, setReleases] = useState([])
 
   useEffect(() => {
     loadData()
@@ -238,8 +271,6 @@ export default function ContractsPage() {
       console.error('Failed to delete document:', error)
     }
   }
-
-  const [releases, setReleases] = useState([])
 
   async function handleCreateContract() {
     if (!createForm.title.trim()) {
@@ -1552,5 +1583,13 @@ export default function ContractsPage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function ContractsPage() {
+  return (
+    <ContractsErrorBoundary>
+      <ContractsPageInner />
+    </ContractsErrorBoundary>
   )
 }
