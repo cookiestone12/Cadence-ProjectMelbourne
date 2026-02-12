@@ -132,7 +132,7 @@ export default function ContractsPage() {
         reference_number: res.data.reference_number || '',
         start_date: res.data.start_date || '',
         end_date: res.data.end_date || '',
-        territory: res.data.territory || '',
+        territory: Array.isArray(res.data.territory) ? res.data.territory.join(', ') : (res.data.territory || ''),
         advance_amount: res.data.advance_amount || '',
         advance_currency: res.data.advance_currency || 'USD',
         notes: res.data.notes || '',
@@ -169,6 +169,11 @@ export default function ContractsPage() {
       if (!payload.start_date) delete payload.start_date
       if (!payload.end_date) delete payload.end_date
       if (!payload.reference_number) delete payload.reference_number
+      if (payload.territory && typeof payload.territory === 'string') {
+        payload.territory = payload.territory.split(',').map(t => t.trim()).filter(Boolean)
+      } else if (!payload.territory) {
+        payload.territory = []
+      }
       if (createParties.length > 0) payload.parties = createParties
       await axios.post(`/api/rights/contracts/org/${organizationId}`, payload)
       setShowCreateModal(false)
@@ -190,6 +195,11 @@ export default function ContractsPage() {
       const payload = { ...editForm }
       if (payload.advance_amount) payload.advance_amount = parseFloat(payload.advance_amount)
       else payload.advance_amount = null
+      if (payload.territory && typeof payload.territory === 'string') {
+        payload.territory = payload.territory.split(',').map(t => t.trim()).filter(Boolean)
+      } else if (!payload.territory) {
+        payload.territory = []
+      }
       await axios.put(`/api/rights/contracts/${contractDetail.id}`, payload)
       setEditMode(false)
       await loadData()
@@ -899,7 +909,7 @@ export default function ContractsPage() {
                       </div>
                       <div>
                         <p className="text-xs font-medium text-[#7A8580] mb-1">Territory</p>
-                        <p className="text-sm text-[#3D4A44]">{contractDetail.territory || '-'}</p>
+                        <p className="text-sm text-[#3D4A44]">{Array.isArray(contractDetail.territory) ? contractDetail.territory.join(', ') : (contractDetail.territory || '-')}</p>
                       </div>
                       <div>
                         <p className="text-xs font-medium text-[#7A8580] mb-1">Advance</p>
