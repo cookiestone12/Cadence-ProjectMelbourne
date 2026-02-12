@@ -685,7 +685,7 @@ export default function CreatorDetailPage() {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
         
-        <div className="relative h-full flex flex-col justify-end p-8">
+        <div className="relative h-full flex flex-col justify-end p-4 sm:p-8">
           <Link 
             to="/roster" 
             className="inline-flex items-center space-x-2 text-white/90 hover:text-white mb-4 w-fit transition-colors"
@@ -704,7 +704,7 @@ export default function CreatorDetailPage() {
             )}
             <div>
               <div className="flex items-center gap-3 mb-1">
-                <h1 className="text-5xl font-semibold text-white">{creator.display_name}</h1>
+                <h1 className="text-3xl sm:text-5xl font-semibold text-white">{creator.display_name}</h1>
                 <button
                   onClick={openEditCreatorModal}
                   className="p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
@@ -713,14 +713,14 @@ export default function CreatorDetailPage() {
                   <PencilIcon className="w-5 h-5 text-white" />
                 </button>
               </div>
-              <div className="flex items-center space-x-4 text-white/90">
-                <span className="text-lg">{creator.roles?.join(', ') || 'Producer'}</span>
-                <span>·</span>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-white/90">
+                <span className="text-base sm:text-lg">{creator.roles?.join(', ') || 'Producer'}</span>
+                <span className="hidden sm:inline">·</span>
                 <span>{songs.length} songs</span>
                 <span>·</span>
                 <span>{placedSongs.length} paid placements</span>
-                <span>·</span>
-                <span>${totalAdvance.toLocaleString()} advances</span>
+                <span className="hidden sm:inline">·</span>
+                <span className="hidden sm:inline">${totalAdvance.toLocaleString()} advances</span>
               </div>
             </div>
           </div>
@@ -728,8 +728,8 @@ export default function CreatorDetailPage() {
       </div>
       
       <div className="bg-white border-b border-[rgba(59,77,67,0.08)] sticky top-0 z-10">
-        <div className="px-8">
-          <div className="flex space-x-8">
+        <div className="px-4 sm:px-8 overflow-x-auto">
+          <div className="flex space-x-4 sm:space-x-8 min-w-max">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -747,7 +747,7 @@ export default function CreatorDetailPage() {
         </div>
       </div>
       
-      <div className="p-8">
+      <div className="p-4 sm:p-8">
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
