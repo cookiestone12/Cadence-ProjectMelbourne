@@ -1,7 +1,7 @@
 import React, { useRef } from 'react'
 import { ArrowDownTrayIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 
-const VERSION = '2.1'
+const VERSION = '2.2'
 const LAST_UPDATED = 'February 2026'
 
 const sections = [
@@ -542,6 +542,22 @@ export default function UserGuidePage() {
         <p className="text-sm text-[#7A8580] mb-3">
           Filter tasks by entity type (songs, works, releases, contracts, placements, royalties) using the filter buttons. The module breakdown widget shows how many tasks exist in each category, helping you prioritize your workflow.
         </p>
+
+        <SubHeading>Reports & Email</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Task Inbox header includes reporting tools to share and export action items:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Download Report" description="Downloads a branded, printable HTML report of all action items. Open the file in a browser and use Print > Save as PDF to create a PDF. Available at all times." />
+          <FeatureCard title="Email Report" description="Appears when filtering by a specific creator. Sends that creator's action items as a digest email to your own email address for reference or forwarding." />
+          <FeatureCard title="Push to Creator" description="Appears when filtering by a creator who has an email address on file. Sends the action items digest directly to the creator's email so they can see what needs attention." />
+        </div>
+        <StepList steps={[
+          'To download a report: Click "Download Report" in the header. The file downloads as HTML — open it and print to PDF.',
+          'To email yourself a creator report: Filter by a creator using the dropdown, then click "Email Report".',
+          'To send directly to a creator: Filter by a creator who has an email on file, then click "Push to Creator".',
+        ]} />
+        <Tip>Use the creator filter dropdown to focus your report or email on a single creator. Without a filter, the Download Report button exports all action items.</Tip>
 
         {/* ===== 11. ROYALTIES ===== */}
         <SectionHeading id="royalties">11. Royalties</SectionHeading>
