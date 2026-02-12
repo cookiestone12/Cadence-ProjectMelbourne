@@ -404,6 +404,176 @@ def send_test_digest(
     return {"message": f"Test digest email sent to {current_user.email}"}
 
 
+@router.post("/push-email/creator/{creator_id}")
+def send_creator_action_items_email(
+    creator_id: int,
+    send_to_creator: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import ActionItem, Creator
+    from ..utils.priority_engine import sort_by_urgency, group_by_priority, calculate_priority_score
+    from ..templates.email_digest import generate_digest_html
+    from ..services.email_provider import get_email_provider
+    
+    # Fetch the creator
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    
+    # Validate the creator belongs to the user's organization
+    user_membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == creator.organization_id
+    ).first()
+    if not user_membership:
+        raise HTTPException(status_code=403, detail="Not authorized to access this creator")
+    
+    # Query ActionItem filtered by creator_id AND status IN ("PENDING", "IN_PROGRESS")
+    actions = db.query(ActionItem).filter(
+        ActionItem.creator_id == creator_id,
+        ActionItem.status.in_(["PENDING", "IN_PROGRESS"])
+    ).all()
+    
+    # Sort and group by priority
+    sorted_actions = sort_by_urgency(actions)
+    grouped = group_by_priority(sorted_actions)
+    
+    # Build grouped_items dict for template
+    now = datetime.utcnow()
+    grouped_items = {}
+    for level, items in grouped.items():
+        grouped_items[level] = [{
+            "title": a.title,
+            "description": a.description,
+            "deadline": a.deadline,
+            "entity_type": a.entity_type,
+            "entity_label": a.entity_label,
+            "action_type": a.action_type,
+            "priority_score": calculate_priority_score(a),
+        } for a in items]
+    
+    # Build summary stats
+    overdue_count = sum(1 for a in actions if a.deadline and a.deadline < now)
+    summary_stats = {
+        "total_items": len(actions),
+        "overdue_count": overdue_count,
+        "critical_count": len(grouped.get("critical", [])),
+        "high_count": len(grouped.get("high", [])),
+    }
+    
+    # Generate HTML email with creator's display_name in the greeting
+    user_name = f"Action Items for {creator.display_name}"
+    html_body = generate_digest_html(user_name, grouped_items, summary_stats)
+    
+    # Determine recipient email
+    recipient_email = current_user.email
+    if send_to_creator and creator.email:
+        recipient_email = creator.email
+    
+    if not recipient_email:
+        raise HTTPException(status_code=400, detail="No valid email address to send to")
+    
+    # Send email
+    provider = get_email_provider()
+    success = provider.send_email(
+        to=recipient_email,
+        subject=f"Rythm - Action Items for {creator.display_name}",
+        html_body=html_body,
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send email")
+    
+    return {"message": f"Email sent to {recipient_email}", "email": recipient_email}
+
+
+@router.get("/digest-pdf")
+def get_digest_pdf(
+    creator_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from fastapi.responses import Response
+    from ..models import ActionItem, Creator
+    from ..utils.priority_engine import sort_by_urgency, group_by_priority, calculate_priority_score
+    from ..templates.email_digest import generate_digest_html
+    
+    # Get user's organization memberships
+    memberships = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).all()
+    org_ids = [m.organization_id for m in memberships]
+    
+    if not org_ids:
+        raise HTTPException(status_code=400, detail="User has no organization memberships")
+    
+    # Validate creator_id if provided
+    creator = None
+    if creator_id:
+        creator = db.query(Creator).filter(Creator.id == creator_id).first()
+        if not creator:
+            raise HTTPException(status_code=404, detail="Creator not found")
+        
+        # Validate creator belongs to one of user's organizations
+        if creator.organization_id not in org_ids:
+            raise HTTPException(status_code=403, detail="Not authorized to access this creator")
+    
+    # Query action items
+    query = db.query(ActionItem).filter(
+        ActionItem.organization_id.in_(org_ids),
+        ActionItem.status.in_(["PENDING", "IN_PROGRESS"])
+    )
+    
+    if creator_id:
+        query = query.filter(ActionItem.creator_id == creator_id)
+    
+    actions = query.all()
+    
+    # Sort and group by priority
+    sorted_actions = sort_by_urgency(actions)
+    grouped = group_by_priority(sorted_actions)
+    
+    # Build grouped_items dict for template
+    now = datetime.utcnow()
+    grouped_items = {}
+    for level, items in grouped.items():
+        grouped_items[level] = [{
+            "title": a.title,
+            "description": a.description,
+            "deadline": a.deadline,
+            "entity_type": a.entity_type,
+            "entity_label": a.entity_label,
+            "action_type": a.action_type,
+            "priority_score": calculate_priority_score(a),
+        } for a in items]
+    
+    # Build summary stats
+    overdue_count = sum(1 for a in actions if a.deadline and a.deadline < now)
+    summary_stats = {
+        "total_items": len(actions),
+        "overdue_count": overdue_count,
+        "critical_count": len(grouped.get("critical", [])),
+        "high_count": len(grouped.get("high", [])),
+    }
+    
+    # Generate HTML using the email digest template
+    user_name = current_user.username or "User"
+    html_body = generate_digest_html(user_name, grouped_items, summary_stats)
+    
+    # Determine filename
+    filename = "rythm-action-items.html"
+    if creator:
+        filename = f"rythm-action-items-{creator.display_name.replace(' ', '-').lower()}.html"
+    
+    # Return as HTML file with download header
+    return Response(
+        content=html_body,
+        media_type="text/html",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 @router.get("/org/{org_id}/settings", response_model=List[OrgNotificationSettingResponse])
 def get_org_notification_settings(
     org_id: int,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon, ClockIcon } from '@heroicons/react/24/outline'
+import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 
 const NOTIFICATION_TYPES = {
   MISSING_ISRC: { label: 'Missing ISRC', description: 'Alert when songs are missing ISRC codes' },
@@ -298,17 +298,6 @@ export default function Settings() {
               <LockClosedIcon className="w-5 h-5" />
               <span>Password</span>
             </button>
-            <button
-              onClick={() => setActiveTab('email-digest')}
-              className={`flex items-center space-x-2 pb-3 px-1 border-b-2 font-medium transition-colors ${
-                activeTab === 'email-digest'
-                  ? 'border-[#5B8A72] text-[#5B8A72]'
-                  : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
-              }`}
-            >
-              <ClockIcon className="w-5 h-5" />
-              <span>Email Digest</span>
-            </button>
             {isOrgAdmin && (
               <button
                 onClick={() => setActiveTab('org-settings')}
@@ -376,87 +365,193 @@ export default function Settings() {
         )}
 
         {activeTab === 'notifications' && (
-          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-[22px] font-medium text-[#3D4A44]">Notification Preferences</h2>
-                <p className="text-[15px] text-[#7A8580] mt-1">Choose how you want to be notified</p>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <div className="grid grid-cols-[1fr,100px,100px,120px] gap-4 px-4 py-2 text-[13px] font-medium text-[#7A8580] uppercase">
-                <span>Notification Type</span>
-                <span className="text-center">In-App</span>
-                <span className="text-center">Email</span>
-                <span className="text-center">Frequency</span>
-              </div>
-              
-              {Object.entries(NOTIFICATION_TYPES).map(([type, info]) => {
-                const pref = getPref(type)
-                return (
-                  <div 
-                    key={type} 
-                    className="grid grid-cols-[1fr,100px,100px,120px] gap-4 items-center px-4 py-4 bg-[#FAFBF9] rounded-xl hover:bg-[#EEF1EC] transition-colors"
-                  >
-                    <div>
-                      <div className="text-[15px] font-medium text-[#3D4A44]">{info.label}</div>
-                      <div className="text-[13px] text-[#7A8580]">{info.description}</div>
-                    </div>
-                    
-                    <div className="flex justify-center">
-                      <button
-                        onClick={() => updatePreference(type, 'in_app_enabled', !pref.in_app_enabled)}
-                        className={`w-10 h-6 rounded-full transition-colors relative ${
-                          pref.in_app_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
-                        }`}
-                      >
-                        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                          pref.in_app_enabled ? 'left-5' : 'left-1'
-                        }`} />
-                      </button>
-                    </div>
-                    
-                    <div className="flex justify-center">
-                      <button
-                        onClick={() => updatePreference(type, 'email_enabled', !pref.email_enabled)}
-                        className={`w-10 h-6 rounded-full transition-colors relative ${
-                          pref.email_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
-                        }`}
-                      >
-                        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                          pref.email_enabled ? 'left-5' : 'left-1'
-                        }`} />
-                      </button>
-                    </div>
-                    
-                    <div className="flex justify-center">
-                      <select
-                        value={pref.frequency}
-                        onChange={(e) => updatePreference(type, 'frequency', e.target.value)}
-                        className="text-[13px] px-2 py-1 border border-[rgba(59,77,67,0.12)] rounded-lg bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                      >
-                        <option value="immediate">Immediate</option>
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                      </select>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="mt-6 p-4 bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] rounded-xl border-l-4 border-[#5B8A72]">
-              <div className="flex items-start space-x-3">
-                <EnvelopeIcon className="w-5 h-5 text-[#5B8A72] mt-0.5" />
+          <div className="space-y-6">
+            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+              <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h4 className="text-[15px] font-medium text-[#3D4A44]">Email Notifications</h4>
-                  <p className="text-[13px] text-[#7A8580] mt-1">
-                    Email notifications will be sent to your registered email address. 
-                    Make sure your email is verified in your account settings.
-                  </p>
+                  <h2 className="text-[22px] font-medium text-[#3D4A44]">Notification Preferences</h2>
+                  <p className="text-[15px] text-[#7A8580] mt-1">Choose how you want to be notified</p>
                 </div>
               </div>
+
+              <div className="space-y-1">
+                <div className="grid grid-cols-[1fr,100px,100px,120px] gap-4 px-4 py-2 text-[13px] font-medium text-[#7A8580] uppercase">
+                  <span>Notification Type</span>
+                  <span className="text-center">In-App</span>
+                  <span className="text-center">Email</span>
+                  <span className="text-center">Frequency</span>
+                </div>
+                
+                {Object.entries(NOTIFICATION_TYPES).map(([type, info]) => {
+                  const pref = getPref(type)
+                  return (
+                    <div 
+                      key={type} 
+                      className="grid grid-cols-[1fr,100px,100px,120px] gap-4 items-center px-4 py-4 bg-[#FAFBF9] rounded-xl hover:bg-[#EEF1EC] transition-colors"
+                    >
+                      <div>
+                        <div className="text-[15px] font-medium text-[#3D4A44]">{info.label}</div>
+                        <div className="text-[13px] text-[#7A8580]">{info.description}</div>
+                      </div>
+                      
+                      <div className="flex justify-center">
+                        <button
+                          onClick={() => updatePreference(type, 'in_app_enabled', !pref.in_app_enabled)}
+                          className={`w-10 h-6 rounded-full transition-colors relative ${
+                            pref.in_app_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                          }`}
+                        >
+                          <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                            pref.in_app_enabled ? 'left-5' : 'left-1'
+                          }`} />
+                        </button>
+                      </div>
+                      
+                      <div className="flex justify-center">
+                        <button
+                          onClick={() => updatePreference(type, 'email_enabled', !pref.email_enabled)}
+                          className={`w-10 h-6 rounded-full transition-colors relative ${
+                            pref.email_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                          }`}
+                        >
+                          <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                            pref.email_enabled ? 'left-5' : 'left-1'
+                          }`} />
+                        </button>
+                      </div>
+                      
+                      <div className="flex justify-center">
+                        <select
+                          value={pref.frequency}
+                          onChange={(e) => updatePreference(type, 'frequency', e.target.value)}
+                          className="text-[13px] px-2 py-1 border border-[rgba(59,77,67,0.12)] rounded-lg bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        >
+                          <option value="immediate">Immediate</option>
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                        </select>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="mt-6 p-4 bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] rounded-xl border-l-4 border-[#5B8A72]">
+                <div className="flex items-start space-x-3">
+                  <EnvelopeIcon className="w-5 h-5 text-[#5B8A72] mt-0.5" />
+                  <div>
+                    <h4 className="text-[15px] font-medium text-[#3D4A44]">Email Notifications</h4>
+                    <p className="text-[13px] text-[#7A8580] mt-1">
+                      Email notifications will be sent to your registered email address. 
+                      Make sure your email is verified in your account settings.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-[18px] font-medium text-[#3D4A44]">Scheduled Email Digest</h3>
+                  <p className="text-[14px] text-[#7A8580] mt-0.5">Receive periodic email summaries of your action items</p>
+                </div>
+                <button
+                  onClick={() => updateEmailDigest({ email_digest_enabled: !emailDigest.email_digest_enabled })}
+                  className={`w-14 h-8 rounded-full transition-colors relative flex-shrink-0 ${
+                    emailDigest.email_digest_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                  }`}
+                >
+                  <span className={`absolute top-1.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                    emailDigest.email_digest_enabled ? 'left-8' : 'left-1.5'
+                  }`} />
+                </button>
+              </div>
+
+              {emailDigest.email_digest_enabled && (
+                <div className="mt-5 pt-5 border-t border-[rgba(59,77,67,0.08)] space-y-5">
+                  <div>
+                    <label className="block text-[14px] font-medium text-[#3D4A44] mb-3">Frequency</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { value: 'daily', label: 'Daily' },
+                        { value: 'every_3_days', label: 'Every 3 Days' },
+                        { value: 'weekly', label: 'Weekly' },
+                        { value: 'biweekly', label: 'Biweekly' },
+                        { value: 'monthly', label: 'Monthly' }
+                      ].map(({ value, label }) => (
+                        <button
+                          key={value}
+                          onClick={() => updateEmailDigest({ schedule_interval: value })}
+                          className={`px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${
+                            emailDigest.schedule_interval === value
+                              ? 'bg-[#5B8A72] text-white'
+                              : 'bg-[#FAFBF9] text-[#3D4A44] border border-[rgba(59,77,67,0.12)] hover:bg-[#EEF1EC]'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[14px] font-medium text-[#3D4A44] mb-2">Delivery Time (UTC)</label>
+                    <select
+                      value={emailDigest.preferred_hour}
+                      onChange={(e) => updateEmailDigest({ preferred_hour: parseInt(e.target.value) })}
+                      className="w-full sm:w-48 px-4 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[14px] bg-white text-[#3D4A44]"
+                    >
+                      {[...Array(24)].map((_, i) => (
+                        <option key={i} value={i}>
+                          {i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[14px] font-medium text-[#3D4A44] mb-3">Priority Filter</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { value: 1, label: 'Critical', color: 'bg-[rgba(196,112,104,0.15)] text-[#C47068] border-[#C47068]' },
+                        { value: 2, label: 'High', color: 'bg-[rgba(196,149,107,0.15)] text-[#C4956B] border-[#C4956B]' },
+                        { value: 3, label: 'Medium', color: 'bg-[rgba(91,138,114,0.15)] text-[#5B8A72] border-[#5B8A72]' },
+                        { value: 4, label: 'All', color: 'bg-[rgba(122,133,128,0.15)] text-[#7A8580] border-[#7A8580]' },
+                      ].map(({ value, label, color }) => (
+                        <button
+                          key={value}
+                          onClick={() => updateEmailDigest({ min_priority_threshold: value })}
+                          className={`py-2 px-3 rounded-lg text-[13px] font-medium border-2 transition-all ${
+                            emailDigest.min_priority_threshold === value
+                              ? `${color} border-opacity-100`
+                              : 'bg-[#FAFBF9] text-[#7A8580] border-transparent hover:bg-[#EEF1EC]'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3">
+                    <div className="flex items-center space-x-2">
+                      {emailDigest.last_email_sent_at && (
+                        <span className="text-[12px] text-[#7A8580]">
+                          Last sent: {new Date(emailDigest.last_email_sent_at).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={sendTestEmail}
+                      disabled={sendingTest}
+                      className="px-4 py-2 bg-[#5B8A72] text-white text-[13px] font-medium rounded-lg hover:bg-[#4A7862] transition-colors disabled:opacity-50"
+                    >
+                      {sendingTest ? 'Sending...' : 'Send Test'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -549,128 +644,6 @@ export default function Settings() {
           </div>
         )}
 
-        {activeTab === 'email-digest' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-[22px] font-medium text-[#3D4A44]">Email Digest</h2>
-                  <p className="text-[15px] text-[#7A8580] mt-1">Get scheduled email summaries of your action items</p>
-                </div>
-                <button
-                  onClick={() => updateEmailDigest({ email_digest_enabled: !emailDigest.email_digest_enabled })}
-                  className={`w-14 h-8 rounded-full transition-colors relative ${
-                    emailDigest.email_digest_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
-                  }`}
-                >
-                  <span className={`absolute top-1.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                    emailDigest.email_digest_enabled ? 'left-8' : 'left-1.5'
-                  }`} />
-                </button>
-              </div>
-
-              {emailDigest.email_digest_enabled && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Frequency</label>
-                      <select
-                        value={emailDigest.schedule_interval}
-                        onChange={(e) => updateEmailDigest({ schedule_interval: e.target.value })}
-                        className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[15px] bg-white text-[#3D4A44]"
-                      >
-                        <option value="daily">Daily</option>
-                        <option value="every_3_days">Every 3 Days</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="biweekly">Every 2 Weeks</option>
-                        <option value="monthly">Monthly</option>
-                      </select>
-                      <p className="text-[13px] text-[#7A8580] mt-1">How often you want to receive the digest</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Delivery Time (UTC)</label>
-                      <select
-                        value={emailDigest.preferred_hour}
-                        onChange={(e) => updateEmailDigest({ preferred_hour: parseInt(e.target.value) })}
-                        className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[15px] bg-white text-[#3D4A44]"
-                      >
-                        {[...Array(24)].map((_, i) => (
-                          <option key={i} value={i}>
-                            {i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-[13px] text-[#7A8580] mt-1">When to send your digest each day</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Minimum Priority</label>
-                    <div className="grid grid-cols-4 gap-3">
-                      {[
-                        { value: 1, label: 'Critical', color: 'bg-[rgba(196,112,104,0.15)] text-[#C47068] border-[#C47068]' },
-                        { value: 2, label: 'High', color: 'bg-[rgba(196,149,107,0.15)] text-[#C4956B] border-[#C4956B]' },
-                        { value: 3, label: 'Medium', color: 'bg-[rgba(91,138,114,0.15)] text-[#5B8A72] border-[#5B8A72]' },
-                        { value: 4, label: 'All', color: 'bg-[rgba(122,133,128,0.15)] text-[#7A8580] border-[#7A8580]' },
-                      ].map(({ value, label, color }) => (
-                        <button
-                          key={value}
-                          onClick={() => updateEmailDigest({ min_priority_threshold: value })}
-                          className={`py-3 px-4 rounded-xl text-[14px] font-medium border-2 transition-all ${
-                            emailDigest.min_priority_threshold === value
-                              ? `${color} border-opacity-100`
-                              : 'bg-[#FAFBF9] text-[#7A8580] border-transparent hover:bg-[#EEF1EC]'
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-[13px] text-[#7A8580] mt-2">
-                      {emailDigest.min_priority_threshold === 1 && 'Only critical items will be included'}
-                      {emailDigest.min_priority_threshold === 2 && 'Critical and high priority items will be included'}
-                      {emailDigest.min_priority_threshold === 3 && 'Critical, high, and medium priority items will be included'}
-                      {emailDigest.min_priority_threshold === 4 && 'All items regardless of priority will be included'}
-                    </p>
-                  </div>
-
-                  {emailDigest.last_email_sent_at && (
-                    <div className="flex items-center space-x-2 text-[13px] text-[#7A8580]">
-                      <ClockIcon className="w-4 h-4" />
-                      <span>Last digest sent: {new Date(emailDigest.last_email_sent_at).toLocaleString()}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
-              <h3 className="text-[17px] font-medium text-[#3D4A44] mb-2">Test Email</h3>
-              <p className="text-[15px] text-[#7A8580] mb-4">
-                Send a test digest email to your account email address to preview what you will receive.
-              </p>
-              <button
-                onClick={sendTestEmail}
-                disabled={sendingTest}
-                className="px-6 py-3 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50 flex items-center space-x-2"
-              >
-                <EnvelopeIcon className="w-5 h-5" />
-                <span>{sendingTest ? 'Sending...' : 'Send Test Digest'}</span>
-              </button>
-            </div>
-
-            <div className="bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] rounded-[18px] p-6 border-l-4 border-[#5B8A72]">
-              <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-3">About Email Digests</h3>
-              <ul className="space-y-2 text-[15px] text-[#7A8580]">
-                <li>Digest emails summarize your pending action items grouped by priority</li>
-                <li>Overdue items are highlighted so you can quickly identify what needs attention</li>
-                <li>You can change the email provider in your platform settings without losing preferences</li>
-                <li>The digest includes items from all organizations you are a member of</li>
-              </ul>
-            </div>
-          </div>
-        )}
 
         {activeTab === 'org-settings' && isOrgAdmin && (
           <div className="space-y-6">

@@ -20,7 +20,9 @@ import {
   CurrencyDollarIcon,
   FilmIcon,
   LinkIcon,
-  BoltIcon
+  BoltIcon,
+  EnvelopeIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 
@@ -118,6 +120,8 @@ export default function ActionItemsPage() {
   const [generatingCrossModule, setGeneratingCrossModule] = useState(false)
   const [saving, setSaving] = useState(false)
   const [feedback, setFeedback] = useState(null)
+  const [pushingEmail, setPushingEmail] = useState(false)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
   const [newAction, setNewAction] = useState({
     action_type: 'GENERAL',
     title: '',
@@ -332,6 +336,45 @@ export default function ActionItemsPage() {
 
   const uniqueTypes = [...new Set(actions.map(a => a.action_type))]
 
+  const handlePushEmail = async (sendToCreator = false) => {
+    if (!filterCreator) return
+    setPushingEmail(true)
+    try {
+      const response = await axios.post(`/api/notifications/push-email/creator/${filterCreator}?send_to_creator=${sendToCreator}`)
+      setFeedback({ type: 'success', msg: response.data.message })
+      setTimeout(() => setFeedback(null), 4000)
+    } catch (error) {
+      setFeedback({ type: 'error', msg: error.response?.data?.detail || 'Failed to send email' })
+      setTimeout(() => setFeedback(null), 4000)
+    } finally {
+      setPushingEmail(false)
+    }
+  }
+
+  const handleDownloadPdf = async () => {
+    setDownloadingPdf(true)
+    try {
+      const params = filterCreator ? `?creator_id=${filterCreator}` : ''
+      const response = await axios.get(`/api/notifications/digest-pdf${params}`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'text/html' }))
+      const link = document.createElement('a')
+      link.href = url
+      const creatorName = filterCreator ? creators.find(c => c.id === parseInt(filterCreator))?.display_name?.replace(/\s+/g, '-').toLowerCase() : null
+      link.download = creatorName ? `rythm-action-items-${creatorName}.html` : 'rythm-action-items.html'
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      setFeedback({ type: 'success', msg: 'Report downloaded — open the file and use Print > Save as PDF' })
+      setTimeout(() => setFeedback(null), 5000)
+    } catch (error) {
+      setFeedback({ type: 'error', msg: 'Failed to download report' })
+      setTimeout(() => setFeedback(null), 4000)
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
+
   const getEntityLink = (action) => {
     const links = []
     if (action.song_id && action.song_title) {
@@ -383,7 +426,38 @@ export default function ActionItemsPage() {
             <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Task Inbox</h1>
             <p className="text-[17px] text-[#7A8580] mt-1">Unified tasks across all modules</p>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 flex-wrap gap-y-2">
+            <button
+              onClick={handleDownloadPdf}
+              disabled={downloadingPdf}
+              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-white border border-[rgba(59,77,67,0.2)] text-[#3D4A44] rounded-xl hover:bg-[#EEF1EC] transition-colors disabled:opacity-50 shadow-sm"
+              title="Download action items as a printable report"
+            >
+              <ArrowDownTrayIcon className="w-5 h-5" />
+              <span>{downloadingPdf ? 'Downloading...' : 'Download Report'}</span>
+            </button>
+            {filterCreator && (
+              <button
+                onClick={() => handlePushEmail(false)}
+                disabled={pushingEmail}
+                className="inline-flex items-center space-x-2 px-4 py-2.5 bg-white border border-[rgba(59,77,67,0.2)] text-[#3D4A44] rounded-xl hover:bg-[#EEF1EC] transition-colors disabled:opacity-50 shadow-sm"
+                title="Email this creator's action items to yourself"
+              >
+                <EnvelopeIcon className="w-5 h-5" />
+                <span>{pushingEmail ? 'Sending...' : 'Email Report'}</span>
+              </button>
+            )}
+            {filterCreator && creators.find(c => c.id === parseInt(filterCreator))?.email && (
+              <button
+                onClick={() => handlePushEmail(true)}
+                disabled={pushingEmail}
+                className="inline-flex items-center space-x-2 px-4 py-2.5 bg-[#5A8A9A] text-white rounded-xl hover:bg-[#4A7A8A] transition-colors disabled:opacity-50 shadow-sm"
+                title="Send action items directly to this creator's email"
+              >
+                <EnvelopeIcon className="w-5 h-5" />
+                <span>{pushingEmail ? 'Sending...' : 'Push to Creator'}</span>
+              </button>
+            )}
             <button
               onClick={handleGenerateCrossModule}
               disabled={generatingCrossModule}
