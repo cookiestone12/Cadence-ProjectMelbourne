@@ -112,7 +112,14 @@ function ContractsPageInner() {
   const [docLinkType, setDocLinkType] = useState('')
   const [docLinkId, setDocLinkId] = useState('')
   const [releases, setReleases] = useState([])
-  const [createDocFile, setCreateDocFile] = useState(null)
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [uploadFile, setUploadFile] = useState(null)
+  const [uploadCreatorId, setUploadCreatorId] = useState('')
+  const [uploadSongId, setUploadSongId] = useState('')
+  const [uploadDescription, setUploadDescription] = useState('')
+  const [uploadLoading, setUploadLoading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [uploadContractId, setUploadContractId] = useState('')
 
   useEffect(() => {
     loadData()
@@ -295,29 +302,63 @@ function ContractsPageInner() {
       if (payload.creator_id) payload.creator_id = parseInt(payload.creator_id)
       else delete payload.creator_id
       if (createParties.length > 0) payload.parties = createParties
-      const res = await axios.post(`/api/rights/contracts/org/${organizationId}`, payload)
-      const newContractId = res.data?.id
-      if (createDocFile && newContractId) {
-        const formData = new FormData()
-        formData.append('file', createDocFile)
-        formData.append('description', createDocFile.name)
-        await axios.post(`/api/rights/contracts/${newContractId}/documents`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        })
-      }
+      await axios.post(`/api/rights/contracts/org/${organizationId}`, payload)
       setShowCreateModal(false)
       setCreateForm({ ...emptyCreateForm })
       setCreateParties([])
-      setCreateDocFile(null)
       setCreateError('')
       await loadData()
     } catch (error) {
       console.error('Failed to create contract:', error)
-      setCreateError(error.response?.data?.detail || 'Failed to create contract. Please try again.')
+      const detail = error.response?.data?.detail
+      setCreateError(typeof detail === 'string' ? detail : JSON.stringify(detail) || 'Failed to create contract. Please try again.')
     } finally {
       setCreateLoading(false)
     }
   }
+
+  async function handleUploadContractDoc() {
+    if (!uploadFile) {
+      setUploadError('Please select a file to upload.')
+      return
+    }
+    if (!uploadContractId) {
+      setUploadError('Please select which contract to attach this document to.')
+      return
+    }
+    setUploadError('')
+    setUploadLoading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+      formData.append('description', uploadDescription || uploadFile.name)
+      if (uploadSongId) formData.append('song_id', uploadSongId)
+      await axios.post(`/api/rights/contracts/${uploadContractId}/documents`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setShowUploadModal(false)
+      setUploadFile(null)
+      setUploadCreatorId('')
+      setUploadSongId('')
+      setUploadDescription('')
+      setUploadContractId('')
+      setUploadError('')
+      if (contractDetail && contractDetail.id === parseInt(uploadContractId)) {
+        await refreshDetail()
+      }
+    } catch (error) {
+      console.error('Failed to upload document:', error)
+      const detail = error.response?.data?.detail
+      setUploadError(typeof detail === 'string' ? detail : 'Failed to upload document. Please try again.')
+    } finally {
+      setUploadLoading(false)
+    }
+  }
+
+  const filteredSongsForUpload = songs.filter(s => {
+    if (!uploadCreatorId) return true
+    return s.creator_id === parseInt(uploadCreatorId)
+  })
 
   async function handleUpdateContract() {
     if (!contractDetail) return
@@ -510,13 +551,22 @@ function ContractsPageInner() {
             </p>
           </div>
         </div>
-        <button
-          className="flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
-          onClick={() => { setShowCreateModal(true); setCreateError(''); setCreateLoading(false) }}
-        >
-          <PlusIcon className="w-5 h-5" />
-          <span>New Contract</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            className="flex items-center space-x-2 px-4 py-2 border border-[#5B8A72] text-[#5B8A72] rounded-lg hover:bg-[rgba(91,138,114,0.08)] transition-colors"
+            onClick={() => { setShowUploadModal(true); setUploadError(''); setUploadFile(null); setUploadCreatorId(''); setUploadSongId(''); setUploadDescription(''); setUploadContractId('') }}
+          >
+            <CloudArrowUpIcon className="w-5 h-5" />
+            <span>Upload Contract</span>
+          </button>
+          <button
+            className="flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+            onClick={() => { setShowCreateModal(true); setCreateError(''); setCreateLoading(false) }}
+          >
+            <PlusIcon className="w-5 h-5" />
+            <span>New Contract</span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
@@ -621,7 +671,7 @@ function ContractsPageInner() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
               <h3 className="text-lg font-semibold text-[#3D4A44]">New Contract</h3>
-              <button onClick={() => { setShowCreateModal(false); setCreateParties([]); setCreateDocFile(null) }} className="text-[#7A8580] hover:text-[#3D4A44]">
+              <button onClick={() => { setShowCreateModal(false); setCreateParties([]) }} className="text-[#7A8580] hover:text-[#3D4A44]">
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
@@ -757,36 +807,6 @@ function ContractsPageInner() {
               </div>
 
               <div className="border-t border-[rgba(59,77,67,0.08)] pt-4">
-                <h4 className="text-sm font-semibold text-[#3D4A44] mb-2">Attach Contract Document</h4>
-                <div className="border-2 border-dashed border-[rgba(59,77,67,0.2)] rounded-lg p-4 text-center hover:border-[#5B8A72] transition-colors">
-                  {createDocFile ? (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <PaperClipIcon className="w-5 h-5 text-[#5B8A72]" />
-                        <span className="text-sm text-[#3D4A44]">{createDocFile.name}</span>
-                        <span className="text-xs text-[#7A8580]">({(createDocFile.size / 1024 / 1024).toFixed(2)} MB)</span>
-                      </div>
-                      <button onClick={() => setCreateDocFile(null)} className="text-[#7A8580] hover:text-red-500">
-                        <XMarkIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="cursor-pointer">
-                      <CloudArrowUpIcon className="w-8 h-8 text-[#7A8580] mx-auto mb-1" />
-                      <p className="text-sm text-[#5B8A72] font-medium">Click to upload a contract file</p>
-                      <p className="text-xs text-[#7A8580] mt-1">PDF, DOC, DOCX, Excel, or images (max 50MB)</p>
-                      <input
-                        type="file"
-                        className="hidden"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                        onChange={(e) => { if (e.target.files[0]) setCreateDocFile(e.target.files[0]) }}
-                      />
-                    </label>
-                  )}
-                </div>
-              </div>
-
-              <div className="border-t border-[rgba(59,77,67,0.08)] pt-4">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-sm font-semibold text-[#3D4A44]">Parties</h4>
                 </div>
@@ -842,7 +862,7 @@ function ContractsPageInner() {
             )}
             <div className="flex justify-end space-x-3 p-6 border-t border-[rgba(59,77,67,0.08)]">
               <button
-                onClick={() => { setShowCreateModal(false); setCreateParties([]); setCreateDocFile(null); setCreateError('') }}
+                onClick={() => { setShowCreateModal(false); setCreateParties([]); setCreateError('') }}
                 className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
               >
                 Cancel
@@ -853,6 +873,124 @@ function ContractsPageInner() {
                 className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {createLoading ? 'Creating...' : 'Create Contract'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-lg font-semibold text-[#3D4A44]">Upload Contract Document</h3>
+              <button onClick={() => setShowUploadModal(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="border-2 border-dashed border-[rgba(59,77,67,0.2)] rounded-lg p-6 text-center hover:border-[#5B8A72] transition-colors">
+                {uploadFile ? (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <PaperClipIcon className="w-5 h-5 text-[#5B8A72]" />
+                      <span className="text-sm text-[#3D4A44] truncate max-w-[250px]">{uploadFile.name}</span>
+                      <span className="text-xs text-[#7A8580]">({(uploadFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+                    </div>
+                    <button onClick={() => setUploadFile(null)} className="text-[#7A8580] hover:text-red-500">
+                      <XMarkIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer">
+                    <CloudArrowUpIcon className="w-10 h-10 text-[#7A8580] mx-auto mb-2" />
+                    <p className="text-sm text-[#5B8A72] font-medium">Click to select a contract file</p>
+                    <p className="text-xs text-[#7A8580] mt-1">PDF, DOC, DOCX, Excel, or images (max 50MB)</p>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                      onChange={(e) => { if (e.target.files[0]) setUploadFile(e.target.files[0]) }}
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Attach to Contract *</label>
+                <select
+                  value={uploadContractId}
+                  onChange={(e) => setUploadContractId(e.target.value)}
+                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                >
+                  <option value="">Select a contract...</option>
+                  {contracts.map(c => (
+                    <option key={c.id} value={c.id}>{c.title}{c.reference_number ? ` (${c.reference_number})` : ''}</option>
+                  ))}
+                </select>
+                {contracts.length === 0 && (
+                  <p className="text-xs text-[#7A8580] mt-1">No contracts yet. Create a contract first, then upload documents.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Client (optional)</label>
+                <select
+                  value={uploadCreatorId}
+                  onChange={(e) => { setUploadCreatorId(e.target.value); setUploadSongId('') }}
+                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                >
+                  <option value="">All clients</option>
+                  {creators.map(c => (
+                    <option key={c.id} value={c.id}>{c.display_name || c.legal_name || c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Song (optional)</label>
+                <select
+                  value={uploadSongId}
+                  onChange={(e) => setUploadSongId(e.target.value)}
+                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                >
+                  <option value="">None</option>
+                  {filteredSongsForUpload.map(s => (
+                    <option key={s.id} value={s.id}>{s.title}{s.artist ? ` — ${s.artist}` : ''}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description (optional)</label>
+                <input
+                  type="text"
+                  value={uploadDescription}
+                  onChange={(e) => setUploadDescription(e.target.value)}
+                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  placeholder="e.g., Signed master agreement"
+                />
+              </div>
+            </div>
+            {uploadError && (
+              <div className="mx-6 mb-0 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                {uploadError}
+              </div>
+            )}
+            <div className="flex justify-end space-x-3 p-6 border-t border-[rgba(59,77,67,0.08)]">
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUploadContractDoc}
+                disabled={!uploadFile || !uploadContractId || uploadLoading}
+                className="flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <CloudArrowUpIcon className="w-5 h-5" />
+                <span>{uploadLoading ? 'Uploading...' : 'Upload Document'}</span>
               </button>
             </div>
           </div>
