@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
-import { PlusIcon, XMarkIcon, ArrowUpTrayIcon, UserPlusIcon, CameraIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, XMarkIcon, ArrowUpTrayIcon, UserPlusIcon, CameraIcon, TrashIcon } from '@heroicons/react/24/outline'
 
 const ROLE_OPTIONS = ['ARTIST', 'SONGWRITER', 'PRODUCER']
 const PRO_OPTIONS = ['ASCAP', 'BMI', 'PRS', 'SESAC', 'OTHER']
@@ -24,6 +24,21 @@ export default function RosterPage() {
   })
 
   const [uploadingImageId, setUploadingImageId] = useState(null)
+  const [deletingId, setDeletingId] = useState(null)
+
+  const handleDeleteCreator = async (creatorId, creatorName) => {
+    if (!window.confirm(`Are you sure you want to remove "${creatorName}" from your roster? This will also remove their song and work credits.`)) return
+    setDeletingId(creatorId)
+    try {
+      await axios.delete(`/api/creators/${creatorId}`)
+      await loadData()
+    } catch (error) {
+      console.error('Failed to delete creator:', error)
+      alert(error.response?.data?.detail || 'Failed to delete creator')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const handleImageUpload = async (creatorId, file) => {
     if (!file) return
@@ -332,6 +347,22 @@ export default function RosterPage() {
                       <div className="w-3.5 h-3.5 border-2 border-[#5B8A72] border-t-transparent rounded-full animate-spin"></div>
                     ) : (
                       <CameraIcon className="w-3.5 h-3.5 text-[#3D4A44]" />
+                    )}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      handleDeleteCreator(creator.id, creator.display_name)
+                    }}
+                    disabled={deletingId === creator.id}
+                    className="absolute top-2 right-2 w-7 h-7 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity duration-150 hover:bg-red-50 z-10"
+                    title="Remove from roster"
+                  >
+                    {deletingId === creator.id ? (
+                      <div className="w-3.5 h-3.5 border-2 border-[#C47068] border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <TrashIcon className="w-3.5 h-3.5 text-[#C47068]" />
                     )}
                   </button>
                 </div>

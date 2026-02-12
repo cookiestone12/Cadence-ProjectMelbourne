@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from typing import List, Optional
-from ..models import get_db, Creator, CreativeContact, OrganizationMember, User, Song, SongCredit
+from ..models import get_db, Creator, CreativeContact, OrganizationMember, User, Song, SongCredit, WorkCredit
 from ..utils.auth import get_current_user
 import os
 import uuid
@@ -326,6 +326,34 @@ def update_creator(
         "song_count": song_count,
         "avg_health_score": float(avg_health) if avg_health else 0.0
     }
+
+
+@router.delete("/{creator_id}")
+def delete_creator(
+    creator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == creator.organization_id
+    ).first()
+    if not membership and not current_user.is_super_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not check_roster_permission(membership):
+        raise HTTPException(status_code=403, detail="You do not have permission to manage the roster")
+
+    db.query(SongCredit).filter(SongCredit.creator_id == creator_id).delete()
+    db.query(WorkCredit).filter(WorkCredit.creator_id == creator_id).delete()
+
+    db.delete(creator)
+    db.commit()
+    return {"message": "Creator deleted successfully"}
 
 
 UPLOADS_DIR = Path(__file__).parent.parent / "uploads" / "creators"
