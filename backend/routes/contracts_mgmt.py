@@ -169,6 +169,39 @@ def _contract_to_dict(contract: Contract, db: Session, include_details: bool = F
     return result
 
 
+@router.get("/contracts/creator/{creator_id}")
+def list_contracts_by_creator(
+    creator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    verify_org_access(current_user, creator.organization_id, db)
+
+    direct_ids = db.query(Contract.id).filter(
+        Contract.organization_id == creator.organization_id,
+        Contract.creator_id == creator_id
+    ).all()
+    party_ids = db.query(ContractParty.contract_id).join(
+        Contract, Contract.id == ContractParty.contract_id
+    ).filter(
+        ContractParty.creator_id == creator_id,
+        Contract.organization_id == creator.organization_id
+    ).all()
+
+    all_ids = list(set([r[0] for r in direct_ids] + [r[0] for r in party_ids]))
+    if not all_ids:
+        return {"contracts": [], "total": 0}
+
+    contracts = db.query(Contract).filter(
+        Contract.id.in_(all_ids),
+        Contract.organization_id == creator.organization_id
+    ).order_by(Contract.created_at.desc()).all()
+    return {"contracts": [_contract_to_dict(c, db) for c in contracts], "total": len(contracts)}
+
+
 @router.get("/contracts/org/{org_id}")
 def list_contracts(
     org_id: int,

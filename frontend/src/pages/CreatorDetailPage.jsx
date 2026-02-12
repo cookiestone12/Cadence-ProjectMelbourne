@@ -45,6 +45,8 @@ export default function CreatorDetailPage() {
   const [savingSpotifyLink, setSavingSpotifyLink] = useState(false)
   const [accountingData, setAccountingData] = useState(null)
   const [accountingLoading, setAccountingLoading] = useState(false)
+  const [creatorContracts, setCreatorContracts] = useState([])
+  const [contractsLoading, setContractsLoading] = useState(false)
   const [showAddFeeModal, setShowAddFeeModal] = useState(false)
   const [showAddAdvanceModal, setShowAddAdvanceModal] = useState(false)
   const [feeForm, setFeeForm] = useState({ fee_type: 'MANAGEMENT_FEE', description: '', amount: '', fee_date: '', notes: '' })
@@ -115,6 +117,24 @@ export default function CreatorDetailPage() {
       setAccountingLoading(false)
     }
   }
+
+  const loadContracts = async () => {
+    setContractsLoading(true)
+    try {
+      const res = await axios.get(`/api/rights/contracts/creator/${id}`)
+      setCreatorContracts(res.data.contracts || [])
+    } catch (err) {
+      console.error('Failed to load contracts:', err)
+    } finally {
+      setContractsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'contracts') {
+      loadContracts()
+    }
+  }, [activeTab, id])
 
   useEffect(() => {
     if (activeTab === 'accounting' && organizationId) {
@@ -663,6 +683,7 @@ export default function CreatorDetailPage() {
     { id: 'overview', label: 'Overview' },
     { id: 'records', label: `Records (${songs.length})` },
     { id: 'releases', label: `Artist Releases (${creatorReleases.length})` },
+    { id: 'contracts', label: `Contracts${creatorContracts.length ? ` (${creatorContracts.length})` : ''}` },
     { id: 'actions', label: 'Actions' },
     { id: 'accounting', label: 'Accounting' },
     { id: 'schedule-a', label: 'Schedule A' }
@@ -1181,6 +1202,79 @@ export default function CreatorDetailPage() {
                     </div>
                   </Link>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'contracts' && (
+          <div className="space-y-4">
+            {contractsLoading ? (
+              <div className="text-center py-12 text-[#7A8580]">Loading contracts...</div>
+            ) : creatorContracts.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.08)] p-12 text-center">
+                <DocumentTextIcon className="w-12 h-12 text-[#B0BDB4] mx-auto mb-3" />
+                <p className="text-[#7A8580] mb-1">No contracts found</p>
+                <p className="text-xs text-[#B0BDB4]">Contracts where {creator.display_name || creator.legal_name} is a party or assigned client will appear here.</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.08)] overflow-hidden">
+                <div className="px-6 py-4 border-b border-[rgba(59,77,67,0.08)]">
+                  <h3 className="font-semibold text-[#3D4A44]">Contracts & Agreements</h3>
+                </div>
+                <div className="divide-y divide-[rgba(59,77,67,0.06)]">
+                  {creatorContracts.map(contract => (
+                    <Link
+                      key={contract.id}
+                      to="/contracts"
+                      className="flex items-center justify-between px-6 py-4 hover:bg-[#F5F7F4] transition-colors group"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-medium text-[#3D4A44] truncate group-hover:text-[#5B8A72] transition-colors">{contract.title}</p>
+                          {contract.reference_number && (
+                            <span className="text-xs text-[#7A8580] bg-[#F5F7F4] px-2 py-0.5 rounded-full">{contract.reference_number}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-[#7A8580]">
+                          {contract.start_date && <span>Start: {new Date(contract.start_date).toLocaleDateString()}</span>}
+                          {contract.end_date && <span>End: {new Date(contract.end_date).toLocaleDateString()}</span>}
+                          {contract.territory?.length > 0 && <span>{contract.territory.join(', ')}</span>}
+                          {contract.advance_amount > 0 && (
+                            <span className="text-[#5B8A72] font-medium">{contract.advance_currency} {contract.advance_amount.toLocaleString()}</span>
+                          )}
+                        </div>
+                        {contract.parties?.length > 0 && (
+                          <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                            {contract.parties.map((p, i) => (
+                              <span key={i} className="text-xs bg-[#EEF1EC] text-[#5B8A72] px-2 py-0.5 rounded-full">{p.party_name} ({p.party_role})</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                          contract.contract_type === 'MASTER' ? 'bg-purple-100 text-purple-700' :
+                          contract.contract_type === 'PUBLISHING' ? 'bg-blue-100 text-blue-700' :
+                          contract.contract_type === 'SYNC_LICENSE' ? 'bg-teal-100 text-teal-700' :
+                          contract.contract_type === 'DISTRIBUTION' ? 'bg-orange-100 text-orange-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {contract.contract_type === 'SYNC_LICENSE' ? 'Sync' : contract.contract_type?.charAt(0) + contract.contract_type?.slice(1).toLowerCase()}
+                        </span>
+                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+                          contract.status === 'ACTIVE' ? 'bg-green-100 text-green-700' :
+                          contract.status === 'DRAFT' ? 'bg-gray-100 text-gray-600' :
+                          contract.status === 'EXPIRED' ? 'bg-red-100 text-red-700' :
+                          contract.status === 'TERMINATED' ? 'bg-red-100 text-red-600' :
+                          'bg-yellow-100 text-yellow-700'
+                        }`}>
+                          {contract.status}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
               </div>
             )}
           </div>
