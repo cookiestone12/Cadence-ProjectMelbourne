@@ -64,6 +64,25 @@ def ensure_schema_updates():
                 conn.commit()
                 logger.info("Added creator_id column to contracts")
 
+        if 'rights_splits' in inspector.get_table_names():
+            rs_cols = [c['name'] for c in inspector.get_columns('rights_splits')]
+            if 'rights_holder_name' not in rs_cols:
+                conn.execute(text("ALTER TABLE rights_splits ADD COLUMN rights_holder_name VARCHAR"))
+                conn.commit()
+                logger.info("Added rights_holder_name column to rights_splits")
+            constraints = inspector.get_foreign_keys('rights_splits')
+            for fk in constraints:
+                if 'rights_holder_id' in fk.get('constrained_columns', []):
+                    fk_name = fk.get('name')
+                    if fk_name:
+                        try:
+                            conn.execute(text(f"ALTER TABLE rights_splits ALTER COLUMN rights_holder_id DROP NOT NULL"))
+                            conn.commit()
+                            logger.info("Made rights_holder_id nullable in rights_splits")
+                        except Exception:
+                            pass
+                    break
+
         bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
         for field in bool_to_string_fields:
             if field in song_cols:

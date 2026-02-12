@@ -559,14 +559,19 @@ function ContractsPageInner() {
   async function handleAddSplit(contractAssetId) {
     if (!contractDetail) return
     const form = splitForms[contractAssetId]
-    if (!form || !form.rights_holder_id || !form.rights_type || !form.share_percentage) return
+    if (!form || (!form.rights_holder_id && !form.rights_holder_name) || !form.rights_type || !form.share_percentage) return
     try {
-      await axios.post(`/api/rights/contracts/${contractDetail.id}/assets/${contractAssetId}/splits`, {
-        rights_holder_id: parseInt(form.rights_holder_id),
+      const payload = {
         rights_type: form.rights_type,
         share_percentage: parseFloat(form.share_percentage),
         notes: form.notes || ''
-      })
+      }
+      if (form.rights_holder_id) {
+        payload.rights_holder_id = parseInt(form.rights_holder_id)
+      } else {
+        payload.rights_holder_name = form.rights_holder_name
+      }
+      await axios.post(`/api/rights/contracts/${contractDetail.id}/assets/${contractAssetId}/splits`, payload)
       setSplitForms(prev => ({ ...prev, [contractAssetId]: undefined }))
       await refreshDetail()
     } catch (error) {
@@ -1704,16 +1709,27 @@ function ContractsPageInner() {
                         {showSplitForm ? (
                           <div className="bg-white rounded-lg p-3 space-y-2">
                             <div className="grid grid-cols-4 gap-2">
-                              <select
-                                value={splitForms[asset.id]?.rights_holder_id || ''}
-                                onChange={(e) => setSplitForms(prev => ({ ...prev, [asset.id]: { ...prev[asset.id], rights_holder_id: e.target.value } }))}
-                                className="border border-[rgba(59,77,67,0.12)] rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                              >
-                                <option value="">Rights holder</option>
-                                {creators.map(c => (
-                                  <option key={c.id} value={c.id}>{c.name || c.artist_name || `Creator ${c.id}`}</option>
-                                ))}
-                              </select>
+                              <div className="flex flex-col space-y-1">
+                                <select
+                                  value={splitForms[asset.id]?.rights_holder_id || ''}
+                                  onChange={(e) => setSplitForms(prev => ({ ...prev, [asset.id]: { ...prev[asset.id], rights_holder_id: e.target.value, rights_holder_name: e.target.value ? '' : prev[asset.id]?.rights_holder_name || '' } }))}
+                                  className="border border-[rgba(59,77,67,0.12)] rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                                >
+                                  <option value="">Select from roster</option>
+                                  {creators.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name || c.artist_name || `Creator ${c.id}`}</option>
+                                  ))}
+                                </select>
+                                {!splitForms[asset.id]?.rights_holder_id && (
+                                  <input
+                                    type="text"
+                                    placeholder="Or type external name"
+                                    value={splitForms[asset.id]?.rights_holder_name || ''}
+                                    onChange={(e) => setSplitForms(prev => ({ ...prev, [asset.id]: { ...prev[asset.id], rights_holder_name: e.target.value } }))}
+                                    className="border border-[rgba(59,77,67,0.12)] rounded-lg px-2 py-1.5 text-xs focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                                  />
+                                )}
+                              </div>
                               <select
                                 value={splitForms[asset.id]?.rights_type || ''}
                                 onChange={(e) => setSplitForms(prev => ({ ...prev, [asset.id]: { ...prev[asset.id], rights_type: e.target.value } }))}
@@ -1751,21 +1767,21 @@ function ContractsPageInner() {
                         ) : (
                           <div className="flex items-center space-x-2">
                             <button
-                              onClick={() => setSplitForms(prev => ({ ...prev, [asset.id]: { rights_holder_id: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '' } }))}
+                              onClick={() => setSplitForms(prev => ({ ...prev, [asset.id]: { rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '' } }))}
                               className="text-xs text-[#5B8A72] hover:text-[#4A7A62] font-medium flex items-center space-x-1 border border-[#5B8A72] rounded-lg px-2 py-1 hover:bg-[rgba(91,138,114,0.08)] transition-colors"
                             >
                               <PlusIcon className="w-3.5 h-3.5" />
                               <span>Add Publishing Split</span>
                             </button>
                             <button
-                              onClick={() => setSplitForms(prev => ({ ...prev, [asset.id]: { rights_holder_id: '', rights_type: 'MASTER', share_percentage: '', notes: '' } }))}
+                              onClick={() => setSplitForms(prev => ({ ...prev, [asset.id]: { rights_holder_id: '', rights_holder_name: '', rights_type: 'MASTER', share_percentage: '', notes: '' } }))}
                               className="text-xs text-[#5B8A72] hover:text-[#4A7A62] font-medium flex items-center space-x-1 border border-[#5B8A72] rounded-lg px-2 py-1 hover:bg-[rgba(91,138,114,0.08)] transition-colors"
                             >
                               <PlusIcon className="w-3.5 h-3.5" />
                               <span>Add Master Split</span>
                             </button>
                             <button
-                              onClick={() => setSplitForms(prev => ({ ...prev, [asset.id]: { rights_holder_id: '', rights_type: '', share_percentage: '', notes: '' } }))}
+                              onClick={() => setSplitForms(prev => ({ ...prev, [asset.id]: { rights_holder_id: '', rights_holder_name: '', rights_type: '', share_percentage: '', notes: '' } }))}
                               className="text-xs text-[#5B8A72] hover:text-[#4A7A62] font-medium flex items-center space-x-1"
                             >
                               <PlusIcon className="w-3.5 h-3.5" />

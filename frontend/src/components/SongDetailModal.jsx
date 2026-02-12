@@ -13,6 +13,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [songDetails, setSongDetails] = useState(null)
   const [loading, setLoading] = useState(true)
   const [contracts, setContracts] = useState([])
+  const [linkedContracts, setLinkedContracts] = useState([])
   const [uploading, setUploading] = useState(false)
   const [rightsData, setRightsData] = useState([])
   const [rightsLoading, setRightsLoading] = useState(false)
@@ -25,6 +26,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   useEffect(() => {
     loadSongDetails()
     loadContracts()
+    loadLinkedContracts()
     loadRightsData()
   }, [song.id])
   
@@ -51,6 +53,18 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       setContracts(response.data)
     } catch (error) {
       console.error('Failed to load contracts:', error)
+    }
+  }
+
+  async function loadLinkedContracts() {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get(`/api/rights/contracts/song/${song.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setLinkedContracts(response.data.contracts || [])
+    } catch (error) {
+      console.error('Failed to load linked contracts:', error)
     }
   }
   
@@ -898,45 +912,82 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   </div>
                 </div>
                 
-                {contracts.length > 0 ? (
-                  <div className="space-y-2">
-                    {contracts.map((contract) => (
-                      <div key={contract.id} className="flex items-center justify-between p-4 bg-[#F5F7F4] rounded-[12px] border border-[rgba(59,77,67,0.08)]">
-                        <div className="flex items-center space-x-3">
-                          <DocumentTextIcon className="w-8 h-8 text-[#5B8A72]" />
-                          <div>
-                            <p className="font-medium text-[#3D4A44]">{contract.file_name}</p>
-                            <p className="text-[13px] text-[#7A8580]">
-                              {contract.contract_type || 'Contract'} • {new Date(contract.created_at).toLocaleDateString()}
-                            </p>
+                {linkedContracts.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-[13px] font-semibold text-[#7A8580] uppercase tracking-wide mb-2">Linked Contracts</h4>
+                    <div className="space-y-2">
+                      {linkedContracts.map((lc) => (
+                        <div key={lc.id} className="flex items-center justify-between p-4 bg-[#F5F7F4] rounded-[12px] border border-[rgba(59,77,67,0.08)]">
+                          <div className="flex items-center space-x-3">
+                            <DocumentTextIcon className="w-8 h-8 text-[#5B8A72]" />
+                            <div>
+                              <p className="font-medium text-[#3D4A44]">{lc.title}</p>
+                              <p className="text-[13px] text-[#7A8580]">
+                                {lc.contract_type || 'Contract'}
+                                {lc.reference_number ? ` • ${lc.reference_number}` : ''}
+                                {lc.status ? ` • ${lc.status}` : ''}
+                              </p>
+                              {(lc.start_date || lc.end_date) && (
+                                <p className="text-[12px] text-[#7A8580]">
+                                  {lc.start_date ? new Date(lc.start_date).toLocaleDateString() : ''}
+                                  {lc.start_date && lc.end_date ? ' – ' : ''}
+                                  {lc.end_date ? new Date(lc.end_date).toLocaleDateString() : ''}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => downloadContract(contract.id)}
-                            className="p-2 text-[#7A8580] hover:text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-[8px] transition-colors"
-                            title="Download"
-                          >
-                            <ArrowDownTrayIcon className="w-5 h-5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteContract(contract.id)}
-                            className="p-2 text-[#7A8580] hover:text-[#C47068] hover:bg-[rgba(196,112,104,0.1)] rounded-[8px] transition-colors"
-                            title="Delete"
-                          >
-                            <TrashIcon className="w-5 h-5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 bg-[#F5F7F4] rounded-[12px] border-2 border-dashed border-[rgba(59,77,67,0.08)]">
-                    <DocumentTextIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
-                    <p className="text-[#3D4A44]">No contracts uploaded yet</p>
-                    <p className="text-[13px] text-[#7A8580]">Upload a PDF to attach it to this song</p>
+                      ))}
+                    </div>
                   </div>
                 )}
+
+                {contracts.length > 0 || linkedContracts.length === 0 ? (
+                  <>
+                    {contracts.length > 0 && linkedContracts.length > 0 && (
+                      <h4 className="text-[13px] font-semibold text-[#7A8580] uppercase tracking-wide mb-2">Uploaded Documents</h4>
+                    )}
+                    {contracts.length > 0 ? (
+                      <div className="space-y-2">
+                        {contracts.map((contract) => (
+                          <div key={contract.id} className="flex items-center justify-between p-4 bg-[#F5F7F4] rounded-[12px] border border-[rgba(59,77,67,0.08)]">
+                            <div className="flex items-center space-x-3">
+                              <DocumentTextIcon className="w-8 h-8 text-[#5B8A72]" />
+                              <div>
+                                <p className="font-medium text-[#3D4A44]">{contract.file_name}</p>
+                                <p className="text-[13px] text-[#7A8580]">
+                                  {contract.contract_type || 'Contract'} • {new Date(contract.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                onClick={() => downloadContract(contract.id)}
+                                className="p-2 text-[#7A8580] hover:text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-[8px] transition-colors"
+                                title="Download"
+                              >
+                                <ArrowDownTrayIcon className="w-5 h-5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteContract(contract.id)}
+                                className="p-2 text-[#7A8580] hover:text-[#C47068] hover:bg-[rgba(196,112,104,0.1)] rounded-[8px] transition-colors"
+                                title="Delete"
+                              >
+                                <TrashIcon className="w-5 h-5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 bg-[#F5F7F4] rounded-[12px] border-2 border-dashed border-[rgba(59,77,67,0.08)]">
+                        <DocumentTextIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
+                        <p className="text-[#3D4A44]">No contracts uploaded yet</p>
+                        <p className="text-[13px] text-[#7A8580]">Upload a PDF to attach it to this song</p>
+                      </div>
+                    )}
+                  </>
+                ) : null}
               </div>
             </div>
           )}

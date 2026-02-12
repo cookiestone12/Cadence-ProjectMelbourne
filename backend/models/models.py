@@ -962,7 +962,8 @@ class RightsSplit(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     contract_asset_id = Column(Integer, ForeignKey("contract_assets.id", ondelete="CASCADE"), nullable=False)
-    rights_holder_id = Column(Integer, ForeignKey("creators.id"), nullable=False)
+    rights_holder_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
+    rights_holder_name = Column(String, nullable=True)
 
     rights_type = Column(String, nullable=False, default="MASTER")
     share_percentage = Column(Float, nullable=False)
@@ -973,7 +974,7 @@ class RightsSplit(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     contract_asset = relationship("ContractAsset")
-    rights_holder = relationship("Creator")
+    rights_holder = relationship("Creator", foreign_keys=[rights_holder_id])
 
 
 class StatementStatus(str, enum.Enum):

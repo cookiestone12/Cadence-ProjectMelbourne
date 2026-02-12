@@ -71,7 +71,8 @@ class AssetLink(BaseModel):
 
 
 class SplitCreate(BaseModel):
-    rights_holder_id: int
+    rights_holder_id: Optional[int] = None
+    rights_holder_name: Optional[str] = None
     rights_type: str = "MASTER"
     share_percentage: float
     notes: Optional[str] = None
@@ -80,6 +81,7 @@ class SplitCreate(BaseModel):
 class SplitUpdate(BaseModel):
     rights_type: Optional[str] = None
     share_percentage: Optional[float] = None
+    rights_holder_name: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -143,11 +145,15 @@ def _contract_to_dict(contract: Contract, db: Session, include_details: bool = F
             splits = db.query(RightsSplit).filter(RightsSplit.contract_asset_id == ca.id).all()
             splits_data = []
             for s in splits:
-                holder = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
+                if s.rights_holder_id:
+                    holder = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
+                    holder_name = holder.display_name if holder else (s.rights_holder_name or "Unknown")
+                else:
+                    holder_name = s.rights_holder_name or "Unknown"
                 splits_data.append({
                     "id": s.id,
                     "rights_holder_id": s.rights_holder_id,
-                    "rights_holder_name": holder.display_name if holder else "Unknown",
+                    "rights_holder_name": holder_name,
                     "rights_type": s.rights_type,
                     "share_percentage": s.share_percentage,
                     "notes": s.notes,
@@ -200,6 +206,42 @@ def list_contracts_by_creator(
         Contract.organization_id == creator.organization_id
     ).order_by(Contract.created_at.desc()).all()
     return {"contracts": [_contract_to_dict(c, db) for c in contracts], "total": len(contracts)}
+
+
+@router.get("/contracts/song/{song_id}")
+def get_contracts_for_song(
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+    verify_org_access(current_user, song.organization_id, db)
+
+    asset_links = db.query(ContractAsset).filter(
+        ContractAsset.asset_type == "SONG",
+        ContractAsset.asset_id == song_id,
+    ).all()
+
+    if not asset_links:
+        return {"contracts": []}
+
+    contract_ids = list(set(ca.contract_id for ca in asset_links))
+    contracts = db.query(Contract).filter(
+        Contract.id.in_(contract_ids),
+        Contract.organization_id == song.organization_id,
+    ).order_by(Contract.created_at.desc()).all()
+
+    return {"contracts": [{
+        "id": c.id,
+        "title": c.title,
+        "contract_type": c.contract_type,
+        "status": c.status,
+        "reference_number": c.reference_number,
+        "start_date": c.start_date.isoformat() if c.start_date else None,
+        "end_date": c.end_date.isoformat() if c.end_date else None,
+    } for c in contracts]}
 
 
 @router.get("/contracts/org/{org_id}")
@@ -464,12 +506,17 @@ def add_split(
     if not ca:
         raise HTTPException(status_code=404, detail="Contract asset not found")
 
-    holder = db.query(Creator).filter(
-        Creator.id == data.rights_holder_id,
-        Creator.organization_id == contract.organization_id,
-    ).first()
-    if not holder:
-        raise HTTPException(status_code=404, detail="Rights holder not found in this organization")
+    holder_name = data.rights_holder_name
+    if data.rights_holder_id:
+        holder = db.query(Creator).filter(
+            Creator.id == data.rights_holder_id,
+            Creator.organization_id == contract.organization_id,
+        ).first()
+        if not holder:
+            raise HTTPException(status_code=404, detail="Rights holder not found in this organization")
+        holder_name = holder_name or holder.display_name
+    elif not data.rights_holder_name:
+        raise HTTPException(status_code=400, detail="Either rights_holder_id or rights_holder_name is required")
 
     if data.share_percentage < 0 or data.share_percentage > 100:
         raise HTTPException(status_code=400, detail="share_percentage must be between 0 and 100")
@@ -488,6 +535,7 @@ def add_split(
     split = RightsSplit(
         contract_asset_id=ca.id,
         rights_holder_id=data.rights_holder_id,
+        rights_holder_name=holder_name,
         rights_type=data.rights_type,
         share_percentage=data.share_percentage,
         notes=data.notes,
@@ -546,6 +594,8 @@ def update_split(
         split.rights_type = data.rights_type
     if data.share_percentage is not None:
         split.share_percentage = data.share_percentage
+    if data.rights_holder_name is not None:
+        split.rights_holder_name = data.rights_holder_name
     if data.notes is not None:
         split.notes = data.notes
 
@@ -613,11 +663,15 @@ def get_asset_rights(
         splits = db.query(RightsSplit).filter(RightsSplit.contract_asset_id == ca.id).all()
         splits_data = []
         for s in splits:
-            holder = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
+            if s.rights_holder_id:
+                holder = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
+                h_name = holder.display_name if holder else (s.rights_holder_name or "Unknown")
+            else:
+                h_name = s.rights_holder_name or "Unknown"
             splits_data.append({
                 "id": s.id,
                 "rights_holder_id": s.rights_holder_id,
-                "rights_holder_name": holder.display_name if holder else "Unknown",
+                "rights_holder_name": h_name,
                 "rights_type": s.rights_type,
                 "share_percentage": s.share_percentage,
                 "notes": s.notes,
