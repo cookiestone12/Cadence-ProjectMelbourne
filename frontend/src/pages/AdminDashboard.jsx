@@ -289,8 +289,8 @@ export default function AdminDashboard() {
             </button>
           </div>
 
-          <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
-            <table className="w-full">
+          <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-x-auto">
+            <table className="w-full min-w-[700px]">
               <thead className="bg-[#EEF1EC]">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">User</th>
