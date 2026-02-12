@@ -99,11 +99,9 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
                   className="h-10 max-w-[140px] object-contain"
                 />
               ) : (
-                <img 
-                  src="/rythm-logo.png" 
-                  alt="Rythm - Catalog Intelligence" 
-                  className="h-16 w-auto object-contain"
-                />
+                <span className="text-lg font-bold text-[#3D4A44]">
+                  {orgBranding?.display_name || orgBranding?.name || 'Rythm'}
+                </span>
               )}
             </div>
             <button

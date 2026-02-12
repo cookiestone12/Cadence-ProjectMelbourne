@@ -303,6 +303,7 @@ class Work(Base):
     genre = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
     lyrics = Column(Text, nullable=True)
+    is_registered_with_pro = Column(Boolean, default=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
