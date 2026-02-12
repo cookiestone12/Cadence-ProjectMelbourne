@@ -112,6 +112,7 @@ function ContractsPageInner() {
   const [docLinkType, setDocLinkType] = useState('')
   const [docLinkId, setDocLinkId] = useState('')
   const [releases, setReleases] = useState([])
+  const [createDocFile, setCreateDocFile] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -294,10 +295,20 @@ function ContractsPageInner() {
       if (payload.creator_id) payload.creator_id = parseInt(payload.creator_id)
       else delete payload.creator_id
       if (createParties.length > 0) payload.parties = createParties
-      await axios.post(`/api/rights/contracts/org/${organizationId}`, payload)
+      const res = await axios.post(`/api/rights/contracts/org/${organizationId}`, payload)
+      const newContractId = res.data?.id
+      if (createDocFile && newContractId) {
+        const formData = new FormData()
+        formData.append('file', createDocFile)
+        formData.append('description', createDocFile.name)
+        await axios.post(`/api/rights/contracts/${newContractId}/documents`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        })
+      }
       setShowCreateModal(false)
       setCreateForm({ ...emptyCreateForm })
       setCreateParties([])
+      setCreateDocFile(null)
       setCreateError('')
       await loadData()
     } catch (error) {
@@ -610,7 +621,7 @@ function ContractsPageInner() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
               <h3 className="text-lg font-semibold text-[#3D4A44]">New Contract</h3>
-              <button onClick={() => { setShowCreateModal(false); setCreateParties([]) }} className="text-[#7A8580] hover:text-[#3D4A44]">
+              <button onClick={() => { setShowCreateModal(false); setCreateParties([]); setCreateDocFile(null) }} className="text-[#7A8580] hover:text-[#3D4A44]">
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
@@ -746,6 +757,36 @@ function ContractsPageInner() {
               </div>
 
               <div className="border-t border-[rgba(59,77,67,0.08)] pt-4">
+                <h4 className="text-sm font-semibold text-[#3D4A44] mb-2">Attach Contract Document</h4>
+                <div className="border-2 border-dashed border-[rgba(59,77,67,0.2)] rounded-lg p-4 text-center hover:border-[#5B8A72] transition-colors">
+                  {createDocFile ? (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <PaperClipIcon className="w-5 h-5 text-[#5B8A72]" />
+                        <span className="text-sm text-[#3D4A44]">{createDocFile.name}</span>
+                        <span className="text-xs text-[#7A8580]">({(createDocFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+                      </div>
+                      <button onClick={() => setCreateDocFile(null)} className="text-[#7A8580] hover:text-red-500">
+                        <XMarkIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="cursor-pointer">
+                      <CloudArrowUpIcon className="w-8 h-8 text-[#7A8580] mx-auto mb-1" />
+                      <p className="text-sm text-[#5B8A72] font-medium">Click to upload a contract file</p>
+                      <p className="text-xs text-[#7A8580] mt-1">PDF, DOC, DOCX, Excel, or images (max 50MB)</p>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                        onChange={(e) => { if (e.target.files[0]) setCreateDocFile(e.target.files[0]) }}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <div className="border-t border-[rgba(59,77,67,0.08)] pt-4">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-sm font-semibold text-[#3D4A44]">Parties</h4>
                 </div>
@@ -801,7 +842,7 @@ function ContractsPageInner() {
             )}
             <div className="flex justify-end space-x-3 p-6 border-t border-[rgba(59,77,67,0.08)]">
               <button
-                onClick={() => { setShowCreateModal(false); setCreateParties([]); setCreateError('') }}
+                onClick={() => { setShowCreateModal(false); setCreateParties([]); setCreateDocFile(null); setCreateError('') }}
                 className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
               >
                 Cancel
