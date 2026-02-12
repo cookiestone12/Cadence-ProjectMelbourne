@@ -76,6 +76,14 @@ export default function HomePage() {
   const [recentNotifications, setRecentNotifications] = useState([])
   const [placementSummary, setPlacementSummary] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  const storedUser = localStorage.getItem('user')
+  let userName = 'User'
+  try {
+    const parsed = JSON.parse(storedUser)
+    userName = parsed?.display_name || parsed?.username || 'User'
+  } catch {}
+
   
   useEffect(() => {
     async function loadDashboard() {
@@ -181,7 +189,7 @@ export default function HomePage() {
             )}
             <div>
               <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">
-                Welcome back, {org?.display_name || org?.name}
+                Welcome back, {userName}
               </h1>
               <p className="text-[17px] text-[#7A8580] mt-1">Here's what's happening with your catalog</p>
             </div>
