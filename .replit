@@ -55,13 +55,17 @@ externalPort = 3002
 localPort = 8000
 externalPort = 8000
 
+[[ports]]
+localPort = 9999
+externalPort = 3000
+
 [nix]
 channel = "stable-25_05"
 packages = ["cargo", "freetype", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "imagemagick"]
 
 [deployment]
 build = ["sh", "-c", "cd frontend && npm run build && cd .. && python -m backend.db_setup"]
-run = ["gunicorn", "backend.main:app", "-c", "backend/gunicorn_config.py"]
+run = ["gunicorn", "backend.production:app", "-c", "backend/gunicorn_config.py"]
 deploymentTarget = "vm"
 
 [userenv]
