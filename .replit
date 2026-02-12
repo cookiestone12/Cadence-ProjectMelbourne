@@ -60,7 +60,7 @@ channel = "stable-25_05"
 packages = ["cargo", "freetype", "glibcLocales", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc", "imagemagick"]
 
 [deployment]
-build = ["bash", "-c", "cd frontend && npm run build"]
+build = ["sh", "-c", "cd frontend && npm run build"]
 run = ["gunicorn", "backend.main:app", "-c", "backend/gunicorn_config.py"]
 deploymentTarget = "vm"
 

@@ -218,35 +218,40 @@ uploads_dir = Path(__file__).parent / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 
-# Serve static files from frontend build (production)
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():
-    app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
-    
+    if (frontend_dist / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
+
+    @app.get("/")
+    async def serve_root():
+        return FileResponse(frontend_dist / "index.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        """Serve the React SPA for all non-API routes"""
-        from fastapi.responses import Response
-        
         if full_path.startswith("api/"):
             from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Not found")
-        
+
         try:
             requested_path = (frontend_dist / full_path).resolve()
             frontend_dist_resolved = frontend_dist.resolve()
-            
+
             if not requested_path.is_relative_to(frontend_dist_resolved):
                 return FileResponse(frontend_dist / "index.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
-            
+
             if requested_path.is_file():
                 if full_path.startswith("assets/"):
                     return FileResponse(requested_path, headers={"Cache-Control": "public, max-age=31536000, immutable"})
                 return FileResponse(requested_path, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
         except (ValueError, RuntimeError):
             pass
-        
+
         return FileResponse(frontend_dist / "index.html", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
+else:
+    @app.get("/")
+    async def serve_root_fallback():
+        return {"status": "healthy", "service": "Rythm Catalog Intelligence", "note": "Frontend not built yet"}
 
 if __name__ == "__main__":
     import uvicorn
