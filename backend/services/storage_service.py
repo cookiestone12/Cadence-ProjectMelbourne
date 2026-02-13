@@ -3,6 +3,7 @@ import base64
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+from urllib.parse import quote
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
@@ -53,7 +54,7 @@ def get_dropbox_auth_url(org_id: int, redirect_uri: str) -> str:
     authorize_url = (
         f"https://www.dropbox.com/oauth2/authorize"
         f"?client_id={DROPBOX_APP_KEY}"
-        f"&redirect_uri={redirect_uri}"
+        f"&redirect_uri={quote(redirect_uri, safe='')}"
         f"&response_type=code"
         f"&token_access_type=offline"
     )
