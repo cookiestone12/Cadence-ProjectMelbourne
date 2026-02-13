@@ -26,8 +26,12 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **API Security**: Enforces JWT authentication, user-organization membership validation, and organization-scoped queries.
 - **AI-Powered CSV Import**: Utilizes OpenAI for intelligent column mapping during bulk song import. Also supports PDF and Word (.docx) Schedule A document parsing, extracting creator info (name, PRO IPI#, ID#), song entries with artist/title/percentage, and Schedule A/B sections.
 - **Notification System**: Customizable in-app and email notifications with user and organization-level preferences.
-- **Action Items System**: Manages proactive action items with deadlines and priorities, with auto-generation based on catalog gaps and cross-module tracking.
+- **Action Items System**: Manages proactive action items with deadlines and priorities, with auto-generation based on catalog gaps and cross-module tracking. Supports user assignment with inline dropdowns, "Assigned To" filtering, and scroll-to-top navigation.
 - **Placement Management**: Comprehensive sync licensing/placement tracking with a status pipeline from PITCHED to PAID, financial tracking, contract linking, release linking, creator/client filtering, catalog search pickers for works/releases, and automatic accounting integration (creates RoyaltyStatement + RoyaltyTransaction on PAID transition with license fee).
+- **Sync Reports**: Customizable sync placement reports filtered by client, status, and date range with PDF/CSV export and branded templates.
+- **Cross-Organization Client Sharing**: Secure sharing flow with email-based invitations, 6-digit passcode verification, org name confirmation, and three role levels (COPRIMARY, SECONDARY, READER) with catalog sync.
+- **Expense Tracking (Money Out)**: New Expense model with 10 categories (producer fees, day rates, video production, legal, etc.) and status flow (PENDING→APPROVED→PAID/CANCELLED). Integrated into Royalties page as Money Out tab with Expenses and Payments sub-sections.
+- **Works Folder Organization**: WorkFolder model with parent_folder_id for nesting, folder bar with counts, inline rename/delete, and move-to-folder functionality on the Works page.
 - **Cross-Module Task Auto-Generation**: Automated task creation for contract expirations, release readiness gaps, and placement follow-ups.
 - **Core Catalog & Creator Management**: Expanded data models for `Works` (compositions) and `Releases` (albums/EPs) with `work_type` and `IPAssetType` enum for broader IP management.
 - **Creative Directory**: A contact management system for industry collaborators with CRUD functionality, searchable UI, role filtering, and PDF export.
