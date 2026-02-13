@@ -80,7 +80,7 @@ def ensure_schema_updates():
                     fk_name = fk.get('name')
                     if fk_name:
                         try:
-                            conn.execute(text(f"ALTER TABLE rights_splits ALTER COLUMN rights_holder_id DROP NOT NULL"))
+                            conn.execute(text("ALTER TABLE rights_splits ALTER COLUMN rights_holder_id DROP NOT NULL"))
                             conn.commit()
                             logger.info("Made rights_holder_id nullable in rights_splits")
                         except Exception:
