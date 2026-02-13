@@ -205,6 +205,133 @@ def get_track_data(spotify_link: str = None) -> Dict[str, Any]:
     }
 
 
+def lookup_release_metadata(spotify_url: str) -> Dict[str, Any]:
+    import logging
+    logger = logging.getLogger("rythm")
+
+    token = _get_access_token()
+    if not token:
+        raise SpotifyAuthError("Spotify is not connected. Please check your Spotify credentials.")
+
+    url_type, resource_id = _extract_spotify_url_type(spotify_url)
+    if not resource_id or url_type == "unknown":
+        raise ValueError("Could not recognize that Spotify URL. Please paste a valid Spotify album or track link.")
+
+    if url_type == "album":
+        album_data = _spotify_get(f"albums/{resource_id}", token)
+        if not album_data:
+            raise SpotifyNotFoundError("Could not find this album on Spotify.")
+
+        artists = [a.get("name") for a in album_data.get("artists", [])]
+        total_tracks = album_data.get("total_tracks", 0)
+        album_type = album_data.get("album_type", "album").upper()
+        if album_type == "SINGLE" or total_tracks == 1:
+            release_type = "SINGLE"
+        elif total_tracks <= 6:
+            release_type = "EP"
+        else:
+            release_type = "ALBUM"
+
+        genres = album_data.get("genres", [])
+        cover_art = album_data.get("images", [{}])[0].get("url") if album_data.get("images") else None
+        release_date = album_data.get("release_date", "")
+        copyright_entries = album_data.get("copyrights", [])
+        copyright_line = copyright_entries[0].get("text", "") if copyright_entries else ""
+
+        tracks = []
+        for t in album_data.get("tracks", {}).get("items", []):
+            t_artists = [a.get("name") for a in t.get("artists", [])]
+            isrc = None
+            try:
+                track_detail = _spotify_get(f"tracks/{t.get('id')}", token)
+                if track_detail:
+                    isrc = track_detail.get("external_ids", {}).get("isrc")
+            except Exception:
+                pass
+            tracks.append({
+                "title": t.get("name"),
+                "primary_artist": t_artists[0] if t_artists else (artists[0] if artists else ""),
+                "isrc": isrc,
+                "track_number": t.get("track_number"),
+                "disc_number": t.get("disc_number"),
+                "duration_ms": t.get("duration_ms"),
+                "spotify_url": t.get("external_urls", {}).get("spotify"),
+            })
+
+        return {
+            "title": album_data.get("name", ""),
+            "primary_artist": artists[0] if artists else "",
+            "release_type": release_type,
+            "label": album_data.get("label", ""),
+            "release_date": release_date,
+            "genre": genres[0] if genres else "",
+            "cover_art_url": cover_art,
+            "copyright_line": copyright_line,
+            "copyright_year": int(release_date[:4]) if release_date and len(release_date) >= 4 else None,
+            "spotify_url": album_data.get("external_urls", {}).get("spotify", ""),
+            "upc": album_data.get("external_ids", {}).get("upc", ""),
+            "total_tracks": total_tracks,
+            "tracks": tracks,
+        }
+
+    elif url_type == "track":
+        track_data = _spotify_get(f"tracks/{resource_id}", token)
+        if not track_data:
+            raise SpotifyNotFoundError("Could not find this track on Spotify.")
+
+        artists = [a.get("name") for a in track_data.get("artists", [])]
+        album = track_data.get("album", {})
+        album_artists = [a.get("name") for a in album.get("artists", [])]
+        cover_art = album.get("images", [{}])[0].get("url") if album.get("images") else None
+        release_date = album.get("release_date", "")
+
+        album_id = album.get("id")
+        label = ""
+        copyright_line = ""
+        upc = ""
+        genres = []
+        if album_id:
+            try:
+                full_album = _spotify_get(f"albums/{album_id}", token)
+                if full_album:
+                    label = full_album.get("label", "")
+                    copyright_entries = full_album.get("copyrights", [])
+                    copyright_line = copyright_entries[0].get("text", "") if copyright_entries else ""
+                    upc = full_album.get("external_ids", {}).get("upc", "")
+                    genres = full_album.get("genres", [])
+            except Exception:
+                pass
+
+        isrc = track_data.get("external_ids", {}).get("isrc", "")
+
+        return {
+            "title": track_data.get("name", ""),
+            "primary_artist": artists[0] if artists else "",
+            "release_type": "SINGLE",
+            "label": label,
+            "release_date": release_date,
+            "genre": genres[0] if genres else "",
+            "cover_art_url": cover_art,
+            "copyright_line": copyright_line,
+            "copyright_year": int(release_date[:4]) if release_date and len(release_date) >= 4 else None,
+            "spotify_url": track_data.get("external_urls", {}).get("spotify", ""),
+            "upc": upc,
+            "total_tracks": 1,
+            "tracks": [{
+                "title": track_data.get("name"),
+                "primary_artist": artists[0] if artists else "",
+                "isrc": isrc,
+                "track_number": track_data.get("track_number"),
+                "disc_number": track_data.get("disc_number"),
+                "duration_ms": track_data.get("duration_ms"),
+                "spotify_url": track_data.get("external_urls", {}).get("spotify"),
+            }],
+        }
+
+    else:
+        raise ValueError("Please paste a Spotify album or track URL to populate release data.")
+
+
 def _fetch_playlist_with_token(playlist_id: str, token: str, logger) -> List[Dict[str, Any]]:
     tracks = []
     offset = 0

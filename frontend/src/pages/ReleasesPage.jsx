@@ -70,6 +70,10 @@ export default function ReleasesPage() {
   const [trackEdits, setTrackEdits] = useState({})
   const [savingTrack, setSavingTrack] = useState(null)
   const [creators, setCreators] = useState([])
+  const [spotifyUrl, setSpotifyUrl] = useState('')
+  const [spotifyLoading, setSpotifyLoading] = useState(false)
+  const [spotifyError, setSpotifyError] = useState('')
+  const [spotifyPreview, setSpotifyPreview] = useState(null)
   const [createForm, setCreateForm] = useState({
     title: '',
     release_type: 'SINGLE',
@@ -298,6 +302,52 @@ export default function ReleasesPage() {
     }
   }
 
+  async function handleSpotifyLookup() {
+    if (!spotifyUrl.trim()) return
+    setSpotifyLoading(true)
+    setSpotifyError('')
+    setSpotifyPreview(null)
+    try {
+      const response = await axios.post('/api/releases/spotify-lookup', { spotify_url: spotifyUrl.trim() })
+      setSpotifyPreview(response.data)
+    } catch (error) {
+      setSpotifyError(error.response?.data?.detail || 'Failed to look up Spotify data')
+    } finally {
+      setSpotifyLoading(false)
+    }
+  }
+
+  async function handleApplySpotifyData() {
+    if (!spotifyPreview || !selectedRelease) return
+    try {
+      const payload = {}
+      if (spotifyPreview.title) payload.title = spotifyPreview.title
+      if (spotifyPreview.primary_artist) payload.primary_artist = spotifyPreview.primary_artist
+      if (spotifyPreview.release_type) payload.release_type = spotifyPreview.release_type
+      if (spotifyPreview.label) payload.label = spotifyPreview.label
+      if (spotifyPreview.release_date) {
+        const rd = spotifyPreview.release_date
+        if (rd.length === 4) payload.release_date = `${rd}-01-01`
+        else if (rd.length === 7) payload.release_date = `${rd}-01`
+        else payload.release_date = rd
+      }
+      if (spotifyPreview.genre) payload.genre = spotifyPreview.genre
+      if (spotifyPreview.copyright_line) payload.copyright_line = spotifyPreview.copyright_line
+      if (spotifyPreview.copyright_year) payload.copyright_year = spotifyPreview.copyright_year
+      if (spotifyPreview.spotify_url) payload.spotify_url = spotifyPreview.spotify_url
+      if (spotifyPreview.upc) payload.upc = spotifyPreview.upc
+
+      await axios.put(`/api/releases/${selectedRelease}`, payload)
+      loadReleaseDetail(selectedRelease)
+      loadReleases()
+      setSpotifyPreview(null)
+      setSpotifyUrl('')
+      setSpotifyError('')
+    } catch (error) {
+      setSpotifyError(error.response?.data?.detail || 'Failed to apply Spotify data')
+    }
+  }
+
   async function handleSaveIsrc(songId) {
     try {
       await axios.patch(`/api/songs/${songId}`, { isrc: isrcValue })
@@ -449,6 +499,75 @@ export default function ReleasesPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+            <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-[#3D4A44] flex items-center space-x-2">
+                  <LinkIcon className="w-4 h-4 text-[#1DB954]" />
+                  <span>Populate from Spotify</span>
+                </h3>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  placeholder="Paste a Spotify album or track URL..."
+                  value={spotifyUrl}
+                  onChange={(e) => setSpotifyUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSpotifyLookup()}
+                  className="flex-1 border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#1DB954] focus:border-transparent bg-white text-[#3D4A44]"
+                />
+                <button
+                  onClick={handleSpotifyLookup}
+                  disabled={spotifyLoading || !spotifyUrl.trim()}
+                  className="px-4 py-2 bg-[#1DB954] text-white rounded-lg hover:bg-[#1aa34a] transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                >
+                  {spotifyLoading ? (
+                    <ArrowPathIcon className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <MagnifyingGlassIcon className="w-4 h-4" />
+                  )}
+                  <span>{spotifyLoading ? 'Looking up...' : 'Look Up'}</span>
+                </button>
+              </div>
+              {spotifyError && (
+                <div className="mt-2 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{spotifyError}</div>
+              )}
+              {spotifyPreview && (
+                <div className="mt-4 border border-[rgba(59,77,67,0.12)] rounded-lg p-4 bg-white">
+                  <div className="flex items-start space-x-4">
+                    {spotifyPreview.cover_art_url && (
+                      <img src={spotifyPreview.cover_art_url} alt="Cover" className="w-16 h-16 rounded-lg object-cover flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-[#3D4A44] truncate">{spotifyPreview.title}</p>
+                      <p className="text-sm text-[#7A8580]">{spotifyPreview.primary_artist}</p>
+                      <div className="flex flex-wrap gap-2 mt-2 text-xs text-[#7A8580]">
+                        {spotifyPreview.release_type && <span className="bg-[#EEF1EC] px-2 py-0.5 rounded-full">{spotifyPreview.release_type}</span>}
+                        {spotifyPreview.release_date && <span className="bg-[#EEF1EC] px-2 py-0.5 rounded-full">{spotifyPreview.release_date}</span>}
+                        {spotifyPreview.label && <span className="bg-[#EEF1EC] px-2 py-0.5 rounded-full">{spotifyPreview.label}</span>}
+                        {spotifyPreview.genre && <span className="bg-[#EEF1EC] px-2 py-0.5 rounded-full">{spotifyPreview.genre}</span>}
+                        {spotifyPreview.upc && <span className="bg-[#EEF1EC] px-2 py-0.5 rounded-full">UPC: {spotifyPreview.upc}</span>}
+                        {spotifyPreview.total_tracks && <span className="bg-[#EEF1EC] px-2 py-0.5 rounded-full">{spotifyPreview.total_tracks} track{spotifyPreview.total_tracks !== 1 ? 's' : ''}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end space-x-3 mt-4 pt-3 border-t border-[rgba(59,77,67,0.08)]">
+                    <button
+                      onClick={() => { setSpotifyPreview(null); setSpotifyUrl(''); }}
+                      className="px-3 py-1.5 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleApplySpotifyData}
+                      className="px-4 py-1.5 bg-[#1DB954] text-white rounded-lg hover:bg-[#1aa34a] transition-colors text-sm font-medium"
+                    >
+                      Apply to Release
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
               <h2 className="text-lg font-semibold text-[#3D4A44] mb-4">Release Details</h2>
               {editMode ? (

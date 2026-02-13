@@ -10,6 +10,7 @@ import io
 import json
 from ..models import get_db, Release, ReleaseTrack, Song, SongCredit, Creator, OrganizationMember, User
 from ..utils.auth import get_current_user
+from ..services.spotify_service import lookup_release_metadata, SpotifyAuthError, SpotifyNotFoundError
 
 router = APIRouter(prefix="/api/releases", tags=["releases"])
 
@@ -941,3 +942,25 @@ async def delete_release_artwork(
     db.commit()
 
     return {"message": "Artwork removed"}
+
+
+class SpotifyLookupRequest(BaseModel):
+    spotify_url: str
+
+
+@router.post("/spotify-lookup")
+async def spotify_lookup(
+    body: SpotifyLookupRequest,
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        metadata = lookup_release_metadata(body.spotify_url)
+        return metadata
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except SpotifyNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except SpotifyAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to look up Spotify data: {str(e)}")
