@@ -282,9 +282,38 @@ export default function Settings() {
   const connectDropbox = async () => {
     setConnectingDropbox(true)
     try {
-      const redirectUri = `${window.location.origin}/settings?tab=integrations&dropbox_callback=true`
+      const redirectUri = `${window.location.origin}/dropbox-callback`
       const response = await axios.get(`/api/integrations/dropbox/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}`)
-      window.location.href = response.data.auth_url || response.data.url
+      const authUrl = response.data.auth_url || response.data.url
+      const popup = window.open(authUrl, 'dropbox_auth', 'width=600,height=700,scrollbars=yes')
+      const handleMessage = async (event) => {
+        if (event.data?.type === 'dropbox_callback' && event.data?.code) {
+          window.removeEventListener('message', handleMessage)
+          try {
+            await axios.post('/api/integrations/dropbox/callback', {
+              code: event.data.code,
+              redirect_uri: redirectUri,
+            })
+            await fetchIntegrations()
+            setMessage('Dropbox connected successfully!')
+            setTimeout(() => setMessage(''), 3000)
+          } catch (err) {
+            console.error('Error completing Dropbox OAuth:', err)
+            setMessage('Failed to connect Dropbox')
+            setTimeout(() => setMessage(''), 3000)
+          } finally {
+            setConnectingDropbox(false)
+          }
+        }
+      }
+      window.addEventListener('message', handleMessage)
+      const checkClosed = setInterval(() => {
+        if (popup && popup.closed) {
+          clearInterval(checkClosed)
+          window.removeEventListener('message', handleMessage)
+          setConnectingDropbox(false)
+        }
+      }, 1000)
     } catch (error) {
       console.error('Error getting Dropbox auth URL:', error)
       setMessage('Failed to start Dropbox connection')
