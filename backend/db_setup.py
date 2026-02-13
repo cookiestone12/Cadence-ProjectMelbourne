@@ -87,6 +87,20 @@ def ensure_schema_updates():
                             pass
                     break
 
+        creator_new_fields = {
+            'spotify_url': 'VARCHAR',
+            'apple_music_url': 'VARCHAR',
+            'youtube_url': 'VARCHAR',
+            'instagram_url': 'VARCHAR',
+            'twitter_url': 'VARCHAR',
+            'custom_links': 'JSONB DEFAULT \'[]\'::jsonb',
+        }
+        for field, col_type in creator_new_fields.items():
+            if field not in cols:
+                conn.execute(text(f"ALTER TABLE creators ADD COLUMN {field} {col_type}"))
+                conn.commit()
+                logger.info(f"Added {field} column to creators")
+
         om_cols = [c['name'] for c in inspector.get_columns('organization_members')]
         if 'can_manage_roster' not in om_cols:
             conn.execute(text("ALTER TABLE organization_members ADD COLUMN can_manage_roster BOOLEAN DEFAULT FALSE"))

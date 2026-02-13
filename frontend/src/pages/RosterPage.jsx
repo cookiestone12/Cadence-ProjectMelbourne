@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
-import { PlusIcon, XMarkIcon, ArrowUpTrayIcon, UserPlusIcon, CameraIcon, TrashIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, XMarkIcon, ArrowUpTrayIcon, UserPlusIcon, CameraIcon, TrashIcon, DocumentArrowDownIcon, CheckIcon } from '@heroicons/react/24/outline'
 
 const ROLE_OPTIONS = ['ARTIST', 'SONGWRITER', 'PRODUCER']
 const PRO_OPTIONS = ['ASCAP', 'BMI', 'PRS', 'SESAC', 'OTHER']
@@ -25,6 +25,47 @@ export default function RosterPage() {
 
   const [uploadingImageId, setUploadingImageId] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [selectMode, setSelectMode] = useState(false)
+  const [exportingPDF, setExportingPDF] = useState(false)
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === creators.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(creators.map(c => c.id)))
+    }
+  }
+
+  const handleExportRosterPDF = async () => {
+    if (selectedIds.size === 0) return
+    setExportingPDF(true)
+    try {
+      const res = await axios.post(`/api/creators/org/${orgId}/roster-pdf`, {
+        creator_ids: Array.from(selectedIds)
+      }, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'Roster_Brief.pdf'
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to export roster PDF:', error)
+      alert('Failed to export roster PDF')
+    } finally {
+      setExportingPDF(false)
+    }
+  }
 
   const handleDeleteCreator = async (creatorId, creatorName) => {
     if (!window.confirm(`Are you sure you want to remove "${creatorName}" from your roster? This will also remove their song and work credits.`)) return
@@ -262,21 +303,55 @@ export default function RosterPage() {
             <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Roster</h1>
             <p className="text-[17px] text-[#7A8580] mt-1">Manage your creators and view their catalog performance</p>
           </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowCSVModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[rgba(59,77,67,0.2)] text-[#3D4A44] rounded-xl font-medium hover:bg-[#EEF1EC] transition-colors"
-            >
-              <ArrowUpTrayIcon className="w-5 h-5" />
-              <span>Upload CSV</span>
-            </button>
-            <button
-              onClick={() => setShowNewCreatorModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors"
-            >
-              <UserPlusIcon className="w-5 h-5" />
-              <span>Add Creator</span>
-            </button>
+          <div className="flex gap-3 flex-wrap">
+            {selectMode ? (
+              <>
+                <button
+                  onClick={toggleSelectAll}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[rgba(59,77,67,0.2)] text-[#3D4A44] rounded-xl font-medium hover:bg-[#EEF1EC] transition-colors text-[14px]"
+                >
+                  {selectedIds.size === creators.length ? 'Deselect All' : 'Select All'}
+                </button>
+                <button
+                  onClick={handleExportRosterPDF}
+                  disabled={selectedIds.size === 0 || exportingPDF}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
+                >
+                  <DocumentArrowDownIcon className="w-5 h-5" />
+                  {exportingPDF ? 'Exporting...' : `Export PDF (${selectedIds.size})`}
+                </button>
+                <button
+                  onClick={() => { setSelectMode(false); setSelectedIds(new Set()) }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[rgba(59,77,67,0.2)] text-[#7A8580] rounded-xl font-medium hover:bg-[#EEF1EC] transition-colors text-[14px]"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => setSelectMode(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[rgba(59,77,67,0.2)] text-[#3D4A44] rounded-xl font-medium hover:bg-[#EEF1EC] transition-colors"
+                >
+                  <DocumentArrowDownIcon className="w-5 h-5" />
+                  <span>Roster PDF</span>
+                </button>
+                <button
+                  onClick={() => setShowCSVModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[rgba(59,77,67,0.2)] text-[#3D4A44] rounded-xl font-medium hover:bg-[#EEF1EC] transition-colors"
+                >
+                  <ArrowUpTrayIcon className="w-5 h-5" />
+                  <span>Upload CSV</span>
+                </button>
+                <button
+                  onClick={() => setShowNewCreatorModal(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors"
+                >
+                  <UserPlusIcon className="w-5 h-5" />
+                  <span>Add Creator</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
         
@@ -308,9 +383,14 @@ export default function RosterPage() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {creators.map((creator) => (
-              <div key={creator.id} className="bg-white rounded-xl shadow-[0px_2px_8px_rgba(0,0,0,0.07)] hover:shadow-[0px_6px_16px_rgba(0,0,0,0.1)] transition-all duration-200 overflow-hidden group">
+              <div key={creator.id} onClick={selectMode ? () => toggleSelect(creator.id) : undefined} className={`bg-white rounded-xl shadow-[0px_2px_8px_rgba(0,0,0,0.07)] hover:shadow-[0px_6px_16px_rgba(0,0,0,0.1)] transition-all duration-200 overflow-hidden group ${selectMode ? 'cursor-pointer' : ''} ${selectMode && selectedIds.has(creator.id) ? 'ring-2 ring-[#5B8A72] ring-offset-2' : ''}`}>
                 <div className="aspect-square bg-gradient-to-br from-[#5B8A72] to-[#7BA594] relative overflow-hidden">
-                  <Link to={`/roster/${creator.id}`} className="block w-full h-full">
+                  {selectMode && (
+                    <div className={`absolute top-2 left-2 z-20 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${selectedIds.has(creator.id) ? 'bg-[#5B8A72] border-[#5B8A72]' : 'bg-white/80 border-white/80'}`}>
+                      {selectedIds.has(creator.id) && <CheckIcon className="w-4 h-4 text-white" />}
+                    </div>
+                  )}
+                  <Link to={selectMode ? '#' : `/roster/${creator.id}`} onClick={selectMode ? (e) => e.preventDefault() : undefined} className="block w-full h-full">
                     {creator.hero_image_url ? (
                       <img 
                         src={`/api/creators/${creator.id}/image`} 

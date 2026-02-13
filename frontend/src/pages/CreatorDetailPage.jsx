@@ -79,7 +79,14 @@ export default function CreatorDetailPage() {
     primary_pro: '',
     primary_ipi: '',
     publisher_contact_id: null,
-    admin_contact_id: null
+    admin_contact_id: null,
+    bio: '',
+    spotify_url: '',
+    apple_music_url: '',
+    youtube_url: '',
+    instagram_url: '',
+    twitter_url: '',
+    custom_links: []
   })
   
   const loadSongs = async (orgId) => {
@@ -461,7 +468,14 @@ export default function CreatorDetailPage() {
       primary_pro: creator.primary_pro || '',
       primary_ipi: creator.primary_ipi || '',
       publisher_contact_id: creator.publisher_contact_id || null,
-      admin_contact_id: creator.admin_contact_id || null
+      admin_contact_id: creator.admin_contact_id || null,
+      bio: creator.bio || '',
+      spotify_url: creator.spotify_url || '',
+      apple_music_url: creator.apple_music_url || '',
+      youtube_url: creator.youtube_url || '',
+      instagram_url: creator.instagram_url || '',
+      twitter_url: creator.twitter_url || '',
+      custom_links: creator.custom_links ? [...creator.custom_links.map(l => ({...l}))] : []
     })
     setShowEditCreatorModal(true)
   }
@@ -989,6 +1003,67 @@ export default function CreatorDetailPage() {
                   )}
                 </div>
               </div>
+
+              {creator.bio && (
+                <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                  <h2 className="text-xl font-semibold text-[#3D4A44] mb-4">About</h2>
+                  <p className="text-sm text-[#7A8580] leading-relaxed whitespace-pre-line">{creator.bio}</p>
+                </div>
+              )}
+
+              {(creator.spotify_url || creator.apple_music_url || creator.youtube_url || creator.instagram_url || creator.twitter_url || (creator.custom_links && creator.custom_links.length > 0)) && (
+                <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                  <h2 className="text-xl font-semibold text-[#3D4A44] mb-4">Links & Profiles</h2>
+                  <div className="space-y-2">
+                    {creator.spotify_url && (
+                      <a href={creator.spotify_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-[#F5F7F4] transition-colors group">
+                        <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                        <span className="text-sm font-medium text-[#3D4A44] group-hover:text-[#1DB954] transition-colors">Spotify</span>
+                      </a>
+                    )}
+                    {creator.apple_music_url && (
+                      <a href={creator.apple_music_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-[#F5F7F4] transition-colors group">
+                        <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24"><defs><linearGradient id="am-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#FA233B"/><stop offset="100%" stopColor="#FB5C74"/></linearGradient></defs><path d="M23.994 6.124a9.23 9.23 0 00-.24-2.19c-.317-1.31-1.062-2.31-2.18-3.043A5.022 5.022 0 0019.7.28C18.96.094 18.2.017 17.44.001 17.2-.003 16.96 0 16.72 0H7.28c-.24 0-.48-.003-.72.001C5.8.017 5.04.094 4.3.28c-.9.23-1.7.67-2.38 1.31-.55.5-.96 1.12-1.24 1.83-.24.6-.36 1.23-.4 1.88-.04.5-.06 1-.07 1.5V17.2c.01.5.03 1 .07 1.5.04.65.16 1.28.4 1.88.28.71.69 1.33 1.24 1.83.68.64 1.48 1.08 2.38 1.31.74.19 1.5.26 2.26.28.24.003.48.01.72.01h9.44c.24 0 .48.003.72-.01.76-.02 1.52-.09 2.26-.28.9-.23 1.7-.67 2.38-1.31.55-.5.96-1.12 1.24-1.83.24-.6.36-1.23.4-1.88.04-.5.06-1 .07-1.5V6.124zm-6.74 6.636a.544.544 0 01-.54.56c-.12 0-.24-.04-.36-.12l-.04-.04c-.52-.44-1.12-.68-1.8-.76-.16-.02-.32-.02-.48-.02-.4 0-.8.08-1.16.24-.4.18-.74.42-1 .72a2.71 2.71 0 00-.52.92 3.78 3.78 0 00-.16 1.12c0 .4.06.8.16 1.16.12.4.3.76.56 1.06.28.32.6.56.96.72.4.18.84.26 1.28.26.16 0 .32 0 .48-.02.68-.08 1.28-.32 1.8-.76l.04-.04c.12-.08.24-.12.36-.12a.544.544 0 01.54.56c0 .16-.06.3-.18.4-.68.6-1.48.98-2.4 1.1-.2.02-.4.04-.6.04-.64 0-1.24-.12-1.76-.38a3.78 3.78 0 01-1.36-1.02 4.4 4.4 0 01-.82-1.46 5.16 5.16 0 01-.28-1.7c0-.58.1-1.14.28-1.66.2-.56.5-1.04.82-1.46a3.78 3.78 0 011.36-1.02c.52-.26 1.12-.38 1.76-.38.2 0 .4.02.6.04.92.12 1.72.5 2.4 1.1.12.1.18.24.18.4zM9.16 7.88c.12-.36.46-.56.82-.48l4.6 1.2c.36.08.6.4.6.78v5.36c0 .6-.16 1.14-.44 1.6-.3.5-.72.88-1.24 1.12-.36.16-.74.26-1.12.3-.14.02-.28.02-.42.02-.56 0-1.08-.14-1.52-.42s-.74-.68-.86-1.18c-.06-.24-.08-.48-.06-.72.04-.46.22-.86.52-1.18.32-.34.72-.56 1.16-.66l2.84-.72V9.56l-3.4-.88v4.76c0 .6-.16 1.14-.44 1.6-.3.5-.72.88-1.24 1.12-.36.16-.74.26-1.12.3-.14.02-.28.02-.42.02-.56 0-1.08-.14-1.52-.42s-.74-.68-.86-1.18c-.06-.24-.08-.48-.06-.72.04-.46.22-.86.52-1.18.32-.34.72-.56 1.16-.66l2.84-.72V8.36c0-.2.06-.36.14-.48z" fill="url(#am-grad)"/></svg>
+                        <span className="text-sm font-medium text-[#3D4A44] group-hover:text-[#FA233B] transition-colors">Apple Music</span>
+                      </a>
+                    )}
+                    {creator.youtube_url && (
+                      <a href={creator.youtube_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-[#F5F7F4] transition-colors group">
+                        <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        <span className="text-sm font-medium text-[#3D4A44] group-hover:text-[#FF0000] transition-colors">YouTube</span>
+                      </a>
+                    )}
+                    {(creator.spotify_url || creator.apple_music_url || creator.youtube_url) && (creator.instagram_url || creator.twitter_url) && (
+                      <div className="border-t border-[rgba(59,77,67,0.06)] my-1"></div>
+                    )}
+                    {creator.instagram_url && (
+                      <a href={creator.instagram_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-[#F5F7F4] transition-colors group">
+                        <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24"><defs><linearGradient id="ig-grad" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stopColor="#FFDC80"/><stop offset="25%" stopColor="#F77737"/><stop offset="50%" stopColor="#E1306C"/><stop offset="75%" stopColor="#C13584"/><stop offset="100%" stopColor="#833AB4"/></linearGradient></defs><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z" fill="url(#ig-grad)"/></svg>
+                        <span className="text-sm font-medium text-[#3D4A44] group-hover:text-[#E1306C] transition-colors">Instagram</span>
+                      </a>
+                    )}
+                    {creator.twitter_url && (
+                      <a href={creator.twitter_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-[#F5F7F4] transition-colors group">
+                        <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="#000000"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                        <span className="text-sm font-medium text-[#3D4A44] group-hover:text-[#000000] transition-colors">X (Twitter)</span>
+                      </a>
+                    )}
+                    {creator.custom_links && creator.custom_links.length > 0 && (
+                      <>
+                        {(creator.spotify_url || creator.apple_music_url || creator.youtube_url || creator.instagram_url || creator.twitter_url) && (
+                          <div className="border-t border-[rgba(59,77,67,0.06)] my-1"></div>
+                        )}
+                        {creator.custom_links.map((link, idx) => (
+                          <a key={idx} href={link.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-2.5 rounded-xl hover:bg-[#F5F7F4] transition-colors group">
+                            <svg className="w-5 h-5 flex-shrink-0 text-[#5B8A72]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                            <span className="text-sm font-medium text-[#3D4A44] group-hover:text-[#5B8A72] transition-colors">{link.name || link.url}</span>
+                          </a>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
               
               <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
                 <h2 className="text-xl font-semibold text-[#3D4A44] mb-5">Registration Status</h2>
@@ -2226,6 +2301,149 @@ export default function CreatorDetailPage() {
                     ))}
                   </optgroup>
                 </select>
+              </div>
+
+              <div className="border-t border-[rgba(59,77,67,0.1)] pt-4 mt-4">
+                <h3 className="text-[15px] font-semibold text-[#3D4A44] mb-3">Bio</h3>
+                <textarea
+                  value={creatorForm.bio}
+                  onChange={(e) => setCreatorForm({...creatorForm, bio: e.target.value})}
+                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent resize-none"
+                  placeholder="Brief bio or description..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="border-t border-[rgba(59,77,67,0.1)] pt-4 mt-4">
+                <h3 className="text-[15px] font-semibold text-[#3D4A44] mb-3">DSP Links</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-[#7A8580] mb-1">Spotify URL</label>
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                      <input
+                        type="url"
+                        value={creatorForm.spotify_url}
+                        onChange={(e) => setCreatorForm({...creatorForm, spotify_url: e.target.value})}
+                        className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        placeholder="https://open.spotify.com/artist/..."
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[#7A8580] mb-1">Apple Music URL</label>
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="#FA233B"><path d="M23.994 6.124a9.23 9.23 0 00-.24-2.19c-.317-1.31-1.062-2.31-2.18-3.043A5.022 5.022 0 0019.7.28C18.96.094 18.2.017 17.44.001 17.2-.003 16.96 0 16.72 0H7.28c-.24 0-.48-.003-.72.001C5.8.017 5.04.094 4.3.28c-.9.23-1.7.67-2.38 1.31-.55.5-.96 1.12-1.24 1.83-.24.6-.36 1.23-.4 1.88-.04.5-.06 1-.07 1.5V17.2c.01.5.03 1 .07 1.5.04.65.16 1.28.4 1.88.28.71.69 1.33 1.24 1.83.68.64 1.48 1.08 2.38 1.31.74.19 1.5.26 2.26.28.24.003.48.01.72.01h9.44c.24 0 .48.003.72-.01.76-.02 1.52-.09 2.26-.28.9-.23 1.7-.67 2.38-1.31.55-.5.96-1.12 1.24-1.83.24-.6.36-1.23.4-1.88.04-.5.06-1 .07-1.5V6.124z"/></svg>
+                      <input
+                        type="url"
+                        value={creatorForm.apple_music_url}
+                        onChange={(e) => setCreatorForm({...creatorForm, apple_music_url: e.target.value})}
+                        className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        placeholder="https://music.apple.com/artist/..."
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[#7A8580] mb-1">YouTube URL</label>
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="#FF0000"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                      <input
+                        type="url"
+                        value={creatorForm.youtube_url}
+                        onChange={(e) => setCreatorForm({...creatorForm, youtube_url: e.target.value})}
+                        className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        placeholder="https://youtube.com/@..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-[rgba(59,77,67,0.1)] pt-4 mt-4">
+                <h3 className="text-[15px] font-semibold text-[#3D4A44] mb-3">Social Media</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-[#7A8580] mb-1">Instagram URL</label>
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="#E1306C"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+                      <input
+                        type="url"
+                        value={creatorForm.instagram_url}
+                        onChange={(e) => setCreatorForm({...creatorForm, instagram_url: e.target.value})}
+                        className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        placeholder="https://instagram.com/..."
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-[#7A8580] mb-1">X (Twitter) URL</label>
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="#000000"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                      <input
+                        type="url"
+                        value={creatorForm.twitter_url}
+                        onChange={(e) => setCreatorForm({...creatorForm, twitter_url: e.target.value})}
+                        className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        placeholder="https://x.com/..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-[rgba(59,77,67,0.1)] pt-4 mt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-[15px] font-semibold text-[#3D4A44]">Custom Links</h3>
+                  <button
+                    type="button"
+                    onClick={() => setCreatorForm({...creatorForm, custom_links: [...creatorForm.custom_links, { name: '', url: '' }]})}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[#5B8A72] border border-[#5B8A72] rounded-lg hover:bg-[#5B8A72] hover:text-white transition-colors"
+                  >
+                    <PlusIcon className="w-3.5 h-3.5" />
+                    Add Link
+                  </button>
+                </div>
+                {creatorForm.custom_links.length === 0 && (
+                  <p className="text-xs text-[#7A8580] italic">No custom links added yet.</p>
+                )}
+                <div className="space-y-2">
+                  {creatorForm.custom_links.map((link, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={link.name}
+                        onChange={(e) => {
+                          const updated = [...creatorForm.custom_links]
+                          updated[idx] = { ...updated[idx], name: e.target.value }
+                          setCreatorForm({...creatorForm, custom_links: updated})
+                        }}
+                        className="w-1/3 px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        placeholder="Name"
+                      />
+                      <input
+                        type="url"
+                        value={link.url}
+                        onChange={(e) => {
+                          const updated = [...creatorForm.custom_links]
+                          updated[idx] = { ...updated[idx], url: e.target.value }
+                          setCreatorForm({...creatorForm, custom_links: updated})
+                        }}
+                        className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        placeholder="https://..."
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = creatorForm.custom_links.filter((_, i) => i !== idx)
+                          setCreatorForm({...creatorForm, custom_links: updated})
+                        }}
+                        className="p-2 text-[#C47068] hover:bg-[rgba(255,59,48,0.1)] rounded-lg transition-colors"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">

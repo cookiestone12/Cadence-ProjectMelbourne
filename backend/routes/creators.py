@@ -25,6 +25,13 @@ class CreatorResponse(BaseModel):
     linked_user_id: Optional[int]
     song_count: Optional[int] = 0
     avg_health_score: Optional[float] = 0.0
+    bio: Optional[str] = None
+    spotify_url: Optional[str] = None
+    apple_music_url: Optional[str] = None
+    youtube_url: Optional[str] = None
+    instagram_url: Optional[str] = None
+    twitter_url: Optional[str] = None
+    custom_links: Optional[List[dict]] = None
     
     class Config:
         from_attributes = True
@@ -38,6 +45,13 @@ class CreatorCreateRequest(BaseModel):
     primary_pro: Optional[str] = None
     primary_ipi: Optional[str] = None
     hero_image_url: Optional[str] = None
+    bio: Optional[str] = None
+    spotify_url: Optional[str] = None
+    apple_music_url: Optional[str] = None
+    youtube_url: Optional[str] = None
+    instagram_url: Optional[str] = None
+    twitter_url: Optional[str] = None
+    custom_links: Optional[List[dict]] = None
 
 class CreatorUpdateRequest(BaseModel):
     display_name: Optional[str] = None
@@ -50,6 +64,13 @@ class CreatorUpdateRequest(BaseModel):
     hero_image_url: Optional[str] = None
     publisher_contact_id: Optional[int] = None
     admin_contact_id: Optional[int] = None
+    bio: Optional[str] = None
+    spotify_url: Optional[str] = None
+    apple_music_url: Optional[str] = None
+    youtube_url: Optional[str] = None
+    instagram_url: Optional[str] = None
+    twitter_url: Optional[str] = None
+    custom_links: Optional[List[dict]] = None
 
 class CreatorDetailResponse(BaseModel):
     id: int
@@ -69,6 +90,13 @@ class CreatorDetailResponse(BaseModel):
     publisher_contact: Optional[dict] = None
     admin_contact_id: Optional[int] = None
     admin_contact: Optional[dict] = None
+    bio: Optional[str] = None
+    spotify_url: Optional[str] = None
+    apple_music_url: Optional[str] = None
+    youtube_url: Optional[str] = None
+    instagram_url: Optional[str] = None
+    twitter_url: Optional[str] = None
+    custom_links: Optional[List[dict]] = None
     
     class Config:
         from_attributes = True
@@ -113,7 +141,14 @@ def get_organization_creators(
             "hero_image_url": creator.hero_image_url,
             "linked_user_id": creator.linked_user_id,
             "song_count": song_count,
-            "avg_health_score": float(avg_health) if avg_health else 0.0
+            "avg_health_score": float(avg_health) if avg_health else 0.0,
+            "bio": creator.bio,
+            "spotify_url": creator.spotify_url,
+            "apple_music_url": creator.apple_music_url,
+            "youtube_url": creator.youtube_url,
+            "instagram_url": creator.instagram_url,
+            "twitter_url": creator.twitter_url,
+            "custom_links": creator.custom_links or [],
         })
     
     return result
@@ -150,7 +185,14 @@ def create_creator(
         primary_territory=request.primary_territory,
         primary_pro=request.primary_pro,
         primary_ipi=request.primary_ipi,
-        hero_image_url=request.hero_image_url
+        hero_image_url=request.hero_image_url,
+        bio=request.bio,
+        spotify_url=request.spotify_url,
+        apple_music_url=request.apple_music_url,
+        youtube_url=request.youtube_url,
+        instagram_url=request.instagram_url,
+        twitter_url=request.twitter_url,
+        custom_links=request.custom_links or [],
     )
     db.add(creator)
     db.flush()
@@ -255,7 +297,14 @@ def get_creator(
         "publisher_contact_id": creator.publisher_contact_id,
         "publisher_contact": publisher_contact,
         "admin_contact_id": creator.admin_contact_id,
-        "admin_contact": admin_contact
+        "admin_contact": admin_contact,
+        "bio": creator.bio,
+        "spotify_url": creator.spotify_url,
+        "apple_music_url": creator.apple_music_url,
+        "youtube_url": creator.youtube_url,
+        "instagram_url": creator.instagram_url,
+        "twitter_url": creator.twitter_url,
+        "custom_links": creator.custom_links or [],
     }
 
 @router.put("/{creator_id}", response_model=CreatorResponse)
@@ -301,6 +350,20 @@ def update_creator(
         creator.publisher_contact_id = request.publisher_contact_id if request.publisher_contact_id != 0 else None
     if request.admin_contact_id is not None:
         creator.admin_contact_id = request.admin_contact_id if request.admin_contact_id != 0 else None
+    if request.bio is not None:
+        creator.bio = request.bio
+    if request.spotify_url is not None:
+        creator.spotify_url = request.spotify_url
+    if request.apple_music_url is not None:
+        creator.apple_music_url = request.apple_music_url
+    if request.youtube_url is not None:
+        creator.youtube_url = request.youtube_url
+    if request.instagram_url is not None:
+        creator.instagram_url = request.instagram_url
+    if request.twitter_url is not None:
+        creator.twitter_url = request.twitter_url
+    if request.custom_links is not None:
+        creator.custom_links = request.custom_links
     
     db.commit()
     db.refresh(creator)
@@ -439,3 +502,200 @@ async def upload_creator_image(
     db.refresh(creator)
 
     return {"hero_image_url": creator.hero_image_url}
+
+
+class RosterPDFRequest(BaseModel):
+    creator_ids: List[int]
+
+
+@router.post("/org/{org_id}/roster-pdf")
+def export_roster_pdf(
+    org_id: int,
+    request: RosterPDFRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    org_name = org.display_name or org.name if org else "Organization"
+
+    creators = db.query(Creator).filter(
+        Creator.id.in_(request.creator_ids),
+        Creator.organization_id == org_id
+    ).all()
+    if not creators:
+        raise HTTPException(status_code=404, detail="No creators found")
+
+    import io
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, KeepTogether, Table, TableStyle
+    from reportlab.graphics.shapes import Drawing, Circle, String
+
+    buffer = io.BytesIO()
+    page_w, page_h = letter
+
+    sage = colors.HexColor("#5B8A72")
+    dark_text = colors.HexColor("#3D4A44")
+    muted_text = colors.HexColor("#7A8580")
+    light_bg = colors.HexColor("#F5F7F4")
+    border_color = colors.HexColor("#E0E5E2")
+
+    class RosterTemplate:
+        def on_page(self, canvas, doc):
+            canvas.saveState()
+            grad_steps = 20
+            for i in range(grad_steps):
+                frac = i / grad_steps
+                r = 0.357 + frac * (0.961 - 0.357)
+                g = 0.541 + frac * (0.969 - 0.541)
+                b = 0.447 + frac * (0.957 - 0.447)
+                step_h = (1.6*inch) / grad_steps
+                y = page_h - (i+1) * step_h
+                canvas.setFillColor(colors.Color(r, g, b))
+                canvas.rect(0, y, page_w, step_h + 1, fill=True, stroke=False)
+
+            canvas.setFillColor(colors.white)
+            canvas.setFont("Helvetica-Bold", 22)
+            canvas.drawString(0.75*inch, page_h - 0.8*inch, f"{org_name}")
+            canvas.setFont("Helvetica", 11)
+            canvas.drawString(0.75*inch, page_h - 1.1*inch, "Roster Brief")
+            canvas.setFont("Helvetica", 8)
+            canvas.drawRightString(page_w - 0.75*inch, page_h - 0.5*inch, f"{len(creators)} Creator{'s' if len(creators) != 1 else ''}")
+
+            canvas.setFillColor(muted_text)
+            canvas.setFont("Helvetica", 7)
+            canvas.drawCentredString(page_w/2, 0.4*inch, f"Generated by {org_name} via Rythm Catalog Intelligence | {datetime.utcnow().strftime('%B %d, %Y')}")
+            canvas.restoreState()
+
+    doc = SimpleDocTemplate(
+        buffer, pagesize=letter,
+        topMargin=1.8*inch, bottomMargin=0.8*inch,
+        leftMargin=0.75*inch, rightMargin=0.75*inch
+    )
+
+    name_style = ParagraphStyle('Name', fontName='Helvetica-Bold', fontSize=16, textColor=dark_text, spaceAfter=2, leading=20)
+    bio_style = ParagraphStyle('Bio', fontName='Helvetica', fontSize=9, textColor=muted_text, spaceAfter=6, leading=13)
+    label_style = ParagraphStyle('Label', fontName='Helvetica', fontSize=7, textColor=muted_text, spaceAfter=1, leading=9)
+    link_style = ParagraphStyle('Link', fontName='Helvetica', fontSize=9, textColor=sage, spaceAfter=4, leading=12)
+    role_style = ParagraphStyle('Role', fontName='Helvetica', fontSize=8, textColor=sage, spaceAfter=4, leading=10)
+
+    elements = []
+
+    id_order = {cid: idx for idx, cid in enumerate(request.creator_ids)}
+    creators.sort(key=lambda c: id_order.get(c.id, 999))
+
+    for idx, creator in enumerate(creators):
+        card_elements = []
+
+        if idx > 0:
+            card_elements.append(Spacer(1, 16))
+
+        photo_cell = None
+        if creator.hero_image_data:
+            try:
+                img_buf = io.BytesIO(creator.hero_image_data)
+                photo_cell = RLImage(img_buf, width=0.9*inch, height=0.9*inch)
+            except Exception:
+                pass
+
+        if not photo_cell:
+            d = Drawing(65, 65)
+            d.add(Circle(32.5, 32.5, 30, fillColor=sage, strokeColor=colors.transparent, strokeWidth=0))
+            initials = ""
+            parts = creator.display_name.split()
+            if len(parts) >= 2:
+                initials = parts[0][0].upper() + parts[-1][0].upper()
+            elif parts:
+                initials = parts[0][0].upper()
+            d.add(String(32.5, 25, initials, fontSize=22, fillColor=colors.white, textAnchor='middle', fontName='Helvetica-Bold'))
+            photo_cell = d
+
+        info_parts = []
+        info_parts.append(Paragraph(creator.display_name, name_style))
+
+        if creator.roles:
+            role_text = " · ".join(creator.roles)
+            info_parts.append(Paragraph(role_text, role_style))
+
+        if creator.bio:
+            bio_text = creator.bio[:300] + ("..." if len(creator.bio) > 300 else "")
+            info_parts.append(Paragraph(bio_text, bio_style))
+
+        dsp_links = []
+        if creator.spotify_url:
+            dsp_links.append(f'<a href="{creator.spotify_url}" color="#5B8A72">Spotify</a>')
+        if creator.apple_music_url:
+            dsp_links.append(f'<a href="{creator.apple_music_url}" color="#5B8A72">Apple Music</a>')
+        if creator.youtube_url:
+            dsp_links.append(f'<a href="{creator.youtube_url}" color="#5B8A72">YouTube</a>')
+        if dsp_links:
+            info_parts.append(Paragraph(" · ".join(dsp_links), link_style))
+
+        social_links = []
+        if creator.instagram_url:
+            social_links.append(f'<a href="{creator.instagram_url}" color="#5B8A72">Instagram</a>')
+        if creator.twitter_url:
+            social_links.append(f'<a href="{creator.twitter_url}" color="#5B8A72">X / Twitter</a>')
+        if creator.website_url:
+            social_links.append(f'<a href="{creator.website_url}" color="#5B8A72">Website</a>')
+        if social_links:
+            info_parts.append(Paragraph(" · ".join(social_links), link_style))
+
+        custom = creator.custom_links or []
+        if custom:
+            custom_parts = []
+            for cl in custom:
+                name = cl.get("name", "Link")
+                url = cl.get("url", "")
+                if url:
+                    custom_parts.append(f'<a href="{url}" color="#5B8A72">{name}</a>')
+            if custom_parts:
+                info_parts.append(Paragraph(" · ".join(custom_parts), link_style))
+
+        from reportlab.platypus import TableStyle as TS
+        info_cell = []
+        for p in info_parts:
+            info_cell.append(p)
+
+        card_table = Table(
+            [[photo_cell, info_cell]],
+            colWidths=[1.1*inch, page_w - 2.5*inch - 1.1*inch],
+            style=TS([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (0, 0), 0),
+                ('LEFTPADDING', (1, 0), (1, 0), 12),
+                ('RIGHTPADDING', (-1, -1), (-1, -1), 0),
+                ('TOPPADDING', (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ])
+        )
+        card_elements.append(card_table)
+
+        if idx < len(creators) - 1:
+            from reportlab.graphics.shapes import Drawing as D, Line
+            sep = D(page_w - 1.5*inch, 1)
+            sep.add(Line(0, 0, page_w - 1.5*inch, 0, strokeColor=border_color, strokeWidth=0.5))
+            card_elements.append(sep)
+
+        elements.append(KeepTogether(card_elements))
+
+    tmpl = RosterTemplate()
+    doc.build(elements, onFirstPage=tmpl.on_page, onLaterPages=tmpl.on_page)
+
+    buffer.seek(0)
+    from starlette.responses import Response
+    filename = f"{org_name.replace(' ', '_')}_Roster_Brief.pdf"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
