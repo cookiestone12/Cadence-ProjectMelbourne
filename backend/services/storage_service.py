@@ -41,47 +41,53 @@ def decrypt_token(encrypted: str) -> str:
     return f.decrypt(encrypted.encode()).decode()
 
 
-def get_dropbox_auth_url(org_id: int, redirect_uri: str) -> str:
-    if not DROPBOX_APP_KEY or not DROPBOX_APP_SECRET:
-        raise ValueError("DROPBOX_APP_KEY and DROPBOX_APP_SECRET must be configured")
-
-    auth_flow = dropbox.DropboxOAuth2FlowNoRedirect(
+def get_dropbox_auth_flow():
+    return dropbox.DropboxOAuth2FlowNoRedirect(
         consumer_key=DROPBOX_APP_KEY,
         consumer_secret=DROPBOX_APP_SECRET,
         token_access_type="offline",
-        use_pkce=False,
+        use_pkce=True,
     )
-    authorize_url = (
-        f"https://www.dropbox.com/oauth2/authorize"
-        f"?client_id={DROPBOX_APP_KEY}"
-        f"&redirect_uri={quote(redirect_uri, safe='')}"
-        f"&response_type=code"
-        f"&token_access_type=offline"
-    )
-    return authorize_url
+
+
+def get_dropbox_auth_url(org_id: int, redirect_uri: str = None) -> dict:
+    if not DROPBOX_APP_KEY or not DROPBOX_APP_SECRET:
+        raise ValueError("DROPBOX_APP_KEY and DROPBOX_APP_SECRET must be configured")
+
+    auth_flow = get_dropbox_auth_flow()
+    authorize_url = auth_flow.start()
+    return {
+        "url": authorize_url,
+        "code_verifier": auth_flow._code_verifier if hasattr(auth_flow, '_code_verifier') else None,
+    }
 
 
 def complete_dropbox_oauth(
     code: str,
-    redirect_uri: str,
     org_id: int,
     user_id: int,
     db: Session,
+    code_verifier: str = None,
+    redirect_uri: str = None,
 ) -> IntegrationAccount:
     import requests
 
+    token_data_payload = {
+        "code": code,
+        "grant_type": "authorization_code",
+        "client_id": DROPBOX_APP_KEY,
+    }
+
+    if code_verifier:
+        token_data_payload["code_verifier"] = code_verifier
+    else:
+        token_data_payload["client_secret"] = DROPBOX_APP_SECRET
+
+    if redirect_uri:
+        token_data_payload["redirect_uri"] = redirect_uri
+
     token_url = "https://api.dropboxapi.com/oauth2/token"
-    resp = requests.post(
-        token_url,
-        data={
-            "code": code,
-            "grant_type": "authorization_code",
-            "redirect_uri": redirect_uri,
-            "client_id": DROPBOX_APP_KEY,
-            "client_secret": DROPBOX_APP_SECRET,
-        },
-        timeout=15,
-    )
+    resp = requests.post(token_url, data=token_data_payload, timeout=15)
     resp.raise_for_status()
     token_data = resp.json()
 

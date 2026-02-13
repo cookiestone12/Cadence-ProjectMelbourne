@@ -279,45 +279,47 @@ export default function Settings() {
     }
   }
 
+  const [dropboxCodeInput, setDropboxCodeInput] = useState('')
+  const [showCodeInput, setShowCodeInput] = useState(false)
+  const [dropboxCodeVerifier, setDropboxCodeVerifier] = useState(null)
+
   const connectDropbox = async () => {
     setConnectingDropbox(true)
     try {
       const response = await axios.get('/api/integrations/dropbox/auth-url')
-      const authUrl = response.data.auth_url || response.data.url
-      const usedRedirectUri = response.data.redirect_uri
-      const popup = window.open(authUrl, 'dropbox_auth', 'width=600,height=700,scrollbars=yes')
-      const handleMessage = async (event) => {
-        if (event.data?.type === 'dropbox_callback' && event.data?.code) {
-          window.removeEventListener('message', handleMessage)
-          try {
-            await axios.post('/api/integrations/dropbox/callback', {
-              code: event.data.code,
-              redirect_uri: usedRedirectUri,
-            })
-            await fetchIntegrations()
-            setMessage('Dropbox connected successfully!')
-            setTimeout(() => setMessage(''), 3000)
-          } catch (err) {
-            console.error('Error completing Dropbox OAuth:', err)
-            setMessage('Failed to connect Dropbox')
-            setTimeout(() => setMessage(''), 3000)
-          } finally {
-            setConnectingDropbox(false)
-          }
-        }
-      }
-      window.addEventListener('message', handleMessage)
-      const checkClosed = setInterval(() => {
-        if (popup && popup.closed) {
-          clearInterval(checkClosed)
-          window.removeEventListener('message', handleMessage)
-          setConnectingDropbox(false)
-        }
-      }, 1000)
+      const authUrl = response.data.auth_url
+      const codeVerifier = response.data.code_verifier
+      setDropboxCodeVerifier(codeVerifier)
+      window.open(authUrl, 'dropbox_auth', 'width=600,height=700,scrollbars=yes')
+      setShowCodeInput(true)
+      setConnectingDropbox(false)
     } catch (error) {
       console.error('Error getting Dropbox auth URL:', error)
       setMessage('Failed to start Dropbox connection')
       setTimeout(() => setMessage(''), 3000)
+      setConnectingDropbox(false)
+    }
+  }
+
+  const submitDropboxCode = async () => {
+    if (!dropboxCodeInput.trim()) return
+    setConnectingDropbox(true)
+    try {
+      await axios.post('/api/integrations/dropbox/callback', {
+        code: dropboxCodeInput.trim(),
+        code_verifier: dropboxCodeVerifier,
+      })
+      await fetchIntegrations()
+      setMessage('Dropbox connected successfully!')
+      setTimeout(() => setMessage(''), 3000)
+      setShowCodeInput(false)
+      setDropboxCodeInput('')
+      setDropboxCodeVerifier(null)
+    } catch (err) {
+      console.error('Error completing Dropbox OAuth:', err)
+      setMessage('Failed to connect Dropbox. Please check the code and try again.')
+      setTimeout(() => setMessage(''), 5000)
+    } finally {
       setConnectingDropbox(false)
     }
   }
@@ -998,14 +1000,47 @@ export default function Settings() {
                   <p className="text-[15px] text-[#7A8580] mb-6">
                     Connect your Dropbox account to link audio files to songs and releases for AI analysis.
                   </p>
-                  <button
-                    onClick={connectDropbox}
-                    disabled={connectingDropbox}
-                    className="px-6 py-3 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50 flex items-center space-x-2"
-                  >
-                    <CloudArrowUpIcon className="w-5 h-5" />
-                    <span>{connectingDropbox ? 'Connecting...' : 'Connect Dropbox'}</span>
-                  </button>
+                  {!showCodeInput ? (
+                    <button
+                      onClick={connectDropbox}
+                      disabled={connectingDropbox}
+                      className="px-6 py-3 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50 flex items-center space-x-2"
+                    >
+                      <CloudArrowUpIcon className="w-5 h-5" />
+                      <span>{connectingDropbox ? 'Connecting...' : 'Connect Dropbox'}</span>
+                    </button>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-[#F0F4F1] rounded-xl border border-[#D1DDD5]">
+                        <p className="text-[14px] text-[#3D4A44] mb-3">
+                          A Dropbox authorization page has opened. After you approve access, Dropbox will show you an authorization code. Copy and paste that code below:
+                        </p>
+                        <div className="flex items-center space-x-3">
+                          <input
+                            type="text"
+                            value={dropboxCodeInput}
+                            onChange={(e) => setDropboxCodeInput(e.target.value)}
+                            placeholder="Paste your authorization code here"
+                            className="flex-1 px-4 py-2.5 border border-[#D1DDD5] rounded-lg text-[14px] text-[#3D4A44] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                            onKeyDown={(e) => e.key === 'Enter' && submitDropboxCode()}
+                          />
+                          <button
+                            onClick={submitDropboxCode}
+                            disabled={connectingDropbox || !dropboxCodeInput.trim()}
+                            className="px-5 py-2.5 bg-[#5B8A72] text-white rounded-lg font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50 text-[14px]"
+                          >
+                            {connectingDropbox ? 'Connecting...' : 'Submit'}
+                          </button>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => { setShowCodeInput(false); setDropboxCodeInput(''); setDropboxCodeVerifier(null); }}
+                        className="text-[13px] text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-5">

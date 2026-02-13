@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
@@ -11,16 +11,8 @@ router = APIRouter(prefix="/api/integrations", tags=["integrations"])
 
 class OAuthCallbackRequest(BaseModel):
     code: str
-    redirect_uri: str
-
-
-def _build_redirect_uri(request: Request) -> str:
-    origin = request.headers.get("origin")
-    if not origin:
-        proto = request.headers.get("x-forwarded-proto", "https")
-        host = request.headers.get("x-forwarded-host") or request.headers.get("host", "")
-        origin = f"{proto}://{host}"
-    return f"{origin}/dropbox-callback"
+    code_verifier: Optional[str] = None
+    redirect_uri: Optional[str] = None
 
 
 class DefaultFolderRequest(BaseModel):
@@ -62,17 +54,13 @@ def get_integration_status(
 
 @router.get("/dropbox/auth-url")
 def get_dropbox_auth_url(
-    request: Request,
-    redirect_uri: str = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     org_id = _get_org_id(current_user, db)
-    if not redirect_uri:
-        redirect_uri = _build_redirect_uri(request)
     try:
-        url = storage_service.get_dropbox_auth_url(org_id, redirect_uri)
-        return {"auth_url": url, "redirect_uri": redirect_uri}
+        result = storage_service.get_dropbox_auth_url(org_id)
+        return {"auth_url": result["url"], "code_verifier": result.get("code_verifier")}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -87,10 +75,11 @@ def dropbox_oauth_callback(
     try:
         integration = storage_service.complete_dropbox_oauth(
             code=request.code,
-            redirect_uri=request.redirect_uri,
             org_id=org_id,
             user_id=current_user.id,
             db=db,
+            code_verifier=request.code_verifier,
+            redirect_uri=request.redirect_uri,
         )
         return {
             "success": True,
