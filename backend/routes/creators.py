@@ -525,6 +525,9 @@ def export_roster_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    import logging
+    logger = logging.getLogger("rythm")
+    
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == current_user.id,
         OrganizationMember.organization_id == org_id
@@ -541,6 +544,15 @@ def export_roster_pdf(
     ).all()
     if not creators:
         raise HTTPException(status_code=404, detail="No creators found")
+    
+    try:
+        return _build_roster_pdf(creators, org_name, request)
+    except Exception as e:
+        logger.error(f"Failed to generate roster PDF: {type(e).__name__}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate PDF: {str(e)}")
+
+
+def _build_roster_pdf(creators, org_name, request):
 
     import io
     from reportlab.lib import colors
@@ -613,9 +625,23 @@ def export_roster_pdf(
         if creator.hero_image_data:
             try:
                 img_buf = io.BytesIO(creator.hero_image_data)
+                from PIL import Image as PILImage
+                pil_img = PILImage.open(img_buf)
+                pil_img.verify()
+                img_buf.seek(0)
                 photo_cell = RLImage(img_buf, width=0.9*inch, height=0.9*inch)
             except Exception:
-                pass
+                photo_cell = None
+        if not photo_cell and creator.hero_image_url:
+            try:
+                import os
+                url = creator.hero_image_url
+                if url.startswith('/uploads/'):
+                    file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), url.lstrip('/'))
+                    if os.path.exists(file_path):
+                        photo_cell = RLImage(file_path, width=0.9*inch, height=0.9*inch)
+            except Exception:
+                photo_cell = None
 
         if not photo_cell:
             d = Drawing(65, 65)
