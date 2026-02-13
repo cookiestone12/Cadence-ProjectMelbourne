@@ -163,6 +163,141 @@ def placement_to_dict(p: Placement, db: Session) -> dict:
     }
 
 
+def placements_to_dicts(placements: List[Placement], db: Session) -> List[dict]:
+    """
+    Batch-load related data for multiple placements to avoid N+1 queries.
+    This function performs bulk queries for all related data and constructs result dicts
+    using in-memory lookups instead of individual queries per placement.
+    """
+    if not placements:
+        return []
+    
+    # Collect unique IDs from all placements
+    song_ids = set()
+    work_ids = set()
+    release_ids = set()
+    contract_ids = set()
+    user_ids = set()
+    
+    for p in placements:
+        if p.song_id:
+            song_ids.add(p.song_id)
+        if p.work_id:
+            work_ids.add(p.work_id)
+        if p.release_id:
+            release_ids.add(p.release_id)
+        if p.contract_id:
+            contract_ids.add(p.contract_id)
+        if p.assigned_to_user_id:
+            user_ids.add(p.assigned_to_user_id)
+    
+    # Batch load all related data with single queries
+    songs_map = {}
+    if song_ids:
+        songs = db.query(Song).filter(Song.id.in_(song_ids)).all()
+        songs_map = {s.id: s.title for s in songs}
+    
+    works_map = {}
+    if work_ids:
+        works = db.query(Work).filter(Work.id.in_(work_ids)).all()
+        works_map = {w.id: w.title for w in works}
+    
+    releases_map = {}
+    if release_ids:
+        releases = db.query(Release).filter(Release.id.in_(release_ids)).all()
+        releases_map = {r.id: r.title for r in releases}
+    
+    contracts_map = {}
+    if contract_ids:
+        contracts = db.query(Contract).filter(Contract.id.in_(contract_ids)).all()
+        contracts_map = {c.id: c.title for c in contracts}
+    
+    users_map = {}
+    if user_ids:
+        users = db.query(User).filter(User.id.in_(user_ids)).all()
+        users_map = {u.id: u.username for u in users}
+    
+    # Build creator names mappings
+    song_creators_map = {}
+    work_creators_map = {}
+    
+    if song_ids:
+        song_credits = db.query(SongCredit).filter(SongCredit.song_id.in_(song_ids)).all()
+        song_creator_ids = {c.creator_id for c in song_credits}
+        
+        if song_creator_ids:
+            creators = db.query(Creator).filter(Creator.id.in_(song_creator_ids)).all()
+            creator_names = {c.id: c.display_name for c in creators}
+            
+            for credit in song_credits:
+                if credit.song_id not in song_creators_map:
+                    song_creators_map[credit.song_id] = []
+                creator_name = creator_names.get(credit.creator_id)
+                if creator_name and creator_name not in song_creators_map[credit.song_id]:
+                    song_creators_map[credit.song_id].append(creator_name)
+    
+    if work_ids:
+        work_credits = db.query(WorkCredit).filter(WorkCredit.work_id.in_(work_ids)).all()
+        work_creator_ids = {c.creator_id for c in work_credits}
+        
+        if work_creator_ids:
+            creators = db.query(Creator).filter(Creator.id.in_(work_creator_ids)).all()
+            creator_names = {c.id: c.display_name for c in creators}
+            
+            for credit in work_credits:
+                if credit.work_id not in work_creators_map:
+                    work_creators_map[credit.work_id] = []
+                creator_name = creator_names.get(credit.creator_id)
+                if creator_name and creator_name not in work_creators_map[credit.work_id]:
+                    work_creators_map[credit.work_id].append(creator_name)
+    
+    # Build result list using dictionary lookups
+    result = []
+    for p in placements:
+        creator_names = []
+        creator_names.extend(song_creators_map.get(p.song_id, []))
+        creator_names.extend(work_creators_map.get(p.work_id, []))
+        
+        result.append({
+            "id": p.id,
+            "organization_id": p.organization_id,
+            "title": p.title,
+            "description": p.description,
+            "placement_type": p.placement_type,
+            "status": p.status,
+            "song_id": p.song_id,
+            "song_title": songs_map.get(p.song_id) if p.song_id else None,
+            "work_id": p.work_id,
+            "work_title": works_map.get(p.work_id) if p.work_id else None,
+            "release_id": p.release_id,
+            "release_title": releases_map.get(p.release_id) if p.release_id else None,
+            "contract_id": p.contract_id,
+            "contract_title": contracts_map.get(p.contract_id) if p.contract_id else None,
+            "client_name": p.client_name,
+            "project_name": p.project_name,
+            "media_type": p.media_type,
+            "license_fee": p.license_fee,
+            "license_currency": p.license_currency,
+            "license_type": p.license_type,
+            "territory": p.territory,
+            "usage_notes": p.usage_notes,
+            "pitched_date": str(p.pitched_date) if p.pitched_date else None,
+            "secured_date": str(p.secured_date) if p.secured_date else None,
+            "delivery_date": str(p.delivery_date) if p.delivery_date else None,
+            "air_date": str(p.air_date) if p.air_date else None,
+            "contact_name": p.contact_name,
+            "contact_email": p.contact_email,
+            "notes": p.notes,
+            "assigned_to_user_id": p.assigned_to_user_id,
+            "assigned_to_name": users_map.get(p.assigned_to_user_id) if p.assigned_to_user_id else None,
+            "creator_names": creator_names,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+        })
+    
+    return result
+
+
 @router.get("/org/{org_id}")
 def get_placements(
     org_id: int,
@@ -202,7 +337,7 @@ def get_placements(
     query = query.order_by(desc(Placement.updated_at))
     placements = query.all()
 
-    return [placement_to_dict(p, db) for p in placements]
+    return placements_to_dicts(placements, db)
 
 
 @router.get("/org/{org_id}/summary")

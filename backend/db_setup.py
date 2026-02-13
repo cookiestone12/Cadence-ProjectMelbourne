@@ -124,6 +124,37 @@ def ensure_schema_updates():
                     conn.commit()
                     logger.info(f"Converted songs.{field} from BOOLEAN to VARCHAR")
 
+        perf_indexes = [
+            ("ix_songs_organization_id", "songs", "organization_id"),
+            ("ix_song_credits_song_id", "song_credits", "song_id"),
+            ("ix_song_credits_creator_id", "song_credits", "creator_id"),
+            ("ix_creators_organization_id", "creators", "organization_id"),
+            ("ix_placements_organization_id", "placements", "organization_id"),
+            ("ix_placements_song_id", "placements", "song_id"),
+            ("ix_placements_work_id", "placements", "work_id"),
+            ("ix_work_credits_work_id", "work_credits", "work_id"),
+            ("ix_work_credits_creator_id", "work_credits", "creator_id"),
+            ("ix_works_organization_id", "works", "organization_id"),
+            ("ix_org_members_user_id", "organization_members", "user_id"),
+            ("ix_org_members_org_id", "organization_members", "organization_id"),
+            ("ix_song_dsp_links_song_id", "song_dsp_links", "song_id"),
+            ("ix_placements_status", "placements", "status"),
+            ("ix_placements_updated_at", "placements", "updated_at"),
+        ]
+        existing_indexes = {idx['name'] for idx in inspector.get_indexes('songs')}
+        for tbl in ['song_credits', 'creators', 'placements', 'work_credits', 'works', 'organization_members', 'song_dsp_links']:
+            if tbl in inspector.get_table_names():
+                existing_indexes.update(idx['name'] for idx in inspector.get_indexes(tbl))
+
+        for idx_name, table, column in perf_indexes:
+            if idx_name not in existing_indexes and table in inspector.get_table_names():
+                try:
+                    conn.execute(text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column})"))
+                    conn.commit()
+                    logger.info(f"Created performance index {idx_name}")
+                except Exception as e:
+                    logger.warning(f"Could not create index {idx_name}: {e}")
+
 
 def seed_super_admin():
     from backend.utils.auth import get_password_hash

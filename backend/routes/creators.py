@@ -117,17 +117,27 @@ def get_organization_creators(
     
     creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
     
+    # Collect all creator IDs
+    creator_ids = [creator.id for creator in creators]
+    
+    # Run ONE query to get song counts grouped by creator_id
+    counts = db.query(SongCredit.creator_id, func.count(SongCredit.id)).filter(
+        SongCredit.creator_id.in_(creator_ids)
+    ).group_by(SongCredit.creator_id).all()
+    count_map = {cid: cnt for cid, cnt in counts}
+    
+    # Run ONE query to get average health scores grouped by creator_id
+    avgs = db.query(SongCredit.creator_id, func.avg(Song.status_health_score)).join(
+        Song, Song.id == SongCredit.song_id
+    ).filter(
+        SongCredit.creator_id.in_(creator_ids)
+    ).group_by(SongCredit.creator_id).all()
+    avg_map = {cid: float(avg) if avg else 0.0 for cid, avg in avgs}
+    
     result = []
     for creator in creators:
-        song_count = db.query(func.count(SongCredit.id)).filter(
-            SongCredit.creator_id == creator.id
-        ).scalar() or 0
-        
-        avg_health = db.query(func.avg(Song.status_health_score)).join(
-            SongCredit, Song.id == SongCredit.song_id
-        ).filter(
-            SongCredit.creator_id == creator.id
-        ).scalar() or 0.0
+        song_count = count_map.get(creator.id, 0)
+        avg_health = avg_map.get(creator.id, 0.0)
         
         result.append({
             "id": creator.id,

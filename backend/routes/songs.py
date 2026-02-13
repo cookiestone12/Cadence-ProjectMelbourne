@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import date
@@ -216,16 +216,44 @@ def get_organization_songs(
     
     songs = query.distinct().offset(offset).limit(limit).all()
     
+    # Batch-load client info to avoid N+1 queries
+    song_ids = [song.id for song in songs]
+    song_client_map = {}
+    
+    if song_ids:
+        # Step 1: Get the first SongCredit per song using a subquery
+        # Using min(SongCredit.id) to get the first credit
+        subquery = db.query(
+            func.min(SongCredit.id).label("min_id")
+        ).filter(
+            SongCredit.song_id.in_(song_ids)
+        ).group_by(SongCredit.song_id).subquery()
+        
+        first_credits = db.query(SongCredit).filter(
+            SongCredit.id.in_(db.query(subquery.c.min_id))
+        ).all()
+        
+        # Step 2: Collect all creator IDs from first credits
+        creator_ids = [credit.creator_id for credit in first_credits]
+        
+        # Step 3: Fetch all relevant creators in one query
+        creators_map = {}
+        if creator_ids:
+            creators = db.query(Creator).filter(Creator.id.in_(creator_ids)).all()
+            creators_map = {creator.id: creator for creator in creators}
+        
+        # Step 4: Build lookup dictionary: song_id -> (client_name, client_id)
+        for credit in first_credits:
+            creator = creators_map.get(credit.creator_id)
+            if creator:
+                song_client_map[credit.song_id] = (creator.display_name, creator.id)
+    
     result = []
     for song in songs:
         client_name = None
         client_id = None
-        credit = db.query(SongCredit).filter(SongCredit.song_id == song.id).order_by(SongCredit.id).first()
-        if credit:
-            creator = db.query(Creator).filter(Creator.id == credit.creator_id).first()
-            if creator:
-                client_name = creator.display_name
-                client_id = creator.id
+        if song.id in song_client_map:
+            client_name, client_id = song_client_map[song.id]
         
         result.append({
             "id": song.id,
