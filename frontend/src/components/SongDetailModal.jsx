@@ -27,6 +27,9 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [splitForm, setSplitForm] = useState({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '' })
   const [splitSaving, setSplitSaving] = useState(false)
   const [splitCreators, setSplitCreators] = useState([])
+  const [showAddClient, setShowAddClient] = useState(false)
+  const [addClientCreatorId, setAddClientCreatorId] = useState('')
+  const [addClientRole, setAddClientRole] = useState('PRIMARY_ARTIST')
   
   useEffect(() => {
     loadSongDetails()
@@ -551,20 +554,111 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       <p className="text-[#3D4A44]">{songDetails.primary_artist}</p>
                     )}
                   </div>
-                  <div>
-                    <label className="text-[13px] font-medium text-[#7A8580]">Client</label>
-                    {songDetails.client_name ? (
-                      <Link 
-                        to={`/creators/${songDetails.client_id}`}
-                        onClick={onClose}
-                        className="flex items-center space-x-2 text-[#5B8A72] hover:text-[#7BA594]"
-                      >
-                        <UserIcon className="w-4 h-4" />
-                        <span className="font-medium">{songDetails.client_name}</span>
-                      </Link>
-                    ) : (
-                      <p className="text-[#7A8580]">Not assigned</p>
-                    )}
+                  <div className="col-span-full">
+                    <label className="text-[13px] font-medium text-[#7A8580] mb-1 block">Clients</label>
+                    <div className="space-y-2">
+                      {songDetails.credits && songDetails.credits.length > 0 ? (
+                        songDetails.credits.map((credit) => (
+                          <div key={credit.id} className="flex items-center justify-between p-2 bg-[#F5F7F4] rounded-[10px]">
+                            <Link
+                              to={`/roster/${credit.creator_id}`}
+                              onClick={onClose}
+                              className="flex items-center gap-2 text-[#5B8A72] hover:text-[#7BA594]"
+                            >
+                              <UserIcon className="w-4 h-4" />
+                              <span className="font-medium text-sm">{credit.creator_name || credit.creator?.display_name || 'Unknown'}</span>
+                              <span className="text-xs text-[#7A8580]">({credit.role})</span>
+                            </Link>
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`Remove ${credit.creator_name || credit.creator?.display_name || 'this client'} from this song?`)) return
+                                try {
+                                  await axios.delete(`/api/songs/${song.id}/credits/${credit.id}`)
+                                  await loadSongDetails()
+                                  if (onSongUpdated) onSongUpdated()
+                                } catch (err) {
+                                  console.error('Failed to remove credit:', err)
+                                  alert('Failed to remove client')
+                                }
+                              }}
+                              className="p-1 text-[#7A8580] hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+                              title="Remove client"
+                            >
+                              <XMarkIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[#7A8580] text-sm">No clients assigned</p>
+                      )}
+                      {showAddClient ? (
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={addClientCreatorId}
+                            onChange={(e) => setAddClientCreatorId(e.target.value)}
+                            className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                          >
+                            <option value="">Select a client...</option>
+                            {splitCreators
+                              .filter(c => !songDetails.credits?.some(cr => cr.creator_id === c.id))
+                              .map(c => (
+                                <option key={c.id} value={c.id}>{c.display_name}</option>
+                              ))
+                            }
+                          </select>
+                          <select
+                            value={addClientRole}
+                            onChange={(e) => setAddClientRole(e.target.value)}
+                            className="px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                          >
+                            <option value="PRIMARY_ARTIST">Primary Artist</option>
+                            <option value="FEATURED_ARTIST">Featured Artist</option>
+                            <option value="SONGWRITER">Songwriter</option>
+                            <option value="PRODUCER">Producer</option>
+                            <option value="COMPOSER">Composer</option>
+                            <option value="LYRICIST">Lyricist</option>
+                          </select>
+                          <button
+                            onClick={async () => {
+                              if (!addClientCreatorId) return
+                              try {
+                                await axios.post(`/api/songs/${song.id}/credits`, {
+                                  creator_id: parseInt(addClientCreatorId),
+                                  role: addClientRole
+                                })
+                                setAddClientCreatorId('')
+                                setShowAddClient(false)
+                                await loadSongDetails()
+                                if (onSongUpdated) onSongUpdated()
+                              } catch (err) {
+                                console.error('Failed to add credit:', err)
+                                alert(err.response?.data?.detail || 'Failed to add client')
+                              }
+                            }}
+                            disabled={!addClientCreatorId}
+                            className="px-3 py-2 bg-[#5B8A72] text-white rounded-[10px] text-sm font-medium hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                          >
+                            Add
+                          </button>
+                          <button
+                            onClick={() => { setShowAddClient(false); setAddClientCreatorId('') }}
+                            className="p-2 text-[#7A8580] hover:text-[#3D4A44] rounded-[10px] hover:bg-[#EEF1EC] transition-colors"
+                          >
+                            <XMarkIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setShowAddClient(true)}
+                          disabled={!songDetails || splitCreators.length === 0}
+                          className="flex items-center gap-1.5 text-sm text-[#5B8A72] hover:text-[#4A7A62] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={splitCreators.length === 0 ? 'Add creators to your roster first' : 'Add a client to this song'}
+                        >
+                          <PlusIcon className="w-4 h-4" />
+                          Add Client
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Project/Album</label>

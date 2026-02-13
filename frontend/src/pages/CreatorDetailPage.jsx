@@ -37,6 +37,8 @@ export default function CreatorDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [creatorReleases, setCreatorReleases] = useState([])
+  const [sortColumn, setSortColumn] = useState(null)
+  const [sortDirection, setSortDirection] = useState('asc')
   const [showEditCreatorModal, setShowEditCreatorModal] = useState(false)
   const [editingCreator, setEditingCreator] = useState(false)
   const [showSpotifyModal, setShowSpotifyModal] = useState(false)
@@ -644,6 +646,52 @@ export default function CreatorDetailPage() {
     }
   }
 
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  const sortedSongs = [...songs].sort((a, b) => {
+    if (!sortColumn) return 0
+    const dir = sortDirection === 'asc' ? 1 : -1
+    let aVal = a[sortColumn]
+    let bVal = b[sortColumn]
+    if (sortColumn === 'publishing_percentage' || sortColumn === 'advance_amount') {
+      aVal = parseFloat(aVal) || 0
+      bVal = parseFloat(bVal) || 0
+      return (aVal - bVal) * dir
+    }
+    if (sortColumn === 'is_registered_with_pro' || sortColumn === 'is_paid' || sortColumn === 'is_released' || sortColumn === 'has_contract_executed' || sortColumn === 'soundexchange_registered' || sortColumn === 'is_invoiced') {
+      const toBool = (v) => v === true || v === 'Yes' || v === 'true' ? 1 : 0
+      return (toBool(aVal) - toBool(bVal)) * dir
+    }
+    aVal = String(aVal || '').toLowerCase()
+    bVal = String(bVal || '').toLowerCase()
+    if (aVal < bVal) return -1 * dir
+    if (aVal > bVal) return 1 * dir
+    return 0
+  })
+
+  const SortHeader = ({ column, children, className = '' }) => (
+    <th
+      className={`px-4 py-3 font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[#EEF1EC] transition-colors ${className}`}
+      onClick={() => handleSort(column)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        {sortColumn === column ? (
+          <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+        ) : (
+          <span className="text-[#B0BDB4]">⇅</span>
+        )}
+      </span>
+    </th>
+  )
+
   const handleCreateFee = async (e) => {
     e.preventDefault()
     setSavingFee(true)
@@ -1136,22 +1184,22 @@ export default function CreatorDetailPage() {
                         className="w-4 h-4 rounded accent-[#5B8A72]"
                       />
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44] sticky left-0 bg-[#F8F8FB]">Title / Artist</th>
-                    <th className="px-4 py-3 text-left font-semibold text-[#3D4A44]">Label</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Pub %</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Advance</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">PRO</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Fee</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Sound Ex.</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Contract</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Paid</th>
-                    <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Released</th>
+                    <SortHeader column="title" className="text-left sticky left-0 bg-[#F8F8FB]">Title / Artist</SortHeader>
+                    <SortHeader column="label" className="text-left">Label</SortHeader>
+                    <SortHeader column="publishing_percentage" className="text-center">Pub %</SortHeader>
+                    <SortHeader column="advance_amount" className="text-center">Advance</SortHeader>
+                    <SortHeader column="is_registered_with_pro" className="text-center">PRO</SortHeader>
+                    <SortHeader column="is_invoiced" className="text-center">Fee</SortHeader>
+                    <SortHeader column="soundexchange_registered" className="text-center">Sound Ex.</SortHeader>
+                    <SortHeader column="has_contract_executed" className="text-center">Contract</SortHeader>
+                    <SortHeader column="is_paid" className="text-center">Paid</SortHeader>
+                    <SortHeader column="is_released" className="text-center">Released</SortHeader>
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Spotify</th>
                     <th className="px-4 py-3 text-center font-semibold text-[#3D4A44]">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {songs.map((song, index) => (
+                  {sortedSongs.map((song, index) => (
                     <tr key={song.id} className={`hover:bg-[#F8F8FB] transition-colors border-b border-[rgba(0,0,0,0.05)] ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'} ${selectedSongs.has(song.id) ? 'bg-[#EDF5F0] hover:bg-[#E0EDE5]' : ''}`}>
                       <td className="px-3 py-3 text-center w-10">
                         <input
