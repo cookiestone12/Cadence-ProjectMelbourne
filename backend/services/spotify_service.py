@@ -388,6 +388,46 @@ def _fetch_album_tracks(album_id: str, token: str, logger) -> List[Dict[str, Any
     return tracks
 
 
+def _fetch_with_retries(fetch_fn, resource_type: str, resource_id: str, tokens, logger, max_retries=3):
+    import time
+    last_error = None
+
+    for attempt in range(1, max_retries + 1):
+        all_404 = True
+        for token_name, token in tokens:
+            try:
+                logger.info(f"Spotify: Attempt {attempt}/{max_retries} - fetching {resource_type} with {token_name} token")
+                tracks = fetch_fn(resource_id, token, logger)
+                all_404 = False
+                if tracks:
+                    logger.info(f"Spotify: Got {len(tracks)} tracks from {resource_type} on attempt {attempt}")
+                    return tracks
+            except SpotifyNotFoundError as e:
+                logger.warning(f"Spotify: {token_name} got 404 for {resource_type} {resource_id} (attempt {attempt}): {e}")
+                last_error = e
+                continue
+            except (SpotifyForbiddenError, SpotifyAuthError) as e:
+                all_404 = False
+                last_error = e
+                logger.warning(f"Spotify: {token_name} failed for {resource_type}: {e}")
+                continue
+            except Exception as e:
+                all_404 = False
+                last_error = e
+                logger.warning(f"Spotify: {token_name} error for {resource_type}: {e}")
+                continue
+
+        if not all_404:
+            break
+
+        if attempt < max_retries:
+            delay = attempt * 1.5
+            logger.info(f"Spotify: All tokens got 404, retrying in {delay}s (attempt {attempt}/{max_retries})")
+            time.sleep(delay)
+
+    return None, last_error, all_404
+
+
 def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
     import logging
     logger = logging.getLogger("rythm")
@@ -411,61 +451,28 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
         raise SpotifyAuthError("Spotify is not connected. Please check your Spotify credentials.")
 
     if url_type == "artist":
-        for token_name, token in tokens:
-            try:
-                logger.info(f"Spotify: Fetching artist discography with {token_name} token")
-                tracks = _fetch_artist_tracks(resource_id, token, logger)
-                if tracks:
-                    logger.info(f"Spotify: Got {len(tracks)} tracks from artist discography")
-                    return tracks
-            except (SpotifyNotFoundError, SpotifyForbiddenError, SpotifyAuthError) as e:
-                logger.warning(f"Spotify: {token_name} failed for artist: {e}")
-                continue
-        raise SpotifyNotFoundError("Could not find this artist on Spotify. Please check the URL.")
+        result = _fetch_with_retries(_fetch_artist_tracks, "artist", resource_id, tokens, logger)
+        if isinstance(result, tuple):
+            raise SpotifyNotFoundError("Could not find this artist on Spotify. Please check the URL and try again.")
+        return result
 
     if url_type == "album":
-        for token_name, token in tokens:
-            try:
-                logger.info(f"Spotify: Fetching album tracks with {token_name} token")
-                tracks = _fetch_album_tracks(resource_id, token, logger)
-                if tracks:
-                    logger.info(f"Spotify: Got {len(tracks)} tracks from album")
-                    return tracks
-            except (SpotifyNotFoundError, SpotifyForbiddenError, SpotifyAuthError) as e:
-                logger.warning(f"Spotify: {token_name} failed for album: {e}")
-                continue
-        raise SpotifyNotFoundError("Could not find this album on Spotify. Please check the URL.")
+        result = _fetch_with_retries(_fetch_album_tracks, "album", resource_id, tokens, logger)
+        if isinstance(result, tuple):
+            raise SpotifyNotFoundError("Could not find this album on Spotify. Please check the URL and try again.")
+        return result
 
-    all_404 = True
-    for token_name, token in tokens:
-        try:
-            logger.info(f"Spotify: Trying playlist fetch with {token_name} token")
-            tracks = _fetch_playlist_with_token(resource_id, token, logger)
-            all_404 = False
-            if tracks:
-                logger.info(f"Spotify: Got {len(tracks)} tracks with {token_name} token")
-                return tracks
-        except SpotifyNotFoundError as e:
-            logger.warning(f"Spotify: {token_name} token got 404 for playlist {resource_id}: {e}")
-            continue
-        except (SpotifyForbiddenError, SpotifyAuthError) as e:
-            all_404 = False
-            logger.warning(f"Spotify: {token_name} token failed for playlist: {e}")
-            continue
-        except Exception as e:
-            all_404 = False
-            logger.warning(f"Spotify: {token_name} token error for playlist: {e}")
-            continue
-
-    if all_404:
-        raise SpotifyNotFoundError(
-            "This playlist could not be accessed via the Spotify API. "
-            "Spotify's auto-generated playlists (like 'This Is...' or 'Daily Mix') "
-            "are often not available through the API. "
-            "Try pasting an artist URL, album URL, or a user-created playlist instead."
-        )
-
-    return []
+    result = _fetch_with_retries(_fetch_playlist_with_token, "playlist", resource_id, tokens, logger)
+    if isinstance(result, tuple):
+        tracks_result, last_error, all_404 = result
+        if all_404:
+            raise SpotifyNotFoundError(
+                "Could not fetch this playlist from Spotify after multiple attempts. "
+                "The Spotify API sometimes has intermittent issues. "
+                "Please wait a moment and try again, or try pasting an artist or album URL instead."
+            )
+        return []
+    return result
 
 
 def search_tracks(query: str, limit: int = 10) -> List[Dict[str, Any]]:

@@ -87,7 +87,7 @@ def preview_playlist_import(
             raise HTTPException(status_code=400, detail="Spotify is not connected. Please reconnect the Spotify integration in your project settings, or set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables.")
 
         logger.warning(f"Spotify playlist preview: empty result for org {org_id}, playlist URL: {data.playlist_url}")
-        raise HTTPException(status_code=400, detail="Could not fetch playlist tracks. The playlist may be empty or not accessible.")
+        raise HTTPException(status_code=400, detail="Could not fetch playlist tracks. The playlist may be empty or temporarily unavailable. Please try again in a moment.")
 
     existing_isrcs = set()
     existing_songs = db.query(Song.isrc).filter(
