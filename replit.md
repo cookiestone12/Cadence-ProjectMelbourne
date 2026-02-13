@@ -39,7 +39,7 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Containerization**: Utilizes Docker for multi-stage builds and `docker-compose` for local development.
 
 ### Feature Specifications
-- **Creator Roster Management**: Visual cards and detailed profiles.
+- **Creator Roster Management**: Visual cards and detailed profiles with DSP links (Spotify, Apple Music, YouTube), social media (Instagram, X/Twitter), bio, and custom named links. Branded roster PDF export with selectable creators.
 - **Advanced Catalog View**: Spreadsheet-style with filtering and sortable columns.
 - **Song Management**: Manual and AI-powered bulk CSV upload.
 - **Placement Tracking**: Comprehensive management page with status pipeline, CRUD operations, and contract linking.
