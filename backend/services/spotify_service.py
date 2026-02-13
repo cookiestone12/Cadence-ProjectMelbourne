@@ -54,12 +54,6 @@ def _get_replit_access_token() -> Optional[str]:
         refresh_token = creds.get("refresh_token")
         client_id = creds.get("client_id")
 
-        logger.info(
-            f"Spotify connector credentials: "
-            f"access_token={'present (' + str(len(access_token)) + ' chars)' if access_token else 'missing'}, "
-            f"refresh_token={'present (' + str(len(refresh_token)) + ' chars)' if refresh_token else 'missing'}, "
-            f"client_id={'present (' + str(len(client_id)) + ' chars)' if client_id else 'missing'}"
-        )
 
         if refresh_token and client_id:
             logger.info("Spotify connector: attempting token refresh to get a fresh access token")
