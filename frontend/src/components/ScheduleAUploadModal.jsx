@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { XMarkIcon, ArrowUpTrayIcon, CheckCircleIcon, XCircleIcon, ArrowRightIcon, ArrowLeftIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, ArrowUpTrayIcon, CheckCircleIcon, XCircleIcon, ArrowRightIcon, ArrowLeftIcon, SparklesIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
 
 const STANDARD_FIELDS = [
   { value: 'title', label: 'Song Title', required: true },
@@ -17,6 +17,11 @@ const STANDARD_FIELDS = [
   { value: 'notes', label: 'Notes' },
 ]
 
+const isDocumentFile = (filename) => {
+  const lower = (filename || '').toLowerCase()
+  return lower.endsWith('.pdf') || lower.endsWith('.docx') || lower.endsWith('.doc')
+}
+
 export default function ScheduleAUploadModal({ onClose, onSuccess, organizationId, creators = [] }) {
   const [step, setStep] = useState(1)
   const [file, setFile] = useState(null)
@@ -32,6 +37,8 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
   const [previewRows, setPreviewRows] = useState([])
   const [allRows, setAllRows] = useState([])
   const [totalRows, setTotalRows] = useState(0)
+  const [isDocImport, setIsDocImport] = useState(false)
+  const [documentInfo, setDocumentInfo] = useState(null)
   
   const [selectedCreatorId, setSelectedCreatorId] = useState('')
   const [createNewCreator, setCreateNewCreator] = useState(false)
@@ -97,8 +104,13 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
       const formData = new FormData()
       formData.append('file', file)
       
+      const isDoc = isDocumentFile(file.name)
+      const endpoint = isDoc 
+        ? `/api/csv/document-preview/${organizationId}`
+        : `/api/csv/preview/${organizationId}?all_rows=true`
+      
       const response = await axios.post(
-        `/api/csv/preview/${organizationId}?all_rows=true`,
+        endpoint,
         formData,
         {
           headers: {
@@ -114,7 +126,28 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
       setAllRows(allRowsData)
       setPreviewRows(allRowsData.slice(0, 5))
       setTotalRows(response.data.row_count || 0)
-      setStep(2)
+      
+      if (isDoc && response.data.is_document_import) {
+        setIsDocImport(true)
+        setDocumentInfo(response.data.document_info || null)
+        if (response.data.document_info?.creator_name) {
+          const matchingCreator = creatorList.find(
+            c => c.display_name.toLowerCase() === response.data.document_info.creator_name.toLowerCase()
+          )
+          if (matchingCreator) {
+            setSelectedCreatorId(String(matchingCreator.id))
+            setCreateNewCreator(false)
+          } else {
+            setCreateNewCreator(true)
+            setNewCreatorName(response.data.document_info.creator_name)
+          }
+        }
+        setStep(2)
+      } else {
+        setIsDocImport(false)
+        setDocumentInfo(null)
+        setStep(2)
+      }
     } catch (err) {
       console.error('Analysis failed:', err)
       setError(err.response?.data?.detail || 'Failed to analyze file. Please check the format.')
@@ -140,7 +173,7 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
   }
   
   const handleImport = async () => {
-    if (!hasRequiredMappings()) {
+    if (!isDocImport && !hasRequiredMappings()) {
       setError('Song Title mapping is required')
       return
     }
@@ -161,11 +194,29 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
     try {
       const token = localStorage.getItem('token')
       
+      let importMapping = mapping
+      let importRows = allRows.length > 0 ? allRows : previewRows
+      
+      if (isDocImport) {
+        importMapping = {
+          title: 'title',
+          primary_artist: 'primary_artist',
+          publishing_percentage: 'publishing_percentage',
+          notes: 'notes',
+        }
+        importRows = importRows.map(row => ({
+          title: row.title || '',
+          primary_artist: row.primary_artist || '',
+          publishing_percentage: row.publishing_percentage || '',
+          notes: row.notes || '',
+        }))
+      }
+      
       const response = await axios.post(
         `/api/csv/import/${organizationId}`,
         {
-          mapping,
-          rows: allRows.length > 0 ? allRows : previewRows,
+          mapping: importMapping,
+          rows: importRows,
           creator_id: createNewCreator ? null : parseInt(selectedCreatorId),
           create_new_creator: createNewCreator,
           new_creator_name: createNewCreator ? newCreatorName.trim() : null
@@ -196,7 +247,10 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
   const isValidFile = file && (
     file.name.endsWith('.csv') ||
     file.name.endsWith('.xlsx') ||
-    file.name.endsWith('.xls')
+    file.name.endsWith('.xls') ||
+    file.name.endsWith('.pdf') ||
+    file.name.endsWith('.docx') ||
+    file.name.endsWith('.doc')
   )
   
   const getAvailableFields = (currentHeader) => {
@@ -219,8 +273,8 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
             <div>
               <h2 className="text-2xl font-bold text-[#3D4A44]">Import Catalog</h2>
               <p className="text-sm text-[#7A8580] mt-1">
-                {step === 1 && 'Upload your CSV or Excel file'}
-                {step === 2 && 'Review AI-suggested column mapping'}
+                {step === 1 && 'Upload your CSV, Excel, PDF, or Word file'}
+                {step === 2 && (isDocImport ? 'Review parsed songs from document' : 'Review AI-suggested column mapping')}
                 {step === 3 && 'Select creator for imported songs'}
                 {step === 4 && 'Import complete!'}
               </p>
@@ -290,7 +344,7 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                       <input
                         type="file"
                         className="hidden"
-                        accept=".csv,.xlsx,.xls"
+                        accept=".csv,.xlsx,.xls,.pdf,.docx,.doc"
                         onChange={handleFileChange}
                       />
                       <span className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] cursor-pointer inline-block transition-colors">
@@ -298,7 +352,7 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                       </span>
                     </label>
                     <p className="text-xs text-[#7A8580] mt-2">
-                      Supported formats: CSV, Excel (.xlsx, .xls)
+                      Supported formats: CSV, Excel (.xlsx, .xls), PDF, Word (.docx)
                     </p>
                   </div>
                 )}
@@ -314,23 +368,100 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
               <div className="mt-6 p-4 bg-[rgba(90,138,154,0.08)] border border-[rgba(90,138,154,0.15)] rounded-lg">
                 <div className="flex items-center gap-2 mb-3">
                   <SparklesIcon className="w-5 h-5 text-[#5B8A72]" />
-                  <h3 className="text-sm font-semibold text-[#4A7A8A]">AI-Powered Import</h3>
+                  <h3 className="text-sm font-semibold text-[#4A7A8A]">Smart Import</h3>
                 </div>
                 <p className="text-xs text-[#5A8A9A] mb-3">
-                  Our AI will automatically detect and map your columns, no matter what format you use.
-                  Just upload your file and we'll handle the rest!
+                  Upload spreadsheets or documents and we'll automatically parse your catalog data.
                 </p>
                 <div className="text-xs text-[#5A8A9A] space-y-1">
-                  <p><strong>Common column names we recognize:</strong></p>
-                  <p>"Track", "Song", "Title" → Song Title</p>
-                  <p>"Writer", "Artist", "Performer" → Artist Name</p>
-                  <p>"%", "Share", "Split", "Pub" → Percentages</p>
+                  <p><strong>CSV/Excel:</strong> AI auto-maps your columns (Title, Artist, %, etc.)</p>
+                  <p><strong>PDF/Word:</strong> Parses Schedule A documents with "Artist - Song Title XX%" format</p>
+                  <p>Creator info (name, PRO IPI#) is auto-detected from document headers</p>
                 </div>
               </div>
             </>
           )}
           
-          {step === 2 && previewData && (
+          {step === 2 && previewData && isDocImport && (
+            <>
+              {documentInfo && (
+                <div className="mb-4 p-4 bg-[rgba(91,138,114,0.08)] border border-[rgba(91,138,114,0.15)] rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <DocumentTextIcon className="w-5 h-5 text-[#5B8A72]" />
+                    <span className="text-sm font-semibold text-[#3D4A44]">Document Info Detected</span>
+                  </div>
+                  <div className="text-sm text-[#5A7A6A] space-y-1">
+                    {documentInfo.creator_name && <p><strong>Creator:</strong> {documentInfo.creator_name}</p>}
+                    {documentInfo.pro_name && documentInfo.bmi_ipi && (
+                      <p><strong>{documentInfo.pro_name} IPI#:</strong> {documentInfo.bmi_ipi}</p>
+                    )}
+                    {documentInfo.bmi_id && <p><strong>ID#:</strong> {documentInfo.bmi_id}</p>}
+                  </div>
+                </div>
+              )}
+              
+              {previewData.warnings?.length > 0 && (
+                <div className="mb-3 space-y-1">
+                  {previewData.warnings.map((w, i) => (
+                    <p key={i} className="text-xs text-[#5A8A6A]">{w}</p>
+                  ))}
+                </div>
+              )}
+
+              <div className="mb-4 flex items-center justify-between">
+                <span className="text-sm font-medium text-[#3D4A44]">
+                  {totalRows} songs parsed from document
+                </span>
+                <span className="text-xs text-[#7A8580]">
+                  {allRows.filter(r => r.section === 'Schedule A').length} released, {allRows.filter(r => r.section !== 'Schedule A').length} pipeline
+                </span>
+              </div>
+              
+              <div className="border border-[rgba(59,77,67,0.1)] rounded-lg overflow-hidden">
+                <div className="overflow-x-auto max-h-[340px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-[rgba(59,77,67,0.03)] sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-[#5B8A72]">Artist</th>
+                        <th className="px-3 py-2 text-left font-medium text-[#5B8A72]">Song Title</th>
+                        <th className="px-3 py-2 text-center font-medium text-[#5B8A72]">Pub %</th>
+                        <th className="px-3 py-2 text-left font-medium text-[#5B8A72]">Section</th>
+                        <th className="px-3 py-2 text-left font-medium text-[#5B8A72]">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allRows.map((row, idx) => (
+                        <tr key={idx} className={`border-t border-[rgba(59,77,67,0.05)] ${row.section !== 'Schedule A' ? 'bg-[rgba(196,149,107,0.05)]' : ''}`}>
+                          <td className="px-3 py-2 text-[#3D4A44]">{row.primary_artist || '-'}</td>
+                          <td className="px-3 py-2 text-[#3D4A44] font-medium">{row.title || '-'}</td>
+                          <td className="px-3 py-2 text-center text-[#3D4A44]">{row.publishing_percentage ? `${row.publishing_percentage}%` : '-'}</td>
+                          <td className="px-3 py-2">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                              row.section === 'Schedule A' 
+                                ? 'bg-[rgba(91,154,110,0.15)] text-[#4A8A5A]' 
+                                : 'bg-[rgba(196,149,107,0.15)] text-[#8A6B4A]'
+                            }`}>
+                              {row.section === 'Schedule A' ? 'Released' : 'Pipeline'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-[#7A8580] text-[11px]">{row.notes || ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              {error && (
+                <div className="mt-4 p-4 bg-[rgba(196,112,104,0.08)] border border-[rgba(196,112,104,0.2)] rounded-lg flex items-start space-x-3">
+                  <XCircleIcon className="w-5 h-5 text-[#C47068] flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-[#A45850]">{error}</p>
+                </div>
+              )}
+            </>
+          )}
+          
+          {step === 2 && previewData && !isDocImport && (
             <>
               <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -601,14 +732,14 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
             {step === 2 && (
               <button
                 onClick={() => {
-                  if (hasRequiredMappings()) {
+                  if (isDocImport || hasRequiredMappings()) {
                     setError(null)
                     setStep(3)
                   } else {
                     setError('Please map at least the Song Title column')
                   }
                 }}
-                disabled={!hasRequiredMappings()}
+                disabled={!isDocImport && !hasRequiredMappings()}
                 className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Continue

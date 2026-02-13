@@ -219,6 +219,40 @@ async def preview_csv(
     )
 
 
+@router.post("/document-preview/{org_id}")
+async def preview_document(
+    org_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from backend.services.document_parser import parse_document
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized to access this organization")
+
+    filename = file.filename or ""
+    lower = filename.lower()
+    if not (lower.endswith('.pdf') or lower.endswith('.docx') or lower.endswith('.doc')):
+        raise HTTPException(status_code=400, detail="File must be a PDF or Word document (.pdf, .docx)")
+
+    if file.size and file.size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10MB.")
+
+    content = await file.read()
+    result = parse_document(content, filename)
+
+    if result.errors:
+        raise HTTPException(status_code=400, detail=result.errors[0])
+
+    return result.to_preview_response()
+
+
 @router.post("/import/{org_id}", response_model=ImportResult)
 async def import_csv(
     org_id: int,

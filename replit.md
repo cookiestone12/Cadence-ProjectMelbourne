@@ -24,7 +24,7 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Health Score System**: Dynamically calculates song health based on weighted checklist completion.
 - **Catalog Valuation Tool**: Uses a weighted average of Streaming Multiple, Revenue Multiple, Market Comparables, and a Black Box Algorithm.
 - **API Security**: Enforces JWT authentication, user-organization membership validation, and organization-scoped queries.
-- **AI-Powered CSV Import**: Utilizes OpenAI for intelligent column mapping during bulk song import.
+- **AI-Powered CSV Import**: Utilizes OpenAI for intelligent column mapping during bulk song import. Also supports PDF and Word (.docx) Schedule A document parsing, extracting creator info (name, PRO IPI#, ID#), song entries with artist/title/percentage, and Schedule A/B sections.
 - **Notification System**: Customizable in-app and email notifications with user and organization-level preferences.
 - **Action Items System**: Manages proactive action items with deadlines and priorities, with auto-generation based on catalog gaps and cross-module tracking.
 - **Placement Management**: Comprehensive sync licensing/placement tracking with a status pipeline from PITCHED to PAID, financial tracking, contract linking, release linking, creator/client filtering, catalog search pickers for works/releases, and automatic accounting integration (creates RoyaltyStatement + RoyaltyTransaction on PAID transition with license fee).
