@@ -124,7 +124,8 @@ export default function CreatorDetailPage() {
 
         try {
           const contactsRes = await axios.get(`/api/creative-directory/org/${orgId}`)
-          setDirectoryContacts(contactsRes.data)
+          const contactsData = contactsRes.data
+          setDirectoryContacts(Array.isArray(contactsData) ? contactsData : contactsData.contacts || [])
         } catch (e) {
           console.error('Failed to load directory contacts:', e)
         }
