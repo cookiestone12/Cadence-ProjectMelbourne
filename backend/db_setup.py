@@ -1,5 +1,6 @@
 """Database setup script - runs migrations and seeds before app start."""
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -8,6 +9,12 @@ from backend.models import Base, engine
 from backend.models.database import SessionLocal
 from backend.models.models import User
 from backend.utils.logging_config import logger
+
+
+def _validate_sql_identifier(name: str) -> str:
+    if not re.match(r'^[a-z][a-z0-9_]*$', name):
+        raise ValueError(f"Invalid SQL identifier: {name}")
+    return name
 
 
 def ensure_schema_updates():
@@ -109,20 +116,21 @@ def ensure_schema_updates():
 
         bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
         for field in bool_to_string_fields:
-            if field in song_cols:
-                col_type = str(song_cols[field]['type'])
+            safe_field = _validate_sql_identifier(field)
+            if safe_field in song_cols:
+                col_type = str(song_cols[safe_field]['type'])
                 if 'BOOLEAN' in col_type.upper() or 'BOOL' in col_type.upper():
                     conn.execute(text(f"""
-                        ALTER TABLE songs ALTER COLUMN {field} TYPE VARCHAR
+                        ALTER TABLE songs ALTER COLUMN {safe_field} TYPE VARCHAR
                         USING CASE
-                            WHEN {field} = true THEN 'Yes'
-                            WHEN {field} = false THEN 'No'
+                            WHEN {safe_field} = true THEN 'Yes'
+                            WHEN {safe_field} = false THEN 'No'
                             ELSE 'No'
                         END
                     """))
-                    conn.execute(text(f"ALTER TABLE songs ALTER COLUMN {field} SET DEFAULT 'No'"))
+                    conn.execute(text(f"ALTER TABLE songs ALTER COLUMN {safe_field} SET DEFAULT 'No'"))
                     conn.commit()
-                    logger.info(f"Converted songs.{field} from BOOLEAN to VARCHAR")
+                    logger.info(f"Converted songs.{safe_field} from BOOLEAN to VARCHAR")
 
         perf_indexes = [
             ("ix_songs_organization_id", "songs", "organization_id"),

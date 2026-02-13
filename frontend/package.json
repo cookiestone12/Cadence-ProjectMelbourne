@@ -9,11 +9,11 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
-    "axios": "^1.6.2",
+    "axios": "^1.13.5",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
-    "react-router-dom": "^6.20.0",
+    "react-router-dom": "^6.30.3",
     "recharts": "^2.10.3"
   },
   "devDependencies": {
