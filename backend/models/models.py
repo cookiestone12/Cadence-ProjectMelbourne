@@ -310,14 +310,27 @@ class Work(Base):
     genre = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
     lyrics = Column(Text, nullable=True)
+    folder_id = Column(Integer, ForeignKey("work_folders.id"), nullable=True)
     is_registered_with_pro = Column(Boolean, default=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     organization = relationship("Organization")
+    folder = relationship("WorkFolder", back_populates="works")
     work_tracks = relationship("WorkTrack", back_populates="work", cascade="all, delete-orphan")
     credits = relationship("WorkCredit", back_populates="work", cascade="all, delete-orphan")
+
+
+class WorkFolder(Base):
+    __tablename__ = "work_folders"
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    name = Column(String, nullable=False)
+    parent_folder_id = Column(Integer, ForeignKey("work_folders.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    organization = relationship("Organization")
+    works = relationship("Work", back_populates="folder")
 
 
 class WorkTrack(Base):
@@ -1290,6 +1303,51 @@ class Advance(Base):
     created_by = relationship("User")
 
 
+class ExpenseCategory(str, enum.Enum):
+    PRODUCER_FEE = "PRODUCER_FEE"
+    DAY_RATE = "DAY_RATE"
+    VIDEO_PRODUCTION = "VIDEO_PRODUCTION"
+    CONTENT_CREATION = "CONTENT_CREATION"
+    LEGAL = "LEGAL"
+    MARKETING = "MARKETING"
+    TRAVEL = "TRAVEL"
+    STUDIO = "STUDIO"
+    MIXING_MASTERING = "MIXING_MASTERING"
+    OTHER = "OTHER"
+
+class Expense(Base):
+    __tablename__ = "expenses"
+    __table_args__ = (
+        Index('ix_expenses_org_id', 'organization_id'),
+    )
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    category = Column(String, nullable=False, default="OTHER")
+    description = Column(String, nullable=False)
+    amount_cents = Column(Integer, nullable=False, default=0)
+    currency = Column(String, default="USD")
+    payee_name = Column(String, nullable=True)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+    placement_id = Column(Integer, ForeignKey("placements.id"), nullable=True)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    expense_date = Column(Date, nullable=True)
+    status = Column(String, default="PENDING")
+    payment_method = Column(String, nullable=True)
+    invoice_reference = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    budget_source = Column(String, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    organization = relationship("Organization")
+    creator = relationship("Creator")
+    contract = relationship("Contract")
+    placement = relationship("Placement")
+    song = relationship("Song")
+    created_by = relationship("User")
+
+
 class Placement(Base):
     __tablename__ = "placements"
     __table_args__ = (
@@ -1346,6 +1404,51 @@ class Placement(Base):
     contract = relationship("Contract")
     assigned_to = relationship("User", foreign_keys=[assigned_to_user_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
+
+
+class ClientShareStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+    REVOKED = "REVOKED"
+
+class ClientShareRole(str, enum.Enum):
+    COPRIMARY = "COPRIMARY"
+    SECONDARY = "SECONDARY"
+    READER = "READER"
+
+class ClientShare(Base):
+    __tablename__ = "client_shares"
+    __table_args__ = (
+        Index('ix_client_shares_org', 'primary_org_id'),
+        Index('ix_client_shares_recipient', 'recipient_org_id'),
+        UniqueConstraint('creator_id', 'recipient_user_email', name='uq_client_share_creator_email'),
+    )
+    
+    id = Column(Integer, primary_key=True, index=True)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=False)
+    primary_org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    recipient_org_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    
+    recipient_user_email = Column(String, nullable=False)
+    recipient_org_name_verification = Column(String, nullable=True)
+    
+    passcode = Column(String(6), nullable=False)
+    role = Column(String, nullable=False, default="READER")
+    status = Column(String, nullable=False, default="PENDING")
+    
+    shared_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    accepted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    accepted_at = Column(DateTime, nullable=True)
+    revoked_at = Column(DateTime, nullable=True)
+    
+    creator = relationship("Creator")
+    primary_org = relationship("Organization", foreign_keys=[primary_org_id])
+    recipient_org = relationship("Organization", foreign_keys=[recipient_org_id])
+    shared_by = relationship("User", foreign_keys=[shared_by_user_id])
+    accepted_by = relationship("User", foreign_keys=[accepted_by_user_id])
 
 
 class AuditLog(Base):

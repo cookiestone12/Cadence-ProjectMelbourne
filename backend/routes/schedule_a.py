@@ -450,9 +450,9 @@ def export_schedule_a_pdf(
     elements = []
     
     # Header with logo
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo.png')
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo-medium.png')
     if os.path.exists(logo_path):
-        logo = Image(logo_path, width=0.8*inch, height=0.8*inch)
+        logo = Image(logo_path, width=1.5*inch, height=1.2*inch)
         logo.hAlign = 'CENTER'
         elements.append(logo)
         elements.append(Spacer(1, 6))
@@ -687,9 +687,9 @@ def export_simplified_schedule_a_pdf(
 
     elements = []
 
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo.png')
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo-medium.png')
     if os.path.exists(logo_path):
-        logo = Image(logo_path, width=0.7*inch, height=0.7*inch)
+        logo = Image(logo_path, width=1.5*inch, height=1.2*inch)
         logo.hAlign = 'CENTER'
         elements.append(logo)
         elements.append(Spacer(1, 4))

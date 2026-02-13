@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, asc, or_
+from sqlalchemy import desc, asc, or_, func, distinct
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, date
+import io
+import os
 from ..models import get_db, Placement, Song, Work, Contract, OrganizationMember, User, Release, ReleaseTrack, Creator, SongCredit, WorkCredit
 from ..utils.auth import get_current_user
 
@@ -591,6 +594,207 @@ def delete_placement(
     db.commit()
 
     return {"message": "Placement deleted"}
+
+
+@router.get("/org/{org_id}/clients")
+def list_placement_clients(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_org_access(db, current_user, org_id)
+    clients = db.query(distinct(Placement.client_name)).filter(
+        Placement.organization_id == org_id,
+        Placement.client_name.isnot(None),
+        Placement.client_name != ""
+    ).order_by(Placement.client_name).all()
+    return [c[0] for c in clients]
+
+
+@router.get("/org/{org_id}/sync-report")
+def generate_sync_report(
+    org_id: int,
+    client_name: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    format: str = "json",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_org_access(db, current_user, org_id)
+
+    query = db.query(Placement).filter(Placement.organization_id == org_id)
+
+    if client_name:
+        query = query.filter(Placement.client_name.ilike(f"%{client_name}%"))
+    if status:
+        query = query.filter(Placement.status == status)
+    if date_from:
+        try:
+            df = datetime.strptime(date_from, "%Y-%m-%d").date()
+            query = query.filter(Placement.pitched_date >= df)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            dt = datetime.strptime(date_to, "%Y-%m-%d").date()
+            query = query.filter(Placement.pitched_date <= dt)
+        except ValueError:
+            pass
+
+    query = query.order_by(desc(Placement.updated_at))
+    placements = query.all()
+    placement_dicts = placements_to_dicts(placements, db)
+
+    total_revenue = sum(p.license_fee or 0 for p in placements)
+    by_status = {}
+    by_client = {}
+    for p in placements:
+        s = p.status or "UNKNOWN"
+        by_status[s] = by_status.get(s, 0) + 1
+        c = p.client_name or "Unknown"
+        by_client[c] = by_client.get(c, 0) + 1
+
+    summary = {
+        "total_placements": len(placements),
+        "total_revenue": total_revenue,
+        "by_status": by_status,
+        "by_client": by_client,
+    }
+
+    if format == "pdf":
+        return _generate_sync_report_pdf(placement_dicts, summary, client_name, status, date_from, date_to)
+
+    return {"placements": placement_dicts, "summary": summary}
+
+
+def _generate_sync_report_pdf(placements, summary, client_name, status, date_from, date_to):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter, landscape
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+
+    PRIMARY = colors.HexColor('#5B8A72')
+    DARK = colors.HexColor('#3D4A44')
+    LIGHT = colors.HexColor('#E8F0EC')
+    BORDER = colors.HexColor('#A3C4B5')
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(letter),
+        rightMargin=0.5 * inch,
+        leftMargin=0.5 * inch,
+        topMargin=0.5 * inch,
+        bottomMargin=0.5 * inch
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('SyncTitle', parent=styles['Heading1'], fontSize=22, textColor=DARK, alignment=TA_CENTER, spaceAfter=4)
+    subtitle_style = ParagraphStyle('SyncSubtitle', parent=styles['Normal'], fontSize=12, textColor=PRIMARY, alignment=TA_CENTER, spaceAfter=10)
+    section_style = ParagraphStyle('SyncSection', parent=styles['Heading2'], fontSize=13, textColor=DARK, spaceBefore=16, spaceAfter=8)
+    normal_style = ParagraphStyle('SyncNormal', parent=styles['Normal'], fontSize=10, textColor=DARK)
+    small_style = ParagraphStyle('SyncSmall', parent=styles['Normal'], fontSize=7.5, textColor=DARK)
+    footer_style = ParagraphStyle('SyncFooter', parent=styles['Normal'], fontSize=8, textColor=colors.grey)
+
+    elements = []
+
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo-medium.png')
+    if os.path.exists(logo_path):
+        logo = Image(logo_path, width=1.5 * inch, height=1.2 * inch)
+        logo.hAlign = 'CENTER'
+        elements.append(logo)
+        elements.append(Spacer(1, 6))
+
+    elements.append(Paragraph("Sync Placement Report", title_style))
+
+    filter_parts = []
+    if client_name:
+        filter_parts.append(f"Client: {client_name}")
+    if status:
+        filter_parts.append(f"Status: {status}")
+    if date_from:
+        filter_parts.append(f"From: {date_from}")
+    if date_to:
+        filter_parts.append(f"To: {date_to}")
+    if filter_parts:
+        elements.append(Paragraph(" | ".join(filter_parts), subtitle_style))
+    else:
+        elements.append(Paragraph("All Placements", subtitle_style))
+
+    elements.append(Paragraph(f"Generated: {datetime.utcnow().strftime('%B %d, %Y')}", normal_style))
+    elements.append(Spacer(1, 12))
+
+    elements.append(Paragraph("SUMMARY", section_style))
+    status_breakdown = ", ".join(f"{k}: {v}" for k, v in summary["by_status"].items()) or "None"
+    summary_data = [
+        ["Total Placements", str(summary["total_placements"]), "Total Revenue", f"${summary['total_revenue']:,.2f}"],
+        ["Status Breakdown", status_breakdown, "", ""],
+    ]
+    summary_table = Table(summary_data, colWidths=[1.8 * inch, 2.5 * inch, 1.5 * inch, 2.0 * inch])
+    summary_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), LIGHT),
+        ('TEXTCOLOR', (0, 0), (-1, -1), DARK),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, BORDER),
+        ('SPAN', (1, 1), (3, 1)),
+    ]))
+    elements.append(summary_table)
+    elements.append(Spacer(1, 16))
+
+    if placements:
+        elements.append(Paragraph("PLACEMENT DETAILS", section_style))
+        table_headers = ["Title", "Song", "Client", "Status", "License Fee", "Pitched", "Secured"]
+        table_data = [table_headers]
+        for p in placements:
+            song_name = p.get("song_title") or p.get("work_title") or ""
+            table_data.append([
+                Paragraph(str(p.get("title", ""))[:40], small_style),
+                Paragraph(str(song_name)[:30], small_style),
+                Paragraph(str(p.get("client_name") or "")[:25], small_style),
+                str(p.get("status") or ""),
+                f"${p.get('license_fee') or 0:,.2f}",
+                str(p.get("pitched_date") or "")[:10],
+                str(p.get("secured_date") or "")[:10],
+            ])
+
+        detail_table = Table(table_data, colWidths=[
+            2.0 * inch, 1.6 * inch, 1.5 * inch, 1.0 * inch, 1.0 * inch, 0.9 * inch, 0.9 * inch
+        ])
+        detail_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), PRIMARY),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
+            ('GRID', (0, 0), (-1, -1), 0.5, BORDER),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, LIGHT]),
+        ]))
+        elements.append(detail_table)
+
+    elements.append(Spacer(1, 24))
+    elements.append(Paragraph(f"<i>Generated by Rythm Catalog Intelligence — {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</i>", footer_style))
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    filename = f"Sync_Report_{datetime.utcnow().strftime('%Y-%m-%d')}.pdf"
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 
 @router.get("/config/options")

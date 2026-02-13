@@ -54,6 +54,7 @@ import UserGuidePage from './pages/UserGuidePage'
 import TenantAdminPage from './pages/TenantAdminPage'
 import CreativeDirectoryPage from './pages/CreativeDirectoryPage'
 import RegistrationReportPage from './pages/RegistrationReportPage'
+import SyncReportsPage from './pages/SyncReportsPage'
 import Sidebar from './components/Sidebar'
 
 function App() {
@@ -173,6 +174,7 @@ function App() {
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/valuation" element={<ValuationPage />} />
             <Route path="/registration-reports" element={<RegistrationReportPage />} />
+            <Route path="/sync-reports" element={<SyncReportsPage />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/guide" element={<UserGuidePage />} />
             <Route path="/org-admin" element={<TenantAdminPage />} />

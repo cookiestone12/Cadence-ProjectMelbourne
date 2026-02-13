@@ -32,7 +32,7 @@ const TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: ChartBarIcon },
   { key: 'statements', label: 'Statements', icon: DocumentTextIcon },
   { key: 'earnings', label: 'Earnings', icon: CurrencyDollarIcon },
-  { key: 'payments', label: 'Payments', icon: BanknotesIcon },
+  { key: 'money_out', label: 'Money Out', icon: ArrowUpTrayIcon },
   { key: 'fees', label: 'Fees & Advances', icon: CalculatorIcon },
 ]
 
@@ -111,6 +111,7 @@ const StatusBadge = ({ status, colorMap }) => {
 function DashboardTab({ orgId }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [expenseSummary, setExpenseSummary] = useState(null)
 
   useEffect(() => {
     if (!orgId) return
@@ -119,6 +120,9 @@ function DashboardTab({ orgId }) {
       .then(res => setData(res.data))
       .catch(err => console.error('Dashboard load error:', err))
       .finally(() => setLoading(false))
+    axios.get(`/api/expenses/org/${orgId}/summary`)
+      .then(res => setExpenseSummary(res.data))
+      .catch(err => console.error('Expense summary load error:', err))
   }, [orgId])
 
   if (loading) return <LoadingSpinner message="Loading dashboard..." />
@@ -140,7 +144,7 @@ function DashboardTab({ orgId }) {
     { label: 'Total Revenue', value: formatCents(data.total_revenue_cents), icon: CurrencyDollarIcon, accent: true },
     { label: 'Total Allocated', value: formatCents(data.total_allocated_cents), icon: CheckCircleIcon },
     { label: 'Unallocated', value: formatCents(data.total_unallocated_cents), icon: ExclamationCircleIcon },
-    { label: 'Recoupment Items', value: advances.length, icon: DocumentTextIcon },
+    { label: 'Money Out', value: formatCents(expenseSummary?.total_amount_cents || 0), icon: ArrowUpTrayIcon },
   ]
 
   return (
@@ -885,7 +889,318 @@ function EarningsTab({ orgId }) {
   )
 }
 
-function PaymentsTab({ orgId, creators, contracts }) {
+const EXPENSE_CATEGORIES = [
+  { value: 'PRODUCER_FEE', label: 'Producer Fee' },
+  { value: 'DAY_RATE', label: 'Day Rate' },
+  { value: 'VIDEO_PRODUCTION', label: 'Video Production' },
+  { value: 'CONTENT_CREATION', label: 'Content Creation' },
+  { value: 'LEGAL', label: 'Legal' },
+  { value: 'MARKETING', label: 'Marketing' },
+  { value: 'TRAVEL', label: 'Travel' },
+  { value: 'STUDIO', label: 'Studio' },
+  { value: 'MIXING_MASTERING', label: 'Mixing/Mastering' },
+  { value: 'OTHER', label: 'Other' },
+]
+
+const EXPENSE_STATUS_COLORS = {
+  PENDING: { bg: 'bg-amber-100', text: 'text-amber-700' },
+  APPROVED: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  PAID: { bg: 'bg-green-100', text: 'text-green-700' },
+  CANCELLED: { bg: 'bg-red-100', text: 'text-red-700' },
+}
+
+const getCategoryLabel = (val) => {
+  const cat = EXPENSE_CATEGORIES.find(c => c.value === val)
+  return cat ? cat.label : val
+}
+
+function MoneyOutTab({ orgId, creators, contracts }) {
+  const [subTab, setSubTab] = useState('expenses')
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 mb-2">
+        <button
+          onClick={() => setSubTab('expenses')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+            subTab === 'expenses'
+              ? 'bg-[rgba(91,138,114,0.12)] text-[#5B8A72] border border-[rgba(91,138,114,0.2)]'
+              : 'text-[#7A8580] hover:text-[#3D4A44] hover:bg-[rgba(91,138,114,0.06)]'
+          }`}
+        >
+          <ArrowUpTrayIcon className="w-4 h-4" /> Expenses
+        </button>
+        <button
+          onClick={() => setSubTab('payments')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+            subTab === 'payments'
+              ? 'bg-[rgba(91,138,114,0.12)] text-[#5B8A72] border border-[rgba(91,138,114,0.2)]'
+              : 'text-[#7A8580] hover:text-[#3D4A44] hover:bg-[rgba(91,138,114,0.06)]'
+          }`}
+        >
+          <BanknotesIcon className="w-4 h-4" /> Payments
+        </button>
+      </div>
+
+      {subTab === 'expenses' && <ExpensesSubTab orgId={orgId} creators={creators} contracts={contracts} />}
+      {subTab === 'payments' && <PaymentsSubTab orgId={orgId} creators={creators} contracts={contracts} />}
+    </div>
+  )
+}
+
+function ExpensesSubTab({ orgId, creators, contracts }) {
+  const [expenses, setExpenses] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [form, setForm] = useState({
+    category: 'OTHER',
+    description: '',
+    amount: '',
+    payee_name: '',
+    creator_id: '',
+    contract_id: '',
+    expense_date: '',
+    payment_method: '',
+    invoice_reference: '',
+    budget_source: '',
+    notes: '',
+  })
+
+  const loadExpenses = useCallback(async () => {
+    if (!orgId) return
+    try {
+      let url = `/api/expenses/org/${orgId}`
+      const params = new URLSearchParams()
+      if (categoryFilter) params.append('category', categoryFilter)
+      if (statusFilter) params.append('status', statusFilter)
+      if (params.toString()) url += `?${params.toString()}`
+      const res = await axios.get(url)
+      setExpenses(Array.isArray(res.data) ? res.data : [])
+    } catch (err) {
+      console.error('Failed to load expenses:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [orgId, categoryFilter, statusFilter])
+
+  useEffect(() => { loadExpenses() }, [loadExpenses])
+
+  const handleCreate = async () => {
+    if (!form.description || !form.amount) return
+    setCreating(true)
+    try {
+      await axios.post(`/api/expenses/org/${orgId}`, {
+        category: form.category,
+        description: form.description,
+        amount_cents: Math.round(parseFloat(form.amount) * 100),
+        payee_name: form.payee_name || null,
+        creator_id: form.creator_id ? parseInt(form.creator_id) : null,
+        contract_id: form.contract_id ? parseInt(form.contract_id) : null,
+        expense_date: form.expense_date || null,
+        payment_method: form.payment_method || null,
+        invoice_reference: form.invoice_reference || null,
+        budget_source: form.budget_source || null,
+        notes: form.notes || null,
+      })
+      setShowCreate(false)
+      setForm({ category: 'OTHER', description: '', amount: '', payee_name: '', creator_id: '', contract_id: '', expense_date: '', payment_method: '', invoice_reference: '', budget_source: '', notes: '' })
+      loadExpenses()
+    } catch (err) {
+      console.error('Failed to create expense:', err)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleUpdateStatus = async (expenseId, newStatus) => {
+    try {
+      await axios.patch(`/api/expenses/${expenseId}/status`, { status: newStatus })
+      loadExpenses()
+    } catch (err) {
+      console.error('Failed to update expense status:', err)
+    }
+  }
+
+  const handleDelete = async (expenseId) => {
+    if (!window.confirm('Delete this expense? This cannot be undone.')) return
+    try {
+      await axios.delete(`/api/expenses/${expenseId}`)
+      loadExpenses()
+    } catch (err) {
+      console.error('Failed to delete expense:', err)
+    }
+  }
+
+  if (loading) return <LoadingSpinner message="Loading expenses..." />
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} className="px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none">
+            <option value="">All Categories</option>
+            {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none">
+            <option value="">All Statuses</option>
+            <option value="PENDING">Pending</option>
+            <option value="APPROVED">Approved</option>
+            <option value="PAID">Paid</option>
+            <option value="CANCELLED">Cancelled</option>
+          </select>
+        </div>
+        <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
+          <PlusIcon className="w-4 h-4" /> Add Expense
+        </button>
+      </div>
+
+      <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)]">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-[#EEF1EC]">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Date</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Category</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Description</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Payee</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Amount</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Status</th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+              {expenses.map(e => (
+                <tr key={e.id} className="hover:bg-[rgba(91,138,114,0.04)]">
+                  <td className="px-6 py-4 text-sm text-[#7A8580]">{formatDate(e.expense_date)}</td>
+                  <td className="px-6 py-4">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[rgba(91,138,114,0.1)] text-[#5B8A72]">
+                      {getCategoryLabel(e.category)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-[#3D4A44]">{e.description || '—'}</td>
+                  <td className="px-6 py-4 text-sm text-[#7A8580]">{e.payee_name || e.creator_name || '—'}</td>
+                  <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(e.amount_cents)}</td>
+                  <td className="px-6 py-4"><StatusBadge status={e.status || 'PENDING'} colorMap={EXPENSE_STATUS_COLORS} /></td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-end gap-1">
+                      {e.status === 'PENDING' && (
+                        <button onClick={() => handleUpdateStatus(e.id, 'APPROVED')} className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-medium">
+                          Approve
+                        </button>
+                      )}
+                      {e.status === 'APPROVED' && (
+                        <button onClick={() => handleUpdateStatus(e.id, 'PAID')} className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors font-medium">
+                          Mark Paid
+                        </button>
+                      )}
+                      {(e.status === 'PENDING' || e.status === 'APPROVED') && (
+                        <button onClick={() => handleUpdateStatus(e.id, 'CANCELLED')} className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors font-medium">
+                          Cancel
+                        </button>
+                      )}
+                      <button onClick={() => handleDelete(e.id)} className="p-1.5 text-[#7A8580] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {expenses.length === 0 && (
+                <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-[#7A8580]">No expenses recorded yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showCreate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-lg font-semibold text-[#3D4A44]">Add Expense</h3>
+              <button onClick={() => setShowCreate(false)} className="p-2 hover:bg-[rgba(59,77,67,0.06)] rounded-full transition-colors">
+                <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Category</label>
+                <select value={form.category} onChange={e => setForm(prev => ({ ...prev, category: e.target.value }))} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none">
+                  {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description</label>
+                <input type="text" value={form.description} onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))} placeholder="Expense description" className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Amount ($)</label>
+                <input type="number" step="0.01" value={form.amount} onChange={e => setForm(prev => ({ ...prev, amount: e.target.value }))} placeholder="0.00" className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Payee Name</label>
+                <input type="text" value={form.payee_name} onChange={e => setForm(prev => ({ ...prev, payee_name: e.target.value }))} placeholder="Who was paid" className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Creator (optional)</label>
+                  <select value={form.creator_id} onChange={e => setForm(prev => ({ ...prev, creator_id: e.target.value }))} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none">
+                    <option value="">None</option>
+                    {(creators || []).map(c => <option key={c.id} value={c.id}>{c.display_name || c.name || c.artist_name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Contract (optional)</label>
+                  <select value={form.contract_id} onChange={e => setForm(prev => ({ ...prev, contract_id: e.target.value }))} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none">
+                    <option value="">None</option>
+                    {(contracts || []).map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Expense Date</label>
+                <input type="date" value={form.expense_date} onChange={e => setForm(prev => ({ ...prev, expense_date: e.target.value }))} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Payment Method</label>
+                  <input type="text" value={form.payment_method} onChange={e => setForm(prev => ({ ...prev, payment_method: e.target.value }))} placeholder="e.g. Wire, Check" className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Invoice Reference</label>
+                  <input type="text" value={form.invoice_reference} onChange={e => setForm(prev => ({ ...prev, invoice_reference: e.target.value }))} placeholder="INV-001" className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Budget Source</label>
+                <input type="text" value={form.budget_source} onChange={e => setForm(prev => ({ ...prev, budget_source: e.target.value }))} placeholder="e.g. Client Budget, Label Budget" className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Notes</label>
+                <textarea value={form.notes} onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))} rows={3} placeholder="Optional notes..." className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none resize-none" />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
+                <button
+                  onClick={handleCreate}
+                  disabled={!form.description || !form.amount || creating}
+                  className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium disabled:opacity-50"
+                >
+                  {creating ? 'Creating...' : 'Add Expense'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PaymentsSubTab({ orgId, creators, contracts }) {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -948,7 +1263,7 @@ function PaymentsTab({ orgId, creators, contracts }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-[#3D4A44]">Payments</h3>
+        <h3 className="text-lg font-semibold text-[#3D4A44]">Royalty Payments</h3>
         <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
           <PlusIcon className="w-4 h-4" /> Create Payment
         </button>
@@ -1526,7 +1841,7 @@ export default function RoyaltiesPage() {
         {activeTab === 'dashboard' && <DashboardTab orgId={orgId} />}
         {activeTab === 'statements' && <StatementsTab orgId={orgId} songs={songs} />}
         {activeTab === 'earnings' && <EarningsTab orgId={orgId} />}
-        {activeTab === 'payments' && <PaymentsTab orgId={orgId} creators={creators} contracts={contracts} />}
+        {activeTab === 'money_out' && <MoneyOutTab orgId={orgId} creators={creators} contracts={contracts} />}
         {activeTab === 'fees' && <FeesAdvancesTab orgId={orgId} creators={creators} />}
       </div>
     </div>

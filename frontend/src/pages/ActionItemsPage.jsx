@@ -22,7 +22,9 @@ import {
   LinkIcon,
   BoltIcon,
   EnvelopeIcon,
-  ArrowDownTrayIcon
+  ArrowDownTrayIcon,
+  UserIcon,
+  ArrowUpIcon
 } from '@heroicons/react/24/outline'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 
@@ -106,6 +108,7 @@ export default function ActionItemsPage() {
   const [orgId, setOrgId] = useState(null)
   const [actions, setActions] = useState([])
   const [creators, setCreators] = useState([])
+  const [members, setMembers] = useState([])
   const [songs, setSongs] = useState([])
   const [summary, setSummary] = useState({ total_pending: 0, overdue: 0, due_this_week: 0, high_priority: 0, by_entity_type: {}, by_action_type: {} })
   const [loading, setLoading] = useState(true)
@@ -141,11 +144,20 @@ export default function ActionItemsPage() {
     work_id: '',
     release_id: '',
     contract_id: '',
-    placement_id: ''
+    placement_id: '',
+    assigned_to_user_id: ''
   })
+  const [showScrollTop, setShowScrollTop] = useState(false)
+  const [filterAssignedTo, setFilterAssignedTo] = useState('')
 
   useEffect(() => {
     loadInitialData()
+  }, [])
+
+  useEffect(() => {
+    const handleScroll = () => setShowScrollTop(window.scrollY > 400)
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
   const loadInitialData = async () => {
@@ -155,13 +167,15 @@ export default function ActionItemsPage() {
       if (!id) { setLoading(false); return }
       setOrgId(id)
 
-      const [creatorsRes, songsRes] = await Promise.all([
+      const [creatorsRes, songsRes, membersRes] = await Promise.all([
         axios.get(`/api/creators/org/${id}`),
-        axios.get(`/api/songs/org/${id}?limit=1000`)
+        axios.get(`/api/songs/org/${id}?limit=1000`),
+        axios.get(`/api/organizations/${id}/members`)
       ])
 
       setCreators(creatorsRes.data)
       setSongs(Array.isArray(songsRes.data) ? songsRes.data : [])
+      setMembers(membersRes.data.members || membersRes.data || [])
 
       await Promise.all([
         loadActions(id),
@@ -220,7 +234,8 @@ export default function ActionItemsPage() {
         contract_id: newAction.contract_id ? parseInt(newAction.contract_id) : null,
         placement_id: newAction.placement_id ? parseInt(newAction.placement_id) : null,
         entity_type: newAction.entity_type || null,
-        deadline: newAction.deadline || null
+        deadline: newAction.deadline || null,
+        assigned_to_user_id: newAction.assigned_to_user_id ? parseInt(newAction.assigned_to_user_id) : null
       })
       setShowAddForm(false)
       setNewAction({
@@ -236,7 +251,8 @@ export default function ActionItemsPage() {
         work_id: '',
         release_id: '',
         contract_id: '',
-        placement_id: ''
+        placement_id: '',
+        assigned_to_user_id: ''
       })
       await Promise.all([loadActions(), loadSummary()])
     } catch (error) {
@@ -261,6 +277,17 @@ export default function ActionItemsPage() {
       await Promise.all([loadActions(), loadSummary()])
     } catch (error) {
       console.error('Failed to delete action:', error)
+    }
+  }
+
+  const handleAssignAction = async (actionId, userId) => {
+    try {
+      await axios.put(`/api/actions/${actionId}`, {
+        assigned_to_user_id: userId ? parseInt(userId) : null
+      })
+      await loadActions()
+    } catch (error) {
+      console.error('Failed to assign action:', error)
     }
   }
 
@@ -309,6 +336,7 @@ export default function ActionItemsPage() {
 
   const filteredActions = actions.filter(action => {
     if (filterType && action.action_type !== filterType) return false
+    if (filterAssignedTo && String(action.assigned_to_user_id) !== filterAssignedTo) return false
     return true
   })
 
@@ -330,7 +358,7 @@ export default function ActionItemsPage() {
     }
   })
 
-  const hasActiveFilters = filterStatus || filterPriority || filterCreator || filterType || filterEntityType
+  const hasActiveFilters = filterStatus || filterPriority || filterCreator || filterType || filterEntityType || filterAssignedTo
 
   const clearFilters = () => {
     setFilterStatus('')
@@ -338,6 +366,7 @@ export default function ActionItemsPage() {
     setFilterCreator('')
     setFilterType('')
     setFilterEntityType('')
+    setFilterAssignedTo('')
   }
 
   const uniqueTypes = [...new Set(actions.map(a => a.action_type))]
@@ -664,6 +693,17 @@ export default function ActionItemsPage() {
             ))}
           </select>
 
+          <select
+            value={filterAssignedTo}
+            onChange={(e) => setFilterAssignedTo(e.target.value)}
+            className="text-sm px-3 py-1.5 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44] max-w-[200px]"
+          >
+            <option value="">All Assignees</option>
+            {members.map(m => (
+              <option key={m.user_id || m.id} value={m.user_id || m.id}>{m.username || m.email || m.name}</option>
+            ))}
+          </select>
+
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
@@ -873,6 +913,20 @@ export default function ActionItemsPage() {
               </div>
 
               <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Assign To</label>
+                <select
+                  value={newAction.assigned_to_user_id}
+                  onChange={(e) => setNewAction(prev => ({...prev, assigned_to_user_id: e.target.value}))}
+                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                >
+                  <option value="">Unassigned</option>
+                  {members.map(m => (
+                    <option key={m.user_id || m.id} value={m.user_id || m.id}>{m.username || m.email || m.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-[#3D4A44] mb-1">Song (optional)</label>
                 <select
                   value={newAction.song_id}
@@ -1056,6 +1110,13 @@ export default function ActionItemsPage() {
                             </span>
                           )}
 
+                          {action.assigned_to_name && (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[rgba(91,138,114,0.08)] text-[#5B8A72] font-medium">
+                              <UserIcon className="w-3 h-3" />
+                              {action.assigned_to_name}
+                            </span>
+                          )}
+
                           <span className="inline-flex items-center text-[#7A8580]">
                             <CalendarIcon className="w-3 h-3 mr-1" />
                             {action.deadline ? (
@@ -1096,6 +1157,19 @@ export default function ActionItemsPage() {
 
                     <div className="flex items-center space-x-1 ml-4">
                       {!isCompleted && (
+                        <select
+                          value={action.assigned_to_user_id || ''}
+                          onChange={(e) => handleAssignAction(action.id, e.target.value)}
+                          className="text-xs px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg bg-white text-[#3D4A44] focus:ring-1 focus:ring-[#5B8A72] focus:border-transparent max-w-[120px]"
+                          title="Assign to"
+                        >
+                          <option value="">Assign...</option>
+                          {members.map(m => (
+                            <option key={m.user_id || m.id} value={m.user_id || m.id}>{m.username || m.email || m.name}</option>
+                          ))}
+                        </select>
+                      )}
+                      {!isCompleted && (
                         <button
                           onClick={() => handleCompleteAction(action.id)}
                           className="p-2 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors"
@@ -1119,6 +1193,15 @@ export default function ActionItemsPage() {
           )}
         </div>
       </div>
+
+      {showScrollTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-6 right-6 z-50 p-3 bg-[#5B8A72] text-white rounded-full shadow-lg hover:bg-[#4A7A62] transition-all"
+        >
+          <ArrowUpIcon className="w-5 h-5" />
+        </button>
+      )}
     </div>
   )
 }

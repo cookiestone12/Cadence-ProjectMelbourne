@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from pydantic import BaseModel
 from typing import List, Optional
-from ..models import get_db, Work, WorkTrack, WorkCredit, Song, Creator, OrganizationMember, User
+from ..models import get_db, Work, WorkFolder, WorkTrack, WorkCredit, Song, Creator, OrganizationMember, User
 from ..utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/works", tags=["works"])
@@ -41,6 +41,18 @@ class WorkCreditCreate(BaseModel):
     role: str
     share_percentage: Optional[float] = None
     publisher_name: Optional[str] = None
+
+
+class FolderCreate(BaseModel):
+    name: str
+
+
+class FolderUpdate(BaseModel):
+    name: str
+
+
+class WorkMove(BaseModel):
+    folder_id: Optional[int] = None
 
 
 def verify_org_access(user: User, org_id: int, db: Session):
@@ -89,6 +101,7 @@ def list_works(
             "language": w.language,
             "genre": w.genre,
             "notes": w.notes,
+            "folder_id": w.folder_id,
             "track_count": track_count,
             "credit_count": credit_count,
             "created_at": w.created_at.isoformat() if w.created_at else None,
@@ -140,6 +153,7 @@ def get_work(work_id: int, db: Session = Depends(get_db), current_user: User = D
         "genre": work.genre,
         "notes": work.notes,
         "lyrics": work.lyrics,
+        "folder_id": work.folder_id,
         "tracks": tracks,
         "credits": credits,
         "created_at": work.created_at.isoformat() if work.created_at else None,
@@ -269,3 +283,68 @@ def remove_work_credit(work_id: int, credit_id: int, db: Session = Depends(get_d
     db.delete(credit)
     db.commit()
     return {"message": "Credit removed from work"}
+
+
+@router.get("/org/{org_id}/folders")
+def list_folders(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    verify_org_access(current_user, org_id, db)
+    folders = db.query(WorkFolder).filter(WorkFolder.organization_id == org_id).order_by(WorkFolder.name).all()
+    results = []
+    for f in folders:
+        work_count = db.query(Work).filter(Work.folder_id == f.id).count()
+        results.append({
+            "id": f.id,
+            "name": f.name,
+            "parent_folder_id": f.parent_folder_id,
+            "work_count": work_count,
+            "created_at": f.created_at.isoformat() if f.created_at else None,
+        })
+    return results
+
+
+@router.post("/org/{org_id}/folders")
+def create_folder(org_id: int, data: FolderCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    verify_org_access(current_user, org_id, db)
+    folder = WorkFolder(organization_id=org_id, name=data.name)
+    db.add(folder)
+    db.commit()
+    db.refresh(folder)
+    return {"id": folder.id, "name": folder.name, "message": "Folder created successfully"}
+
+
+@router.put("/folders/{folder_id}")
+def rename_folder(folder_id: int, data: FolderUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    folder = db.query(WorkFolder).filter(WorkFolder.id == folder_id).first()
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    verify_org_access(current_user, folder.organization_id, db)
+    folder.name = data.name
+    db.commit()
+    return {"id": folder.id, "name": folder.name, "message": "Folder renamed successfully"}
+
+
+@router.delete("/folders/{folder_id}")
+def delete_folder(folder_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    folder = db.query(WorkFolder).filter(WorkFolder.id == folder_id).first()
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    verify_org_access(current_user, folder.organization_id, db)
+    db.query(Work).filter(Work.folder_id == folder_id).update({"folder_id": None})
+    db.delete(folder)
+    db.commit()
+    return {"message": "Folder deleted successfully"}
+
+
+@router.put("/{work_id}/move")
+def move_work(work_id: int, data: WorkMove, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    work = db.query(Work).filter(Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="Work not found")
+    verify_org_access(current_user, work.organization_id, db)
+    if data.folder_id is not None:
+        folder = db.query(WorkFolder).filter(WorkFolder.id == data.folder_id).first()
+        if not folder:
+            raise HTTPException(status_code=404, detail="Folder not found")
+    work.folder_id = data.folder_id
+    db.commit()
+    return {"message": "Work moved successfully"}

@@ -15,8 +15,10 @@ import {
   BuildingOfficeIcon,
   EyeIcon,
   EyeSlashIcon,
-  ClipboardDocumentListIcon
+  ClipboardDocumentListIcon,
+  ShareIcon,
 } from '@heroicons/react/24/outline'
+import ClientSharingTab from '../components/ClientSharingModal'
 
 export default function TenantAdminPage() {
   const [activeTab, setActiveTab] = useState('members')
@@ -85,6 +87,7 @@ export default function TenantAdminPage() {
   const tabs = [
     { id: 'members', label: 'Team Members', icon: UsersIcon },
     { id: 'branding', label: 'Organization Branding', icon: BuildingOfficeIcon },
+    { id: 'sharing', label: 'Client Sharing', icon: ShareIcon },
     { id: 'audit', label: 'Activity Log', icon: ClipboardDocumentListIcon },
   ]
 
@@ -146,6 +149,8 @@ export default function TenantAdminPage() {
       {activeTab === 'branding' && (
         <BrandingTab branding={branding} onSave={(b) => { setBranding(b); showMsg('Branding updated') }} onError={(e) => showMsg(e, true)} />
       )}
+
+      {activeTab === 'sharing' && <ClientSharingTab />}
 
       {activeTab === 'audit' && <AuditLogTab />}
 

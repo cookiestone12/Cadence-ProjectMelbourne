@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import axios from 'axios'
 import {
   MagnifyingGlassIcon, PlusIcon, XMarkIcon, TrashIcon,
-  PencilIcon, MusicalNoteIcon, UserGroupIcon, LinkIcon
+  PencilIcon, MusicalNoteIcon, UserGroupIcon, LinkIcon,
+  FolderIcon, FolderOpenIcon, ChevronDownIcon,
+  EllipsisVerticalIcon, ArrowsUpDownIcon
 } from '@heroicons/react/24/outline'
 
 export default function WorksPage() {
@@ -26,8 +28,33 @@ export default function WorksPage() {
   const [rightsData, setRightsData] = useState([])
   const [rightsLoading, setRightsLoading] = useState(false)
 
+  const [folders, setFolders] = useState([])
+  const [activeFolderId, setActiveFolderId] = useState('all')
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+  const [folderMenuId, setFolderMenuId] = useState(null)
+  const [renamingFolderId, setRenamingFolderId] = useState(null)
+  const [renameFolderName, setRenameFolderName] = useState('')
+
+  const [genreFilter, setGenreFilter] = useState('')
+  const [creditsFilter, setCreditsFilter] = useState('')
+  const [tracksFilter, setTracksFilter] = useState('')
+  const [sortOption, setSortOption] = useState('title_asc')
+
+  const folderMenuRef = useRef(null)
+
   useEffect(() => {
     loadData()
+  }, [])
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (folderMenuRef.current && !folderMenuRef.current.contains(e.target)) {
+        setFolderMenuId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   async function loadData() {
@@ -37,15 +64,17 @@ export default function WorksPage() {
       if (!orgId) { setLoading(false); return }
       setOrganizationId(orgId)
 
-      const [worksResponse, songsResponse, creatorsResponse] = await Promise.all([
+      const [worksResponse, songsResponse, creatorsResponse, foldersResponse] = await Promise.all([
         axios.get(`/api/works/org/${orgId}?limit=500`),
         axios.get(`/api/songs/org/${orgId}?limit=1000`),
-        axios.get(`/api/creators/org/${orgId}`)
+        axios.get(`/api/creators/org/${orgId}`),
+        axios.get(`/api/works/org/${orgId}/folders`)
       ])
 
       setWorks(worksResponse.data.works || [])
       setSongs(songsResponse.data)
       setCreators(creatorsResponse.data)
+      setFolders(foldersResponse.data || [])
     } catch (error) {
       console.error('Failed to load works:', error)
     } finally {
@@ -53,15 +82,47 @@ export default function WorksPage() {
     }
   }
 
-  const filteredWorks = works.filter(work => {
-    if (workTypeFilter && (work.work_type || 'TRACK') !== workTypeFilter) return false
-    if (!searchTerm) return true
-    const term = searchTerm.toLowerCase()
-    return (
-      work.title.toLowerCase().includes(term) ||
-      (work.iswc && work.iswc.toLowerCase().includes(term))
-    )
-  })
+  const genres = useMemo(() => {
+    const genreSet = new Set()
+    works.forEach(w => { if (w.genre) genreSet.add(w.genre) })
+    return Array.from(genreSet).sort()
+  }, [works])
+
+  const filteredWorks = useMemo(() => {
+    let result = works.filter(work => {
+      if (workTypeFilter && (work.work_type || 'TRACK') !== workTypeFilter) return false
+      if (genreFilter && work.genre !== genreFilter) return false
+      if (creditsFilter === 'has' && work.credit_count === 0) return false
+      if (creditsFilter === 'no' && work.credit_count > 0) return false
+      if (tracksFilter === 'has' && work.track_count === 0) return false
+      if (tracksFilter === 'no' && work.track_count > 0) return false
+
+      if (activeFolderId === 'unfiled' && work.folder_id != null) return false
+      if (activeFolderId !== 'all' && activeFolderId !== 'unfiled') {
+        if (work.folder_id !== parseInt(activeFolderId)) return false
+      }
+
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        return (
+          work.title.toLowerCase().includes(term) ||
+          (work.iswc && work.iswc.toLowerCase().includes(term))
+        )
+      }
+      return true
+    })
+
+    result.sort((a, b) => {
+      switch (sortOption) {
+        case 'title_desc': return b.title.localeCompare(a.title)
+        case 'newest': return (b.created_at || '').localeCompare(a.created_at || '')
+        case 'oldest': return (a.created_at || '').localeCompare(b.created_at || '')
+        default: return a.title.localeCompare(b.title)
+      }
+    })
+
+    return result
+  }, [works, workTypeFilter, genreFilter, creditsFilter, tracksFilter, activeFolderId, searchTerm, sortOption])
 
   async function openWorkDetail(work) {
     setSelectedWork(work)
@@ -193,6 +254,54 @@ export default function WorksPage() {
     }
   }
 
+  async function handleCreateFolder() {
+    if (!newFolderName.trim() || !organizationId) return
+    try {
+      await axios.post(`/api/works/org/${organizationId}/folders`, { name: newFolderName.trim() })
+      setNewFolderName('')
+      setShowNewFolderInput(false)
+      await loadData()
+    } catch (error) {
+      console.error('Failed to create folder:', error)
+    }
+  }
+
+  async function handleRenameFolder(folderId) {
+    if (!renameFolderName.trim()) return
+    try {
+      await axios.put(`/api/works/folders/${folderId}`, { name: renameFolderName.trim() })
+      setRenamingFolderId(null)
+      setRenameFolderName('')
+      await loadData()
+    } catch (error) {
+      console.error('Failed to rename folder:', error)
+    }
+  }
+
+  async function handleDeleteFolder(folderId) {
+    try {
+      await axios.delete(`/api/works/folders/${folderId}`)
+      if (activeFolderId === String(folderId)) setActiveFolderId('all')
+      setFolderMenuId(null)
+      await loadData()
+    } catch (error) {
+      console.error('Failed to delete folder:', error)
+    }
+  }
+
+  async function handleMoveWork(workId, folderId) {
+    try {
+      await axios.put(`/api/works/${workId}/move`, { folder_id: folderId })
+      await loadData()
+      if (workDetail && workDetail.id === workId) {
+        const res = await axios.get(`/api/works/${workId}`)
+        setWorkDetail(res.data)
+      }
+    } catch (error) {
+      console.error('Failed to move work:', error)
+    }
+  }
+
   const linkedTrackIds = workDetail?.tracks?.map(t => t.song_id) || []
   const availableTracks = songs.filter(s => {
     if (linkedTrackIds.includes(s.id)) return false
@@ -200,6 +309,8 @@ export default function WorksPage() {
     return s.title.toLowerCase().includes(trackSearch.toLowerCase()) ||
       s.primary_artist.toLowerCase().includes(trackSearch.toLowerCase())
   })
+
+  const unfiledCount = works.filter(w => w.folder_id == null).length
 
   if (loading) {
     return (
@@ -210,7 +321,7 @@ export default function WorksPage() {
   }
 
   return (
-    <div className="p-4 sm:p-8">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-full">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Works</h1>
@@ -227,9 +338,129 @@ export default function WorksPage() {
         </div>
       </div>
 
-      <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
-        <div className="flex items-center space-x-4">
-          <div className="flex-1 relative">
+      <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-3 mb-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setActiveFolderId('all')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              activeFolderId === 'all'
+                ? 'bg-[#5B8A72] text-white'
+                : 'text-[#3D4A44] hover:bg-[#EEF1EC]'
+            }`}
+          >
+            <FolderIcon className="w-4 h-4" />
+            <span>All Works</span>
+            <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeFolderId === 'all' ? 'bg-white/20' : 'bg-[rgba(59,77,67,0.08)]'}`}>{works.length}</span>
+          </button>
+          <button
+            onClick={() => setActiveFolderId('unfiled')}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              activeFolderId === 'unfiled'
+                ? 'bg-[#5B8A72] text-white'
+                : 'text-[#3D4A44] hover:bg-[#EEF1EC]'
+            }`}
+          >
+            <FolderOpenIcon className="w-4 h-4" />
+            <span>Unfiled</span>
+            <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeFolderId === 'unfiled' ? 'bg-white/20' : 'bg-[rgba(59,77,67,0.08)]'}`}>{unfiledCount}</span>
+          </button>
+
+          <div className="w-px h-6 bg-[rgba(59,77,67,0.12)]" />
+
+          {folders.map(folder => (
+            <div key={folder.id} className="relative">
+              {renamingFolderId === folder.id ? (
+                <form onSubmit={(e) => { e.preventDefault(); handleRenameFolder(folder.id) }} className="flex items-center">
+                  <input
+                    type="text"
+                    value={renameFolderName}
+                    onChange={(e) => setRenameFolderName(e.target.value)}
+                    onBlur={() => { setRenamingFolderId(null); setRenameFolderName('') }}
+                    autoFocus
+                    className="px-2 py-1 text-sm border border-[#5B8A72] rounded-lg focus:ring-2 focus:ring-[#5B8A72] bg-white text-[#3D4A44] w-28"
+                  />
+                </form>
+              ) : (
+                <button
+                  onClick={() => setActiveFolderId(String(folder.id))}
+                  onContextMenu={(e) => { e.preventDefault(); setFolderMenuId(folderMenuId === folder.id ? null : folder.id) }}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors group ${
+                    activeFolderId === String(folder.id)
+                      ? 'bg-[#5B8A72] text-white'
+                      : 'text-[#3D4A44] hover:bg-[#EEF1EC]'
+                  }`}
+                >
+                  <FolderIcon className="w-4 h-4" />
+                  <span>{folder.name}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeFolderId === String(folder.id) ? 'bg-white/20' : 'bg-[rgba(59,77,67,0.08)]'}`}>{folder.work_count}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setFolderMenuId(folderMenuId === folder.id ? null : folder.id) }}
+                    className={`ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity ${
+                      activeFolderId === String(folder.id) ? 'hover:bg-white/20' : 'hover:bg-[rgba(59,77,67,0.08)]'
+                    }`}
+                  >
+                    <EllipsisVerticalIcon className="w-3.5 h-3.5" />
+                  </button>
+                </button>
+              )}
+
+              {folderMenuId === folder.id && (
+                <div ref={folderMenuRef} className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-[rgba(59,77,67,0.12)] py-1 z-20 w-36">
+                  <button
+                    onClick={() => {
+                      setRenamingFolderId(folder.id)
+                      setRenameFolderName(folder.name)
+                      setFolderMenuId(null)
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-sm text-[#3D4A44] hover:bg-[#EEF1EC] flex items-center space-x-2"
+                  >
+                    <PencilIcon className="w-3.5 h-3.5" />
+                    <span>Rename</span>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteFolder(folder.id)}
+                    className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                  >
+                    <TrashIcon className="w-3.5 h-3.5" />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {showNewFolderInput ? (
+            <form onSubmit={(e) => { e.preventDefault(); handleCreateFolder() }} className="flex items-center space-x-1">
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="Folder name"
+                autoFocus
+                className="px-2 py-1 text-sm border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] bg-white text-[#3D4A44] w-28"
+              />
+              <button type="submit" className="p-1 text-[#5B8A72] hover:bg-[#EEF1EC] rounded">
+                <PlusIcon className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={() => { setShowNewFolderInput(false); setNewFolderName('') }} className="p-1 text-[#7A8580] hover:bg-[#EEF1EC] rounded">
+                <XMarkIcon className="w-4 h-4" />
+              </button>
+            </form>
+          ) : (
+            <button
+              onClick={() => setShowNewFolderInput(true)}
+              className="flex items-center space-x-1 px-2 py-1.5 rounded-lg text-sm text-[#5B8A72] hover:bg-[#EEF1EC] transition-colors"
+            >
+              <PlusIcon className="w-4 h-4" />
+              <span>New Folder</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[200px] relative">
             <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7A8580]" />
             <input
               type="text"
@@ -248,64 +479,117 @@ export default function WorksPage() {
             <option value="DEMO">Demo</option>
             <option value="TRACK">Track</option>
           </select>
+          <select
+            value={genreFilter}
+            onChange={(e) => setGenreFilter(e.target.value)}
+            className="border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44] text-sm"
+          >
+            <option value="">All Genres</option>
+            {genres.map(g => <option key={g} value={g}>{g}</option>)}
+          </select>
+          <select
+            value={creditsFilter}
+            onChange={(e) => setCreditsFilter(e.target.value)}
+            className="border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44] text-sm"
+          >
+            <option value="">Credits: Any</option>
+            <option value="has">Has Credits</option>
+            <option value="no">No Credits</option>
+          </select>
+          <select
+            value={tracksFilter}
+            onChange={(e) => setTracksFilter(e.target.value)}
+            className="border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44] text-sm"
+          >
+            <option value="">Tracks: Any</option>
+            <option value="has">Has Tracks</option>
+            <option value="no">No Tracks</option>
+          </select>
+          <div className="flex items-center space-x-1">
+            <ArrowsUpDownIcon className="w-4 h-4 text-[#7A8580]" />
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value)}
+              className="border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44] text-sm"
+            >
+              <option value="title_asc">Title (A-Z)</option>
+              <option value="title_desc">Title (Z-A)</option>
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+            </select>
+          </div>
         </div>
       </div>
 
       <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full table-fixed">
             <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">ISWC</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Genre</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Linked Tracks</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Credits</th>
+                <th className="w-[35%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
+                <th className="w-[10%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Type</th>
+                <th className="w-[15%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">ISWC</th>
+                <th className="w-[15%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Genre</th>
+                <th className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Folder</th>
+                <th className="w-[7%] px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Tracks</th>
+                <th className="w-[6%] px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Credits</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
-              {filteredWorks.map((work) => (
-                <tr
-                  key={work.id}
-                  onClick={() => openWorkDetail(work)}
-                  className="hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-[#3D4A44]">{work.title}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                      (work.work_type || 'TRACK') === 'DEMO'
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-sky-100 text-sky-700'
-                    }`}>
-                      {(work.work_type || 'TRACK') === 'DEMO' ? 'Demo' : 'Track'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-[#7A8580]">
-                    {work.iswc || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-[#7A8580]">
-                    {work.genre || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="inline-flex items-center space-x-1 text-sm text-[#7A8580]">
-                      <MusicalNoteIcon className="w-4 h-4" />
-                      <span>{work.track_count}</span>
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="inline-flex items-center space-x-1 text-sm text-[#7A8580]">
-                      <UserGroupIcon className="w-4 h-4" />
-                      <span>{work.credit_count}</span>
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {filteredWorks.map((work) => {
+                const workFolder = folders.find(f => f.id === work.folder_id)
+                return (
+                  <tr
+                    key={work.id}
+                    onClick={() => openWorkDetail(work)}
+                    className="hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
+                  >
+                    <td className="px-4 py-3 min-w-0">
+                      <div className="font-medium text-[#3D4A44] truncate">{work.title}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                        (work.work_type || 'TRACK') === 'DEMO'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-sky-100 text-sky-700'
+                      }`}>
+                        {(work.work_type || 'TRACK') === 'DEMO' ? 'Demo' : 'Track'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580] min-w-0">
+                      <span className="truncate block">{work.iswc || '-'}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580] min-w-0">
+                      <span className="truncate block">{work.genre || '-'}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580] min-w-0">
+                      {workFolder ? (
+                        <span className="inline-flex items-center space-x-1 text-xs bg-[#EEF1EC] px-2 py-0.5 rounded-full truncate">
+                          <FolderIcon className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">{workFolder.name}</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-[#7A8580]">-</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="inline-flex items-center space-x-1 text-sm text-[#7A8580]">
+                        <MusicalNoteIcon className="w-4 h-4" />
+                        <span>{work.track_count}</span>
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="inline-flex items-center space-x-1 text-sm text-[#7A8580]">
+                        <UserGroupIcon className="w-4 h-4" />
+                        <span>{work.credit_count}</span>
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
               {filteredWorks.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="px-6 py-12 text-center text-[#7A8580]">
+                  <td colSpan="7" className="px-6 py-12 text-center text-[#7A8580]">
                     No works found
                   </td>
                 </tr>
@@ -575,6 +859,19 @@ export default function WorksPage() {
                         <p className="text-sm text-[#3D4A44]">{workDetail.notes}</p>
                       </div>
                     )}
+                    <div className="border-t border-[rgba(59,77,67,0.08)] pt-4">
+                      <p className="text-xs font-medium text-[#7A8580] mb-2">Move to Folder</p>
+                      <select
+                        value={workDetail.folder_id || ''}
+                        onChange={(e) => handleMoveWork(workDetail.id, e.target.value ? parseInt(e.target.value) : null)}
+                        className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                      >
+                        <option value="">No Folder (Unfiled)</option>
+                        {folders.map(f => (
+                          <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 )
               )}

@@ -18,7 +18,8 @@ import {
   BanknotesIcon,
   FilmIcon,
   BuildingOfficeIcon,
-  UserGroupIcon
+  UserGroupIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline'
 import NotificationBell from './NotificationBell'
 
@@ -63,6 +64,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/actions', label: 'Actions', icon: ClipboardDocumentCheckIcon },
     { path: '/royalties', label: 'Royalties', icon: BanknotesIcon },
     { path: '/placements', label: 'Sync Placements', icon: FilmIcon },
+    { path: '/sync-reports', label: 'Sync Reports', icon: DocumentDuplicateIcon },
     { path: '/registration-reports', label: 'Registration Reports', icon: DocumentTextIcon },
     { path: '/reports', label: 'Reports', icon: ChartBarIcon },
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
