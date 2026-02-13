@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline'
+import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, CloudArrowUpIcon, CloudIcon, FolderIcon, CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/outline'
 
 const NOTIFICATION_TYPES = {
   MISSING_ISRC: { label: 'Missing ISRC', description: 'Alert when songs are missing ISRC codes' },
@@ -44,12 +44,26 @@ export default function Settings() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [integrations, setIntegrations] = useState({})
+  const [connectingDropbox, setConnectingDropbox] = useState(false)
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false)
+  const [folderContents, setFolderContents] = useState([])
+  const [currentFolderPath, setCurrentFolderPath] = useState('')
+  const [loadingFolders, setLoadingFolders] = useState(false)
+  const [testingConnection, setTestingConnection] = useState(false)
 
   useEffect(() => {
     fetchUserInfo()
     fetchPreferences()
     fetchOrgData()
     fetchEmailDigest()
+    fetchIntegrations()
+
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('tab') === 'integrations') setActiveTab('integrations')
+    if (params.get('dropbox_callback') === 'true' && params.get('code')) {
+      handleDropboxCallback(params.get('code'))
+    }
   }, [])
 
   const fetchUserInfo = async () => {
@@ -226,6 +240,111 @@ export default function Settings() {
     }
   }
 
+  const fetchIntegrations = async () => {
+    try {
+      const response = await axios.get('/api/integrations/status')
+      const raw = response.data?.integrations || []
+      const mapped = {}
+      raw.forEach(i => {
+        const key = (i.provider || '').toLowerCase()
+        mapped[key] = {
+          connected: true,
+          account_email: i.account_email,
+          display_name: i.account_display_name,
+          default_folder: i.default_folder_path,
+          connected_at: i.connected_at,
+        }
+      })
+      setIntegrations(mapped)
+    } catch (error) {
+      console.error('Error fetching integrations:', error)
+    }
+  }
+
+  const handleDropboxCallback = async (code) => {
+    setConnectingDropbox(true)
+    try {
+      const redirectUri = `${window.location.origin}/settings?tab=integrations&dropbox_callback=true`
+      await axios.post('/api/integrations/dropbox/callback', { code, redirect_uri: redirectUri })
+      await fetchIntegrations()
+      setMessage('Dropbox connected successfully!')
+      setTimeout(() => setMessage(''), 3000)
+      window.history.replaceState({}, document.title, '/settings?tab=integrations')
+    } catch (error) {
+      console.error('Error completing Dropbox OAuth:', error)
+      setMessage('Failed to connect Dropbox')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setConnectingDropbox(false)
+    }
+  }
+
+  const connectDropbox = async () => {
+    setConnectingDropbox(true)
+    try {
+      const redirectUri = `${window.location.origin}/settings?tab=integrations&dropbox_callback=true`
+      const response = await axios.get(`/api/integrations/dropbox/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}`)
+      window.location.href = response.data.auth_url || response.data.url
+    } catch (error) {
+      console.error('Error getting Dropbox auth URL:', error)
+      setMessage('Failed to start Dropbox connection')
+      setTimeout(() => setMessage(''), 3000)
+      setConnectingDropbox(false)
+    }
+  }
+
+  const disconnectDropbox = async () => {
+    try {
+      await axios.delete('/api/integrations/dropbox')
+      await fetchIntegrations()
+      setMessage('Dropbox disconnected')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      console.error('Error disconnecting Dropbox:', error)
+      setMessage('Failed to disconnect Dropbox')
+    }
+  }
+
+  const browseFolders = async (path = '') => {
+    setLoadingFolders(true)
+    try {
+      const response = await axios.get(`/api/integrations/dropbox/files?path=${encodeURIComponent(path)}`)
+      setFolderContents(response.data?.files || response.data?.entries || [])
+      setCurrentFolderPath(path)
+    } catch (error) {
+      console.error('Error browsing folders:', error)
+    } finally {
+      setLoadingFolders(false)
+    }
+  }
+
+  const setDefaultFolder = async (path) => {
+    try {
+      await axios.put('/api/integrations/dropbox/default-folder', { path })
+      await fetchIntegrations()
+      setFolderPickerOpen(false)
+      setMessage('Default folder updated')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      console.error('Error setting default folder:', error)
+      setMessage('Failed to update default folder')
+    }
+  }
+
+  const testDropboxConnection = async () => {
+    setTestingConnection(true)
+    try {
+      const response = await axios.get('/api/integrations/dropbox/files?path=')
+      setMessage('Dropbox connection is working!')
+      setTimeout(() => setMessage(''), 3000)
+    } catch (error) {
+      setMessage('Dropbox connection test failed')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setTestingConnection(false)
+    }
+  }
+
   const handleChangePassword = async (e) => {
     e.preventDefault()
     setPasswordError('')
@@ -312,6 +431,19 @@ export default function Settings() {
               >
                 <BuildingOfficeIcon className="w-5 h-5" />
                 <span>Organization</span>
+              </button>
+            )}
+            {isOrgAdmin && (
+              <button
+                onClick={() => setActiveTab('integrations')}
+                className={`flex items-center space-x-2 pb-3 px-1 border-b-2 font-medium transition-colors ${
+                  activeTab === 'integrations'
+                    ? 'border-[#5B8A72] text-[#5B8A72]'
+                    : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
+                }`}
+              >
+                <CloudArrowUpIcon className="w-5 h-5" />
+                <span>Integrations</span>
               </button>
             )}
           </div>
@@ -808,6 +940,194 @@ export default function Settings() {
                 <li>• When "Allow Override" is disabled, team members cannot change that notification type's settings</li>
                 <li>• The rollup digest provides a consolidated view of all action items across your organization</li>
               </ul>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'integrations' && isOrgAdmin && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-[rgba(91,138,114,0.1)] rounded-xl flex items-center justify-center">
+                    <CloudIcon className="w-7 h-7 text-[#5B8A72]" />
+                  </div>
+                  <div>
+                    <h2 className="text-[22px] font-medium text-[#3D4A44]">Dropbox</h2>
+                    {integrations.dropbox?.connected && (
+                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[12px] font-medium bg-[rgba(91,154,110,0.15)] text-[#5B9A6E]">
+                        <CheckCircleIcon className="w-3.5 h-3.5" />
+                        <span>Connected</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {!integrations.dropbox?.connected ? (
+                <div>
+                  <p className="text-[15px] text-[#7A8580] mb-6">
+                    Connect your Dropbox account to link audio files to songs and releases for AI analysis.
+                  </p>
+                  <button
+                    onClick={connectDropbox}
+                    disabled={connectingDropbox}
+                    className="px-6 py-3 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50 flex items-center space-x-2"
+                  >
+                    <CloudArrowUpIcon className="w-5 h-5" />
+                    <span>{connectingDropbox ? 'Connecting...' : 'Connect Dropbox'}</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  <div className="p-4 bg-[#FAFBF9] rounded-xl">
+                    <div className="grid grid-cols-2 gap-4">
+                      {integrations.dropbox?.account_email && (
+                        <div>
+                          <div className="text-[13px] text-[#7A8580] mb-1">Email</div>
+                          <div className="text-[15px] font-medium text-[#3D4A44]">{integrations.dropbox.account_email}</div>
+                        </div>
+                      )}
+                      {integrations.dropbox?.display_name && (
+                        <div>
+                          <div className="text-[13px] text-[#7A8580] mb-1">Account</div>
+                          <div className="text-[15px] font-medium text-[#3D4A44]">{integrations.dropbox.display_name}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-[#FAFBF9] rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-[13px] text-[#7A8580] mb-1">Default Folder</div>
+                        <div className="text-[15px] font-medium text-[#3D4A44] flex items-center space-x-2">
+                          <FolderIcon className="w-4 h-4 text-[#5B8A72]" />
+                          <span>{integrations.dropbox?.default_folder || '/ (root)'}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => { setFolderPickerOpen(true); browseFolders(integrations.dropbox?.default_folder || ''); }}
+                        className="px-3 py-1.5 text-[13px] font-medium text-[#5B8A72] border border-[#5B8A72] rounded-lg hover:bg-[rgba(91,138,114,0.08)] transition-colors"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={testDropboxConnection}
+                      disabled={testingConnection}
+                      className="px-4 py-2 bg-[#5B8A72] text-white text-[13px] font-medium rounded-lg hover:bg-[#4A7862] transition-colors disabled:opacity-50"
+                    >
+                      {testingConnection ? 'Testing...' : 'Test Connection'}
+                    </button>
+                    <button
+                      onClick={disconnectDropbox}
+                      className="px-4 py-2 bg-white text-[#C47068] text-[13px] font-medium rounded-lg border border-[#C47068] hover:bg-[rgba(196,112,104,0.08)] transition-colors"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Coming Soon</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 opacity-50 cursor-not-allowed">
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="w-10 h-10 bg-[rgba(122,133,128,0.1)] rounded-xl flex items-center justify-center">
+                      <CloudIcon className="w-6 h-6 text-[#7A8580]" />
+                    </div>
+                    <div>
+                      <h4 className="text-[17px] font-medium text-[#3D4A44]">Box</h4>
+                      <span className="text-[12px] text-[#7A8580]">Coming Soon</span>
+                    </div>
+                  </div>
+                  <p className="text-[13px] text-[#7A8580]">
+                    Connect your Box account for cloud file storage integration.
+                  </p>
+                </div>
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 opacity-50 cursor-not-allowed">
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="w-10 h-10 bg-[rgba(122,133,128,0.1)] rounded-xl flex items-center justify-center">
+                      <CloudIcon className="w-6 h-6 text-[#7A8580]" />
+                    </div>
+                    <div>
+                      <h4 className="text-[17px] font-medium text-[#3D4A44]">Google Drive</h4>
+                      <span className="text-[12px] text-[#7A8580]">Coming Soon</span>
+                    </div>
+                  </div>
+                  <p className="text-[13px] text-[#7A8580]">
+                    Connect your Google Drive for seamless file access and sharing.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {folderPickerOpen && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-[18px] shadow-xl w-full max-w-lg max-h-[70vh] flex flex-col">
+              <div className="flex items-center justify-between p-5 border-b border-[rgba(59,77,67,0.08)]">
+                <div>
+                  <h3 className="text-[18px] font-medium text-[#3D4A44]">Select Default Folder</h3>
+                  <p className="text-[13px] text-[#7A8580] mt-0.5">{currentFolderPath || '/ (root)'}</p>
+                </div>
+                <button
+                  onClick={() => setFolderPickerOpen(false)}
+                  className="p-1.5 text-[#7A8580] hover:text-[#3D4A44] rounded-lg hover:bg-[#FAFBF9] transition-colors"
+                >
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                {currentFolderPath && (
+                  <button
+                    onClick={() => {
+                      const parentPath = currentFolderPath.split('/').slice(0, -1).join('/');
+                      browseFolders(parentPath);
+                    }}
+                    className="w-full flex items-center space-x-3 px-3 py-3 rounded-xl hover:bg-[#FAFBF9] transition-colors text-left mb-1"
+                  >
+                    <FolderIcon className="w-5 h-5 text-[#7A8580]" />
+                    <span className="text-[15px] text-[#7A8580]">..</span>
+                  </button>
+                )}
+                {loadingFolders ? (
+                  <div className="flex items-center justify-center py-8 text-[#7A8580]">
+                    <span className="text-[15px]">Loading folders...</span>
+                  </div>
+                ) : (
+                  folderContents
+                    .filter(item => item['.tag'] === 'folder' || item.type === 'folder')
+                    .map((folder, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => browseFolders(folder.path_lower || folder.path || folder.name)}
+                        className="w-full flex items-center space-x-3 px-3 py-3 rounded-xl hover:bg-[#FAFBF9] transition-colors text-left mb-1"
+                      >
+                        <FolderIcon className="w-5 h-5 text-[#5B8A72]" />
+                        <span className="text-[15px] text-[#3D4A44]">{folder.name}</span>
+                      </button>
+                    ))
+                )}
+                {!loadingFolders && folderContents.filter(item => item['.tag'] === 'folder' || item.type === 'folder').length === 0 && (
+                  <div className="text-center py-8 text-[#7A8580] text-[14px]">No subfolders found</div>
+                )}
+              </div>
+              <div className="p-4 border-t border-[rgba(59,77,67,0.08)]">
+                <button
+                  onClick={() => setDefaultFolder(currentFolderPath)}
+                  className="w-full px-4 py-3 bg-[#5B8A72] text-white font-medium rounded-xl hover:bg-[#4A7862] transition-colors"
+                >
+                  Select This Folder
+                </button>
+              </div>
             </div>
           </div>
         )}

@@ -6,7 +6,9 @@ import {
   CalendarIcon, ExclamationTriangleIcon, CheckCircleIcon,
   ChevronLeftIcon, ChevronDownIcon, ChevronUpIcon, ArrowDownTrayIcon, ArrowPathIcon,
   ShieldCheckIcon, ClipboardDocumentCheckIcon, PhotoIcon,
-  InformationCircleIcon, CheckIcon, LinkIcon, DocumentTextIcon
+  InformationCircleIcon, CheckIcon, LinkIcon, DocumentTextIcon,
+  SpeakerWaveIcon, FolderIcon, FolderOpenIcon, ArrowRightIcon,
+  SignalIcon, BoltIcon
 } from '@heroicons/react/24/outline'
 
 const READINESS_TOOLTIPS = {
@@ -74,6 +76,15 @@ export default function ReleasesPage() {
   const [spotifyLoading, setSpotifyLoading] = useState(false)
   const [spotifyError, setSpotifyError] = useState('')
   const [spotifyPreview, setSpotifyPreview] = useState(null)
+  const [releaseAudio, setReleaseAudio] = useState({})
+  const [showBulkLink, setShowBulkLink] = useState(false)
+  const [bulkDropboxFiles, setBulkDropboxFiles] = useState([])
+  const [bulkDropboxPath, setBulkDropboxPath] = useState('')
+  const [bulkDropboxLoading, setBulkDropboxLoading] = useState(false)
+  const [bulkLinking, setBulkLinking] = useState(false)
+  const [dropboxConnected, setDropboxConnected] = useState(false)
+  const [bulkMatches, setBulkMatches] = useState({})
+  const [bulkAnalyzing, setBulkAnalyzing] = useState(false)
   const [createForm, setCreateForm] = useState({
     title: '',
     release_type: 'SINGLE',
@@ -154,6 +165,8 @@ export default function ReleasesPage() {
       const response = await axios.get(`/api/releases/${releaseId}`)
       setDetailData(response.data)
       loadReadiness(releaseId)
+      loadReleaseAudio(releaseId)
+      checkDropboxConnected()
       if (response.data.cover_art_url) {
         fetchArtworkBlob(releaseId).then(url => {
           if (url) {
@@ -390,6 +403,124 @@ export default function ReleasesPage() {
         URL.revokeObjectURL(a.href)
       })
       .catch(err => console.error('Export failed:', err))
+  }
+
+  async function loadReleaseAudio(releaseId) {
+    try {
+      const response = await axios.get(`/api/audio/release/${releaseId}`)
+      const audioMap = {}
+      const tracks = response.data?.tracks || []
+      tracks.forEach(track => {
+        if (track.assets && track.assets.length > 0) {
+          audioMap[track.song_id] = track.assets[0]
+        }
+      })
+      setReleaseAudio(audioMap)
+    } catch (error) {
+      console.error('Failed to load release audio:', error)
+      setReleaseAudio({})
+    }
+  }
+
+  async function checkDropboxConnected() {
+    try {
+      const response = await axios.get('/api/integrations/status')
+      const integrations = response.data?.integrations || []
+      const dropbox = Array.isArray(integrations) ? integrations.find(i => i.provider === 'DROPBOX' || i.provider?.toLowerCase() === 'dropbox') : null
+      setDropboxConnected(!!dropbox)
+    } catch {
+      setDropboxConnected(false)
+    }
+  }
+
+  async function browseBulkDropbox(path) {
+    setBulkDropboxLoading(true)
+    try {
+      const response = await axios.get(`/api/integrations/dropbox/files?path=${encodeURIComponent(path)}`)
+      setBulkDropboxFiles(response.data?.files || response.data || [])
+      setBulkDropboxPath(path)
+    } catch (error) {
+      console.error('Failed to browse Dropbox:', error)
+      setBulkDropboxFiles([])
+    } finally {
+      setBulkDropboxLoading(false)
+    }
+  }
+
+  function autoMatchFiles(files, tracks) {
+    const matches = {}
+    if (!tracks || !files) return matches
+    files.forEach(file => {
+      if (file.is_folder) return
+      const fname = (file.name || '').toLowerCase()
+      tracks.forEach(track => {
+        const titleMatch = track.title && fname.includes(track.title.toLowerCase())
+        const numStr = String(track.track_number).padStart(2, '0')
+        const numMatch = fname.match(new RegExp(`(^|[^0-9])0*${track.track_number}([^0-9]|$)`))
+        if (titleMatch || numMatch) {
+          if (!matches[track.song_id]) {
+            matches[track.song_id] = file
+          }
+        }
+      })
+    })
+    return matches
+  }
+
+  async function handleBulkLink(releaseId) {
+    setBulkLinking(true)
+    try {
+      const linkData = Object.entries(bulkMatches).map(([songId, file]) => ({
+        song_id: parseInt(songId),
+        provider_file_id: file.id || file.path_display || file.path,
+        path_display: file.path_display || file.path_lower || file.path,
+        name: file.name,
+        size_bytes: file.size || null,
+        file_type: "MAIN",
+        mime_type: null,
+      }))
+      await axios.post(`/api/audio/release/${releaseId}/bulk-link`, { links: linkData })
+      setShowBulkLink(false)
+      setBulkMatches({})
+      setBulkDropboxFiles([])
+      setBulkDropboxPath('')
+      loadReleaseAudio(releaseId)
+    } catch (error) {
+      console.error('Failed to bulk link:', error)
+      alert(error.response?.data?.detail || 'Failed to bulk link audio files')
+    } finally {
+      setBulkLinking(false)
+    }
+  }
+
+  async function handleBulkAnalyze(releaseId) {
+    setBulkAnalyzing(true)
+    try {
+      const assetIds = Object.values(releaseAudio)
+        .filter(a => a.id)
+        .map(a => a.id)
+      if (assetIds.length === 0) {
+        alert('No linked audio to analyze')
+        setBulkAnalyzing(false)
+        return
+      }
+      await axios.post('/api/audio/bulk-analyze', { asset_ids: assetIds })
+      loadReleaseAudio(releaseId)
+    } catch (error) {
+      console.error('Failed to bulk analyze:', error)
+      alert(error.response?.data?.detail || 'Failed to start bulk analysis')
+    } finally {
+      setBulkAnalyzing(false)
+    }
+  }
+
+  async function handleAnalyzeSingle(assetId, releaseId) {
+    try {
+      await axios.post('/api/audio/bulk-analyze', { asset_ids: [assetId] })
+      loadReleaseAudio(releaseId)
+    } catch (error) {
+      console.error('Failed to analyze:', error)
+    }
   }
 
   const filteredReleases = releases.filter(r => {
@@ -934,6 +1065,97 @@ export default function ReleasesPage() {
                 </div>
               )}
             </div>
+
+            <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-2">
+                  <SpeakerWaveIcon className="w-5 h-5 text-[#5B8A72]" />
+                  <h2 className="text-lg font-semibold text-[#3D4A44]">Audio Links</h2>
+                  {(detailData.tracks || []).length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[#EEF1EC] text-[#5B8A72]">
+                      {Object.keys(releaseAudio).filter(sid => (detailData.tracks || []).some(t => String(t.song_id) === String(sid))).length} of {(detailData.tracks || []).length} tracks have audio linked
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center space-x-2">
+                  {Object.keys(releaseAudio).length > 0 && (
+                    <button
+                      onClick={() => handleBulkAnalyze(selectedRelease)}
+                      disabled={bulkAnalyzing}
+                      className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#5B8A72] text-white text-xs rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                    >
+                      <BoltIcon className="w-3.5 h-3.5" />
+                      <span>{bulkAnalyzing ? 'Analyzing...' : 'Bulk Analyze'}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setShowBulkLink(true)
+                      if (dropboxConnected) browseBulkDropbox('')
+                    }}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#EEF1EC] text-[#3D4A44] text-xs rounded-lg hover:bg-[#E4E8E2] transition-colors"
+                  >
+                    <FolderOpenIcon className="w-3.5 h-3.5" />
+                    <span>Bulk Link Audio</span>
+                  </button>
+                </div>
+              </div>
+
+              {(detailData.tracks || []).length === 0 ? (
+                <div className="text-center py-6 text-[#7A8580] text-sm">Add tracks to link audio files</div>
+              ) : (
+                <div className="divide-y divide-[rgba(59,77,67,0.08)]">
+                  {(detailData.tracks || []).map((track) => {
+                    const audio = releaseAudio[track.song_id]
+                    return (
+                      <div key={`audio-${track.song_id}`} className="flex items-center justify-between py-3">
+                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                          <span className="text-xs font-medium text-[#7A8580] w-8 flex-shrink-0 text-right">
+                            {track.track_number}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-[#3D4A44] truncate">{track.title}</p>
+                            {audio ? (
+                              <div className="flex items-center space-x-2 mt-0.5">
+                                <CheckCircleIcon className="w-3.5 h-3.5 text-[#5B8A72] flex-shrink-0" />
+                                <span className="text-xs text-[#5B8A72] truncate">{audio.name || audio.original_filename || audio.filename || 'Linked'}</span>
+                                {audio.file_type && (
+                                  <span className="text-xs text-[#7A8580] bg-[#EEF1EC] px-1.5 py-0.5 rounded flex-shrink-0">{audio.file_type}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-[#7A8580] mt-0.5">No audio linked</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
+                          {audio ? (
+                            <button
+                              onClick={() => handleAnalyzeSingle(audio.id, selectedRelease)}
+                              className="flex items-center space-x-1 px-2.5 py-1 bg-[#EEF1EC] text-[#3D4A44] text-xs rounded-lg hover:bg-[#E4E8E2] transition-colors"
+                            >
+                              <SignalIcon className="w-3 h-3" />
+                              <span>Analyze</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setShowBulkLink(true)
+                                if (dropboxConnected) browseBulkDropbox('')
+                              }}
+                              className="flex items-center space-x-1 px-2.5 py-1 bg-[#5B8A72] text-white text-xs rounded-lg hover:bg-[#4A7A62] transition-colors"
+                            >
+                              <LinkIcon className="w-3 h-3" />
+                              <span>Link</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-6">
@@ -1199,6 +1421,164 @@ export default function ReleasesPage() {
             </div>
           </div>
         </div>
+
+        {showBulkLink && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col">
+              <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+                <div>
+                  <h3 className="text-lg font-semibold text-[#3D4A44]">Bulk Link Audio from Dropbox</h3>
+                  <p className="text-xs text-[#7A8580] mt-1">Browse your Dropbox to match audio files to tracks</p>
+                </div>
+                <button
+                  onClick={() => { setShowBulkLink(false); setBulkMatches({}); setBulkDropboxFiles([]); setBulkDropboxPath('') }}
+                  className="text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+                >
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6">
+                {!dropboxConnected ? (
+                  <div className="text-center py-12">
+                    <FolderIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
+                    <p className="text-[#3D4A44] font-medium mb-2">Dropbox Not Connected</p>
+                    <p className="text-sm text-[#7A8580]">Connect Dropbox in Settings to browse and link audio files.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center space-x-2 mb-4">
+                      <button
+                        onClick={() => browseBulkDropbox('')}
+                        className="text-xs text-[#5B8A72] hover:underline"
+                      >
+                        Root
+                      </button>
+                      {bulkDropboxPath && bulkDropboxPath.split('/').filter(Boolean).map((segment, idx, arr) => (
+                        <span key={idx} className="flex items-center space-x-2">
+                          <ArrowRightIcon className="w-3 h-3 text-[#7A8580]" />
+                          <button
+                            onClick={() => browseBulkDropbox('/' + arr.slice(0, idx + 1).join('/'))}
+                            className="text-xs text-[#5B8A72] hover:underline"
+                          >
+                            {segment}
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+
+                    {bulkDropboxLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <ArrowPathIcon className="w-6 h-6 text-[#7A8580] animate-spin" />
+                      </div>
+                    ) : (
+                      <div className="border border-[rgba(59,77,67,0.12)] rounded-lg divide-y divide-[rgba(59,77,67,0.08)] max-h-48 overflow-y-auto mb-6">
+                        {bulkDropboxFiles.length === 0 ? (
+                          <div className="text-center py-6 text-sm text-[#7A8580]">No files found in this folder</div>
+                        ) : (
+                          bulkDropboxFiles.map((file, idx) => (
+                            <div
+                              key={idx}
+                              className={`flex items-center justify-between px-4 py-2.5 hover:bg-[#EEF1EC] transition-colors ${file.is_folder ? 'cursor-pointer' : ''}`}
+                              onClick={() => file.is_folder && browseBulkDropbox(file.path_display || file.path_lower || file.path)}
+                            >
+                              <div className="flex items-center space-x-3 min-w-0 flex-1">
+                                {file.is_folder ? (
+                                  <FolderIcon className="w-4 h-4 text-[#5B8A72] flex-shrink-0" />
+                                ) : (
+                                  <MusicalNoteIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                                )}
+                                <span className="text-sm text-[#3D4A44] truncate">{file.name}</span>
+                              </div>
+                              {!file.is_folder && file.size && (
+                                <span className="text-xs text-[#7A8580] flex-shrink-0 ml-2">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+
+                    {bulkDropboxFiles.filter(f => !f.is_folder).length > 0 && (
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-semibold text-[#3D4A44]">File-to-Track Matching</h4>
+                          <button
+                            onClick={() => {
+                              const audioFiles = bulkDropboxFiles.filter(f => !f.is_folder)
+                              const matches = autoMatchFiles(audioFiles, detailData.tracks || [])
+                              setBulkMatches(matches)
+                            }}
+                            className="text-xs text-[#5B8A72] hover:underline"
+                          >
+                            Auto-Match
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          {(detailData.tracks || []).map(track => {
+                            const matched = bulkMatches[track.song_id]
+                            const audioFiles = bulkDropboxFiles.filter(f => !f.is_folder)
+                            return (
+                              <div key={track.song_id} className="flex items-center space-x-3 bg-[#EEF1EC] rounded-lg px-3 py-2">
+                                <span className="text-xs text-[#7A8580] w-6 flex-shrink-0">{track.track_number}.</span>
+                                <span className="text-sm text-[#3D4A44] flex-shrink-0 w-32 truncate">{track.title}</span>
+                                <ArrowRightIcon className="w-3 h-3 text-[#7A8580] flex-shrink-0" />
+                                <select
+                                  value={matched ? (matched.path_display || matched.path_lower || matched.name) : ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value
+                                    if (!val) {
+                                      setBulkMatches(prev => {
+                                        const next = { ...prev }
+                                        delete next[track.song_id]
+                                        return next
+                                      })
+                                    } else {
+                                      const file = audioFiles.find(f => (f.path_display || f.path_lower || f.name) === val)
+                                      if (file) setBulkMatches(prev => ({ ...prev, [track.song_id]: file }))
+                                    }
+                                  }}
+                                  className="flex-1 text-xs border border-[rgba(59,77,67,0.15)] rounded px-2 py-1.5 bg-white text-[#3D4A44] focus:ring-1 focus:ring-[#5B8A72] focus:outline-none"
+                                >
+                                  <option value="">— Select file —</option>
+                                  {audioFiles.map((f, i) => (
+                                    <option key={i} value={f.path_display || f.path_lower || f.name}>{f.name}</option>
+                                  ))}
+                                </select>
+                                {matched && <CheckCircleIcon className="w-4 h-4 text-[#5B8A72] flex-shrink-0" />}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {dropboxConnected && Object.keys(bulkMatches).length > 0 && (
+                <div className="p-6 border-t border-[rgba(59,77,67,0.08)] flex items-center justify-between">
+                  <span className="text-sm text-[#7A8580]">{Object.keys(bulkMatches).length} file(s) matched to tracks</span>
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={() => { setShowBulkLink(false); setBulkMatches({}); setBulkDropboxFiles([]); setBulkDropboxPath('') }}
+                      className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleBulkLink(selectedRelease)}
+                      disabled={bulkLinking}
+                      className="px-4 py-2 bg-[#5B8A72] text-white text-sm rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                    >
+                      {bulkLinking ? 'Linking...' : `Link ${Object.keys(bulkMatches).length} File(s)`}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {detailLoading && (
           <div className="fixed inset-0 bg-black/20 flex items-center justify-center z-50">

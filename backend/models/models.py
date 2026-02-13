@@ -1472,3 +1472,161 @@ class AuditLog(Base):
 
     organization = relationship("Organization")
     user = relationship("User")
+
+
+class StorageProvider(str, enum.Enum):
+    DROPBOX = "DROPBOX"
+    BOX = "BOX"
+    GOOGLE_DRIVE = "GOOGLE_DRIVE"
+
+class AudioFileType(str, enum.Enum):
+    MAIN = "MAIN"
+    INSTRUMENTAL = "INSTRUMENTAL"
+    CLEAN = "CLEAN"
+    ALT_MIX = "ALT_MIX"
+    STEMS = "STEMS"
+    OTHER = "OTHER"
+
+class AnalysisStatus(str, enum.Enum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+
+class TagType(str, enum.Enum):
+    MOOD = "MOOD"
+    TEXTURE = "TEXTURE"
+    SYNC = "SYNC"
+    GENRE = "GENRE"
+    USER = "USER"
+
+class TagSource(str, enum.Enum):
+    AI = "AI"
+    USER = "USER"
+
+
+class IntegrationAccount(Base):
+    __tablename__ = "integration_accounts"
+    __table_args__ = (
+        Index('ix_integration_accounts_org_id', 'org_id'),
+        UniqueConstraint('org_id', 'provider', name='uq_integration_org_provider'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    provider = Column(String, nullable=False, default="DROPBOX")
+    access_token_encrypted = Column(Text, nullable=True)
+    refresh_token_encrypted = Column(Text, nullable=True)
+    token_expires_at = Column(DateTime, nullable=True)
+    connected_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    account_email = Column(String, nullable=True)
+    account_display_name = Column(String, nullable=True)
+    default_folder_path = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    connected_by = relationship("User")
+
+
+class AudioAsset(Base):
+    __tablename__ = "audio_assets"
+    __table_args__ = (
+        Index('ix_audio_assets_org_id', 'org_id'),
+        Index('ix_audio_assets_song_id', 'song_id'),
+        Index('ix_audio_assets_release_id', 'release_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    release_id = Column(Integer, ForeignKey("releases.id"), nullable=True)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True, index=True)
+    provider = Column(String, nullable=False, default="DROPBOX")
+    provider_file_id = Column(String, nullable=True)
+    path_display = Column(String, nullable=True)
+    name = Column(String, nullable=False)
+    size_bytes = Column(Integer, nullable=True)
+    file_type = Column(String, nullable=False, default="MAIN")
+    mime_type = Column(String, nullable=True)
+    duration_seconds = Column(Float, nullable=True)
+    checksum = Column(String, nullable=True)
+    last_verified_at = Column(DateTime, nullable=True)
+    is_available = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    song = relationship("Song")
+    release = relationship("Release")
+    creator = relationship("Creator")
+    analysis = relationship("AudioAnalysis", uselist=False, back_populates="audio_asset")
+    tags = relationship("AudioAssetTag", back_populates="audio_asset", cascade="all, delete-orphan")
+
+
+class AudioAnalysis(Base):
+    __tablename__ = "audio_analyses"
+    __table_args__ = (
+        Index('ix_audio_analyses_org_id', 'org_id'),
+        Index('ix_audio_analyses_asset_id', 'audio_asset_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    audio_asset_id = Column(Integer, ForeignKey("audio_assets.id"), nullable=False, index=True, unique=True)
+    status = Column(String, nullable=False, default="QUEUED")
+    analyzed_at = Column(DateTime, nullable=True)
+    bpm = Column(Float, nullable=True)
+    bpm_confidence = Column(Float, nullable=True)
+    musical_key = Column(String, nullable=True)
+    key_confidence = Column(Float, nullable=True)
+    time_signature = Column(String, nullable=True)
+    duration_seconds = Column(Float, nullable=True)
+    lufs = Column(Float, nullable=True)
+    peak_db = Column(Float, nullable=True)
+    dynamic_range = Column(Float, nullable=True)
+    vocal_present = Column(Boolean, nullable=True)
+    vocal_confidence = Column(Float, nullable=True)
+    energy_level = Column(String, nullable=True)
+    features_json = Column(JSON, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    audio_asset = relationship("AudioAsset", back_populates="analysis")
+
+
+class AudioTag(Base):
+    __tablename__ = "audio_tags"
+    __table_args__ = (
+        UniqueConstraint('org_id', 'name', 'tag_type', name='uq_audio_tag_org_name'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    tag_type = Column(String, nullable=False, default="MOOD")
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    organization = relationship("Organization")
+    created_by = relationship("User")
+
+
+class AudioAssetTag(Base):
+    __tablename__ = "audio_asset_tags"
+    __table_args__ = (
+        UniqueConstraint('audio_asset_id', 'audio_tag_id', name='uq_asset_tag'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    audio_asset_id = Column(Integer, ForeignKey("audio_assets.id", ondelete="CASCADE"), nullable=False, index=True)
+    audio_tag_id = Column(Integer, ForeignKey("audio_tags.id", ondelete="CASCADE"), nullable=False, index=True)
+    source = Column(String, nullable=False, default="AI")
+    confidence = Column(Float, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    audio_asset = relationship("AudioAsset", back_populates="tags")
+    audio_tag = relationship("AudioTag")

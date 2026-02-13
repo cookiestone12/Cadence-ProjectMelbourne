@@ -37,6 +37,11 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Creative Directory**: A contact management system for industry collaborators with CRUD functionality, searchable UI, role filtering, and PDF export.
 - **Registration Reports**: Operational PRO registration workflow. Tracks `is_registered_with_pro` flag on Songs and Works. Supports Outstanding/Registered filtering, creator grouping, checkbox selection for aggregating items into reports. Generates branded PDF reports for selected items. Includes direct email-to-admin feature via Resend with PDF attachment, plus CSV and manual PDF download options.
 - **Spotify Integration**: Integrates with the Spotify API for playlist import, track search, and release metadata lookup (auto-populate release details from Spotify album/track URLs).
+- **Dropbox Audio Integration**: Provider-agnostic cloud storage integration (Dropbox first, extensible to Box/Google Drive). OAuth connect/disconnect per org. Links audio files to songs/releases without hosting audio locally. Temporary downloads for AI analysis only.
+- **AI Audio Analysis**: Background analysis pipeline using OpenAI for generating BPM, key, loudness, mood/texture/sync tags from audio file metadata and song context. Analysis results stored in AudioAnalysis with tag system (AudioTag/AudioAssetTag). Supports single and bulk analysis.
+- **Audio Tagging System**: AI-generated tags with confidence scores + user-editable overrides. Tag types: MOOD, TEXTURE, SYNC, GENRE, USER. Tags power catalog filtering and Brief Builder matching.
+- **Brief Builder**: Sync brief matching tool that accepts free-text descriptions + structured filters (BPM range, key, moods, textures, vocal presence, stems available). Uses OpenAI for natural language query parsing. Returns ranked song results with match scores and reasons.
+- **Catalog Audio Filters**: Toggleable audio columns (Audio Linked, BPM, Key, Mood, Analyzed) and client-side audio filters in the catalog view.
 - **Alembic Migrations**: Manages database migrations.
 - **Production Server**: Configured with Gunicorn and Uvicorn workers for production deployment.
 - **Structured Logging**: JSON-formatted logging with request tracing.
@@ -80,3 +85,5 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Gunicorn**: Production WSGI/ASGI server.
 - **Resend**: Email delivery service.
 - **APScheduler**: Background task scheduling.
+- **Dropbox SDK**: Dropbox API client for Python (OAuth, file browsing, download links).
+- **Cryptography**: Token encryption/decryption for OAuth tokens at rest.

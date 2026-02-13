@@ -5,7 +5,8 @@ import {
   XMarkIcon, CheckCircleIcon, XCircleIcon, MinusCircleIcon,
   MusicalNoteIcon, ChartBarIcon, DocumentTextIcon, LinkIcon,
   DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon, UserIcon,
-  ScaleIcon, PencilSquareIcon, PlusIcon
+  ScaleIcon, PencilSquareIcon, PlusIcon, SpeakerWaveIcon,
+  FolderIcon, FolderOpenIcon, ArrowLeftIcon
 } from '@heroicons/react/24/outline'
 
 export default function SongDetailModal({ song, onClose, onSongUpdated }) {
@@ -34,6 +35,18 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [addClientMasterShare, setAddClientMasterShare] = useState('')
   const [editingCreditId, setEditingCreditId] = useState(null)
   const [editCreditForm, setEditCreditForm] = useState({ role: '', pub_share: '', master_share: '' })
+  const [audioAssets, setAudioAssets] = useState([])
+  const [audioLoading, setAudioLoading] = useState(false)
+  const [showDropboxPicker, setShowDropboxPicker] = useState(false)
+  const [dropboxFiles, setDropboxFiles] = useState([])
+  const [dropboxPath, setDropboxPath] = useState('')
+  const [dropboxLoading, setDropboxLoading] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState([])
+  const [analyzing, setAnalyzing] = useState({})
+  const [dropboxConnected, setDropboxConnected] = useState(false)
+  const [showAddTag, setShowAddTag] = useState(null)
+  const [newTagName, setNewTagName] = useState('')
+  const [newTagType, setNewTagType] = useState('MOOD')
   
   useEffect(() => {
     loadSongDetails()
@@ -43,6 +56,13 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     loadSongSplits()
     loadSplitCreators()
   }, [song.id])
+
+  useEffect(() => {
+    if (activeTab === 'audio') {
+      loadAudioAssets()
+      checkDropboxStatus()
+    }
+  }, [activeTab, song.id])
   
   async function loadSongDetails() {
     try {
@@ -335,6 +355,193 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   function handleEditChange(field, value) {
     setEditForm(prev => ({ ...prev, [field]: value }))
   }
+
+  async function loadAudioAssets() {
+    setAudioLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get(`/api/audio/song/${song.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setAudioAssets(response.data?.assets || response.data || [])
+    } catch (error) {
+      console.error('Failed to load audio assets:', error)
+      setAudioAssets([])
+    } finally {
+      setAudioLoading(false)
+    }
+  }
+
+  async function checkDropboxStatus() {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get('/api/integrations/status', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const dropbox = response.data?.integrations?.find(i => i.provider === 'DROPBOX' || i.provider?.toLowerCase() === 'dropbox')
+      setDropboxConnected(!!dropbox)
+    } catch (error) {
+      console.error('Failed to check Dropbox status:', error)
+      setDropboxConnected(false)
+    }
+  }
+
+  async function browseDropbox(path) {
+    setDropboxLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get(`/api/integrations/dropbox/files?path=${encodeURIComponent(path)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setDropboxFiles(response.data?.files || response.data?.entries || [])
+      setDropboxPath(path)
+    } catch (error) {
+      console.error('Failed to browse Dropbox:', error)
+    } finally {
+      setDropboxLoading(false)
+    }
+  }
+
+  async function linkFile(file) {
+    try {
+      const token = localStorage.getItem('token')
+      await axios.post(`/api/audio/song/${song.id}/link`, {
+        provider_file_id: file.id || file.path_display || file.path,
+        path_display: file.path_display || file.path,
+        name: file.name,
+        size_bytes: file.size || file.size_bytes || null,
+        file_type: "MAIN",
+        mime_type: null,
+      }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      await loadAudioAssets()
+    } catch (error) {
+      console.error('Failed to link file:', error)
+      alert(error.response?.data?.detail || 'Failed to link file')
+    }
+  }
+
+  async function unlinkFile(assetId) {
+    if (!confirm('Unlink this audio file?')) return
+    try {
+      const token = localStorage.getItem('token')
+      await axios.delete(`/api/audio/${assetId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      await loadAudioAssets()
+    } catch (error) {
+      console.error('Failed to unlink file:', error)
+    }
+  }
+
+  async function analyzeFile(assetId) {
+    setAnalyzing(prev => ({ ...prev, [assetId]: true }))
+    try {
+      const token = localStorage.getItem('token')
+      await axios.post(`/api/audio/${assetId}/analyze`, {}, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const analysisRes = await axios.get(`/api/audio/${assetId}/analysis`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setAudioAssets(prev => prev.map(a => a.id === assetId ? { ...a, analysis: analysisRes.data } : a))
+    } catch (error) {
+      console.error('Failed to analyze file:', error)
+      alert(error.response?.data?.detail || 'Failed to analyze file')
+    } finally {
+      setAnalyzing(prev => ({ ...prev, [assetId]: false }))
+    }
+  }
+
+  async function addTag(assetId, name, tagType) {
+    try {
+      const token = localStorage.getItem('token')
+      await axios.post(`/api/audio/${assetId}/tags`, { name, tag_type: tagType }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const analysisRes = await axios.get(`/api/audio/${assetId}/analysis`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setAudioAssets(prev => prev.map(a => a.id === assetId ? { ...a, analysis: analysisRes.data } : a))
+      setShowAddTag(null)
+      setNewTagName('')
+      setNewTagType('MOOD')
+    } catch (error) {
+      console.error('Failed to add tag:', error)
+    }
+  }
+
+  async function removeTag(assetId, tagId) {
+    try {
+      const token = localStorage.getItem('token')
+      await axios.delete(`/api/audio/${assetId}/tags/${tagId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      const analysisRes = await axios.get(`/api/audio/${assetId}/analysis`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setAudioAssets(prev => prev.map(a => a.id === assetId ? { ...a, analysis: analysisRes.data } : a))
+    } catch (error) {
+      console.error('Failed to remove tag:', error)
+    }
+  }
+
+  async function updateFileType(assetId, fileType) {
+    try {
+      const token = localStorage.getItem('token')
+      await axios.put(`/api/audio/${assetId}/type`, { file_type: fileType }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setAudioAssets(prev => prev.map(a => a.id === assetId ? { ...a, file_type: fileType } : a))
+    } catch (error) {
+      console.error('Failed to update file type:', error)
+    }
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes) return '—'
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
+    return (bytes / 1048576).toFixed(1) + ' MB'
+  }
+
+  function isAudioFile(filename) {
+    const ext = (filename || '').toLowerCase().split('.').pop()
+    return ['mp3', 'wav', 'flac', 'aiff', 'm4a', 'ogg'].includes(ext)
+  }
+
+  function handleOpenDropboxPicker() {
+    setShowDropboxPicker(true)
+    setDropboxPath('')
+    setSelectedFiles([])
+    browseDropbox('')
+  }
+
+  function handleSelectFile(file) {
+    setSelectedFiles(prev => {
+      const exists = prev.find(f => f.path_display === file.path_display || f.path === file.path)
+      if (exists) return prev.filter(f => (f.path_display || f.path) !== (file.path_display || file.path))
+      return [...prev, file]
+    })
+  }
+
+  async function handleLinkSelected() {
+    for (const file of selectedFiles) {
+      await linkFile(file)
+    }
+    setShowDropboxPicker(false)
+    setSelectedFiles([])
+  }
+
+  function getTagColor(tagType) {
+    switch ((tagType || '').toUpperCase()) {
+      case 'MOOD': return 'bg-blue-50 text-blue-700 border-blue-200'
+      case 'TEXTURE': return 'bg-purple-50 text-purple-700 border-purple-200'
+      case 'SYNC': return 'bg-amber-50 text-amber-700 border-amber-200'
+      default: return 'bg-green-50 text-green-700 border-green-200'
+    }
+  }
   
   const getStatusIcon = (value) => {
     const strVal = String(value ?? '').toLowerCase()
@@ -490,7 +697,8 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
               { id: 'rights', label: 'Rights & Splits', icon: ScaleIcon },
               { id: 'placement', label: 'Placement Status', icon: DocumentTextIcon },
               { id: 'streaming', label: 'Streaming & Valuation', icon: ChartBarIcon },
-              { id: 'links', label: 'Credits & Links', icon: LinkIcon }
+              { id: 'links', label: 'Credits & Links', icon: LinkIcon },
+              { id: 'audio', label: 'Audio', icon: SpeakerWaveIcon }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -1539,6 +1747,289 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   <p className="text-[#7A8580]">No DSP links added yet</p>
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'audio' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[17px] font-semibold text-[#3D4A44]">Audio Files</h3>
+                  {dropboxConnected && (
+                    <button
+                      onClick={handleOpenDropboxPicker}
+                      className="flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-[12px] font-medium text-[14px] hover:bg-[#4A7A62] transition-colors"
+                    >
+                      <LinkIcon className="w-4 h-4" />
+                      <span>Link from Dropbox</span>
+                    </button>
+                  )}
+                </div>
+
+                {audioLoading ? (
+                  <div className="text-center py-8 text-[#7A8580]">Loading audio files...</div>
+                ) : audioAssets.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-[1fr_140px_80px_90px_auto_auto] gap-3 px-3 py-2 text-[12px] font-medium text-[#7A8580] uppercase tracking-wider">
+                      <span>Filename</span>
+                      <span>Type</span>
+                      <span>Size</span>
+                      <span>Status</span>
+                      <span>Analysis</span>
+                      <span></span>
+                    </div>
+                    {audioAssets.map((asset) => (
+                      <div key={asset.id}>
+                        <div className="grid grid-cols-[1fr_140px_80px_90px_auto_auto] gap-3 px-3 py-3 bg-[#F5F7F4] rounded-[12px] items-center">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <SpeakerWaveIcon className="w-5 h-5 text-[#5B8A72] flex-shrink-0" />
+                            <span className="font-medium text-[#3D4A44] text-[14px] truncate">{asset.name || asset.filename}</span>
+                          </div>
+                          <select
+                            value={asset.file_type || 'Other'}
+                            onChange={(e) => updateFileType(asset.id, e.target.value)}
+                            className="border border-[rgba(59,77,67,0.12)] rounded-lg px-2 py-1.5 text-[13px] bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                          >
+                            <option value="Main Mix">Main Mix</option>
+                            <option value="Instrumental">Instrumental</option>
+                            <option value="Clean">Clean</option>
+                            <option value="Alt Mix">Alt Mix</option>
+                            <option value="Stems">Stems</option>
+                            <option value="Other">Other</option>
+                          </select>
+                          <span className="text-[13px] text-[#7A8580]">{formatFileSize(asset.size_bytes || asset.size)}</span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-medium w-fit ${
+                            asset.is_available !== false
+                              ? 'bg-[rgba(91,154,110,0.15)] text-[#5B9A6E]'
+                              : 'bg-[rgba(196,112,104,0.15)] text-[#C47068]'
+                          }`}>
+                            {asset.is_available !== false ? 'Available' : 'Unavailable'}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            {asset.analysis ? (
+                              <div className="flex items-center gap-1.5">
+                                {asset.analysis.bpm && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[rgba(91,138,114,0.12)] text-[#5B8A72]">
+                                    {Math.round(asset.analysis.bpm)} BPM
+                                  </span>
+                                )}
+                                {asset.analysis.key && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[rgba(91,138,114,0.12)] text-[#5B8A72]">
+                                    {asset.analysis.key}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => analyzeFile(asset.id)}
+                                disabled={analyzing[asset.id]}
+                                className="flex items-center gap-1 px-2.5 py-1 text-[12px] font-medium text-[#5B8A72] border border-[rgba(91,138,114,0.3)] rounded-lg hover:bg-[rgba(91,138,114,0.08)] transition-colors disabled:opacity-50"
+                              >
+                                <ChartBarIcon className="w-3.5 h-3.5" />
+                                {analyzing[asset.id] ? 'Analyzing...' : 'Analyze'}
+                              </button>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => unlinkFile(asset.id)}
+                            className="p-1.5 text-[#7A8580] hover:text-[#C47068] rounded transition-colors"
+                            title="Unlink file"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {asset.analysis && (
+                          <div className="mt-2 ml-4 p-4 bg-white rounded-[12px] border border-[rgba(59,77,67,0.08)]">
+                            <div className="flex items-center gap-6 mb-3">
+                              {asset.analysis.bpm && (
+                                <div>
+                                  <span className="text-[12px] font-medium text-[#7A8580]">BPM</span>
+                                  <p className="text-[18px] font-semibold text-[#3D4A44]">{Math.round(asset.analysis.bpm)}</p>
+                                </div>
+                              )}
+                              {asset.analysis.key && (
+                                <div>
+                                  <span className="text-[12px] font-medium text-[#7A8580]">Key</span>
+                                  <p className="text-[18px] font-semibold text-[#3D4A44]">{asset.analysis.key}</p>
+                                </div>
+                              )}
+                              {asset.analysis.loudness != null && (
+                                <div>
+                                  <span className="text-[12px] font-medium text-[#7A8580]">Loudness</span>
+                                  <p className="text-[18px] font-semibold text-[#3D4A44]">{asset.analysis.loudness.toFixed(1)} dB</p>
+                                </div>
+                              )}
+                            </div>
+
+                            {(asset.analysis.tags && asset.analysis.tags.length > 0) && (
+                              <div className="flex flex-wrap gap-1.5 mb-2">
+                                {asset.analysis.tags.map((tag) => (
+                                  <span
+                                    key={tag.id}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-medium border ${getTagColor(tag.tag_type)}`}
+                                  >
+                                    {tag.name}
+                                    <button
+                                      onClick={() => removeTag(asset.id, tag.id)}
+                                      className="ml-0.5 hover:opacity-70"
+                                    >
+                                      <XMarkIcon className="w-3 h-3" />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {showAddTag === asset.id ? (
+                              <div className="flex items-center gap-2 mt-2">
+                                <input
+                                  type="text"
+                                  value={newTagName}
+                                  onChange={(e) => setNewTagName(e.target.value)}
+                                  placeholder="Tag name"
+                                  className="flex-1 border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-1.5 text-[13px] bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                                />
+                                <select
+                                  value={newTagType}
+                                  onChange={(e) => setNewTagType(e.target.value)}
+                                  className="border border-[rgba(59,77,67,0.12)] rounded-lg px-2 py-1.5 text-[13px] bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                                >
+                                  <option value="MOOD">Mood</option>
+                                  <option value="TEXTURE">Texture</option>
+                                  <option value="SYNC">Sync</option>
+                                  <option value="USER">User</option>
+                                </select>
+                                <button
+                                  onClick={() => { if (newTagName.trim()) addTag(asset.id, newTagName.trim(), newTagType) }}
+                                  className="px-3 py-1.5 text-[12px] font-medium bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+                                >
+                                  Add
+                                </button>
+                                <button
+                                  onClick={() => { setShowAddTag(null); setNewTagName(''); setNewTagType('MOOD') }}
+                                  className="px-2 py-1.5 text-[12px] text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setShowAddTag(asset.id)}
+                                className="flex items-center gap-1 mt-1 text-[12px] font-medium text-[#5B8A72] hover:text-[#4A7A62] transition-colors"
+                              >
+                                <PlusIcon className="w-3.5 h-3.5" />
+                                Add Tag
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 bg-[#F5F7F4] rounded-[12px] border-2 border-dashed border-[rgba(59,77,67,0.08)]">
+                    <SpeakerWaveIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
+                    <p className="text-[#3D4A44] font-medium">No audio files linked yet</p>
+                    <p className="text-[13px] text-[#7A8580] mt-1">
+                      {dropboxConnected ? 'Click "Link from Dropbox" to attach audio files' : 'Connect Dropbox in Settings to link audio files'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {showDropboxPicker && (
+                <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setShowDropboxPicker(false)}>
+                  <div className="bg-white rounded-[18px] shadow-[0px_8px_24px_rgba(0,0,0,0.15)] w-full max-w-lg max-h-[70vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                    <div className="p-4 border-b border-[rgba(59,77,67,0.08)] flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FolderOpenIcon className="w-5 h-5 text-[#5B8A72]" />
+                        <h4 className="text-[16px] font-semibold text-[#3D4A44]">Browse Dropbox</h4>
+                      </div>
+                      <button onClick={() => setShowDropboxPicker(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
+                        <XMarkIcon className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    <div className="px-4 py-2 border-b border-[rgba(59,77,67,0.08)] flex items-center gap-2 text-[13px] text-[#7A8580]">
+                      {dropboxPath && (
+                        <button
+                          onClick={() => {
+                            const parentPath = dropboxPath.split('/').slice(0, -1).join('/')
+                            browseDropbox(parentPath)
+                          }}
+                          className="flex items-center gap-1 text-[#5B8A72] hover:text-[#4A7A62] font-medium"
+                        >
+                          <ArrowLeftIcon className="w-4 h-4" />
+                          Back
+                        </button>
+                      )}
+                      <span className="truncate">/{dropboxPath}</span>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-2">
+                      {dropboxLoading ? (
+                        <div className="text-center py-8 text-[#7A8580]">Loading...</div>
+                      ) : dropboxFiles.length > 0 ? (
+                        <div className="space-y-1">
+                          {dropboxFiles.map((file, idx) => {
+                            const isFolder = file['.tag'] === 'folder' || file.is_folder || file.type === 'folder'
+                            const isAudio = !isFolder && isAudioFile(file.name)
+                            const isSelected = selectedFiles.some(f => (f.path_display || f.path) === (file.path_display || file.path))
+
+                            if (!isFolder && !isAudio) return null
+
+                            return (
+                              <button
+                                key={idx}
+                                onClick={() => {
+                                  if (isFolder) {
+                                    browseDropbox(file.path_display || file.path_lower || file.path)
+                                  } else if (isAudio) {
+                                    handleSelectFile(file)
+                                  }
+                                }}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-left transition-colors ${
+                                  isSelected ? 'bg-[rgba(91,138,114,0.12)] border border-[#5B8A72]' : 'hover:bg-[#F5F7F4] border border-transparent'
+                                }`}
+                              >
+                                {isFolder ? (
+                                  <FolderIcon className="w-5 h-5 text-[#C4956B] flex-shrink-0" />
+                                ) : (
+                                  <SpeakerWaveIcon className="w-5 h-5 text-[#5B8A72] flex-shrink-0" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[14px] font-medium text-[#3D4A44] truncate">{file.name}</p>
+                                  {!isFolder && file.size && (
+                                    <p className="text-[12px] text-[#7A8580]">{formatFileSize(file.size)}</p>
+                                  )}
+                                </div>
+                                {isSelected && (
+                                  <CheckCircleIcon className="w-5 h-5 text-[#5B8A72] flex-shrink-0" />
+                                )}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-[#7A8580] text-[14px]">No files found in this folder</div>
+                      )}
+                    </div>
+
+                    {selectedFiles.length > 0 && (
+                      <div className="p-4 border-t border-[rgba(59,77,67,0.08)] flex items-center justify-between">
+                        <span className="text-[13px] text-[#7A8580]">{selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} selected</span>
+                        <button
+                          onClick={handleLinkSelected}
+                          className="px-4 py-2 bg-[#5B8A72] text-white rounded-[12px] font-medium text-[14px] hover:bg-[#4A7A62] transition-colors"
+                        >
+                          Link Selected
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

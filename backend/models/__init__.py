@@ -19,6 +19,8 @@ from .models import (
     Placement,
     ClientShare, ClientShareStatus, ClientShareRole,
     AuditLog,
+    StorageProvider, AudioFileType, AnalysisStatus, TagType, TagSource,
+    IntegrationAccount, AudioAsset, AudioAnalysis, AudioTag, AudioAssetTag,
 )
 
 __all__ = [
@@ -42,4 +44,6 @@ __all__ = [
     "Placement",
     "ClientShare", "ClientShareStatus", "ClientShareRole",
     "AuditLog",
+    "StorageProvider", "AudioFileType", "AnalysisStatus", "TagType", "TagSource",
+    "IntegrationAccount", "AudioAsset", "AudioAnalysis", "AudioTag", "AudioAssetTag",
 ]

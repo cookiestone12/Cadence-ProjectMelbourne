@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { 
   FunnelIcon, MagnifyingGlassIcon, PlusIcon, ArrowUpTrayIcon,
-  CheckCircleIcon, XCircleIcon, MinusCircleIcon, LinkIcon, TrashIcon
+  CheckCircleIcon, XCircleIcon, MinusCircleIcon, LinkIcon, TrashIcon,
+  SpeakerWaveIcon, ChevronDownIcon, ChevronUpIcon
 } from '@heroicons/react/24/outline'
 import SongDetailModal from '../components/SongDetailModal'
 import AddSongModal from '../components/AddSongModal'
@@ -48,6 +49,39 @@ export default function NewCatalogPage() {
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
   const [duplicateGroups, setDuplicateGroups] = useState([])
   const [duplicateLoading, setDuplicateLoading] = useState(false)
+
+  const [audioData, setAudioData] = useState({})
+  const [audioColumnsEnabled, setAudioColumnsEnabled] = useState(false)
+  const [audioDataLoading, setAudioDataLoading] = useState(false)
+  const [showAudioFilters, setShowAudioFilters] = useState(false)
+  const [audioFilters, setAudioFilters] = useState({
+    audioLinked: '',
+    analyzed: '',
+    bpmMin: '',
+    bpmMax: '',
+    musicalKey: '',
+    mood: [],
+    vocal: ''
+  })
+
+  const MUSICAL_KEYS = [
+    'C major', 'C minor', 'C# major', 'C# minor',
+    'D major', 'D minor', 'D# major', 'D# minor',
+    'E major', 'E minor',
+    'F major', 'F minor', 'F# major', 'F# minor',
+    'G major', 'G minor', 'G# major', 'G# minor',
+    'A major', 'A minor', 'A# major', 'A# minor',
+    'B major', 'B minor'
+  ]
+  const MOOD_OPTIONS = ['uplifting', 'melancholic', 'tense', 'dreamy', 'energetic', 'calm']
+  const MOOD_COLORS = {
+    uplifting: 'bg-amber-100 text-amber-800',
+    melancholic: 'bg-blue-100 text-blue-800',
+    tense: 'bg-red-100 text-red-800',
+    dreamy: 'bg-purple-100 text-purple-800',
+    energetic: 'bg-orange-100 text-orange-800',
+    calm: 'bg-teal-100 text-teal-800'
+  }
   
   useEffect(() => {
     loadData()
@@ -81,6 +115,48 @@ export default function NewCatalogPage() {
       setLoading(false)
     }
   }
+
+  const loadAudioData = async (songIds) => {
+    if (!songIds || songIds.length === 0) return
+    setAudioDataLoading(true)
+    const data = {}
+    const batchSize = 10
+    for (let i = 0; i < songIds.length; i += batchSize) {
+      const batch = songIds.slice(i, i + batchSize)
+      await Promise.all(batch.map(async (id) => {
+        try {
+          const res = await axios.get(`/api/audio/song/${id}`)
+          data[id] = res.data?.assets || res.data || []
+        } catch (e) {
+          data[id] = []
+        }
+      }))
+    }
+    setAudioData(data)
+    setAudioDataLoading(false)
+  }
+
+  useEffect(() => {
+    if (audioColumnsEnabled && songs.length > 0) {
+      const songIds = songs.map(s => s.id)
+      loadAudioData(songIds)
+    }
+  }, [audioColumnsEnabled, songs])
+
+  const hasActiveAudioFilters = audioFilters.audioLinked !== '' || audioFilters.analyzed !== '' ||
+    audioFilters.bpmMin !== '' || audioFilters.bpmMax !== '' || audioFilters.musicalKey !== '' ||
+    audioFilters.mood.length > 0 || audioFilters.vocal !== ''
+
+  const clearAudioFilters = () => {
+    setAudioFilters({ audioLinked: '', analyzed: '', bpmMin: '', bpmMax: '', musicalKey: '', mood: [], vocal: '' })
+  }
+
+  const toggleMoodFilter = (mood) => {
+    setAudioFilters(prev => ({
+      ...prev,
+      mood: prev.mood.includes(mood) ? prev.mood.filter(m => m !== mood) : [...prev.mood, mood]
+    }))
+  }
   
   const filteredSongs = songs.filter(song => {
     const matchesSearch = !searchTerm || (
@@ -92,8 +168,32 @@ export default function NewCatalogPage() {
     const matchesTab = activeTab === 'all' || 
       (activeTab === 'released' && song.is_released) ||
       (activeTab === 'unreleased' && !song.is_released)
+
+    let matchesAudio = true
+    if (hasActiveAudioFilters && audioColumnsEnabled) {
+      const songAudio = audioData[song.id] || []
+      const hasAudio = songAudio.length > 0
+      const analysis = songAudio[0]?.analysis || null
+      const hasAnalysis = !!analysis
+
+      if (audioFilters.audioLinked === 'yes' && !hasAudio) matchesAudio = false
+      if (audioFilters.audioLinked === 'no' && hasAudio) matchesAudio = false
+      if (audioFilters.analyzed === 'yes' && !hasAnalysis) matchesAudio = false
+      if (audioFilters.analyzed === 'no' && hasAnalysis) matchesAudio = false
+      if (audioFilters.bpmMin && analysis?.bpm && parseFloat(analysis.bpm) < parseFloat(audioFilters.bpmMin)) matchesAudio = false
+      if (audioFilters.bpmMax && analysis?.bpm && parseFloat(analysis.bpm) > parseFloat(audioFilters.bpmMax)) matchesAudio = false
+      if (audioFilters.bpmMin && !analysis?.bpm) matchesAudio = false
+      if (audioFilters.bpmMax && !analysis?.bpm) matchesAudio = false
+      if (audioFilters.musicalKey && analysis?.musical_key !== audioFilters.musicalKey) matchesAudio = false
+      if (audioFilters.mood.length > 0) {
+        const songMoods = analysis?.mood_tags || []
+        if (!audioFilters.mood.some(m => songMoods.includes(m))) matchesAudio = false
+      }
+      if (audioFilters.vocal === 'vocal' && analysis?.has_vocals !== true) matchesAudio = false
+      if (audioFilters.vocal === 'instrumental' && analysis?.has_vocals !== false) matchesAudio = false
+    }
     
-    return matchesSearch && matchesTab
+    return matchesSearch && matchesTab && matchesAudio
   })
 
   const sortedSongs = [...filteredSongs].sort((a, b) => {
@@ -509,6 +609,22 @@ export default function NewCatalogPage() {
               </span>
             )}
           </button>
+
+          <button
+            onClick={() => setAudioColumnsEnabled(!audioColumnsEnabled)}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+              audioColumnsEnabled
+                ? 'bg-[#5B8A72] text-white'
+                : 'bg-[#EEF1EC] text-[#3D4A44] hover:bg-[#E4E8E2]'
+            }`}
+            title={audioColumnsEnabled ? 'Hide audio columns' : 'Show audio columns'}
+          >
+            <SpeakerWaveIcon className="w-5 h-5" />
+            <span>Audio</span>
+            {audioDataLoading && (
+              <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+            )}
+          </button>
         </div>
         
         {showFilters && (
@@ -561,6 +677,134 @@ export default function NewCatalogPage() {
                 Clear Filters
               </button>
             </div>
+          </div>
+        )}
+
+        {audioColumnsEnabled && (
+          <div className="mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)]">
+            <button
+              onClick={() => setShowAudioFilters(!showAudioFilters)}
+              className="flex items-center space-x-2 text-sm font-medium text-[#3D4A44] hover:text-[#5B8A72] transition-colors"
+            >
+              <SpeakerWaveIcon className="w-4 h-4" />
+              <span>Audio & Analysis</span>
+              {hasActiveAudioFilters && (
+                <span className="bg-[#5B8A72] text-white px-2 py-0.5 rounded-full text-xs font-bold ml-1">
+                  {[audioFilters.audioLinked, audioFilters.analyzed, audioFilters.bpmMin, audioFilters.bpmMax, audioFilters.musicalKey, audioFilters.vocal].filter(v => v !== '').length + (audioFilters.mood.length > 0 ? 1 : 0)}
+                </span>
+              )}
+              {showAudioFilters ? <ChevronUpIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
+            </button>
+
+            {showAudioFilters && (
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Audio Linked</label>
+                  <select
+                    value={audioFilters.audioLinked}
+                    onChange={(e) => setAudioFilters(prev => ({ ...prev, audioLinked: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="">All</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Analyzed</label>
+                  <select
+                    value={audioFilters.analyzed}
+                    onChange={(e) => setAudioFilters(prev => ({ ...prev, analyzed: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="">All</option>
+                    <option value="yes">Yes</option>
+                    <option value="no">No</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">BPM Range</label>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      value={audioFilters.bpmMin}
+                      onChange={(e) => setAudioFilters(prev => ({ ...prev, bpmMin: e.target.value }))}
+                      placeholder="Min"
+                      min="0"
+                      max="300"
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                    <span className="text-[#7A8580]">–</span>
+                    <input
+                      type="number"
+                      value={audioFilters.bpmMax}
+                      onChange={(e) => setAudioFilters(prev => ({ ...prev, bpmMax: e.target.value }))}
+                      placeholder="Max"
+                      min="0"
+                      max="300"
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Key</label>
+                  <select
+                    value={audioFilters.musicalKey}
+                    onChange={(e) => setAudioFilters(prev => ({ ...prev, musicalKey: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="">All Keys</option>
+                    {MUSICAL_KEYS.map(k => (
+                      <option key={k} value={k}>{k}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Mood</label>
+                  <div className="flex flex-wrap gap-2">
+                    {MOOD_OPTIONS.map(mood => (
+                      <button
+                        key={mood}
+                        onClick={() => toggleMoodFilter(mood)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors capitalize ${
+                          audioFilters.mood.includes(mood)
+                            ? MOOD_COLORS[mood] || 'bg-[#5B8A72] text-white'
+                            : 'bg-[#EEF1EC] text-[#7A8580] hover:bg-[#E4E8E2]'
+                        }`}
+                      >
+                        {mood}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Vocal</label>
+                  <select
+                    value={audioFilters.vocal}
+                    onChange={(e) => setAudioFilters(prev => ({ ...prev, vocal: e.target.value }))}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="">All</option>
+                    <option value="vocal">Vocal</option>
+                    <option value="instrumental">Instrumental</option>
+                  </select>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    onClick={clearAudioFilters}
+                    className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
+                  >
+                    Clear Audio Filters
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -674,6 +918,15 @@ export default function NewCatalogPage() {
                     )}
                   </div>
                 </th>
+                {audioColumnsEnabled && (
+                  <>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Audio</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">BPM</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Key</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Mood</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Analyzed</th>
+                  </>
+                )}
                 <th className="px-3 py-4 text-center text-sm font-semibold text-[#3D4A44] w-10"></th>
               </tr>
             </thead>
@@ -765,6 +1018,45 @@ export default function NewCatalogPage() {
                   </td>
                   <td className="px-4 py-3">{getStatusIcon(song.has_contract_executed ? 'Yes' : 'No')}</td>
                   <td className="px-4 py-3">{getStatusIcon(song.is_registered_with_pro ? 'Yes' : 'No')}</td>
+                  {audioColumnsEnabled && (() => {
+                    const songAudio = audioData[song.id] || []
+                    const hasAudio = songAudio.length > 0
+                    const analysis = songAudio[0]?.analysis || null
+                    const firstMood = analysis?.mood_tags?.[0] || null
+                    return (
+                      <>
+                        <td className="px-4 py-3 text-center">
+                          {hasAudio ? (
+                            <SpeakerWaveIcon className="w-5 h-5 text-[#5B8A72] mx-auto" />
+                          ) : (
+                            <span className="text-[#7A8580]">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-[#7A8580]">
+                          {analysis?.bpm ? Math.round(analysis.bpm) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-[#7A8580]">
+                          {analysis?.musical_key || '-'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {firstMood ? (
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${MOOD_COLORS[firstMood] || 'bg-gray-100 text-gray-800'}`}>
+                              {firstMood}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-[#7A8580]">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {analysis ? (
+                            <CheckCircleIcon className="w-5 h-5 text-[#5B9A6E] mx-auto" />
+                          ) : (
+                            <span className="text-[#7A8580]">-</span>
+                          )}
+                        </td>
+                      </>
+                    )
+                  })()}
                   <td className="px-3 py-3 text-center">
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeleteSong(song.id, song.title) }}
@@ -779,7 +1071,7 @@ export default function NewCatalogPage() {
               
               {filteredSongs.length === 0 && (
                 <tr>
-                  <td colSpan="10" className="px-6 py-12 text-center text-[#7A8580]">
+                  <td colSpan={audioColumnsEnabled ? 16 : 11} className="px-6 py-12 text-center text-[#7A8580]">
                     No songs found
                   </td>
                 </tr>
