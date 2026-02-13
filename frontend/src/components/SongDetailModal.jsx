@@ -30,6 +30,10 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [showAddClient, setShowAddClient] = useState(false)
   const [addClientCreatorId, setAddClientCreatorId] = useState('')
   const [addClientRole, setAddClientRole] = useState('PRIMARY_ARTIST')
+  const [addClientPubShare, setAddClientPubShare] = useState('')
+  const [addClientMasterShare, setAddClientMasterShare] = useState('')
+  const [editingCreditId, setEditingCreditId] = useState(null)
+  const [editCreditForm, setEditCreditForm] = useState({ role: '', pub_share: '', master_share: '' })
   
   useEffect(() => {
     loadSongDetails()
@@ -559,93 +563,230 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                     <div className="space-y-2">
                       {songDetails.credits && songDetails.credits.length > 0 ? (
                         songDetails.credits.map((credit) => (
-                          <div key={credit.id} className="flex items-center justify-between p-2 bg-[#F5F7F4] rounded-[10px]">
-                            <Link
-                              to={`/roster/${credit.creator_id}`}
-                              onClick={onClose}
-                              className="flex items-center gap-2 text-[#5B8A72] hover:text-[#7BA594]"
-                            >
-                              <UserIcon className="w-4 h-4" />
-                              <span className="font-medium text-sm">{credit.creator_name || credit.creator?.display_name || 'Unknown'}</span>
-                              <span className="text-xs text-[#7A8580]">({credit.role})</span>
-                            </Link>
-                            <button
-                              onClick={async () => {
-                                if (!confirm(`Remove ${credit.creator_name || credit.creator?.display_name || 'this client'} from this song?`)) return
-                                try {
-                                  await axios.delete(`/api/songs/${song.id}/credits/${credit.id}`)
-                                  await loadSongDetails()
-                                  if (onSongUpdated) onSongUpdated()
-                                } catch (err) {
-                                  console.error('Failed to remove credit:', err)
-                                  alert('Failed to remove client')
-                                }
-                              }}
-                              className="p-1 text-[#7A8580] hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
-                              title="Remove client"
-                            >
-                              <XMarkIcon className="w-4 h-4" />
-                            </button>
-                          </div>
+                          editingCreditId === credit.id ? (
+                            <div key={credit.id} className="p-3 bg-[#F5F7F4] rounded-[10px] space-y-2">
+                              <div className="flex items-center gap-2">
+                                <UserIcon className="w-4 h-4 text-[#5B8A72]" />
+                                <span className="font-medium text-sm text-[#3D4A44]">{credit.creator_name || 'Unknown'}</span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2">
+                                <div>
+                                  <label className="text-[11px] text-[#7A8580]">Role</label>
+                                  <select
+                                    value={editCreditForm.role}
+                                    onChange={(e) => setEditCreditForm(prev => ({ ...prev, role: e.target.value }))}
+                                    className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-[8px] text-xs text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
+                                  >
+                                    <option value="PRIMARY_ARTIST">Primary Artist</option>
+                                    <option value="FEATURED_ARTIST">Featured Artist</option>
+                                    <option value="SONGWRITER">Songwriter</option>
+                                    <option value="PRODUCER">Producer</option>
+                                    <option value="COMPOSER">Composer</option>
+                                    <option value="LYRICIST">Lyricist</option>
+                                    <option value="ARTIST">Artist</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="text-[11px] text-[#7A8580]">Pub %</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    value={editCreditForm.pub_share}
+                                    onChange={(e) => setEditCreditForm(prev => ({ ...prev, pub_share: e.target.value }))}
+                                    placeholder="—"
+                                    className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-[8px] text-xs text-[#3D4A44] focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[11px] text-[#7A8580]">Master %</label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    value={editCreditForm.master_share}
+                                    onChange={(e) => setEditCreditForm(prev => ({ ...prev, master_share: e.target.value }))}
+                                    placeholder="—"
+                                    className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-[8px] text-xs text-[#3D4A44] focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  onClick={() => setEditingCreditId(null)}
+                                  className="px-3 py-1 text-xs text-[#7A8580] hover:text-[#3D4A44] rounded-[8px] hover:bg-white transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      const payload = { role: editCreditForm.role }
+                                      payload.pub_share = editCreditForm.pub_share === '' ? null : parseFloat(editCreditForm.pub_share)
+                                      payload.master_share = editCreditForm.master_share === '' ? null : parseFloat(editCreditForm.master_share)
+                                      await axios.patch(`/api/songs/${song.id}/credits/${credit.id}`, payload)
+                                      setEditingCreditId(null)
+                                      await loadSongDetails()
+                                      if (onSongUpdated) onSongUpdated()
+                                    } catch (err) {
+                                      console.error('Failed to update credit:', err)
+                                      alert(err.response?.data?.detail || 'Failed to update client')
+                                    }
+                                  }}
+                                  className="px-3 py-1 text-xs bg-[#5B8A72] text-white rounded-[8px] font-medium hover:bg-[#4A7A62] transition-colors"
+                                >
+                                  Save
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div key={credit.id} className="flex items-center justify-between p-2 bg-[#F5F7F4] rounded-[10px]">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <Link
+                                  to={`/roster/${credit.creator_id}`}
+                                  onClick={onClose}
+                                  className="flex items-center gap-2 text-[#5B8A72] hover:text-[#7BA594]"
+                                >
+                                  <UserIcon className="w-4 h-4 flex-shrink-0" />
+                                  <span className="font-medium text-sm">{credit.creator_name || 'Unknown'}</span>
+                                </Link>
+                                <span className="text-xs text-[#7A8580]">({credit.role})</span>
+                                {credit.pub_share != null && <span className="text-xs text-[#5B8A72] bg-[rgba(91,138,114,0.1)] px-1.5 py-0.5 rounded">Pub {credit.pub_share}%</span>}
+                                {credit.master_share != null && <span className="text-xs text-[#5A8A9A] bg-[rgba(90,138,154,0.1)] px-1.5 py-0.5 rounded">Master {credit.master_share}%</span>}
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => {
+                                    setEditingCreditId(credit.id)
+                                    setEditCreditForm({
+                                      role: credit.role,
+                                      pub_share: credit.pub_share != null ? String(credit.pub_share) : '',
+                                      master_share: credit.master_share != null ? String(credit.master_share) : ''
+                                    })
+                                  }}
+                                  className="p-1 text-[#7A8580] hover:text-[#5B8A72] rounded-lg hover:bg-[rgba(91,138,114,0.08)] transition-colors"
+                                  title="Edit role & splits"
+                                >
+                                  <PencilSquareIcon className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`Remove ${credit.creator_name || 'this client'} from this song?`)) return
+                                    try {
+                                      await axios.delete(`/api/songs/${song.id}/credits/${credit.id}`)
+                                      await loadSongDetails()
+                                      if (onSongUpdated) onSongUpdated()
+                                    } catch (err) {
+                                      console.error('Failed to remove credit:', err)
+                                      alert('Failed to remove client')
+                                    }
+                                  }}
+                                  className="p-1 text-[#7A8580] hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+                                  title="Remove client"
+                                >
+                                  <XMarkIcon className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          )
                         ))
                       ) : (
                         <p className="text-[#7A8580] text-sm">No clients assigned</p>
                       )}
                       {showAddClient ? (
-                        <div className="flex items-center gap-2">
-                          <select
-                            value={addClientCreatorId}
-                            onChange={(e) => setAddClientCreatorId(e.target.value)}
-                            className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                          >
-                            <option value="">Select a client...</option>
-                            {splitCreators
-                              .filter(c => !songDetails.credits?.some(cr => cr.creator_id === c.id))
-                              .map(c => (
-                                <option key={c.id} value={c.id}>{c.display_name}</option>
-                              ))
-                            }
-                          </select>
-                          <select
-                            value={addClientRole}
-                            onChange={(e) => setAddClientRole(e.target.value)}
-                            className="px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                          >
-                            <option value="PRIMARY_ARTIST">Primary Artist</option>
-                            <option value="FEATURED_ARTIST">Featured Artist</option>
-                            <option value="SONGWRITER">Songwriter</option>
-                            <option value="PRODUCER">Producer</option>
-                            <option value="COMPOSER">Composer</option>
-                            <option value="LYRICIST">Lyricist</option>
-                          </select>
-                          <button
-                            onClick={async () => {
-                              if (!addClientCreatorId) return
-                              try {
-                                await axios.post(`/api/songs/${song.id}/credits`, {
-                                  creator_id: parseInt(addClientCreatorId),
-                                  role: addClientRole
-                                })
-                                setAddClientCreatorId('')
-                                setShowAddClient(false)
-                                await loadSongDetails()
-                                if (onSongUpdated) onSongUpdated()
-                              } catch (err) {
-                                console.error('Failed to add credit:', err)
-                                alert(err.response?.data?.detail || 'Failed to add client')
+                        <div className="p-3 bg-[#F5F7F4] rounded-[10px] space-y-2">
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={addClientCreatorId}
+                              onChange={(e) => setAddClientCreatorId(e.target.value)}
+                              className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                            >
+                              <option value="">Select a client...</option>
+                              {splitCreators
+                                .filter(c => !songDetails.credits?.some(cr => cr.creator_id === c.id))
+                                .map(c => (
+                                  <option key={c.id} value={c.id}>{c.display_name}</option>
+                                ))
                               }
-                            }}
-                            disabled={!addClientCreatorId}
-                            className="px-3 py-2 bg-[#5B8A72] text-white rounded-[10px] text-sm font-medium hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
-                          >
-                            Add
-                          </button>
-                          <button
-                            onClick={() => { setShowAddClient(false); setAddClientCreatorId('') }}
-                            className="p-2 text-[#7A8580] hover:text-[#3D4A44] rounded-[10px] hover:bg-[#EEF1EC] transition-colors"
-                          >
-                            <XMarkIcon className="w-4 h-4" />
-                          </button>
+                            </select>
+                            <select
+                              value={addClientRole}
+                              onChange={(e) => setAddClientRole(e.target.value)}
+                              className="px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                            >
+                              <option value="PRIMARY_ARTIST">Primary Artist</option>
+                              <option value="FEATURED_ARTIST">Featured Artist</option>
+                              <option value="SONGWRITER">Songwriter</option>
+                              <option value="PRODUCER">Producer</option>
+                              <option value="COMPOSER">Composer</option>
+                              <option value="LYRICIST">Lyricist</option>
+                            </select>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[11px] text-[#7A8580]">Pub Split %</label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                value={addClientPubShare}
+                                onChange={(e) => setAddClientPubShare(e.target.value)}
+                                placeholder="Optional"
+                                className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-[8px] text-xs text-[#3D4A44] focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] text-[#7A8580]">Master Split %</label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.01"
+                                value={addClientMasterShare}
+                                onChange={(e) => setAddClientMasterShare(e.target.value)}
+                                placeholder="Optional"
+                                className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-[8px] text-xs text-[#3D4A44] focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => { setShowAddClient(false); setAddClientCreatorId(''); setAddClientPubShare(''); setAddClientMasterShare('') }}
+                              className="px-3 py-1.5 text-xs text-[#7A8580] hover:text-[#3D4A44] rounded-[8px] hover:bg-white transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!addClientCreatorId) return
+                                try {
+                                  const payload = {
+                                    creator_id: parseInt(addClientCreatorId),
+                                    role: addClientRole
+                                  }
+                                  if (addClientPubShare !== '') payload.pub_share = parseFloat(addClientPubShare)
+                                  if (addClientMasterShare !== '') payload.master_share = parseFloat(addClientMasterShare)
+                                  await axios.post(`/api/songs/${song.id}/credits`, payload)
+                                  setAddClientCreatorId('')
+                                  setAddClientPubShare('')
+                                  setAddClientMasterShare('')
+                                  setShowAddClient(false)
+                                  await loadSongDetails()
+                                  if (onSongUpdated) onSongUpdated()
+                                } catch (err) {
+                                  console.error('Failed to add credit:', err)
+                                  alert(err.response?.data?.detail || 'Failed to add client')
+                                }
+                              }}
+                              disabled={!addClientCreatorId}
+                              className="px-3 py-1.5 text-xs bg-[#5B8A72] text-white rounded-[8px] font-medium hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                            >
+                              Add Client
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <button

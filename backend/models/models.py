@@ -429,6 +429,8 @@ class SongCredit(Base):
     creator_id = Column(Integer, ForeignKey("creators.id"), nullable=False, index=True)
     role = Column(String, nullable=False)
     share_percentage = Column(Float, nullable=True)
+    pub_share = Column(Float, nullable=True)
+    master_share = Column(Float, nullable=True)
     creative_contact_id = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     

@@ -360,7 +360,9 @@ def get_song(
                 "creator_id": creator.id,
                 "creator_name": creator.display_name,
                 "role": credit.role,
-                "share_percentage": credit.share_percentage
+                "share_percentage": credit.share_percentage,
+                "pub_share": credit.pub_share,
+                "master_share": credit.master_share
             }
             for credit, creator in credits
         ],

@@ -11,6 +11,14 @@ class CreditCreateRequest(BaseModel):
     creator_id: int
     role: str
     share_percentage: Optional[float] = None
+    pub_share: Optional[float] = None
+    master_share: Optional[float] = None
+
+class CreditUpdateRequest(BaseModel):
+    role: Optional[str] = None
+    share_percentage: Optional[float] = None
+    pub_share: Optional[float] = None
+    master_share: Optional[float] = None
 
 class DSPLinkCreateRequest(BaseModel):
     platform: str
@@ -72,13 +80,61 @@ def create_credit(
         song_id=song_id,
         creator_id=request.creator_id,
         role=request.role,
-        share_percentage=request.share_percentage
+        share_percentage=request.share_percentage,
+        pub_share=request.pub_share,
+        master_share=request.master_share
     )
     db.add(credit)
     db.commit()
     db.refresh(credit)
     
     return credit
+
+@router.patch("/{song_id}/credits/{credit_id}")
+def update_credit(
+    song_id: int,
+    credit_id: int,
+    request: CreditUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    song = db.query(Song).filter(Song.id == song_id).first()
+    
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+    
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == song.organization_id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this song")
+    
+    credit = db.query(SongCredit).filter(
+        SongCredit.id == credit_id,
+        SongCredit.song_id == song_id
+    ).first()
+    
+    if not credit:
+        raise HTTPException(status_code=404, detail="Credit not found")
+    
+    update_data = request.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(credit, key, value)
+    
+    db.commit()
+    db.refresh(credit)
+    
+    return {
+        "id": credit.id,
+        "song_id": credit.song_id,
+        "creator_id": credit.creator_id,
+        "role": credit.role,
+        "share_percentage": credit.share_percentage,
+        "pub_share": credit.pub_share,
+        "master_share": credit.master_share
+    }
 
 @router.delete("/{song_id}/credits/{credit_id}")
 def delete_credit(
