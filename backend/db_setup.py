@@ -120,15 +120,16 @@ def ensure_schema_updates():
             if safe_field in song_cols:
                 col_type = str(song_cols[safe_field]['type'])
                 if 'BOOLEAN' in col_type.upper() or 'BOOL' in col_type.upper():
-                    conn.execute(text(f"""
-                        ALTER TABLE songs ALTER COLUMN {safe_field} TYPE VARCHAR
-                        USING CASE
-                            WHEN {safe_field} = true THEN 'Yes'
-                            WHEN {safe_field} = false THEN 'No'
-                            ELSE 'No'
-                        END
-                    """))
-                    conn.execute(text(f"ALTER TABLE songs ALTER COLUMN {safe_field} SET DEFAULT 'No'"))
+                    alter_type_sql = (
+                        f"ALTER TABLE songs ALTER COLUMN {safe_field} TYPE VARCHAR "
+                        f"USING CASE "
+                        f"WHEN {safe_field} = true THEN 'Yes' "
+                        f"WHEN {safe_field} = false THEN 'No' "
+                        f"ELSE 'No' END"
+                    )  # safe: safe_field is from a hardcoded list, validated by _validate_sql_identifier (DDL identifiers cannot be parameterized)
+                    conn.execute(text(alter_type_sql))
+                    alter_default_sql = f"ALTER TABLE songs ALTER COLUMN {safe_field} SET DEFAULT 'No'"  # safe: same as above
+                    conn.execute(text(alter_default_sql))
                     conn.commit()
                     logger.info(f"Converted songs.{safe_field} from BOOLEAN to VARCHAR")
 
