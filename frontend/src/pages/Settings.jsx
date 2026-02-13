@@ -282,9 +282,9 @@ export default function Settings() {
   const connectDropbox = async () => {
     setConnectingDropbox(true)
     try {
-      const redirectUri = `${window.location.origin}/dropbox-callback`
-      const response = await axios.get(`/api/integrations/dropbox/auth-url?redirect_uri=${encodeURIComponent(redirectUri)}`)
+      const response = await axios.get('/api/integrations/dropbox/auth-url')
       const authUrl = response.data.auth_url || response.data.url
+      const usedRedirectUri = response.data.redirect_uri
       const popup = window.open(authUrl, 'dropbox_auth', 'width=600,height=700,scrollbars=yes')
       const handleMessage = async (event) => {
         if (event.data?.type === 'dropbox_callback' && event.data?.code) {
@@ -292,7 +292,7 @@ export default function Settings() {
           try {
             await axios.post('/api/integrations/dropbox/callback', {
               code: event.data.code,
-              redirect_uri: redirectUri,
+              redirect_uri: usedRedirectUri,
             })
             await fetchIntegrations()
             setMessage('Dropbox connected successfully!')
