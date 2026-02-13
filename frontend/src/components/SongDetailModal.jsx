@@ -782,92 +782,120 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       </span>
                     </div>
                   </div>
-                  {isEditing && (
-                    <>
-                      <div>
-                        <label className="text-[13px] font-medium text-[#7A8580]">Publishing %</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={editForm.publishing_percentage}
-                          onChange={(e) => handleEditChange('publishing_percentage', e.target.value)}
-                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[13px] font-medium text-[#7A8580]">Master %</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={editForm.master_percentage}
-                          onChange={(e) => handleEditChange('master_percentage', e.target.value)}
-                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[13px] font-medium text-[#7A8580]">Advance Amount ($)</label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={editForm.advance_amount}
-                          onChange={(e) => handleEditChange('advance_amount', e.target.value)}
-                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[13px] font-medium text-[#7A8580]">Contract Location</label>
-                        <input
-                          type="text"
-                          value={editForm.contract_location}
-                          onChange={(e) => handleEditChange('contract_location', e.target.value)}
-                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[13px] font-medium text-[#7A8580]">Payment Status</label>
-                        <select
-                          value={editForm.payment_status}
-                          onChange={(e) => handleEditChange('payment_status', e.target.value)}
-                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
-                        >
-                          <option value="PENDING">Pending</option>
-                          <option value="INVOICED">Invoiced</option>
-                          <option value="PAID">Paid</option>
-                          <option value="OVERDUE">Overdue</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[13px] font-medium text-[#7A8580]">Paid</label>
-                        <select
-                          value={editForm.is_paid}
-                          onChange={(e) => handleEditChange('is_paid', e.target.value)}
-                          className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
-                        >
-                          <option value="N/A">N/A</option>
-                          <option value="Yes">Yes</option>
-                          <option value="No">No</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[13px] font-medium text-[#7A8580]">Advance</label>
-                        <DollarOrNAInput
-                          value={editForm.is_invoiced}
-                          onChange={(val) => handleEditChange('is_invoiced', val)}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[13px] font-medium text-[#7A8580]">Fee</label>
-                        <DollarOrNAInput
-                          value={editForm.is_registered_with_dsp}
-                          onChange={(val) => handleEditChange('is_registered_with_dsp', val)}
-                        />
-                      </div>
-                    </>
-                  )}
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Publishing %</label>
+                    {isEditing ? (
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={editForm.publishing_percentage}
+                        onChange={(e) => handleEditChange('publishing_percentage', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.publishing_percentage != null ? `${songDetails.publishing_percentage}%` : 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Master %</label>
+                    {isEditing ? (
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={editForm.master_percentage}
+                        onChange={(e) => handleEditChange('master_percentage', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.master_percentage != null ? `${songDetails.master_percentage}%` : 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Advance Amount ($)</label>
+                    {isEditing ? (
+                      <input
+                        type="number"
+                        min="0"
+                        value={editForm.advance_amount}
+                        onChange={(e) => handleEditChange('advance_amount', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.advance_amount != null ? `$${songDetails.advance_amount.toLocaleString()}` : 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Contract Location</label>
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={editForm.contract_location}
+                        onChange={(e) => handleEditChange('contract_location', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.contract_location || 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Payment Status</label>
+                    {isEditing ? (
+                      <select
+                        value={editForm.payment_status}
+                        onChange={(e) => handleEditChange('payment_status', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
+                      >
+                        <option value="PENDING">Pending</option>
+                        <option value="INVOICED">Invoiced</option>
+                        <option value="PAID">Paid</option>
+                        <option value="OVERDUE">Overdue</option>
+                      </select>
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.payment_status || 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Paid</label>
+                    {isEditing ? (
+                      <select
+                        value={editForm.is_paid}
+                        onChange={(e) => handleEditChange('is_paid', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
+                      >
+                        <option value="N/A">N/A</option>
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
+                      </select>
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.is_paid || 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Advance</label>
+                    {isEditing ? (
+                      <DollarOrNAInput
+                        value={editForm.is_invoiced}
+                        onChange={(val) => handleEditChange('is_invoiced', val)}
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.is_invoiced || 'N/A'}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Fee</label>
+                    {isEditing ? (
+                      <DollarOrNAInput
+                        value={editForm.is_registered_with_dsp}
+                        onChange={(val) => handleEditChange('is_registered_with_dsp', val)}
+                      />
+                    ) : (
+                      <p className="text-[#3D4A44]">{songDetails.is_registered_with_dsp || 'N/A'}</p>
+                    )}
+                  </div>
                 </div>
                 
                 <div className="col-span-2 bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
