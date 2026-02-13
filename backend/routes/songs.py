@@ -102,6 +102,7 @@ class SongDetailResponse(BaseModel):
     recording_code: Optional[str]
     master_paid: Optional[str]
     soundexchange_registered: Optional[str]
+    mlc_registered: Optional[str] = None
     payment_status: Optional[str]
     contract_location: Optional[str]
     notes: Optional[str]
@@ -129,6 +130,7 @@ class SongCreateRequest(BaseModel):
     recording_code: Optional[str] = None
     master_paid: Optional[str] = None
     soundexchange_registered: Optional[str] = None
+    mlc_registered: Optional[str] = None
     payment_status: Optional[str] = None
     contract_location: Optional[str] = None
     notes: Optional[str] = None
@@ -159,6 +161,7 @@ class SongUpdateRequest(BaseModel):
     master_percentage: Optional[float] = None
     advance_amount: Optional[int] = None
     soundexchange_registered: Optional[str] = None
+    mlc_registered: Optional[str] = None
     payment_status: Optional[str] = None
     contract_location: Optional[str] = None
     notes: Optional[str] = None
@@ -279,6 +282,7 @@ def get_organization_songs(
             "recording_code": song.recording_code,
             "master_paid": song.master_paid,
             "soundexchange_registered": song.soundexchange_registered,
+            "mlc_registered": song.mlc_registered,
             "payment_status": song.payment_status,
             "contract_location": song.contract_location,
             "notes": song.notes,
@@ -348,6 +352,7 @@ def get_song(
         "recording_code": song.recording_code,
         "master_paid": song.master_paid,
         "soundexchange_registered": song.soundexchange_registered,
+        "mlc_registered": song.mlc_registered,
         "payment_status": song.payment_status,
         "contract_location": song.contract_location,
         "notes": song.notes,
@@ -571,6 +576,7 @@ def create_song(
         recording_code=request.recording_code,
         master_paid=request.master_paid,
         soundexchange_registered=request.soundexchange_registered,
+        mlc_registered=request.mlc_registered,
         payment_status=request.payment_status,
         contract_location=request.contract_location,
         notes=request.notes,
@@ -621,6 +627,7 @@ def create_song(
         "recording_code": song.recording_code,
         "master_paid": song.master_paid,
         "soundexchange_registered": song.soundexchange_registered,
+        "mlc_registered": song.mlc_registered,
         "payment_status": song.payment_status,
         "contract_location": song.contract_location,
         "notes": song.notes,
@@ -681,6 +688,7 @@ def update_song(
         "recording_code": song.recording_code,
         "master_paid": song.master_paid,
         "soundexchange_registered": song.soundexchange_registered,
+        "mlc_registered": song.mlc_registered,
         "payment_status": song.payment_status,
         "contract_location": song.contract_location,
         "notes": song.notes,

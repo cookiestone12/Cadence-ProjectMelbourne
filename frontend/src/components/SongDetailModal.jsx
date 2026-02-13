@@ -1360,6 +1360,10 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       {getStatusIcon(songDetails.soundexchange_registered)}
                     </div>
                     <div className="flex items-center justify-between">
+                      <span className="text-[15px] text-[#3D4A44]">MLC Registered</span>
+                      {getStatusIcon(songDetails.mlc_registered)}
+                    </div>
+                    <div className="flex items-center justify-between">
                       <span className="text-[15px] text-[#3D4A44]">Paid</span>
                       {getStatusIcon(songDetails.is_paid)}
                     </div>

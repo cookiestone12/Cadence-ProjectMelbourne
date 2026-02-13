@@ -265,6 +265,7 @@ class Song(Base):
     
     master_paid = Column(String, nullable=True)
     soundexchange_registered = Column(String, nullable=True)
+    mlc_registered = Column(String, nullable=True)
     payment_status = Column(String, nullable=True)
     contract_location = Column(String, nullable=True)
     notes = Column(Text, nullable=True)

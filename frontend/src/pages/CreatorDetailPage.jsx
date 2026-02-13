@@ -319,6 +319,7 @@ export default function CreatorDetailPage() {
       is_registered_with_pro: song.is_registered_with_pro || false,
       is_registered_with_dsp: normalizeDollarField(song.is_registered_with_dsp),
       soundexchange_registered: normalizeTriState(song.soundexchange_registered),
+      mlc_registered: normalizeTriState(song.mlc_registered),
       is_paid: normalizeTriState(song.is_paid),
       is_invoiced: normalizeDollarField(song.is_invoiced),
       has_contract_executed: song.has_contract_executed || false,
@@ -346,6 +347,7 @@ export default function CreatorDetailPage() {
         is_registered_with_pro: editForm.is_registered_with_pro,
         is_registered_with_dsp: editForm.is_registered_with_dsp,
         soundexchange_registered: editForm.soundexchange_registered,
+        mlc_registered: editForm.mlc_registered,
         is_paid: editForm.is_paid,
         is_invoiced: editForm.is_invoiced,
         has_contract_executed: editForm.has_contract_executed,
@@ -665,7 +667,7 @@ export default function CreatorDetailPage() {
       bVal = parseFloat(bVal) || 0
       return (aVal - bVal) * dir
     }
-    if (sortColumn === 'is_registered_with_pro' || sortColumn === 'is_paid' || sortColumn === 'is_released' || sortColumn === 'has_contract_executed' || sortColumn === 'soundexchange_registered' || sortColumn === 'is_invoiced') {
+    if (sortColumn === 'is_registered_with_pro' || sortColumn === 'is_paid' || sortColumn === 'is_released' || sortColumn === 'has_contract_executed' || sortColumn === 'soundexchange_registered' || sortColumn === 'mlc_registered' || sortColumn === 'is_invoiced') {
       const toBool = (v) => v === true || v === 'Yes' || v === 'true' ? 1 : 0
       return (toBool(aVal) - toBool(bVal)) * dir
     }
@@ -1191,6 +1193,7 @@ export default function CreatorDetailPage() {
                     <SortHeader column="is_registered_with_pro" className="text-center">PRO</SortHeader>
                     <SortHeader column="is_invoiced" className="text-center">Fee</SortHeader>
                     <SortHeader column="soundexchange_registered" className="text-center">Sound Ex.</SortHeader>
+                    <SortHeader column="mlc_registered" className="text-center">MLC</SortHeader>
                     <SortHeader column="has_contract_executed" className="text-center">Contract</SortHeader>
                     <SortHeader column="is_paid" className="text-center">Paid</SortHeader>
                     <SortHeader column="is_released" className="text-center">Released</SortHeader>
@@ -1281,6 +1284,17 @@ export default function CreatorDetailPage() {
                             </select>
                           </td>
                           <td className="px-4 py-2 text-center">
+                            <select 
+                              value={editForm.mlc_registered}
+                              onChange={(e) => setEditForm({...editForm, mlc_registered: e.target.value})}
+                              className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72]"
+                            >
+                              <option value="N/A">N/A</option>
+                              <option value="Yes">Yes</option>
+                              <option value="No">No</option>
+                            </select>
+                          </td>
+                          <td className="px-4 py-2 text-center">
                             <input 
                               type="checkbox" 
                               checked={editForm.has_contract_executed}
@@ -1359,6 +1373,9 @@ export default function CreatorDetailPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <StatusBadge value={song.soundexchange_registered} />
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <StatusBadge value={song.mlc_registered} />
                           </td>
                           <td className="px-4 py-3 text-center">
                             <StatusBadge value={song.has_contract_executed} />
