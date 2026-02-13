@@ -158,7 +158,10 @@ def ensure_schema_updates():
         for idx_name, table, column in perf_indexes:
             if idx_name not in existing_indexes and table in inspector.get_table_names():
                 try:
-                    conn.execute(text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({column})"))
+                    safe_idx = _validate_sql_identifier(idx_name)
+                    safe_tbl = _validate_sql_identifier(table)
+                    safe_col = _validate_sql_identifier(column)
+                    conn.execute(text(f"CREATE INDEX IF NOT EXISTS {safe_idx} ON {safe_tbl}({safe_col})"))
                     conn.commit()
                     logger.info(f"Created performance index {idx_name}")
                 except Exception as e:
