@@ -486,12 +486,19 @@ function ContractsPageInner() {
       }
       if (payload.creator_id) payload.creator_id = parseInt(payload.creator_id)
       else payload.creator_id = null
+      if (!payload.start_date) payload.start_date = null
+      if (!payload.end_date) payload.end_date = null
+      if (!payload.reference_number) payload.reference_number = null
+      if (!payload.notes) payload.notes = null
+      if (!payload.terms_summary) payload.terms_summary = null
+      if (payload.advance_currency === '') payload.advance_currency = null
       await axios.put(`/api/rights/contracts/${contractDetail.id}`, payload)
       setEditMode(false)
       await loadData()
       await refreshDetail()
     } catch (error) {
       console.error('Failed to update contract:', error)
+      alert('Failed to save changes. Please check the form fields and try again.')
     }
   }
 
@@ -1613,10 +1620,18 @@ function ContractsPageInner() {
                             <div>
                               <p className="text-sm font-medium text-[#3D4A44]">{asset.asset_title}</p>
                               <div className="flex items-center space-x-2">
-                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${asset.asset_type === 'SONG' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${asset.asset_type === 'SONG' ? 'bg-purple-100 text-purple-700' : asset.asset_type === 'RELEASE' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
                                   {asset.asset_type}
                                 </span>
                                 {asset.asset_artist && <span className="text-xs text-[#7A8580]">{asset.asset_artist}</span>}
+                                {asset.audio_linked ? (
+                                  <span className="inline-flex items-center space-x-1 text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-medium" title={asset.audio_linked.path_display || asset.audio_linked.name}>
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V4.462c0-.746-.57-1.369-1.31-1.447L7.94 2.12A2.25 2.25 0 005.69 4.335v13.29" /></svg>
+                                    <span>Audio Linked</span>
+                                  </span>
+                                ) : (asset.asset_type === 'SONG' || asset.asset_type === 'RELEASE') ? (
+                                  <span className="text-xs px-1.5 py-0.5 rounded bg-[#EEF1EC] text-[#7A8580]">No Audio</span>
+                                ) : null}
                               </div>
                             </div>
                           </div>

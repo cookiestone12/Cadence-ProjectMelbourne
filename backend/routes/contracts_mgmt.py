@@ -8,7 +8,7 @@ from datetime import date, datetime
 import io
 from ..models import (
     get_db, Contract, ContractParty, ContractAsset, ContractDocument, RightsSplit,
-    Song, Work, Creator, OrganizationMember, User
+    Song, Work, Release, Creator, OrganizationMember, User, AudioAsset
 )
 from ..utils.auth import get_current_user
 
@@ -138,12 +138,45 @@ def _contract_to_dict(contract: Contract, db: Session, include_details: bool = F
         assets_data = []
         for ca in contract.assets:
             asset_title = None
+            asset_artist = None
+            audio_info = None
             if ca.asset_type == "SONG":
                 song = db.query(Song).filter(Song.id == ca.asset_id).first()
                 asset_title = song.title if song else "Unknown Song"
+                asset_artist = song.primary_artist if song else None
+                if song:
+                    audio = db.query(AudioAsset).filter(
+                        AudioAsset.song_id == song.id,
+                        AudioAsset.org_id == contract.organization_id,
+                    ).first()
+                    if audio:
+                        audio_info = {
+                            "id": audio.id,
+                            "name": audio.name,
+                            "provider": audio.provider,
+                            "path_display": audio.path_display,
+                            "file_type": audio.file_type,
+                        }
             elif ca.asset_type == "WORK":
                 work = db.query(Work).filter(Work.id == ca.asset_id).first()
                 asset_title = work.title if work else "Unknown Work"
+            elif ca.asset_type == "RELEASE":
+                release = db.query(Release).filter(Release.id == ca.asset_id).first()
+                asset_title = release.title if release else "Unknown Release"
+                asset_artist = release.primary_artist if release else None
+                if release:
+                    audio = db.query(AudioAsset).filter(
+                        AudioAsset.release_id == release.id,
+                        AudioAsset.org_id == contract.organization_id,
+                    ).first()
+                    if audio:
+                        audio_info = {
+                            "id": audio.id,
+                            "name": audio.name,
+                            "provider": audio.provider,
+                            "path_display": audio.path_display,
+                            "file_type": audio.file_type,
+                        }
 
             splits = db.query(RightsSplit).filter(RightsSplit.contract_asset_id == ca.id).all()
             splits_data = []
@@ -169,6 +202,8 @@ def _contract_to_dict(contract: Contract, db: Session, include_details: bool = F
                 "asset_type": ca.asset_type,
                 "asset_id": ca.asset_id,
                 "asset_title": asset_title,
+                "asset_artist": asset_artist,
+                "audio_linked": audio_info,
                 "splits": splits_data,
                 "created_at": ca.created_at.isoformat() if ca.created_at else None,
             })
