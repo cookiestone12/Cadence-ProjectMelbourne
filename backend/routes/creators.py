@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from typing import List, Optional
-from ..models import get_db, Creator, CreativeContact, OrganizationMember, User, Song, SongCredit, WorkCredit
+from ..models import get_db, Creator, CreativeContact, Organization, OrganizationMember, User, Song, SongCredit, WorkCredit
 from ..utils.auth import get_current_user
 import os
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 router = APIRouter(prefix="/api/creators", tags=["creators"])
