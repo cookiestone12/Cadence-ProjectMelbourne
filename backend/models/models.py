@@ -188,6 +188,7 @@ class Creator(Base):
     instagram_url = Column(String, nullable=True)
     twitter_url = Column(String, nullable=True)
     custom_links = Column(JSON, default=list)
+    roster_export_fields = Column(JSON, default=list)
     assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     publisher_contact_id = Column(Integer, nullable=True)
     admin_contact_id = Column(Integer, nullable=True)

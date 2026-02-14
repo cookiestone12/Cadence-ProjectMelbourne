@@ -84,6 +84,7 @@ export default function CreatorDetailPage() {
     publisher_contact_id: null,
     admin_contact_id: null,
     bio: '',
+    roster_export_fields: [],
     spotify_url: '',
     apple_music_url: '',
     youtube_url: '',
@@ -476,6 +477,7 @@ export default function CreatorDetailPage() {
       publisher_contact_id: creator.publisher_contact_id || null,
       admin_contact_id: creator.admin_contact_id || null,
       bio: creator.bio || '',
+      roster_export_fields: creator.roster_export_fields || [],
       spotify_url: creator.spotify_url || '',
       apple_music_url: creator.apple_music_url || '',
       youtube_url: creator.youtube_url || '',
@@ -2325,6 +2327,72 @@ export default function CreatorDetailPage() {
                       </button>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              <div className="border-t border-[rgba(59,77,67,0.1)] pt-4 mt-4">
+                <h3 className="text-[15px] font-semibold text-[#3D4A44] mb-1">Roster Export Settings</h3>
+                <p className="text-xs text-[#7A8580] mb-3">Choose which fields appear in the exported Roster PDF</p>
+                <div className="space-y-2">
+                  {[
+                    { key: 'bio', label: 'Bio / Description', alwaysShow: true },
+                    { key: 'spotify_url', label: 'Spotify' },
+                    { key: 'apple_music_url', label: 'Apple Music' },
+                    { key: 'youtube_url', label: 'YouTube' },
+                    { key: 'instagram_url', label: 'Instagram' },
+                    { key: 'twitter_url', label: 'X / Twitter' },
+                    { key: 'website_url', label: 'Website' },
+                  ]
+                    .filter(f => f.alwaysShow || creatorForm[f.key])
+                    .map(field => (
+                      <div key={field.key} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-[#F5F7F4] transition-colors">
+                        <span className="text-sm text-[#3D4A44]">{field.label}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fields = creatorForm.roster_export_fields || []
+                            const updated = fields.includes(field.key)
+                              ? fields.filter(f => f !== field.key)
+                              : [...fields, field.key]
+                            setCreatorForm({...creatorForm, roster_export_fields: updated})
+                          }}
+                          className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+                          style={{ backgroundColor: (creatorForm.roster_export_fields || []).includes(field.key) ? '#5B8A72' : '#D1D5DB' }}
+                        >
+                          <span
+                            className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm"
+                            style={{ transform: (creatorForm.roster_export_fields || []).includes(field.key) ? 'translateX(18px)' : 'translateX(3px)' }}
+                          />
+                        </button>
+                      </div>
+                    ))
+                  }
+                  {creatorForm.custom_links.map((link, idx) => {
+                    if (!link.url) return null
+                    const fieldKey = `custom_link_${idx}`
+                    return (
+                      <div key={fieldKey} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-[#F5F7F4] transition-colors">
+                        <span className="text-sm text-[#3D4A44]">{link.name || `Custom Link ${idx + 1}`}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fields = creatorForm.roster_export_fields || []
+                            const updated = fields.includes(fieldKey)
+                              ? fields.filter(f => f !== fieldKey)
+                              : [...fields, fieldKey]
+                            setCreatorForm({...creatorForm, roster_export_fields: updated})
+                          }}
+                          className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+                          style={{ backgroundColor: (creatorForm.roster_export_fields || []).includes(fieldKey) ? '#5B8A72' : '#D1D5DB' }}
+                        >
+                          <span
+                            className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm"
+                            style={{ transform: (creatorForm.roster_export_fields || []).includes(fieldKey) ? 'translateX(18px)' : 'translateX(3px)' }}
+                          />
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 

@@ -33,6 +33,7 @@ class CreatorResponse(BaseModel):
     instagram_url: Optional[str] = None
     twitter_url: Optional[str] = None
     custom_links: Optional[List[dict]] = None
+    roster_export_fields: Optional[List[str]] = None
     
     class Config:
         from_attributes = True
@@ -53,6 +54,7 @@ class CreatorCreateRequest(BaseModel):
     instagram_url: Optional[str] = None
     twitter_url: Optional[str] = None
     custom_links: Optional[List[dict]] = None
+    roster_export_fields: Optional[List[str]] = None
 
 class CreatorUpdateRequest(BaseModel):
     display_name: Optional[str] = None
@@ -72,6 +74,7 @@ class CreatorUpdateRequest(BaseModel):
     instagram_url: Optional[str] = None
     twitter_url: Optional[str] = None
     custom_links: Optional[List[dict]] = None
+    roster_export_fields: Optional[List[str]] = None
 
 class CreatorDetailResponse(BaseModel):
     id: int
@@ -98,6 +101,7 @@ class CreatorDetailResponse(BaseModel):
     instagram_url: Optional[str] = None
     twitter_url: Optional[str] = None
     custom_links: Optional[List[dict]] = None
+    roster_export_fields: Optional[List[str]] = None
     
     class Config:
         from_attributes = True
@@ -160,6 +164,7 @@ def get_organization_creators(
             "instagram_url": creator.instagram_url,
             "twitter_url": creator.twitter_url,
             "custom_links": creator.custom_links or [],
+            "roster_export_fields": creator.roster_export_fields or [],
         })
     
     return result
@@ -204,6 +209,7 @@ def create_creator(
         instagram_url=request.instagram_url,
         twitter_url=request.twitter_url,
         custom_links=request.custom_links or [],
+        roster_export_fields=request.roster_export_fields or [],
     )
     db.add(creator)
     db.flush()
@@ -240,7 +246,8 @@ def create_creator(
         "hero_image_url": creator.hero_image_url,
         "linked_user_id": creator.linked_user_id,
         "song_count": 0,
-        "avg_health_score": 0.0
+        "avg_health_score": 0.0,
+        "roster_export_fields": creator.roster_export_fields or [],
     }
 
 @router.get("/{creator_id}", response_model=CreatorDetailResponse)
@@ -316,6 +323,7 @@ def get_creator(
         "instagram_url": creator.instagram_url,
         "twitter_url": creator.twitter_url,
         "custom_links": creator.custom_links or [],
+        "roster_export_fields": creator.roster_export_fields or [],
     }
 
 @router.put("/{creator_id}", response_model=CreatorResponse)
@@ -375,6 +383,8 @@ def update_creator(
         creator.twitter_url = request.twitter_url
     if request.custom_links is not None:
         creator.custom_links = request.custom_links
+    if request.roster_export_fields is not None:
+        creator.roster_export_fields = request.roster_export_fields
     
     db.commit()
     db.refresh(creator)
@@ -401,7 +411,8 @@ def update_creator(
         "hero_image_url": creator.hero_image_url,
         "linked_user_id": creator.linked_user_id,
         "song_count": song_count,
-        "avg_health_score": float(avg_health) if avg_health else 0.0
+        "avg_health_score": float(avg_health) if avg_health else 0.0,
+        "roster_export_fields": creator.roster_export_fields or [],
     }
 
 
@@ -610,14 +621,26 @@ def _build_roster_pdf(creators, org_name, request):
     label_style = ParagraphStyle('Label', fontName='Helvetica', fontSize=7, textColor=muted_text, spaceAfter=1, leading=9)
     link_style = ParagraphStyle('Link', fontName='Helvetica', fontSize=9, textColor=sage, spaceAfter=4, leading=12)
     role_style = ParagraphStyle('Role', fontName='Helvetica', fontSize=8, textColor=sage, spaceAfter=4, leading=10)
+    pill_style = ParagraphStyle('Pill', fontName='Helvetica-Bold', fontSize=7, textColor=colors.white, leading=9, alignment=1)
 
     elements = []
 
     id_order = {cid: idx for idx, cid in enumerate(request.creator_ids)}
     creators.sort(key=lambda c: id_order.get(c.id, 999))
 
+    link_colors = {
+        'spotify_url': ('#1DB954', 'Spotify'),
+        'apple_music_url': ('#FA233B', 'Apple Music'),
+        'youtube_url': ('#FF0000', 'YouTube'),
+        'instagram_url': ('#E1306C', 'Instagram'),
+        'twitter_url': ('#000000', 'X'),
+        'website_url': ('#5B8A72', 'Website'),
+    }
+
     for idx, creator in enumerate(creators):
         card_elements = []
+        export_fields = creator.roster_export_fields or []
+        show_all = len(export_fields) == 0
 
         if idx > 0:
             card_elements.append(Spacer(1, 16))
@@ -663,40 +686,60 @@ def _build_roster_pdf(creators, org_name, request):
             role_text = " · ".join(creator.roles)
             info_parts.append(Paragraph(role_text, role_style))
 
-        if creator.bio:
+        if (show_all or 'bio' in export_fields) and creator.bio:
             bio_text = creator.bio[:300] + ("..." if len(creator.bio) > 300 else "")
             info_parts.append(Paragraph(bio_text, bio_style))
 
-        dsp_links = []
-        if creator.spotify_url:
-            dsp_links.append(f'<a href="{creator.spotify_url}" color="#5B8A72">Spotify</a>')
-        if creator.apple_music_url:
-            dsp_links.append(f'<a href="{creator.apple_music_url}" color="#5B8A72">Apple Music</a>')
-        if creator.youtube_url:
-            dsp_links.append(f'<a href="{creator.youtube_url}" color="#5B8A72">YouTube</a>')
-        if dsp_links:
-            info_parts.append(Paragraph(" · ".join(dsp_links), link_style))
+        pill_cells = []
+        pill_bg_colors = []
 
-        social_links = []
-        if creator.instagram_url:
-            social_links.append(f'<a href="{creator.instagram_url}" color="#5B8A72">Instagram</a>')
-        if creator.twitter_url:
-            social_links.append(f'<a href="{creator.twitter_url}" color="#5B8A72">X / Twitter</a>')
-        if creator.website_url:
-            social_links.append(f'<a href="{creator.website_url}" color="#5B8A72">Website</a>')
-        if social_links:
-            info_parts.append(Paragraph(" · ".join(social_links), link_style))
+        for field_key, (bg_hex, label) in link_colors.items():
+            url_val = getattr(creator, field_key, None)
+            if url_val and (show_all or field_key in export_fields):
+                pill_para = Paragraph(f'<a href="{url_val}" color="#FFFFFF">{label}</a>', pill_style)
+                pill_cells.append(pill_para)
+                pill_bg_colors.append(colors.HexColor(bg_hex))
 
         custom = creator.custom_links or []
-        if custom:
-            custom_parts = []
-            for cl in custom:
-                name = cl.get("name", "Link")
-                url = cl.get("url", "")
-                if url:
-                    custom_parts.append(f'<a href="{url}" color="#5B8A72">{name}</a>')
-            if custom_parts:
-                info_parts.append(Paragraph(" · ".join(custom_parts), link_style))
+        for ci, cl in enumerate(custom):
+            cl_name = cl.get("name", "Link")
+            cl_url = cl.get("url", "")
+            cl_key = f"custom_link_{ci}"
+            if cl_url and (show_all or cl_key in export_fields):
+                pill_para = Paragraph(f'<a href="{cl_url}" color="#FFFFFF">{cl_name}</a>', pill_style)
+                pill_cells.append(pill_para)
+                pill_bg_colors.append(colors.HexColor("#7A8580"))
+
+        if pill_cells:
+            max_per_row = 5
+            rows = []
+            row_colors = []
+            for i in range(0, len(pill_cells), max_per_row):
+                row = pill_cells[i:i+max_per_row]
+                rc = pill_bg_colors[i:i+max_per_row]
+                while len(row) < max_per_row:
+                    row.append('')
+                    rc.append(colors.transparent)
+                rows.append(row)
+                row_colors.append(rc)
+
+            col_w = (page_w - 2.5*inch - 1.1*inch - 12) / max_per_row
+            pill_table_style = [
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                ('ROUNDEDCORNERS', [4, 4, 4, 4]),
+            ]
+            for ri, rc in enumerate(row_colors):
+                for ci_idx, bg_c in enumerate(rc):
+                    if bg_c != colors.transparent:
+                        pill_table_style.append(('BACKGROUND', (ci_idx, ri), (ci_idx, ri), bg_c))
+
+            pill_table = Table(rows, colWidths=[col_w]*max_per_row, style=TableStyle(pill_table_style))
+            info_parts.append(Spacer(1, 4))
+            info_parts.append(pill_table)
 
         from reportlab.platypus import TableStyle as TS
         info_cell = []
