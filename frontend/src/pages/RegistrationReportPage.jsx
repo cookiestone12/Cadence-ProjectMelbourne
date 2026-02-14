@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import axios from 'axios'
 import {
   ArrowDownTrayIcon,
@@ -10,12 +10,14 @@ import {
   CheckIcon,
   FunnelIcon,
   PaperAirplaneIcon,
-  XMarkIcon
+  XMarkIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon } from '@heroicons/react/24/solid'
 
 export default function RegistrationReportPage() {
   const [loading, setLoading] = useState(true)
+  const [orgId, setOrgId] = useState(null)
   const [assetType, setAssetType] = useState('works')
   const [reportData, setReportData] = useState([])
   const [summary, setSummary] = useState({ total: 0, valid: 0, invalid: 0, outstanding: 0, registered: 0 })
@@ -31,31 +33,39 @@ export default function RegistrationReportPage() {
   const [adminContacts, setAdminContacts] = useState([])
   const [selectedAdminId, setSelectedAdminId] = useState('')
 
-  const orgId = JSON.parse(localStorage.getItem('organization'))?.id
-
   useEffect(() => {
-    if (orgId) {
-      axios.get(`/api/registration-reports/org/${orgId}/creators`)
-        .then(res => setCreators(Array.isArray(res.data) ? res.data : []))
-        .catch(() => {})
+    async function init() {
+      try {
+        const orgRes = await axios.get('/api/organizations/current')
+        const currentOrgId = orgRes.data?.id
+        if (!currentOrgId) { setLoading(false); return }
+        setOrgId(currentOrgId)
 
-      axios.get(`/api/creative-directory/org/${orgId}`)
-        .then(res => {
-          const contacts = Array.isArray(res.data) ? res.data : res.data.contacts || []
-          setAdminContacts(contacts.filter(c => c.email))
-        })
-        .catch(() => {})
+        axios.get(`/api/registration-reports/org/${currentOrgId}/creators`)
+          .then(res => setCreators(Array.isArray(res.data) ? res.data : []))
+          .catch(() => {})
+
+        axios.get(`/api/creative-directory/org/${currentOrgId}`)
+          .then(res => {
+            const contacts = Array.isArray(res.data) ? res.data : res.data.contacts || []
+            setAdminContacts(contacts.filter(c => c.email))
+          })
+          .catch(() => {})
+      } catch {
+        setLoading(false)
+      }
     }
-  }, [orgId])
+    init()
+  }, [])
 
-  useEffect(() => {
-    if (!orgId) { setLoading(false); return }
+  const fetchReport = useCallback((currentOrgId, currentAssetType, creatorId, status) => {
+    if (!currentOrgId) return
     setLoading(true)
     const params = new URLSearchParams()
-    if (selectedCreatorId) params.append('creator_id', selectedCreatorId)
-    if (statusFilter) params.append('status', statusFilter)
+    if (creatorId) params.append('creator_id', creatorId)
+    if (status) params.append('status', status)
     const qs = params.toString() ? `?${params.toString()}` : ''
-    axios.get(`/api/registration-reports/org/${orgId}/${assetType}${qs}`)
+    axios.get(`/api/registration-reports/org/${currentOrgId}/${currentAssetType}${qs}`)
       .then(res => {
         const data = res.data
         setReportData(Array.isArray(data) ? data : data.items || [])
@@ -69,7 +79,16 @@ export default function RegistrationReportPage() {
       })
       .catch(() => { setReportData([]); setSummary({ total: 0, valid: 0, invalid: 0, outstanding: 0, registered: 0 }) })
       .finally(() => setLoading(false))
-  }, [orgId, assetType, selectedCreatorId, statusFilter])
+  }, [])
+
+  useEffect(() => {
+    if (orgId) fetchReport(orgId, assetType, selectedCreatorId, statusFilter)
+  }, [orgId, assetType, selectedCreatorId, statusFilter, fetchReport])
+
+  function handleGenerateReport() {
+    setSelectedItems(new Set())
+    fetchReport(orgId, assetType, selectedCreatorId, statusFilter)
+  }
 
   const toggleExpanded = (id) => {
     setExpandedItems(prev => {
@@ -219,6 +238,14 @@ export default function RegistrationReportPage() {
             <p className="text-white/80 text-sm sm:text-base">PRO registration management — select, report, and send</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleGenerateReport}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              Generate
+            </button>
             <button
               onClick={handleExportCSV}
               className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
