@@ -1,0 +1,422 @@
+REPLIT PROMPT — Add Royalty Processing Pipeline + Ledger + Recoupment (ON TOP of existing Rythm, NO UI restyle)
+
+Context (DO NOT CHANGE):
+You are working inside an existing app called “Rythm — Catalog Intelligence” (multi-tenant). It already has modules and UI patterns documented in the current User Guide v2.2 (February 2026): Home Dashboard, Catalog, Works, Releases, Contracts & Rights, Action Items, Royalties, Placements, Reports, Valuation, Settings. It already supports statement upload, provider auto-detect/mapping, catalog matching, split calculations, recoupment progress, and creator accounting summaries. Do NOT redesign the UI, do NOT rename routes, do NOT remove features. Add a new layer of capabilities while preserving the current look-and-feel (tables, tabs, modals, badges, existing sidebar).  [oai_citation:0‡Rythm — Catalog Intelligence.pdf](sediment://file_000000001fa871f5a00dab0af9e5579e)
+
+Objective:
+Implement a professional, intuitive “Royalty Processing” system comparable to Reprtoir’s pipeline by adding:
+1) Statement objects + normalized statement lines
+2) A Matching Console UI (review/confirm matches) without changing the style
+3) A processing pipeline that creates auditable ledger entries (earnings, fees, recoupment, payables, reversals)
+4) Advances + recoupment pools (master/publishing/etc.) as deal objects (not dependent on statement negative lines)
+5) Payables view and payee abstraction (creators + optional companies)
+6) Reprocessing with reversals (audit-safe corrections)
+7) Guide update: extend the existing “Royalties” and “Contracts & Rights” sections and add “Royalty Processing” sub-sections; be thorough.
+
+Non-negotiables:
+- NO UI style changes. Use existing table components, tabs, badges, buttons, layout spacing.
+- NO breaking changes to existing schema/flows. Additive migrations only.
+- Multi-tenant strict scoping: all new tables MUST include org_id and be filtered by org_id.
+- Keep existing Royalties page and functionality; add “Processing Inbox”, “Statements”, “Matching Console”, “Payables”, “Run History”, “Reprocess”.
+- Maintain existing “Creator Accounting Tab” concept and extend it with ledger/recoupment drill-down (do not remove summary).
+- All processing is asynchronous (jobs/queue). UI remains responsive with status indicators.
+- Robust audit trail: never delete processed accounting data; use reversal entries for corrections.
+
+════════════════════════════════════════════════════════════
+PART A — DATABASE ADDITIONS (MIGRATIONS)
+════════════════════════════════════════════════════════════
+
+Add the following new tables (do not alter existing tables unless adding nullable columns is unavoidable):
+
+1) royalty_statements
+- id (uuid pk)
+- org_id (uuid, indexed)
+- provider_name (text)
+- provider_type (enum/text: PRO, DSP, DISTRIBUTOR, LABEL, PUBLISHER, OTHER)
+- statement_period_start (date, nullable)
+- statement_period_end (date, nullable)
+- received_date (date, nullable)
+- currency (char(3), default 'USD')
+- source_file_name (text)
+- source_file_storage_ref (text, nullable)  // reference to stored upload (existing storage system)
+- row_count (int, default 0)
+- gross_total (numeric(14,2), nullable)
+- net_total (numeric(14,2), nullable)
+- status (enum: UPLOADED, MAPPING_REQUIRED, MAPPING_COMPLETE, MATCHING, READY_TO_PROCESS, PROCESSED, LOCKED)
+- processing_version (int, default 1)
+- locked_at (timestamptz, nullable)
+- created_by_user_id (uuid, nullable)
+- created_at, updated_at
+Indexes:
+- (org_id, status)
+- (org_id, provider_name)
+- (org_id, statement_period_end)
+
+2) royalty_statement_lines
+- id (uuid pk)
+- org_id (uuid, indexed)
+- statement_id (uuid fk -> royalty_statements.id, indexed)
+- line_hash (text, indexed) // deterministic hash of key raw fields to prevent dupes
+Raw identifiers:
+- isrc (text, indexed, nullable)
+- upc (text, nullable)
+- iswc (text, nullable)
+- track_title_raw (text, nullable)
+- release_title_raw (text, nullable)
+- artist_name_raw (text, nullable)
+- label_raw (text, nullable)
+Dimensions:
+- territory (text, nullable)
+- store (text, nullable)
+- usage_type (text, nullable)
+- revenue_type (text/enum: MASTER, PUBLISHING, MECHANICAL, PERFORMANCE, SYNC, NEIGHBORING, OTHER)
+- unit_count (numeric(18,6), nullable)
+Money:
+- gross_amount (numeric(14,2), nullable)
+- deductions_amount (numeric(14,2), nullable)
+- net_amount (numeric(14,2), not null default 0)
+- currency (char(3), nullable)
+- fx_rate_to_statement_currency (numeric(18,8), nullable)
+- net_amount_statement_currency (numeric(14,2), not null default 0)
+Matching:
+- matched_song_id (uuid fk -> songs.id, nullable, indexed)
+- matched_work_id (uuid fk -> works.id, nullable)
+- matched_release_id (uuid fk -> releases.id, nullable)
+- match_status (enum: UNMATCHED, AUTO_MATCHED, CONFIRMED, REJECTED, REVIEW_REQUIRED)
+- match_confidence (numeric(5,2), nullable) // 0-100
+- match_method (text, nullable) // isrc_exact, fuzzy, manual
+- matched_by_user_id (uuid, nullable)
+- matched_at (timestamptz, nullable)
+- created_at, updated_at
+Indexes:
+- (org_id, statement_id)
+- (org_id, isrc)
+- (org_id, match_status)
+- (org_id, matched_song_id)
+
+3) royalty_processing_runs
+- id (uuid pk)
+- org_id (uuid, indexed)
+- statement_id (uuid, indexed)
+- run_version (int) // ties to statement.processing_version
+- status (enum: RUNNING, SUCCEEDED, FAILED, PARTIAL)
+- started_at, completed_at
+- started_by_user_id
+- notes (text, nullable)
+- created_at
+
+4) royalty_ledger_entries  // the accounting backbone
+- id (uuid pk)
+- org_id (uuid, indexed)
+- statement_id (uuid, indexed)
+- statement_line_id (uuid fk -> royalty_statement_lines.id, nullable, indexed)
+- processing_run_id (uuid fk -> royalty_processing_runs.id, indexed)
+Linkage:
+- song_id (uuid fk -> songs.id, nullable, indexed)
+- work_id (uuid fk -> works.id, nullable)
+- release_id (uuid fk -> releases.id, nullable)
+- contract_id (uuid fk -> contracts.id, nullable, indexed)
+- payee_id (uuid fk -> payees.id, indexed)
+Classification:
+- entry_type (enum: EARNING, FEE, RECOUPMENT_APPLIED, PAYABLE_CREATED, PAYMENT, REVERSAL, ADJUSTMENT)
+- revenue_type (text/enum same as line)
+- source (text, nullable) // provider_name or internal
+Amounts:
+- amount_statement_currency (numeric(14,2), not null)
+- payee_currency (char(3), nullable)
+- amount_payee_currency (numeric(14,2), nullable)
+- fx_rate (numeric(18,8), nullable)
+Recoupment linkage:
+- advance_id (uuid fk -> advances.id, nullable, indexed)
+- recoupment_pool (text/enum: MASTER, PUBLISHING, BOTH, CUSTOM, nullable)
+Metadata:
+- memo (text, nullable)
+- created_by_user_id (uuid, nullable)
+- created_at
+Indexes:
+- (org_id, payee_id, created_at)
+- (org_id, contract_id)
+- (org_id, entry_type)
+- (org_id, statement_id)
+
+5) payees  // abstraction so payables can include creators and entities
+- id (uuid pk)
+- org_id (uuid, indexed)
+- payee_type (enum: CREATOR, COMPANY, PUBLISHER, LABEL, OTHER)
+- creator_id (uuid fk -> creators.id, nullable, indexed)
+- company_name (text, nullable)
+- contact_email (text, nullable)
+- payment_details_json (jsonb, nullable) // keep light; no bank routing needed in v1
+- created_at, updated_at
+Constraints:
+- (org_id, creator_id) unique where creator_id not null
+
+6) advances
+- id (uuid pk)
+- org_id (uuid, indexed)
+- contract_id (uuid fk -> contracts.id, nullable, indexed)
+- payee_id (uuid fk -> payees.id, indexed)
+- advance_name (text)
+- advance_date (date)
+- currency (char(3), default 'USD')
+- principal_amount (numeric(14,2), not null)
+- recoupable (bool, default true)
+- recoupment_pool (text/enum: MASTER, PUBLISHING, BOTH, CUSTOM)
+- recoupment_priority (int, default 1)
+- cross_collateralize (bool, default false)
+- start_recouping_on (date, nullable)
+- end_recouping_on (date, nullable)
+- notes (text, nullable)
+- created_at, updated_at
+
+7) advance_balances
+- advance_id (uuid pk fk -> advances.id)
+- org_id (uuid, indexed)
+- outstanding_balance (numeric(14,2), not null)
+- last_updated_at (timestamptz)
+
+Optional (recommended) to complete loop without turning into QuickBooks:
+8) payout_batches
+- id (uuid pk)
+- org_id (uuid, indexed)
+- name (text)
+- currency (char(3))
+- status (enum: DRAFT, APPROVED, PAID, VOID)
+- created_by_user_id
+- created_at, updated_at
+
+9) payout_items
+- id (uuid pk)
+- org_id (uuid, indexed)
+- batch_id (uuid fk -> payout_batches.id, indexed)
+- payee_id (uuid fk -> payees.id, indexed)
+- amount (numeric(14,2))
+- memo (text, nullable)
+- paid_at (timestamptz, nullable)
+- payment_method (text, nullable)
+- external_reference (text, nullable)
+
+Ledger integration rule:
+- When a payout item is marked PAID, create a royalty_ledger_entries record with entry_type=PAYMENT and negative amount (or separate direction field; choose one consistent method).
+
+Backward compatibility rule:
+- If your existing system already stores “advances” or “recoupment”, keep it. Add these tables and build a migration path:
+  - Create payees for existing creators
+  - Create advances/advance_balances from existing advance records if present
+  - Ensure old UI still reads current fields; new UI reads the new backbone.
+
+════════════════════════════════════════════════════════════
+PART B — ROYALTY PROCESSING ENGINE (SERVER LOGIC)
+════════════════════════════════════════════════════════════
+
+Add an async worker/queue for:
+- parsing statement into royalty_statement_lines
+- auto-matching lines to songs/works/releases
+- processing statement into ledger entries
+
+Key flows:
+1) Upload -> Parse -> Create statement + lines
+2) Column mapping (if needed) -> update lines fields
+3) Matching (auto + manual confirmation)
+4) Process statement -> create ledger entries:
+   For each CONFIRMED/AUTO_MATCHED line:
+   a) Determine song/work/release
+   b) Determine applicable contracts/splits for revenue_type
+   c) Allocate earning per payee
+      - Create EARNING entries per payee
+   d) Apply fees (if you track mgmt/admin fees) as FEE entries
+   e) Apply recoupment:
+      - Find active advances for payee, ordered by recoupment_priority
+      - Only apply if advance.recoupable=true and pool matches revenue_type (MASTER->MASTER, etc.)
+      - applied = min(net_payable, outstanding_balance)
+      - Create RECOUPMENT_APPLIED entry for applied amount
+      - Decrement advance_balances.outstanding_balance
+   f) Remaining = payable
+      - Create PAYABLE_CREATED entry
+5) Lock statement after processing:
+   - status -> PROCESSED then LOCKED
+   - store processing_run_id and version
+
+Reprocessing:
+- Create new processing run with incremented run_version
+- Create REVERSAL ledger entries to negate all prior run’s non-reversal entries (preserve audit)
+- Run processing again and generate new entries
+
+Do not allow deleting processed statements or ledger entries.
+
+════════════════════════════════════════════════════════════
+PART C — UX FLOW (NO RESTYLE, JUST NEW SCREENS/TABS)
+════════════════════════════════════════════════════════════
+
+Keep existing Royalties module and extend with the following UI components using your existing styling:
+
+1) Royalties Dashboard additions
+Add a “Processing Inbox” panel near existing charts:
+- Cards for statements in: MAPPING_REQUIRED, MATCHING, READY_TO_PROCESS, REVIEW_REQUIRED
+- Each card shows provider + period + totals + status badge + “Continue” button
+
+2) Statements List view (new subpage under Royalties)
+Route: /royalties/statements (or equivalent)
+Table columns:
+- Provider, Period, Rows, Net Total, Matched %, Status, Last Run, Actions (View)
+
+3) Statement Detail view (new)
+Route: /royalties/statements/:id
+Header: provider + period + status badge + actions
+Tabs (same tab UI pattern used elsewhere):
+- Overview
+- Lines
+- Matching
+- Allocation Preview
+- Run History
+- Exports
+
+3a) Lines tab
+- Table of royalty_statement_lines
+- Filters: All / Unmatched / Review Required / Matched
+- Inline indicators:
+  - match_status badge
+  - confidence
+  - matched song link
+- Bulk actions: Export selected lines, Mark ignore, etc.
+
+3b) Matching tab (the “Matching Console”)
+Two-pane layout (use existing panel styles):
+Left: queue of UNMATCHED and REVIEW_REQUIRED lines with search
+Right: suggested matches + actions:
+- Confirm suggested match
+- Search songs/works/releases and assign
+- Create new song (optional shortcut)
+- Mark ignore (if irrelevant)
+Also add:
+- “Bulk confirm high-confidence matches” (threshold configurable)
+
+3c) Allocation Preview tab
+Show totals by payee BEFORE processing:
+- Payee, Earnings, Fees, Recoupment To Apply, Estimated Payable
+This tab is a preview generated by the engine using current matches + current contracts/advances.
+
+3d) Run History tab
+List processing runs:
+- version, status, started, completed, initiated by, stats
+Actions:
+- Reprocess (requires reason text)
+
+3e) Exports tab
+- Export unmatched lines CSV
+- Export allocation preview CSV
+- Export payables report (after processing)
+
+4) Process Statement UX
+Button appears when:
+- matching coverage >= configured threshold AND no REVIEW_REQUIRED (or override permitted)
+Button: “Process Statement”
+Modal confirms:
+- total net amount
+- matched percentage
+- warnings (unmatched ignored lines)
+On confirm, queue a processing run and show progress.
+
+5) Payables view (new subpage under Royalties)
+Route: /royalties/payables
+Table:
+- Payee, Payable Balance, Outstanding Advances, Last Statement, Actions (View Ledger, Add to Payout Batch)
+This reads from ledger entries (PAYABLE_CREATED minus PAYMENT) and from advance_balances.
+
+6) Creator Profile “Accounting” enhancements (NO restyle)
+Keep existing Accounting tab summary, add sub-tabs inside Accounting:
+- Summary (existing)
+- Ledger (new)
+- Recoupment (new)
+- Payouts (optional, if implemented)
+
+Ledger tab:
+- Filterable table from royalty_ledger_entries for that creator’s payee_id
+- Drill-down by statement / song / contract
+Recoupment tab:
+- List advances + outstanding balances + progress bars
+
+7) Contracts module enhancements (NO restyle)
+In Contract detail page, add a new section/tab “Advances”:
+- Add Advance form (name, date, amount, pool, priority, cross-collateralize)
+- List advances and balances
+This is the rule source for recoupment.
+
+8) Action Items integration (keep existing Action Items module)
+Auto-create tasks when:
+- Statement has >X unmatched lines for >N days
+- Statement is READY_TO_PROCESS but not processed within N days
+- Reprocessing occurs (for review)
+Tasks link to statement detail.
+
+════════════════════════════════════════════════════════════
+PART D — GUIDE UPDATE (UPDATE THE EXISTING USER GUIDE IN DETAIL)
+════════════════════════════════════════════════════════════
+
+You MUST update the existing “Rythm Catalog Intelligence User Guide & Reference Manual v2.2” to include the new features.
+Do not change the style; append and expand existing sections with consistent formatting.
+
+Update/extend these sections:
+
+1) Table of Contents
+Add under “11. Royalties” these new subsections:
+- Royalty Statements
+- Statement Upload & Mapping
+- Matching Console
+- Allocation Preview
+- Processing Runs & Locking
+- Ledger & Payables
+- Advances & Recoupment
+- Reprocessing (Audit-safe Corrections)
+- Exports
+
+2) Section 9: Contracts & Rights
+Add a subsection:
+- Advances
+  - How to add advances to a contract
+  - Recoupment pools (Master vs Publishing)
+  - Priority and cross-collateralization explanation
+
+3) Section 11: Royalties
+Rewrite this section to be more intuitive while keeping current content. Include:
+- Royalties Dashboard (existing) + Processing Inbox (new)
+- Statement Upload flow
+  - provider auto-detect
+  - mapping required vs auto-mapped
+- Statement Detail page tabs and what each does
+- Matching Console how-to with examples
+- Processing: what happens when you click “Process Statement”
+- What “Locked” means (cannot edit lines, only reprocess)
+- Ledger concepts explained simply (EARNING, FEE, RECOUPMENT_APPLIED, PAYABLE_CREATED, PAYMENT, REVERSAL)
+- Payables view
+- Creator Accounting ledger/recoupment drilldowns
+- Reprocessing and why it’s audit-safe
+
+Include tips:
+- Always confirm low-confidence matches
+- Add advances at contract level (don’t depend on statement negative lines)
+- Use Allocation Preview to sanity-check before processing
+
+4) Section 10: Action Items
+Add mention of statement-related tasks:
+- “Statement unmatched lines”
+- “Statement pending processing”
+- “Reprocess review needed”
+
+5) Glossary updates
+Add:
+- Royalty Statement
+- Statement Line
+- Matching Console
+- Ledger Entry
+- Payable
+- Reprocessing
+- Reversal Entry
+- Recoupment Pool
+- Cross-collateralization
+
+Output:
+- Implement the features.
+- Update the in-app guide page at https://rythm-app.replit.app/guide to reflect these changes with thorough documentation.
+
+Do it now. Preserve the UI style. Add features only. Do not break existing modules.
