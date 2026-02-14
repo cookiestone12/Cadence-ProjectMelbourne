@@ -1597,7 +1597,7 @@ export default function CreatorDetailPage() {
         )}
 
         {activeTab === 'accounting' && (
-          <CreatorAccountingEnhanced orgId={organizationId} creatorId={parseInt(id)} existingAccountingData={accountingData} accountingLoading={accountingLoading} />
+          <CreatorAccountingEnhanced orgId={organizationId} creatorId={parseInt(id)} existingAccountingData={accountingData} accountingLoading={accountingLoading} onRefresh={loadAccounting} />
         )}
         
         {activeTab === 'schedule-a' && (

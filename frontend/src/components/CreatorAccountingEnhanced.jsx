@@ -34,7 +34,7 @@ const POOL_COLORS = {
   CUSTOM: 'bg-orange-100 text-orange-700',
 }
 
-export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAccountingData, accountingLoading }) {
+export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAccountingData, accountingLoading, onRefresh }) {
   const [activeSubTab, setActiveSubTab] = useState('summary')
   const [payeeId, setPayeeId] = useState(null)
   const [payeeResolved, setPayeeResolved] = useState(false)
@@ -146,7 +146,7 @@ export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAc
       </div>
 
       {activeSubTab === 'summary' && (
-        <SummarySubTab data={existingAccountingData} loading={accountingLoading} />
+        <SummarySubTab data={existingAccountingData} loading={accountingLoading} orgId={orgId} onRefresh={onRefresh} />
       )}
 
       {activeSubTab === 'ledger' && (
@@ -189,7 +189,9 @@ export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAc
   )
 }
 
-function SummarySubTab({ data, loading }) {
+function SummarySubTab({ data, loading, orgId, onRefresh }) {
+  const [confirmingId, setConfirmingId] = useState(null)
+
   if (loading) {
     return <div className="text-center py-12 text-[#7A8580]">Loading accounting data...</div>
   }
@@ -198,11 +200,30 @@ function SummarySubTab({ data, loading }) {
   }
 
   const summary = data.summary || {}
+  const contracts = data.contracts || []
   const cards = [
     { label: 'Total Royalties', value: formatDollars(summary.total_royalties_dollars), color: 'text-[#5B8A72]' },
     { label: 'Outstanding Advances', value: formatDollars(summary.outstanding_advances_dollars), color: 'text-[#C4956B]' },
     { label: 'Net Payable', value: formatDollars(summary.net_balance_dollars), color: summary.net_balance_cents >= 0 ? 'text-[#5B8A72]' : 'text-[#C47068]' },
   ]
+
+  const hasContractFinancials = (summary.contract_incoming_pending_cents > 0 || summary.contract_outgoing_pending_cents > 0 ||
+    summary.contract_incoming_confirmed_cents > 0 || summary.contract_outgoing_confirmed_cents > 0)
+
+  const handleConfirmPayment = async (contractId) => {
+    setConfirmingId(contractId)
+    try {
+      const token = localStorage.getItem('token')
+      await axios.post(`/api/royalties/confirm-contract-payment/${orgId}/${contractId}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (onRefresh) onRefresh()
+    } catch (err) {
+      console.error('Failed to confirm payment:', err)
+    } finally {
+      setConfirmingId(null)
+    }
+  }
 
   const recentTransactions = data.recent_transactions || data.payments || []
 
@@ -216,6 +237,102 @@ function SummarySubTab({ data, loading }) {
           </div>
         ))}
       </div>
+
+      {hasContractFinancials && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {summary.contract_incoming_pending_cents > 0 && (
+            <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5">
+              <p className="text-xs text-[#7A8580] mb-1">Pending Incoming (Contracts)</p>
+              <p className="text-xl font-bold text-[#C4956B]">{formatDollars(summary.contract_incoming_pending_dollars)}</p>
+            </div>
+          )}
+          {summary.contract_outgoing_pending_cents > 0 && (
+            <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5">
+              <p className="text-xs text-[#7A8580] mb-1">Pending Outgoing (Contracts)</p>
+              <p className="text-xl font-bold text-[#C47068]">{formatDollars(summary.contract_outgoing_pending_dollars)}</p>
+            </div>
+          )}
+          {summary.contract_incoming_confirmed_cents > 0 && (
+            <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5">
+              <p className="text-xs text-[#7A8580] mb-1">Confirmed Incoming (Contracts)</p>
+              <p className="text-xl font-bold text-[#5B8A72]">{formatDollars(summary.contract_incoming_confirmed_dollars)}</p>
+            </div>
+          )}
+          {summary.contract_outgoing_confirmed_cents > 0 && (
+            <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5">
+              <p className="text-xs text-[#7A8580] mb-1">Confirmed Outgoing (Contracts)</p>
+              <p className="text-xl font-bold text-[#5B8A72]">{formatDollars(summary.contract_outgoing_confirmed_dollars)}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {contracts.length > 0 && (
+        <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)]">
+          <div className="px-6 py-4 border-b border-[rgba(59,77,67,0.08)]">
+            <h3 className="font-semibold text-[#3D4A44]">Contract Obligations</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-[rgba(59,77,67,0.08)]">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Contract</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Direction</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Advance</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Recouped</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Status</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                {contracts.map((c) => {
+                  const isPending = c.advance_amount > 0 && !c.is_confirmed
+                  return (
+                    <tr key={c.id} className="hover:bg-[rgba(91,138,114,0.04)]">
+                      <td className="px-6 py-3 text-sm font-medium text-[#3D4A44]">{c.title}</td>
+                      <td className="px-6 py-3 text-sm text-[#7A8580]">{c.contract_type || '—'}</td>
+                      <td className="px-6 py-3 text-sm">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          c.payment_direction === 'OUTGOING' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                        }`}>
+                          {c.payment_direction === 'OUTGOING' ? 'We Pay' : 'We Receive'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3 text-sm text-right font-medium text-[#3D4A44]">
+                        {formatDollars(c.advance_amount)}
+                      </td>
+                      <td className="px-6 py-3 text-sm text-right text-[#7A8580]">
+                        {formatDollars(c.advance_recouped)}
+                      </td>
+                      <td className="px-6 py-3 text-center">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          isPending ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                        }`}>
+                          {isPending ? 'Pending' : 'Confirmed'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3 text-center">
+                        {isPending ? (
+                          <button
+                            onClick={() => handleConfirmPayment(c.id)}
+                            disabled={confirmingId === c.id}
+                            className="px-3 py-1 text-xs font-medium rounded-lg bg-[#5B8A72] text-white hover:bg-[#4A7A62] disabled:opacity-50 transition-colors"
+                          >
+                            {confirmingId === c.id ? 'Confirming...' : 'Confirm Payment'}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-[#7A8580]">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {recentTransactions.length > 0 && (
         <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)]">

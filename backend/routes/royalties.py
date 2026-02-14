@@ -1488,6 +1488,56 @@ def delete_advance(
     return {"status": "deleted"}
 
 
+@router.post("/confirm-contract-payment/{org_id}/{contract_id}")
+def confirm_contract_payment(
+    org_id: int,
+    contract_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    contract = db.query(Contract).filter(Contract.id == contract_id, Contract.organization_id == org_id).first()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    advance_amount = contract.advance_amount or 0
+    if advance_amount <= 0:
+        raise HTTPException(status_code=400, detail="No advance amount on this contract")
+
+    existing_advance = db.query(Advance).filter(
+        Advance.organization_id == org_id,
+        Advance.contract_id == contract_id,
+    ).first()
+
+    if existing_advance:
+        return {"status": "already_confirmed", "contract_id": contract_id}
+
+    contract.advance_recouped = advance_amount
+    if contract.status in ("DRAFT", "PENDING"):
+        contract.status = "ACTIVE"
+
+    if contract.creator_id:
+        direction = contract.payment_direction or "INCOMING"
+        new_advance = Advance(
+            organization_id=org_id,
+            creator_id=contract.creator_id,
+            contract_id=contract_id,
+            description=f"Advance from {contract.title}",
+            amount_cents=int(advance_amount * 100),
+            recouped_cents=0,
+            currency=contract.advance_currency or "USD",
+            advance_date=contract.start_date or datetime.utcnow().date(),
+            fully_recouped=False,
+            status="ACTIVE" if direction == "OUTGOING" else "RECEIVED",
+            notes=f"Auto-created from contract confirmation. Direction: {direction}",
+            created_by_user_id=current_user.id,
+        )
+        db.add(new_advance)
+
+    db.commit()
+    return {"status": "confirmed", "contract_id": contract_id}
+
+
 @router.get("/creator-accounting/{org_id}/{creator_id}")
 def get_creator_accounting(
     org_id: int,
@@ -1530,6 +1580,57 @@ def get_creator_accounting(
         if p.song_id and p.song_id in creator_song_ids and p.status == "PAID" and p.license_fee:
             placement_revenue_cents += int(p.license_fee * 100)
 
+    contracts = db.query(Contract).filter(
+        Contract.organization_id == org_id,
+        Contract.creator_id == creator_id,
+    ).order_by(desc(Contract.created_at)).all()
+
+    contract_items = []
+    contract_incoming_pending_cents = 0
+    contract_outgoing_pending_cents = 0
+    contract_incoming_confirmed_cents = 0
+    contract_outgoing_confirmed_cents = 0
+
+    for c in contracts:
+        advance_cents = int((c.advance_amount or 0) * 100)
+        recouped_cents_val = int((c.advance_recouped or 0) * 100)
+        direction = c.payment_direction or "INCOMING"
+
+        has_linked_advance = db.query(Advance).filter(
+            Advance.organization_id == org_id,
+            Advance.contract_id == c.id,
+        ).first() is not None
+        is_confirmed = has_linked_advance
+
+        if advance_cents > 0:
+            if direction == "INCOMING":
+                if is_confirmed:
+                    contract_incoming_confirmed_cents += advance_cents
+                else:
+                    contract_incoming_pending_cents += advance_cents
+            else:
+                if is_confirmed:
+                    contract_outgoing_confirmed_cents += advance_cents
+                else:
+                    contract_outgoing_pending_cents += advance_cents
+
+        contract_items.append({
+            "id": c.id,
+            "title": c.title,
+            "contract_type": c.contract_type,
+            "payment_direction": direction,
+            "status": c.status,
+            "advance_amount": c.advance_amount or 0,
+            "advance_amount_cents": advance_cents,
+            "advance_currency": c.advance_currency or "USD",
+            "advance_recouped": c.advance_recouped or 0,
+            "advance_recouped_cents": recouped_cents_val,
+            "is_confirmed": is_confirmed,
+            "start_date": c.start_date.isoformat() if c.start_date else None,
+            "end_date": c.end_date.isoformat() if c.end_date else None,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        })
+
     net_balance_cents = total_royalties_cents + placement_revenue_cents - total_fees_cents - total_paid_cents
 
     payment_list = []
@@ -1570,7 +1671,16 @@ def get_creator_accounting(
             "placement_revenue_dollars": placement_revenue_cents / 100.0,
             "net_balance_cents": net_balance_cents,
             "net_balance_dollars": net_balance_cents / 100.0,
+            "contract_incoming_pending_cents": contract_incoming_pending_cents,
+            "contract_incoming_pending_dollars": contract_incoming_pending_cents / 100.0,
+            "contract_outgoing_pending_cents": contract_outgoing_pending_cents,
+            "contract_outgoing_pending_dollars": contract_outgoing_pending_cents / 100.0,
+            "contract_incoming_confirmed_cents": contract_incoming_confirmed_cents,
+            "contract_incoming_confirmed_dollars": contract_incoming_confirmed_cents / 100.0,
+            "contract_outgoing_confirmed_cents": contract_outgoing_confirmed_cents,
+            "contract_outgoing_confirmed_dollars": contract_outgoing_confirmed_cents / 100.0,
         },
+        "contracts": contract_items,
         "payments": payment_list,
         "fees": [fee_to_dict(f, db) for f in fees],
         "advances": [advance_to_dict(a, db) for a in advances],
