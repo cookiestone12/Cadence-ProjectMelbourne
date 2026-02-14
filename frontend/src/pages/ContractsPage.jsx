@@ -1211,12 +1211,12 @@ function ContractsPageInner() {
             </div>
 
             <div className="border-b border-[rgba(59,77,67,0.08)]">
-              <div className="flex space-x-6 px-6">
+              <div className="flex space-x-6 px-6 overflow-x-auto no-scrollbar">
                 {['overview', 'parties', 'assets', 'documents', 'advances'].map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveDetailTab(tab)}
-                    className={`pb-3 pt-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+                    className={`pb-3 pt-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
                       activeDetailTab === tab
                         ? 'border-[#5B8A72] text-[#5B8A72]'
                         : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'

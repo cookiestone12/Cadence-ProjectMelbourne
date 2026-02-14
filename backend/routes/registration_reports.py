@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
@@ -211,7 +211,7 @@ def get_work_registration_report(
         work_ids = db.query(WorkCredit.work_id).filter(WorkCredit.creator_id == creator_id).subquery()
         query = query.filter(Work.id.in_(work_ids))
     if status == "outstanding":
-        query = query.filter(Work.is_registered_with_pro == False)
+        query = query.filter(or_(Work.is_registered_with_pro == False, Work.is_registered_with_pro.is_(None)))
     elif status == "registered":
         query = query.filter(Work.is_registered_with_pro == True)
 
@@ -248,7 +248,7 @@ def get_song_registration_report(
         song_ids = db.query(SongCredit.song_id).filter(SongCredit.creator_id == creator_id).subquery()
         query = query.filter(Song.id.in_(song_ids))
     if status == "outstanding":
-        query = query.filter(Song.is_registered_with_pro == False)
+        query = query.filter(or_(Song.is_registered_with_pro == False, Song.is_registered_with_pro.is_(None)))
     elif status == "registered":
         query = query.filter(Song.is_registered_with_pro == True)
 
@@ -312,13 +312,13 @@ def export_selected_registration_pdf(
         if request.item_ids:
             works = db.query(Work).filter(Work.id.in_(request.item_ids), Work.organization_id == org_id).all()
         else:
-            works = db.query(Work).filter(Work.organization_id == org_id, Work.is_registered_with_pro == False).all()
+            works = db.query(Work).filter(Work.organization_id == org_id, or_(Work.is_registered_with_pro == False, Work.is_registered_with_pro.is_(None))).all()
         items = [build_work_registration_data(w, db) for w in works]
     else:
         if request.item_ids:
             songs = db.query(Song).filter(Song.id.in_(request.item_ids), Song.organization_id == org_id).all()
         else:
-            songs = db.query(Song).filter(Song.organization_id == org_id, Song.is_registered_with_pro == False).all()
+            songs = db.query(Song).filter(Song.organization_id == org_id, or_(Song.is_registered_with_pro == False, Song.is_registered_with_pro.is_(None))).all()
         items = [build_song_registration_data(s, db) for s in songs]
 
     buffer = _generate_pdf(items, request.asset_type, org_name)
@@ -359,7 +359,7 @@ def export_registration_csv(
             work_ids = db.query(WorkCredit.work_id).filter(WorkCredit.creator_id == creator_id).subquery()
             query = query.filter(Work.id.in_(work_ids))
         if status == "outstanding":
-            query = query.filter(Work.is_registered_with_pro == False)
+            query = query.filter(or_(Work.is_registered_with_pro == False, Work.is_registered_with_pro.is_(None)))
         elif status == "registered":
             query = query.filter(Work.is_registered_with_pro == True)
         works = query.all()
@@ -400,7 +400,7 @@ def export_registration_csv(
             song_ids = db.query(SongCredit.song_id).filter(SongCredit.creator_id == creator_id).subquery()
             query = query.filter(Song.id.in_(song_ids))
         if status == "outstanding":
-            query = query.filter(Song.is_registered_with_pro == False)
+            query = query.filter(or_(Song.is_registered_with_pro == False, Song.is_registered_with_pro.is_(None)))
         elif status == "registered":
             query = query.filter(Song.is_registered_with_pro == True)
         songs = query.all()
@@ -471,7 +471,7 @@ def export_registration_pdf_get(
             work_ids = db.query(WorkCredit.work_id).filter(WorkCredit.creator_id == creator_id).subquery()
             query = query.filter(Work.id.in_(work_ids))
         if status == "outstanding":
-            query = query.filter(Work.is_registered_with_pro == False)
+            query = query.filter(or_(Work.is_registered_with_pro == False, Work.is_registered_with_pro.is_(None)))
         elif status == "registered":
             query = query.filter(Work.is_registered_with_pro == True)
         items = [build_work_registration_data(w, db) for w in query.all()]
@@ -481,7 +481,7 @@ def export_registration_pdf_get(
             song_ids = db.query(SongCredit.song_id).filter(SongCredit.creator_id == creator_id).subquery()
             query = query.filter(Song.id.in_(song_ids))
         if status == "outstanding":
-            query = query.filter(Song.is_registered_with_pro == False)
+            query = query.filter(or_(Song.is_registered_with_pro == False, Song.is_registered_with_pro.is_(None)))
         elif status == "registered":
             query = query.filter(Song.is_registered_with_pro == True)
         items = [build_song_registration_data(s, db) for s in query.all()]
@@ -543,13 +543,13 @@ def send_registration_report_email(
         if request.item_ids:
             works = db.query(Work).filter(Work.id.in_(request.item_ids), Work.organization_id == org_id).all()
         else:
-            works = db.query(Work).filter(Work.organization_id == org_id, Work.is_registered_with_pro == False).all()
+            works = db.query(Work).filter(Work.organization_id == org_id, or_(Work.is_registered_with_pro == False, Work.is_registered_with_pro.is_(None))).all()
         items = [build_work_registration_data(w, db) for w in works]
     else:
         if request.item_ids:
             songs = db.query(Song).filter(Song.id.in_(request.item_ids), Song.organization_id == org_id).all()
         else:
-            songs = db.query(Song).filter(Song.organization_id == org_id, Song.is_registered_with_pro == False).all()
+            songs = db.query(Song).filter(Song.organization_id == org_id, or_(Song.is_registered_with_pro == False, Song.is_registered_with_pro.is_(None))).all()
         items = [build_song_registration_data(s, db) for s in songs]
 
     if not items:
