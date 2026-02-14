@@ -1,7 +1,7 @@
 import React, { useRef } from 'react'
 import { ArrowDownTrayIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 
-const VERSION = '2.2'
+const VERSION = '2.3'
 const LAST_UPDATED = 'February 2026'
 
 const sections = [
@@ -512,6 +512,22 @@ export default function UserGuidePage() {
           Upload PDF contract documents to any song via the song detail modal's Contracts tab. These files are securely stored and accessible only to your organization members.
         </p>
 
+        <SubHeading>Advances</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Advances tab on each contract detail page lets you create and manage advances tied to that deal. Advances are the basis for automatic recoupment during royalty processing.
+        </p>
+        <StepList steps={[
+          'Open a contract and navigate to the "Advances" tab.',
+          'Click "Add Advance" to create a new advance record.',
+          'Enter the advance name, date, principal amount, and currency.',
+          'Select a recoupment pool: Master (applies to master recordings revenue), Publishing (applies to composition revenue), Both (applies to all revenue types), or Custom.',
+          'Set the recoupment priority (1 = highest). When multiple advances exist, lower-priority-number advances are recouped first.',
+          'Optionally enable cross-collateralization to allow recoupment across multiple assets under the contract.',
+          'Set optional start and end dates for the recoupment window.',
+          'The system tracks outstanding balances automatically as statements are processed.',
+        ]} />
+        <Tip>Always create advances at the contract level rather than relying on negative statement lines. This gives you precise control over recoupment pools, priority ordering, and cross-collateralization rules.</Tip>
+
         {/* ===== 10. ACTION ITEMS ===== */}
         <SectionHeading id="actions">10. Action Items</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
@@ -536,6 +552,9 @@ export default function UserGuidePage() {
           'Unmatched royalty transactions that need reconciliation.',
           'Placements that haven\'t been updated in 14+ days since pitch.',
           'Placements that need contract documentation.',
+          'Royalty statements with unmatched lines that need review in the Matching Console.',
+          'Royalty statements that are ready for processing but have not been processed.',
+          'Reprocessed statements that need review to verify corrected allocations.',
         ]} />
 
         <SubHeading>Filtering & Organization</SubHeading>
@@ -562,43 +581,176 @@ export default function UserGuidePage() {
         {/* ===== 11. ROYALTIES ===== */}
         <SectionHeading id="royalties">11. Royalties</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          The Royalties module is a full financial engine for managing statement ingestion, asset matching, royalty calculations, advance recoupment, and payment tracking.
+          The Royalties module is a full financial engine for managing statement ingestion, catalog matching, royalty calculations, advance recoupment, ledger accounting, and payment tracking. It includes a professional processing pipeline with an audit-safe ledger.
         </p>
 
         <SubHeading>Royalty Dashboard</SubHeading>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
           <FeatureCard title="Revenue Charts" description="Visual breakdown of royalty revenue over time with trend analysis." />
           <FeatureCard title="Top Earning Tracks" description="Ranked list of your highest-revenue songs from royalty statements." />
-          <FeatureCard title="Recoupment Progress" description="Progress bars showing advance recoupment status for each contract/deal." />
+          <FeatureCard title="Processing Inbox" description="Quick overview of statements needing attention: mapping required, matching in progress, ready to process, and review required." />
           <FeatureCard title="Earnings Breakdown" description="View earnings by rights holder, contract, or individual track." />
         </div>
 
-        <SubHeading>Statement Upload</SubHeading>
-        <StepList steps={[
-          'Navigate to the Royalties page.',
-          'Click "Upload Statement" to import a royalty statement.',
-          'Upload a CSV or Excel file containing transaction data.',
-          'The system auto-detects the PRO source (BMI, ASCAP, SESAC, SoundExchange, SOCAN, PRS) and maps columns accordingly.',
-          'Transactions are automatically matched to your catalog using ISRC, title, and artist name (fuzzy matching).',
-          'Review matches and resolve any unmatched transactions.',
-          'Confirmed transactions are processed through the calculation engine.',
-        ]} />
-        <Tip>The system supports statements from all major PROs. If your statement format is not auto-detected, you can manually map columns during the upload process.</Tip>
-
-        <SubHeading>Royalty Calculation</SubHeading>
+        <SubHeading>Processing Inbox</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          The calculation engine applies contract splits to matched transactions, handles advance recoupment, and generates per-holder allocations. Multi-currency support with exchange rate conversion is included.
+          The Processing tab provides a centralized inbox for managing royalty statements through the processing pipeline. Status cards show how many statements are at each stage, letting you quickly identify what needs attention.
         </p>
 
-        <SubHeading>Fees & Advances</SubHeading>
+        <SubHeading>Statement Upload & Mapping</SubHeading>
+        <StepList steps={[
+          'Navigate to Royalties and click the "Processing" tab.',
+          'Use the Enhanced Upload section to import a royalty statement (CSV or Excel).',
+          'Enter the provider name, source type (PRO, DSP, Distributor, etc.), statement period, and currency.',
+          'The system auto-detects the PRO source and maps columns accordingly. If needed, you can manually adjust column mapping.',
+          'Upon upload, statement lines are created and auto-matching begins immediately.',
+          'The statement status will update to show how many lines were matched automatically.',
+        ]} />
+        <Tip>The system supports statements from all major PROs (BMI, ASCAP, SESAC, SoundExchange, SOCAN, PRS) and DSP distributors. Column mapping happens automatically for recognized formats.</Tip>
+
+        <SubHeading>Royalty Statements</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Each uploaded statement goes through a lifecycle of statuses:
+        </p>
+        <div className="flex items-center gap-1.5 my-4 flex-wrap text-xs">
+          <span className="px-2.5 py-1.5 rounded-lg font-semibold bg-gray-100 text-gray-700">Uploaded</span>
+          <span className="text-[#7A8580]">{'→'}</span>
+          <span className="px-2.5 py-1.5 rounded-lg font-semibold bg-amber-100 text-amber-700">Mapping Required</span>
+          <span className="text-[#7A8580]">{'→'}</span>
+          <span className="px-2.5 py-1.5 rounded-lg font-semibold bg-blue-100 text-blue-700">Matching</span>
+          <span className="text-[#7A8580]">{'→'}</span>
+          <span className="px-2.5 py-1.5 rounded-lg font-semibold bg-teal-100 text-teal-700">Ready to Process</span>
+          <span className="text-[#7A8580]">{'→'}</span>
+          <span className="px-2.5 py-1.5 rounded-lg font-semibold bg-green-100 text-green-700">Processed</span>
+          <span className="text-[#7A8580]">{'→'}</span>
+          <span className="px-2.5 py-1.5 rounded-lg font-semibold bg-purple-100 text-purple-700">Locked</span>
+        </div>
+
+        <SubHeading>Statement Detail Page</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Click any statement to open its detail page with the following tabs:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Overview" description="Summary metrics, matching progress bar, and status breakdown showing how many lines are matched, unmatched, or need review." />
+          <FeatureCard title="Lines" description="Full table of statement lines with filtering by match status, search, and pagination. Each line shows the raw track/artist data, amounts, and match information." />
+          <FeatureCard title="Matching" description="The Matching Console — a two-pane interface for reviewing and confirming matches between statement lines and your catalog." />
+          <FeatureCard title="Allocation Preview" description="Preview of how earnings will be distributed among payees before processing. Shows earnings, fees, recoupment deductions, and net payable per payee." />
+          <FeatureCard title="Run History" description="Log of all processing runs for this statement, with version numbers, status, timing, and the option to reprocess." />
+          <FeatureCard title="Exports" description="Download unmatched lines, allocation previews, or payables reports as CSV files." />
+        </div>
+
+        <SubHeading>Matching Console</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Matching Console is where you review and confirm how statement lines connect to your catalog:
+        </p>
+        <StepList steps={[
+          'The left pane shows a queue of unmatched and review-required lines.',
+          'Select a line to see its details and suggested catalog matches on the right.',
+          'For each suggestion, you can Confirm (accept the match), Reject (remove the suggestion), or Ignore (skip the line).',
+          'Use the search field to find songs/works/releases manually if no suggestions are provided.',
+          'Use "Bulk Confirm High-Confidence" to accept all auto-matched lines above a configurable confidence threshold (e.g., 85%).',
+        ]} />
+        <Tip>Always review matches with confidence below 85% manually. Auto-matched lines with high confidence (85%+) are generally safe to bulk-confirm.</Tip>
+
+        <SubHeading>Processing: What Happens When You Click "Process Statement"</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          When you process a statement, the system performs these steps for each matched line:
+        </p>
+        <StepList steps={[
+          'Identifies the song, work, and/or release from the match.',
+          'Finds applicable contracts and rights splits for the revenue type.',
+          'Creates EARNING ledger entries for each payee based on their split percentage.',
+          'Checks for active advances (from the Advances section on contracts) and applies RECOUPMENT, deducting from outstanding balances in priority order.',
+          'Creates PAYABLE_CREATED entries for the remaining amount after recoupment.',
+          'Updates the statement status to PROCESSED and eventually LOCKED.',
+        ]} />
+        <Tip>Use the Allocation Preview tab to sanity-check the distribution before processing. This shows exactly what each payee will receive.</Tip>
+
+        <SubHeading>Locked Statements</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Once a statement is processed and locked, you cannot edit individual lines or matches. If corrections are needed, use the Reprocess function, which creates reversal entries and re-runs the processing engine. This ensures a complete audit trail.
+        </p>
+
+        <SubHeading>Ledger Concepts</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The ledger is the accounting backbone. Every financial event creates a ledger entry with one of these types:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="EARNING" description="Revenue allocated to a payee from a statement line based on their contract split." />
+          <FeatureCard title="FEE" description="Management, administration, or distribution fees deducted from earnings." />
+          <FeatureCard title="RECOUPMENT_APPLIED" description="Amount deducted from earnings to recover an outstanding advance." />
+          <FeatureCard title="PAYABLE_CREATED" description="Net amount owed to a payee after fees and recoupment." />
+          <FeatureCard title="PAYMENT" description="Records an actual payment made to a payee through a payout batch." />
+          <FeatureCard title="REVERSAL" description="Negates a prior entry when a statement is reprocessed. Preserves audit trail." />
+        </div>
+
+        <SubHeading>Payables</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Payables tab shows all payees with outstanding balances. For each payee, you can see their payable balance (sum of PAYABLE_CREATED minus PAYMENT entries), outstanding advances, and the last statement they appeared in. Use the "View Ledger" button to drill down into individual ledger entries, or "Add to Payout" to include them in a payout batch.
+        </p>
+
+        <SubHeading>Payout Batches</SubHeading>
+        <StepList steps={[
+          'Create a payout batch from the Payables tab.',
+          'Add payees and amounts to the batch.',
+          'Review and approve the batch.',
+          'Mark the batch as Paid — this automatically creates PAYMENT ledger entries for each item.',
+        ]} />
+
+        <SubHeading>Advances & Recoupment</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Advances are upfront payments to creators that are recovered from future earnings. The system supports:
+        </p>
+        <ul className="list-disc pl-5 text-[#7A8580] space-y-1 mb-3">
+          <li><strong>Recoupment Pools:</strong> Master (applies to master recording revenue), Publishing (composition revenue), Both (all revenue), or Custom.</li>
+          <li><strong>Priority Ordering:</strong> When multiple advances exist, lower priority numbers are recouped first.</li>
+          <li><strong>Cross-Collateralization:</strong> When enabled, revenue from any asset under the contract can recoup the advance, not just the specific asset.</li>
+          <li><strong>Progress Tracking:</strong> Visual progress bars show how much of each advance has been recouped.</li>
+        </ul>
+
+        <SubHeading>Reprocessing (Audit-Safe Corrections)</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          If you need to correct a processed statement (e.g., after fixing matches or updating contract splits), use the Reprocess function:
+        </p>
+        <StepList steps={[
+          'Go to the statement\'s Run History tab.',
+          'Click "Reprocess" and provide a reason for the correction.',
+          'The system creates REVERSAL entries that negate all prior ledger entries from the last run.',
+          'Advance balances are restored to their pre-processing state.',
+          'The processing engine runs again with the current data, creating new entries.',
+          'Both the original and corrected entries remain in the ledger for a complete audit trail.',
+        ]} />
+        <Tip>Reprocessing never deletes data. Old entries are reversed (not removed), ensuring you always have a full history of what happened.</Tip>
+
+        <SubHeading>Creator Accounting</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Each creator's profile includes an enhanced Accounting tab with three sub-sections:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 my-4">
+          <FeatureCard title="Summary" description="Overview of total royalties, outstanding advances, and net payable amounts." />
+          <FeatureCard title="Ledger" description="Full filterable ledger of all entries for this creator, with drill-down by statement, song, or contract." />
+          <FeatureCard title="Recoupment" description="List of advances with outstanding balances and visual progress bars showing recoupment status." />
+        </div>
+
+        <SubHeading>Fees & Advances (Legacy)</SubHeading>
         <p className="text-[#7A8580] mb-3">
           The <strong>Fees & Advances</strong> tab in the Royalties page provides organization-wide financial tracking:
         </p>
         <ul className="list-disc pl-5 text-[#7A8580] space-y-1 mb-3">
-          <li><strong>Fees:</strong> Track management, administration, distribution, sync, and legal fees per creator</li>
-          <li><strong>Advances:</strong> Record advances with amounts, dates, and recoupment tracking</li>
-          <li>View recoupment progress bars showing how much of each advance has been recovered</li>
-          <li>Filter by creator to see individual financial summaries</li>
+          <li><strong>Fees:</strong> Track management, administration, distribution, sync, and legal fees per creator.</li>
+          <li><strong>Advances:</strong> Record advances with amounts, dates, and recoupment tracking.</li>
+          <li>View recoupment progress bars showing how much of each advance has been recovered.</li>
+          <li>Filter by creator to see individual financial summaries.</li>
+        </ul>
+
+        <SubHeading>CSV Exports</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          From any statement detail page, you can export:
+        </p>
+        <ul className="list-disc pl-5 text-[#7A8580] space-y-1 mb-3">
+          <li><strong>Unmatched Lines:</strong> CSV of lines that could not be matched to your catalog.</li>
+          <li><strong>Allocation Preview:</strong> CSV showing the projected distribution before processing.</li>
+          <li><strong>Payables Report:</strong> CSV of payable amounts per payee after processing.</li>
         </ul>
 
         {/* ===== 12. PLACEMENTS ===== */}
@@ -782,6 +934,17 @@ export default function UserGuidePage() {
             ['Advance', 'An upfront payment to a creator or rights holder, recouped from future royalty earnings before additional payments are made.'],
             ['Fee', 'A charge deducted from earnings for services such as management, administration, distribution, sync licensing, or legal representation.'],
             ['Demo', 'A work type indicating a song with lyrics and melodies, as opposed to a purely instrumental track.'],
+            ['Royalty Statement', 'A financial report from a PRO, DSP, or distributor detailing royalty earnings for a specific period.'],
+            ['Statement Line', 'A single row within a royalty statement representing earnings for one track/territory/store combination.'],
+            ['Matching Console', 'The two-pane interface for reviewing and confirming how statement lines connect to catalog assets (songs, works, releases).'],
+            ['Ledger Entry', 'An individual accounting record in the royalty ledger, tracking earnings, fees, recoupment, payables, payments, and reversals.'],
+            ['Payable', 'The net amount owed to a payee after earnings have been reduced by fees and advance recoupment.'],
+            ['Reprocessing', 'The act of re-running the processing engine on a previously processed statement, creating reversal entries first to maintain audit integrity.'],
+            ['Reversal Entry', 'A ledger entry that negates a prior entry, created during reprocessing to correct allocations while preserving the full audit trail.'],
+            ['Recoupment Pool', 'The category of revenue from which an advance can be recouped: Master, Publishing, Both, or Custom.'],
+            ['Cross-Collateralization', 'A contract provision allowing revenue from multiple assets to be combined for the purpose of recouping a single advance.'],
+            ['Payout Batch', 'A grouped set of payment items that can be reviewed, approved, and marked as paid together.'],
+            ['Processing Run', 'A single execution of the processing engine against a statement, producing ledger entries and updating advance balances.'],
           ].map(([term, definition]) => (
             <div key={term} className="flex gap-3">
               <span className="font-semibold text-[#3D4A44] min-w-[160px] text-sm">{term}</span>

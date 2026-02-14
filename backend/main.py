@@ -9,7 +9,7 @@ from .routes import (
     contracts, contracts_mgmt, contract_docs, account_links, admin, notifications, actions, csv_upload,
     works, releases, bulk, spotify_import, royalties, placements, analytics,
     tenant_admin, creative_directory, registration_reports, audit_log, expenses,
-    client_sharing, integrations, audio, brief_builder
+    client_sharing, integrations, audio, brief_builder, royalty_processing
 )
 from .utils.logging_config import logger
 import os
@@ -113,6 +113,7 @@ app.include_router(client_sharing.router)
 app.include_router(integrations.router)
 app.include_router(audio.router)
 app.include_router(brief_builder.router)
+app.include_router(royalty_processing.router)
 
 uploads_dir = Path(__file__).parent / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)

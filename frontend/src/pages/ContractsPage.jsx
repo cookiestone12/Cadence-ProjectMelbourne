@@ -6,6 +6,7 @@ import {
   MusicalNoteIcon, CalendarIcon, CurrencyDollarIcon,
   ChevronDownIcon, ArrowDownTrayIcon, PaperClipIcon, CloudArrowUpIcon
 } from '@heroicons/react/24/outline'
+import ContractAdvancesSection from '../components/ContractAdvancesSection'
 
 function SearchableSelect({ options, value, onChange, placeholder, className }) {
   const [search, setSearch] = useState('')
@@ -1204,7 +1205,7 @@ function ContractsPageInner() {
 
             <div className="border-b border-[rgba(59,77,67,0.08)]">
               <div className="flex space-x-6 px-6">
-                {['overview', 'parties', 'assets', 'documents'].map(tab => (
+                {['overview', 'parties', 'assets', 'documents', 'advances'].map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveDetailTab(tab)}
@@ -1217,6 +1218,7 @@ function ContractsPageInner() {
                     {tab === 'overview' ? 'Overview' :
                      tab === 'parties' ? `Parties (${contractDetail?.parties?.length || 0})` :
                      tab === 'assets' ? `Assets & Splits (${contractDetail?.assets?.length || 0})` :
+                     tab === 'advances' ? 'Advances' :
                      `Documents (${contractDocuments.length})`}
                   </button>
                 ))}
@@ -1957,6 +1959,10 @@ function ContractsPageInner() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {contractDetail && activeDetailTab === 'advances' && (
+                <ContractAdvancesSection orgId={organizationId} contractId={contractDetail.id} />
               )}
             </div>
           </div>

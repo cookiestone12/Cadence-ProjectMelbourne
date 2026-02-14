@@ -12,7 +12,7 @@ from .models import (
     ContributorType, ReleaseType, ReleaseStatus,
     Contract, ContractParty, ContractAsset, ContractDocument, RightsSplit,
     ContractType, ContractStatus, AssetType, IPAssetType, RightsType, PartyRole,
-    StatementStatus, TransactionMatchStatus, PaymentStatus,
+    LegacyStatementStatus, StatementStatus, TransactionMatchStatus, PaymentStatus,
     RoyaltyStatement, RoyaltyTransaction, RoyaltyAllocation, Payment,
     Fee, Advance, FeeType,
     Expense, ExpenseCategory,
@@ -21,6 +21,9 @@ from .models import (
     AuditLog,
     StorageProvider, AudioFileType, AnalysisStatus, TagType, TagSource,
     IntegrationAccount, AudioAsset, AudioAnalysis, AudioTag, AudioAssetTag,
+    Payee, PayeeType, RecoupmentPool, PayoutStatus,
+    RoyaltyStatementLine, RoyaltyProcessingRun, RoyaltyLedgerEntry,
+    AdvanceV2, PayoutBatch, PayoutItem,
 )
 
 __all__ = [
@@ -37,7 +40,7 @@ __all__ = [
     "ContributorType", "ReleaseType", "ReleaseStatus",
     "Contract", "ContractParty", "ContractAsset", "ContractDocument", "RightsSplit",
     "ContractType", "ContractStatus", "AssetType", "IPAssetType", "RightsType", "PartyRole",
-    "StatementStatus", "TransactionMatchStatus", "PaymentStatus",
+    "LegacyStatementStatus", "StatementStatus", "TransactionMatchStatus", "PaymentStatus",
     "RoyaltyStatement", "RoyaltyTransaction", "RoyaltyAllocation", "Payment",
     "Fee", "Advance", "FeeType",
     "Expense", "ExpenseCategory",
@@ -46,4 +49,7 @@ __all__ = [
     "AuditLog",
     "StorageProvider", "AudioFileType", "AnalysisStatus", "TagType", "TagSource",
     "IntegrationAccount", "AudioAsset", "AudioAnalysis", "AudioTag", "AudioAssetTag",
+    "Payee", "PayeeType", "RecoupmentPool", "PayoutStatus",
+    "RoyaltyStatementLine", "RoyaltyProcessingRun", "RoyaltyLedgerEntry",
+    "AdvanceV2", "PayoutBatch", "PayoutItem",
 ]

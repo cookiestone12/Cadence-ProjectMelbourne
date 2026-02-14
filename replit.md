@@ -65,6 +65,7 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Unified Tasks Inbox**: Upgraded Action Items page serving as a cross-module task inbox with entity-type filtering.
 - **Enhanced Home Dashboard**: Displays urgent action items, notifications, placement pipeline summary, and tasks breakdown.
 - **Royalty Accounting System**: Financial engine for statement ingestion, asset matching, royalty calculation, advance recoupment, and payment management, supporting multi-currency and PRO statements.
+- **Royalty Processing Pipeline**: Professional royalty processing with Processing Inbox, Statement Detail View (6 tabs: Overview/Lines/Matching/Allocation Preview/Run History/Exports), three-tier auto-matching (ISRC/UPC/fuzzy), Matching Console with bulk-confirm, allocation preview with contract splits and advance recoupment, audit-safe reprocessing with REVERSAL entries, Payables management with payout batches, and per-creator Ledger/Recoupment sub-tabs.
 - **Fees & Advances Tracking**: Per-creator fee and advance tracking with recoupment progress, integrated into royalty accounting.
 - **Release Delivery & Distribution Readiness**: Comprehensive validation checks for release and track metadata, artwork, legal, and credits, with a status workflow and export options (CSV, JSON, PDF).
 

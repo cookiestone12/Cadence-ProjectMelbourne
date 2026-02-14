@@ -27,13 +27,18 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell
 } from 'recharts'
+import ProcessingInboxPanel from '../components/ProcessingInboxPanel'
+import StatementDetailView from '../components/StatementDetailView'
+import PayablesTab from '../components/PayablesTab'
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: ChartBarIcon },
+  { key: 'processing', label: 'Processing', icon: ArrowPathIcon },
   { key: 'statements', label: 'Statements', icon: DocumentTextIcon },
   { key: 'earnings', label: 'Earnings', icon: CurrencyDollarIcon },
   { key: 'money_out', label: 'Money Out', icon: ArrowUpTrayIcon },
   { key: 'fees', label: 'Fees & Advances', icon: CalculatorIcon },
+  { key: 'payables', label: 'Payables', icon: BanknotesIcon },
 ]
 
 const STATEMENT_STATUS_COLORS = {
@@ -1757,6 +1762,196 @@ function FeesAdvancesTab({ orgId, creators }) {
   )
 }
 
+function ProcessingTab({ orgId }) {
+  const [selectedStatementId, setSelectedStatementId] = useState(null)
+  const [statements, setStatements] = useState([])
+  const [statementsLoading, setStatementsLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploadForm, setUploadForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD' })
+  const [uploadFile, setUploadFile] = useState(null)
+
+  const loadStatements = useCallback(async () => {
+    if (!orgId) return
+    try {
+      const res = await axios.get(`/api/royalties/statements/${orgId}`)
+      const data = Array.isArray(res.data) ? res.data : res.data.statements || []
+      setStatements(data)
+    } catch (err) {
+      console.error('Failed to load statements:', err)
+    } finally {
+      setStatementsLoading(false)
+    }
+  }, [orgId])
+
+  useEffect(() => { loadStatements() }, [loadStatements])
+
+  const handleEnhancedUpload = async () => {
+    if (!uploadFile || !uploadForm.source_name) return
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+      formData.append('source_name', uploadForm.source_name)
+      if (uploadForm.source_type) formData.append('source_type', uploadForm.source_type)
+      if (uploadForm.period_start) formData.append('period_start', uploadForm.period_start)
+      if (uploadForm.period_end) formData.append('period_end', uploadForm.period_end)
+      formData.append('currency', uploadForm.currency)
+      await axios.post(`/api/royalty-processing/${orgId}/statements/upload`, formData)
+      setShowUpload(false)
+      setUploadFile(null)
+      setUploadForm({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD' })
+      loadStatements()
+    } catch (err) {
+      console.error('Enhanced upload failed:', err)
+      alert('Upload failed: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const filteredStatements = statusFilter
+    ? statements.filter(s => s.status === statusFilter)
+    : statements
+
+  const STATUS_OPTIONS = [
+    { key: '', label: 'All' },
+    { key: 'UPLOADED', label: 'Uploaded' },
+    { key: 'PARTIALLY_MATCHED', label: 'Partially Matched' },
+    { key: 'REVIEW_REQUIRED', label: 'Review Required' },
+    { key: 'FULLY_MATCHED', label: 'Fully Matched' },
+    { key: 'PROCESSED', label: 'Processed' },
+  ]
+
+  if (selectedStatementId) {
+    return (
+      <StatementDetailView
+        orgId={orgId}
+        statementId={selectedStatementId}
+        onBack={() => { setSelectedStatementId(null); loadStatements() }}
+      />
+    )
+  }
+
+  const inputClass = "w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30"
+
+  return (
+    <div className="space-y-6">
+      <ProcessingInboxPanel orgId={orgId} onSelectStatement={(status) => setStatusFilter(status)} />
+
+      <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-6 border border-[rgba(59,77,67,0.08)]">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-[#3D4A44]">Enhanced Upload</h3>
+          <button
+            onClick={() => setShowUpload(!showUpload)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium"
+          >
+            <ArrowUpTrayIcon className="w-4 h-4" /> Upload & Auto-Match
+          </button>
+        </div>
+        <p className="text-sm text-[#7A8580]">Upload a statement file to create statement lines and automatically run matching.</p>
+
+        {showUpload && (
+          <div className="mt-4 space-y-4 border-t border-[rgba(59,77,67,0.08)] pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Name *</label>
+                <input type="text" value={uploadForm.source_name} onChange={e => setUploadForm(prev => ({ ...prev, source_name: e.target.value }))} placeholder="e.g., Spotify, Apple Music" className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Type</label>
+                <input type="text" value={uploadForm.source_type} onChange={e => setUploadForm(prev => ({ ...prev, source_type: e.target.value }))} placeholder="e.g., DSP, PRO" className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period Start</label>
+                <input type="date" value={uploadForm.period_start} onChange={e => setUploadForm(prev => ({ ...prev, period_start: e.target.value }))} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period End</label>
+                <input type="date" value={uploadForm.period_end} onChange={e => setUploadForm(prev => ({ ...prev, period_end: e.target.value }))} className={inputClass} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">File *</label>
+              <input type="file" accept=".csv,.xlsx,.xls,.tsv" onChange={e => setUploadFile(e.target.files?.[0] || null)} className="text-sm text-[#3D4A44]" />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setShowUpload(false)} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
+              <button
+                onClick={handleEnhancedUpload}
+                disabled={!uploadFile || !uploadForm.source_name || uploading}
+                className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium disabled:opacity-50"
+              >
+                {uploading ? 'Uploading & Matching...' : 'Upload & Auto-Match'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)]">
+        <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+          <h3 className="text-lg font-semibold text-[#3D4A44]">Recent Statements</h3>
+          <div className="flex items-center gap-1 bg-white/60 backdrop-blur-xl rounded-[14px] p-1 border border-[rgba(59,77,67,0.08)]">
+            {STATUS_OPTIONS.map(opt => (
+              <button
+                key={opt.key}
+                onClick={() => setStatusFilter(opt.key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+                  statusFilter === opt.key
+                    ? 'bg-[#5B8A72] text-white'
+                    : 'text-[#7A8580] hover:text-[#3D4A44] hover:bg-[rgba(91,138,114,0.06)]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {statementsLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-[#5B8A72] border-t-transparent"></div>
+          </div>
+        ) : filteredStatements.length === 0 ? (
+          <div className="text-center py-12">
+            <DocumentTextIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3 opacity-40" />
+            <p className="text-sm text-[#7A8580]">No statements found</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-[rgba(59,77,67,0.05)]">
+            {filteredStatements.slice(0, 20).map(stmt => {
+              const colors = STATEMENT_STATUS_COLORS[stmt.status] || { bg: 'bg-gray-100', text: 'text-gray-700' }
+              return (
+                <button
+                  key={stmt.id}
+                  onClick={() => setSelectedStatementId(stmt.id)}
+                  className="w-full text-left px-6 py-4 hover:bg-[rgba(91,138,114,0.04)] transition-colors flex items-center justify-between"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3">
+                      <p className="text-sm font-medium text-[#3D4A44] truncate">{stmt.source_name || 'Statement'}</p>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
+                        {stmt.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#7A8580] mt-1">
+                      {stmt.period_start && stmt.period_end
+                        ? `${new Date(stmt.period_start).toLocaleDateString()} — ${new Date(stmt.period_end).toLocaleDateString()}`
+                        : stmt.file_name || '—'}
+                    </p>
+                  </div>
+                  <ChevronRightIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function RoyaltiesPage() {
   const [orgId, setOrgId] = useState(null)
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -1839,10 +2034,12 @@ export default function RoyaltiesPage() {
         </div>
 
         {activeTab === 'dashboard' && <DashboardTab orgId={orgId} />}
+        {activeTab === 'processing' && <ProcessingTab orgId={orgId} />}
         {activeTab === 'statements' && <StatementsTab orgId={orgId} songs={songs} />}
         {activeTab === 'earnings' && <EarningsTab orgId={orgId} />}
         {activeTab === 'money_out' && <MoneyOutTab orgId={orgId} creators={creators} contracts={contracts} />}
         {activeTab === 'fees' && <FeesAdvancesTab orgId={orgId} creators={creators} />}
+        {activeTab === 'payables' && <PayablesTab orgId={orgId} />}
       </div>
     </div>
   )

@@ -1057,7 +1057,7 @@ class RightsSplit(Base):
     rights_holder = relationship("Creator", foreign_keys=[rights_holder_id])
 
 
-class StatementStatus(str, enum.Enum):
+class LegacyStatementStatus(str, enum.Enum):
     PENDING = "PENDING"
     PROCESSING = "PROCESSING"
     PROCESSED = "PROCESSED"
@@ -1630,3 +1630,261 @@ class AudioAssetTag(Base):
 
     audio_asset = relationship("AudioAsset", back_populates="tags")
     audio_tag = relationship("AudioTag")
+
+
+class ProviderType(str, enum.Enum):
+    PRO = "PRO"
+    DSP = "DSP"
+    DISTRIBUTOR = "DISTRIBUTOR"
+    LABEL = "LABEL"
+    PUBLISHER = "PUBLISHER"
+    OTHER = "OTHER"
+
+class RevenueType(str, enum.Enum):
+    MASTER = "MASTER"
+    PUBLISHING = "PUBLISHING"
+    MECHANICAL = "MECHANICAL"
+    PERFORMANCE = "PERFORMANCE"
+    SYNC = "SYNC"
+    NEIGHBORING = "NEIGHBORING"
+    OTHER = "OTHER"
+
+class MatchStatus(str, enum.Enum):
+    UNMATCHED = "UNMATCHED"
+    AUTO_MATCHED = "AUTO_MATCHED"
+    CONFIRMED = "CONFIRMED"
+    REJECTED = "REJECTED"
+    REVIEW_REQUIRED = "REVIEW_REQUIRED"
+    IGNORED = "IGNORED"
+
+class ProcessingRunStatus(str, enum.Enum):
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    PARTIAL = "PARTIAL"
+
+class LedgerEntryType(str, enum.Enum):
+    EARNING = "EARNING"
+    FEE = "FEE"
+    RECOUPMENT_APPLIED = "RECOUPMENT_APPLIED"
+    PAYABLE_CREATED = "PAYABLE_CREATED"
+    PAYMENT = "PAYMENT"
+    REVERSAL = "REVERSAL"
+    ADJUSTMENT = "ADJUSTMENT"
+
+class PayeeType(str, enum.Enum):
+    CREATOR = "CREATOR"
+    COMPANY = "COMPANY"
+    PUBLISHER = "PUBLISHER"
+    LABEL = "LABEL"
+    OTHER = "OTHER"
+
+class RecoupmentPool(str, enum.Enum):
+    MASTER = "MASTER"
+    PUBLISHING = "PUBLISHING"
+    BOTH = "BOTH"
+    CUSTOM = "CUSTOM"
+
+class PayoutStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    APPROVED = "APPROVED"
+    PAID = "PAID"
+    VOID = "VOID"
+
+class StatementStatus(str, enum.Enum):
+    UPLOADED = "UPLOADED"
+    MAPPING_REQUIRED = "MAPPING_REQUIRED"
+    MAPPING_COMPLETE = "MAPPING_COMPLETE"
+    MATCHING = "MATCHING"
+    READY_TO_PROCESS = "READY_TO_PROCESS"
+    PROCESSED = "PROCESSED"
+    LOCKED = "LOCKED"
+
+
+class Payee(Base):
+    __tablename__ = "payees"
+    __table_args__ = (
+        UniqueConstraint('org_id', 'creator_id', name='uq_payee_org_creator'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    payee_type = Column(String, nullable=False)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
+    company_name = Column(String, nullable=True)
+    contact_email = Column(String, nullable=True)
+    payment_details_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    creator = relationship("Creator")
+    organization = relationship("Organization")
+
+
+class RoyaltyStatementLine(Base):
+    __tablename__ = "royalty_statement_lines"
+    __table_args__ = (
+        Index('ix_rsl_org_statement', 'org_id', 'statement_id'),
+        Index('ix_rsl_org_isrc', 'org_id', 'isrc'),
+        Index('ix_rsl_org_match_status', 'org_id', 'match_status'),
+        Index('ix_rsl_org_matched_song', 'org_id', 'matched_song_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    statement_id = Column(Integer, ForeignKey("royalty_statements.id", ondelete="CASCADE"), nullable=False)
+    line_hash = Column(String, nullable=True, index=True)
+    isrc = Column(String, nullable=True)
+    upc = Column(String, nullable=True)
+    iswc = Column(String, nullable=True)
+    track_title_raw = Column(String, nullable=True)
+    release_title_raw = Column(String, nullable=True)
+    artist_name_raw = Column(String, nullable=True)
+    label_raw = Column(String, nullable=True)
+    territory = Column(String, nullable=True)
+    store = Column(String, nullable=True)
+    usage_type = Column(String, nullable=True)
+    revenue_type = Column(String, nullable=True)
+    unit_count = Column(Float, nullable=True)
+    gross_amount = Column(Float, nullable=True)
+    deductions_amount = Column(Float, nullable=True)
+    net_amount = Column(Float, default=0)
+    currency = Column(String, nullable=True)
+    fx_rate_to_statement_currency = Column(Float, nullable=True)
+    net_amount_statement_currency = Column(Float, default=0)
+    matched_song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    matched_work_id = Column(Integer, ForeignKey("works.id"), nullable=True)
+    matched_release_id = Column(Integer, ForeignKey("releases.id"), nullable=True)
+    match_status = Column(String, default="UNMATCHED")
+    match_confidence = Column(Float, nullable=True)
+    match_method = Column(String, nullable=True)
+    matched_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    matched_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    statement = relationship("RoyaltyStatement", back_populates="statement_lines")
+    song = relationship("Song")
+    work = relationship("Work")
+    release = relationship("Release")
+
+
+class RoyaltyProcessingRun(Base):
+    __tablename__ = "royalty_processing_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    statement_id = Column(Integer, ForeignKey("royalty_statements.id"), nullable=False, index=True)
+    run_version = Column(Integer, nullable=False)
+    status = Column(String, default="RUNNING")
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+    started_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    notes = Column(Text, nullable=True)
+    summary_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class RoyaltyLedgerEntry(Base):
+    __tablename__ = "royalty_ledger_entries"
+    __table_args__ = (
+        Index('ix_rle_org_payee_created', 'org_id', 'payee_id', 'created_at'),
+        Index('ix_rle_org_contract', 'org_id', 'contract_id'),
+        Index('ix_rle_org_entry_type', 'org_id', 'entry_type'),
+        Index('ix_rle_org_statement', 'org_id', 'statement_id'),
+        Index('ix_rle_org_processing_run', 'org_id', 'processing_run_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    statement_id = Column(Integer, ForeignKey("royalty_statements.id"), nullable=False)
+    statement_line_id = Column(Integer, ForeignKey("royalty_statement_lines.id"), nullable=True)
+    processing_run_id = Column(Integer, ForeignKey("royalty_processing_runs.id"), nullable=False)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    work_id = Column(Integer, ForeignKey("works.id"), nullable=True)
+    release_id = Column(Integer, ForeignKey("releases.id"), nullable=True)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+    payee_id = Column(Integer, ForeignKey("payees.id"), nullable=False)
+    entry_type = Column(String, nullable=False)
+    revenue_type = Column(String, nullable=True)
+    source = Column(String, nullable=True)
+    amount_cents = Column(Integer, nullable=False)
+    payee_currency = Column(String, nullable=True)
+    amount_payee_currency_cents = Column(Integer, nullable=True)
+    fx_rate = Column(Float, nullable=True)
+    advance_id = Column(Integer, ForeignKey("advance_pools.id"), nullable=True)
+    recoupment_pool = Column(String, nullable=True)
+    memo = Column(Text, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AdvanceV2(Base):
+    __tablename__ = "advance_pools"
+    __table_args__ = (
+        Index('ix_adv2_org_payee', 'org_id', 'payee_id'),
+        Index('ix_adv2_org_contract', 'org_id', 'contract_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    contract_id = Column(Integer, ForeignKey("contracts.id"), nullable=True)
+    payee_id = Column(Integer, ForeignKey("payees.id"), nullable=False)
+    advance_name = Column(String, nullable=False)
+    advance_date = Column(Date, nullable=False)
+    currency = Column(String, default="USD")
+    principal_amount_cents = Column(Integer, nullable=False)
+    recoupable = Column(Boolean, default=True)
+    recoupment_pool = Column(String, nullable=False)
+    recoupment_priority = Column(Integer, default=1)
+    cross_collateralize = Column(Boolean, default=False)
+    start_recouping_on = Column(Date, nullable=True)
+    end_recouping_on = Column(Date, nullable=True)
+    outstanding_balance_cents = Column(Integer, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    payee = relationship("Payee")
+    contract = relationship("Contract")
+    organization = relationship("Organization")
+
+
+class PayoutBatch(Base):
+    __tablename__ = "payout_batches"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    currency = Column(String, default="USD")
+    status = Column(String, default="DRAFT")
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items = relationship("PayoutItem", back_populates="batch", cascade="all, delete-orphan")
+    organization = relationship("Organization")
+    created_by = relationship("User")
+
+
+class PayoutItem(Base):
+    __tablename__ = "payout_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    batch_id = Column(Integer, ForeignKey("payout_batches.id"), nullable=False, index=True)
+    payee_id = Column(Integer, ForeignKey("payees.id"), nullable=False, index=True)
+    amount_cents = Column(Integer, nullable=False)
+    memo = Column(Text, nullable=True)
+    paid_at = Column(DateTime, nullable=True)
+    payment_method = Column(String, nullable=True)
+    external_reference = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    batch = relationship("PayoutBatch", back_populates="items")
+    payee = relationship("Payee")
+
+
+RoyaltyStatement.statement_lines = relationship("RoyaltyStatementLine", back_populates="statement", cascade="all, delete-orphan")
+RoyaltyStatement.processing_runs = relationship("RoyaltyProcessingRun", backref="statement")
