@@ -386,6 +386,25 @@ def update_creator(
     if request.roster_export_fields is not None:
         creator.roster_export_fields = request.roster_export_fields
     
+    linked_contact = db.query(CreativeContact).filter(
+        CreativeContact.creator_id == creator.id,
+        CreativeContact.organization_id == creator.organization_id
+    ).first()
+    if linked_contact:
+        sync_fields = {
+            'display_name': 'display_name',
+            'legal_name': 'legal_name',
+            'email': 'email',
+            'roles': 'roles',
+            'primary_pro': 'pro',
+            'primary_ipi': 'ipi',
+            'primary_territory': 'territory',
+        }
+        for creator_field, contact_field in sync_fields.items():
+            val = getattr(request, creator_field, None)
+            if val is not None:
+                setattr(linked_contact, contact_field, val)
+
     db.commit()
     db.refresh(creator)
     
@@ -438,6 +457,11 @@ def delete_creator(
 
     db.query(SongCredit).filter(SongCredit.creator_id == creator_id).delete()
     db.query(WorkCredit).filter(WorkCredit.creator_id == creator_id).delete()
+
+    db.query(CreativeContact).filter(
+        CreativeContact.creator_id == creator_id,
+        CreativeContact.organization_id == creator.organization_id
+    ).delete()
 
     from ..services.audit_service import log_action
     log_action(db, creator.organization_id, current_user.id, "DELETE", "CREATOR", creator.id, creator.display_name)

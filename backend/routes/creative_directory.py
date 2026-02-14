@@ -164,6 +164,24 @@ def update_creative_contact(
     for field, value in data.dict(exclude_unset=True).items():
         setattr(contact, field, value)
 
+    if contact.creator_id:
+        linked_creator = db.query(Creator).filter(Creator.id == contact.creator_id).first()
+        if linked_creator:
+            updated = data.dict(exclude_unset=True)
+            sync_map = {
+                'display_name': 'display_name',
+                'legal_name': 'legal_name',
+                'email': 'email',
+                'phone': 'phone',
+                'pro': 'primary_pro',
+                'ipi': 'primary_ipi',
+                'roles': 'roles',
+                'territory': 'primary_territory',
+            }
+            for contact_field, creator_field in sync_map.items():
+                if contact_field in updated:
+                    setattr(linked_creator, creator_field, updated[contact_field])
+
     db.commit()
     db.refresh(contact)
     return _contact_to_dict(contact)
@@ -236,40 +254,55 @@ def sync_creators(
     verify_org_access(current_user, org_id, db)
 
     creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
-    existing_creator_ids = set(
-        r[0] for r in db.query(CreativeContact.creator_id).filter(
+
+    existing_contacts = {
+        c.creator_id: c for c in db.query(CreativeContact).filter(
             CreativeContact.organization_id == org_id,
             CreativeContact.creator_id.isnot(None),
         ).all()
-    )
+    }
 
     created = []
+    updated = []
     for creator in creators:
-        if creator.id in existing_creator_ids:
-            continue
-        contact = CreativeContact(
-            organization_id=org_id,
-            creator_id=creator.id,
-            display_name=creator.display_name,
-            legal_name=creator.legal_name,
-            email=creator.email,
-            phone=creator.phone,
-            pro=creator.primary_pro,
-            ipi=creator.primary_ipi,
-            publisher_name=creator.publisher_name,
-            roles=creator.roles or [],
-            territory=creator.primary_territory,
-        )
-        db.add(contact)
-        created.append(creator.display_name)
+        if creator.id in existing_contacts:
+            contact = existing_contacts[creator.id]
+            contact.display_name = creator.display_name
+            contact.legal_name = creator.legal_name
+            contact.email = creator.email
+            contact.phone = creator.phone
+            contact.pro = creator.primary_pro
+            contact.ipi = creator.primary_ipi
+            contact.publisher_name = creator.publisher_name
+            contact.roles = creator.roles or []
+            contact.territory = creator.primary_territory
+            updated.append(creator.display_name)
+        else:
+            contact = CreativeContact(
+                organization_id=org_id,
+                creator_id=creator.id,
+                display_name=creator.display_name,
+                legal_name=creator.legal_name,
+                email=creator.email,
+                phone=creator.phone,
+                pro=creator.primary_pro,
+                ipi=creator.primary_ipi,
+                publisher_name=creator.publisher_name,
+                roles=creator.roles or [],
+                territory=creator.primary_territory,
+            )
+            db.add(contact)
+            created.append(creator.display_name)
 
-    if created:
+    if created or updated:
         db.commit()
 
     return {
-        "message": f"Synced {len(created)} creator(s) to creative contacts",
+        "message": f"Synced {len(created)} new, {len(updated)} updated creator(s) to creative contacts",
         "created_count": len(created),
+        "updated_count": len(updated),
         "created_names": created,
+        "updated_names": updated,
     }
 
 
