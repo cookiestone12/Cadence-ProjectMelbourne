@@ -60,7 +60,7 @@ def get_dropbox_auth_url(
     org_id = _get_org_id(current_user, db)
     try:
         result = storage_service.get_dropbox_auth_url(org_id)
-        return {"auth_url": result["url"], "code_verifier": result.get("code_verifier")}
+        return {"auth_url": result["url"]}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

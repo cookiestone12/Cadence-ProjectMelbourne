@@ -41,25 +41,18 @@ def decrypt_token(encrypted: str) -> str:
     return f.decrypt(encrypted.encode()).decode()
 
 
-def get_dropbox_auth_flow():
-    return dropbox.DropboxOAuth2FlowNoRedirect(
-        consumer_key=DROPBOX_APP_KEY,
-        consumer_secret=DROPBOX_APP_SECRET,
-        token_access_type="offline",
-        use_pkce=True,
-    )
-
-
 def get_dropbox_auth_url(org_id: int, redirect_uri: str = None) -> dict:
     if not DROPBOX_APP_KEY or not DROPBOX_APP_SECRET:
         raise ValueError("DROPBOX_APP_KEY and DROPBOX_APP_SECRET must be configured")
 
-    auth_flow = get_dropbox_auth_flow()
+    auth_flow = dropbox.DropboxOAuth2FlowNoRedirect(
+        consumer_key=DROPBOX_APP_KEY,
+        consumer_secret=DROPBOX_APP_SECRET,
+        token_access_type="offline",
+        use_pkce=False,
+    )
     authorize_url = auth_flow.start()
-    return {
-        "url": authorize_url,
-        "code_verifier": auth_flow._code_verifier if hasattr(auth_flow, '_code_verifier') else None,
-    }
+    return {"url": authorize_url}
 
 
 def complete_dropbox_oauth(
@@ -70,29 +63,20 @@ def complete_dropbox_oauth(
     code_verifier: str = None,
     redirect_uri: str = None,
 ) -> IntegrationAccount:
-    import requests
+    auth_flow = dropbox.DropboxOAuth2FlowNoRedirect(
+        consumer_key=DROPBOX_APP_KEY,
+        consumer_secret=DROPBOX_APP_SECRET,
+        token_access_type="offline",
+        use_pkce=False,
+    )
+    try:
+        oauth_result = auth_flow.finish(code.strip())
+    except Exception as e:
+        logger.error(f"Dropbox OAuth finish error: {e}")
+        raise ValueError(f"Invalid authorization code: {e}")
 
-    token_data_payload = {
-        "code": code,
-        "grant_type": "authorization_code",
-        "client_id": DROPBOX_APP_KEY,
-    }
-
-    if code_verifier:
-        token_data_payload["code_verifier"] = code_verifier
-    else:
-        token_data_payload["client_secret"] = DROPBOX_APP_SECRET
-
-    if redirect_uri:
-        token_data_payload["redirect_uri"] = redirect_uri
-
-    token_url = "https://api.dropboxapi.com/oauth2/token"
-    resp = requests.post(token_url, data=token_data_payload, timeout=15)
-    resp.raise_for_status()
-    token_data = resp.json()
-
-    access_token = token_data["access_token"]
-    refresh_token = token_data.get("refresh_token")
+    access_token = oauth_result.access_token
+    refresh_token = oauth_result.refresh_token
 
     dbx = dropbox.Dropbox(access_token)
     account_info = dbx.users_get_current_account()

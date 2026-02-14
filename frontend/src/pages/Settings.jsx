@@ -61,9 +61,6 @@ export default function Settings() {
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('tab') === 'integrations') setActiveTab('integrations')
-    if (params.get('dropbox_callback') === 'true' && params.get('code')) {
-      handleDropboxCallback(params.get('code'))
-    }
   }, [])
 
   const fetchUserInfo = async () => {
@@ -261,35 +258,14 @@ export default function Settings() {
     }
   }
 
-  const handleDropboxCallback = async (code) => {
-    setConnectingDropbox(true)
-    try {
-      const redirectUri = `${window.location.origin}/settings?tab=integrations&dropbox_callback=true`
-      await axios.post('/api/integrations/dropbox/callback', { code, redirect_uri: redirectUri })
-      await fetchIntegrations()
-      setMessage('Dropbox connected successfully!')
-      setTimeout(() => setMessage(''), 3000)
-      window.history.replaceState({}, document.title, '/settings?tab=integrations')
-    } catch (error) {
-      console.error('Error completing Dropbox OAuth:', error)
-      setMessage('Failed to connect Dropbox')
-      setTimeout(() => setMessage(''), 3000)
-    } finally {
-      setConnectingDropbox(false)
-    }
-  }
-
   const [dropboxCodeInput, setDropboxCodeInput] = useState('')
   const [showCodeInput, setShowCodeInput] = useState(false)
-  const [dropboxCodeVerifier, setDropboxCodeVerifier] = useState(null)
 
   const connectDropbox = async () => {
     setConnectingDropbox(true)
     try {
       const response = await axios.get('/api/integrations/dropbox/auth-url')
       const authUrl = response.data.auth_url
-      const codeVerifier = response.data.code_verifier
-      setDropboxCodeVerifier(codeVerifier)
       window.open(authUrl, 'dropbox_auth', 'width=600,height=700,scrollbars=yes')
       setShowCodeInput(true)
       setConnectingDropbox(false)
@@ -307,14 +283,12 @@ export default function Settings() {
     try {
       await axios.post('/api/integrations/dropbox/callback', {
         code: dropboxCodeInput.trim(),
-        code_verifier: dropboxCodeVerifier,
       })
       await fetchIntegrations()
       setMessage('Dropbox connected successfully!')
       setTimeout(() => setMessage(''), 3000)
       setShowCodeInput(false)
       setDropboxCodeInput('')
-      setDropboxCodeVerifier(null)
     } catch (err) {
       console.error('Error completing Dropbox OAuth:', err)
       setMessage('Failed to connect Dropbox. Please check the code and try again.')
@@ -1034,7 +1008,7 @@ export default function Settings() {
                         </div>
                       </div>
                       <button
-                        onClick={() => { setShowCodeInput(false); setDropboxCodeInput(''); setDropboxCodeVerifier(null); }}
+                        onClick={() => { setShowCodeInput(false); setDropboxCodeInput(''); }}
                         className="text-[13px] text-[#7A8580] hover:text-[#3D4A44] transition-colors"
                       >
                         Cancel
