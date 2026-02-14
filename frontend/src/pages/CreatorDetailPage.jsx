@@ -2367,32 +2367,26 @@ export default function CreatorDetailPage() {
                       </div>
                     ))
                   }
-                  {creatorForm.custom_links.map((link, idx) => {
-                    if (!link.url) return null
-                    const fieldKey = `custom_link_${idx}`
-                    return (
-                      <div key={fieldKey} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-[#F5F7F4] transition-colors">
-                        <span className="text-sm text-[#3D4A44]">{link.name || `Custom Link ${idx + 1}`}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const fields = creatorForm.roster_export_fields || []
-                            const updated = fields.includes(fieldKey)
-                              ? fields.filter(f => f !== fieldKey)
-                              : [...fields, fieldKey]
-                            setCreatorForm({...creatorForm, roster_export_fields: updated})
-                          }}
-                          className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
-                          style={{ backgroundColor: (creatorForm.roster_export_fields || []).includes(fieldKey) ? '#5B8A72' : '#D1D5DB' }}
-                        >
-                          <span
-                            className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm"
-                            style={{ transform: (creatorForm.roster_export_fields || []).includes(fieldKey) ? 'translateX(18px)' : 'translateX(3px)' }}
-                          />
-                        </button>
-                      </div>
-                    )
-                  })}
+                  <div className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-[#F5F7F4] transition-colors">
+                    <span className="text-sm text-[#3D4A44]">Custom Links (e.g. Demos)</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const fields = creatorForm.roster_export_fields || []
+                        const updated = fields.includes('custom_links')
+                          ? fields.filter(f => f !== 'custom_links')
+                          : [...fields, 'custom_links']
+                        setCreatorForm({...creatorForm, roster_export_fields: updated})
+                      }}
+                      className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+                      style={{ backgroundColor: (creatorForm.roster_export_fields || []).includes('custom_links') ? '#5B8A72' : '#D1D5DB' }}
+                    >
+                      <span
+                        className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm"
+                        style={{ transform: (creatorForm.roster_export_fields || []).includes('custom_links') ? 'translateX(18px)' : 'translateX(3px)' }}
+                      />
+                    </button>
+                  </div>
                 </div>
               </div>
 

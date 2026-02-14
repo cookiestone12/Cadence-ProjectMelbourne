@@ -687,7 +687,7 @@ def _build_roster_pdf(creators, org_name, request):
             info_parts.append(Paragraph(role_text, role_style))
 
         if (show_all or 'bio' in export_fields) and creator.bio:
-            bio_text = creator.bio[:300] + ("..." if len(creator.bio) > 300 else "")
+            bio_text = creator.bio[:215] + ("..." if len(creator.bio) > 215 else "")
             info_parts.append(Paragraph(bio_text, bio_style))
 
         pill_cells = []
@@ -705,7 +705,7 @@ def _build_roster_pdf(creators, org_name, request):
             cl_name = cl.get("name", "Link")
             cl_url = cl.get("url", "")
             cl_key = f"custom_link_{ci}"
-            if cl_url and (show_all or cl_key in export_fields):
+            if cl_url and (show_all or 'custom_links' in export_fields or cl_key in export_fields):
                 pill_para = Paragraph(f'<a href="{cl_url}" color="#FFFFFF">{cl_name}</a>', pill_style)
                 pill_cells.append(pill_para)
                 pill_bg_colors.append(colors.HexColor("#7A8580"))
