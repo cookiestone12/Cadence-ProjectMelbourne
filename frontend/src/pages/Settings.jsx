@@ -626,7 +626,7 @@ export default function Settings() {
               </div>
 
               <div className="space-y-1">
-                <div className="grid grid-cols-[1fr,100px,100px,120px] gap-4 px-4 py-2 text-[13px] font-medium text-[#7A8580] uppercase">
+                <div className="hidden md:grid grid-cols-[1fr,80px,80px,110px] gap-3 px-4 py-2 text-[13px] font-medium text-[#7A8580] uppercase">
                   <span>Notification Type</span>
                   <span className="text-center">In-App</span>
                   <span className="text-center">Email</span>
@@ -638,49 +638,97 @@ export default function Settings() {
                   return (
                     <div 
                       key={type} 
-                      className="grid grid-cols-[1fr,100px,100px,120px] gap-4 items-center px-4 py-4 bg-[#FAFBF9] rounded-xl hover:bg-[#EEF1EC] transition-colors"
+                      className="px-4 py-4 bg-[#FAFBF9] rounded-xl hover:bg-[#EEF1EC] transition-colors"
                     >
-                      <div>
-                        <div className="text-[15px] font-medium text-[#3D4A44]">{info.label}</div>
-                        <div className="text-[13px] text-[#7A8580]">{info.description}</div>
+                      <div className="hidden md:grid grid-cols-[1fr,80px,80px,110px] gap-3 items-center">
+                        <div>
+                          <div className="text-[15px] font-medium text-[#3D4A44]">{info.label}</div>
+                          <div className="text-[13px] text-[#7A8580]">{info.description}</div>
+                        </div>
+                        
+                        <div className="flex justify-center">
+                          <button
+                            onClick={() => updatePreference(type, 'in_app_enabled', !pref.in_app_enabled)}
+                            className={`w-10 h-6 rounded-full transition-colors relative ${
+                              pref.in_app_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                            }`}
+                          >
+                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                              pref.in_app_enabled ? 'left-5' : 'left-1'
+                            }`} />
+                          </button>
+                        </div>
+                        
+                        <div className="flex justify-center">
+                          <button
+                            onClick={() => updatePreference(type, 'email_enabled', !pref.email_enabled)}
+                            className={`w-10 h-6 rounded-full transition-colors relative ${
+                              pref.email_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                            }`}
+                          >
+                            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                              pref.email_enabled ? 'left-5' : 'left-1'
+                            }`} />
+                          </button>
+                        </div>
+                        
+                        <div className="flex justify-center">
+                          <select
+                            value={pref.frequency}
+                            onChange={(e) => updatePreference(type, 'frequency', e.target.value)}
+                            className="text-[13px] px-2 py-1 border border-[rgba(59,77,67,0.12)] rounded-lg bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                          >
+                            <option value="immediate">Immediate</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                          </select>
+                        </div>
                       </div>
-                      
-                      <div className="flex justify-center">
-                        <button
-                          onClick={() => updatePreference(type, 'in_app_enabled', !pref.in_app_enabled)}
-                          className={`w-10 h-6 rounded-full transition-colors relative ${
-                            pref.in_app_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
-                          }`}
-                        >
-                          <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                            pref.in_app_enabled ? 'left-5' : 'left-1'
-                          }`} />
-                        </button>
-                      </div>
-                      
-                      <div className="flex justify-center">
-                        <button
-                          onClick={() => updatePreference(type, 'email_enabled', !pref.email_enabled)}
-                          className={`w-10 h-6 rounded-full transition-colors relative ${
-                            pref.email_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
-                          }`}
-                        >
-                          <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                            pref.email_enabled ? 'left-5' : 'left-1'
-                          }`} />
-                        </button>
-                      </div>
-                      
-                      <div className="flex justify-center">
-                        <select
-                          value={pref.frequency}
-                          onChange={(e) => updatePreference(type, 'frequency', e.target.value)}
-                          className="text-[13px] px-2 py-1 border border-[rgba(59,77,67,0.12)] rounded-lg bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                        >
-                          <option value="immediate">Immediate</option>
-                          <option value="daily">Daily</option>
-                          <option value="weekly">Weekly</option>
-                        </select>
+
+                      <div className="md:hidden">
+                        <div className="mb-3">
+                          <div className="text-[15px] font-medium text-[#3D4A44]">{info.label}</div>
+                          <div className="text-[13px] text-[#7A8580]">{info.description}</div>
+                        </div>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[12px] text-[#7A8580]">In-App</span>
+                              <button
+                                onClick={() => updatePreference(type, 'in_app_enabled', !pref.in_app_enabled)}
+                                className={`w-10 h-6 rounded-full transition-colors relative ${
+                                  pref.in_app_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                                }`}
+                              >
+                                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                                  pref.in_app_enabled ? 'left-5' : 'left-1'
+                                }`} />
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[12px] text-[#7A8580]">Email</span>
+                              <button
+                                onClick={() => updatePreference(type, 'email_enabled', !pref.email_enabled)}
+                                className={`w-10 h-6 rounded-full transition-colors relative ${
+                                  pref.email_enabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                                }`}
+                              >
+                                <span className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                                  pref.email_enabled ? 'left-5' : 'left-1'
+                                }`} />
+                              </button>
+                            </div>
+                          </div>
+                          <select
+                            value={pref.frequency}
+                            onChange={(e) => updatePreference(type, 'frequency', e.target.value)}
+                            className="text-[13px] px-2 py-1.5 border border-[rgba(59,77,67,0.12)] rounded-lg bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                          >
+                            <option value="immediate">Immediate</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
                   )
