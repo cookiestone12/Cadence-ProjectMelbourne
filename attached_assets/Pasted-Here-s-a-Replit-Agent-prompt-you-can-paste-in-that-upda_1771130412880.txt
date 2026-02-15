@@ -1,0 +1,212 @@
+Here’s a Replit Agent prompt you can paste in that updates your existing app only by adding PWA + install + lock-screen push notifications (Android + iOS). It’s written to not change any UI/UX or architecture beyond what’s required.
+
+⸻
+
+Replit Agent Prompt (copy/paste)
+
+You are working inside an existing deployed web app at rythm-app.replit.app. Your job is to add Progressive Web App (PWA) support with:
+	•	Install button / install prompt
+	•	Android + iOS web push notifications that can appear on the lock screen
+	•	Offline-ready shell (minimum viable caching so the app still loads)
+	•	Zero visual redesign: do not change existing UI styling, layout, routes, or component structure except where you must add a small install/notification control.
+	•	No refactors unless required to implement PWA/push.
+	•	Keep existing auth, API structure, and database choices. Only add what’s necessary.
+
+0) First: detect stack
+
+Before coding, inspect the repository to identify:
+	•	Framework: (Next.js / Vite+React / CRA / Express server-render / etc.)
+	•	Where static assets live (e.g., /public, /static)
+	•	How routing works
+	•	Where the server/API lives (same app vs separate)
+
+Then implement the steps below in the most native way for that stack.
+
+⸻
+
+A) PWA INSTALLABILITY (manifest + icons + meta)
+
+1) Add a Web App Manifest
+
+Create manifest.webmanifest (or manifest.json where your stack expects it) and ensure it is served with the correct content-type.
+
+Manifest requirements:
+	•	name: “Rythm”
+	•	short_name: “Rythm”
+	•	start_url: / (or your app’s main entry path)
+	•	display: standalone
+	•	background_color + theme_color: match current brand colors (derive from existing CSS/theme; do not invent a new palette)
+	•	icons: include at least:
+	•	192x192
+	•	512x512
+	•	512x512 maskable
+If icons don’t exist, generate simple clean icons that match the existing logo/branding without changing the logo. Place them in the appropriate public/static directory.
+
+2) Add required HTML meta tags
+
+Add:
+	•	<link rel="manifest" href="/manifest.webmanifest">
+	•	<meta name="theme-color" content="...">
+	•	Apple PWA support:
+	•	<meta name="apple-mobile-web-app-capable" content="yes">
+	•	<meta name="apple-mobile-web-app-status-bar-style" content="default">
+	•	<link rel="apple-touch-icon" href="/icons/...">
+
+Do this in the correct place depending on stack:
+	•	Next.js: app/layout.tsx or pages/_document.tsx
+	•	Vite/CRA: index.html
+
+⸻
+
+B) SERVICE WORKER (offline shell + push)
+
+3) Add a Service Worker
+
+Implement a service worker with:
+	•	Minimal offline caching: cache the app shell + key static assets so the app can boot offline.
+	•	Network-first for API calls (do not break live data).
+	•	Proper versioning and cache cleanup.
+
+Use the most appropriate approach:
+	•	Next.js: next-pwa OR a custom SW (prefer custom if it avoids config churn)
+	•	Vite: vite-plugin-pwa OR custom SW
+	•	Plain/Express: custom service-worker.js
+
+Constraint: keep changes minimal and localized.
+
+4) Register the Service Worker in the client
+
+Add client-side SW registration on app load.
+	•	Must not break SSR/hydration if Next.js.
+	•	Must handle “already registered” safely.
+
+⸻
+
+C) PUSH NOTIFICATIONS (Android + iOS)
+
+You must implement Web Push using the standard stack:
+	•	Client: Push API + Notification API
+	•	Server: VAPID + web-push library
+	•	Storage: persist push subscriptions tied to a user (or device) so the server can send pushes later
+
+Important platform note (must respect)
+	•	iOS web push works on iOS 16.4+ and requires the web app to be installed to Home Screen (PWA). Permission prompts must only appear in valid contexts.
+	•	Android push works on Chrome/Edge/etc.
+
+5) Add VAPID keys support
+	•	Add env vars:
+	•	VAPID_PUBLIC_KEY
+	•	VAPID_PRIVATE_KEY
+	•	VAPID_SUBJECT (e.g., mailto:support@yourdomain.com)
+	•	If keys are missing, provide a one-time script/command to generate them locally (do not commit private key).
+
+6) Create subscription storage
+
+Add a new table/collection for push subscriptions (minimal fields):
+	•	id
+	•	userId (nullable if your app supports guests; otherwise required)
+	•	endpoint
+	•	p256dh
+	•	auth
+	•	userAgent (optional but helpful)
+	•	createdAt, updatedAt
+	•	isActive boolean
+
+If the app already has a DB layer, use it. If not, implement the smallest viable persistence consistent with the current project.
+
+7) API endpoints
+
+Add endpoints:
+	1.	POST /api/push/subscribe
+	•	Accept subscription JSON from the browser
+	•	Upsert by endpoint
+	•	Associate to logged-in user if available
+	2.	POST /api/push/unsubscribe
+	•	Mark inactive / delete subscription by endpoint
+	3.	POST /api/push/send (protected/admin-only OR internal use)
+	•	Accept { title, body, url, icon }
+	•	Sends to:
+	•	a specific userId if provided, else
+	•	all active subscriptions (only if authorized)
+	•	Must fail safely with clear errors
+
+Security:
+	•	Require authentication for send endpoint. If auth system exists, integrate. If not, lock it behind an env token PUSH_SEND_TOKEN.
+
+8) Client UX (minimal changes)
+
+Add a small, unobtrusive control in an existing appropriate settings/profile area:
+	•	Button: “Enable Notifications”
+	•	Button: “Disable Notifications” (when enabled)
+	•	Status text: Enabled/Disabled
+	•	Do not redesign pages—place it where it fits with current UI.
+
+Behavior:
+	•	Clicking “Enable”:
+	•	Registers SW (if not already)
+	•	Requests Notification permission
+	•	Subscribes via pushManager.subscribe with VAPID public key
+	•	Sends subscription to /api/push/subscribe
+	•	Clicking “Disable”:
+	•	Unsubscribes in browser
+	•	Calls /api/push/unsubscribe
+
+Also add an install prompt UX:
+	•	Show “Install App” button only when installable:
+	•	Android/desktop: use beforeinstallprompt event and call prompt()
+	•	iOS: detect iOS Safari + not installed; show a tiny hint “Install: Share → Add to Home Screen”
+	•	Keep this UI minimal and consistent.
+
+9) Notification click behavior (lock screen)
+
+In the service worker:
+	•	Handle push event:
+	•	Show notification with title, body, icon, and data.url
+	•	Handle notificationclick:
+	•	Focus existing window if open; otherwise open data.url (fallback to /)
+
+⸻
+
+D) ACCEPTANCE TESTS (must pass)
+
+Provide a short checklist and ensure these work:
+	1.	Lighthouse PWA installability:
+
+	•	Manifest valid
+	•	Service worker controlling page
+	•	App is installable on Chrome Android
+
+	2.	Android:
+
+	•	Install prompt appears (or Install button works)
+	•	After enabling notifications, pushes show even when screen locked
+
+	3.	iOS (16.4+):
+
+	•	After “Add to Home Screen” install, notification permission works
+	•	Push notification appears on lock screen when sent
+
+	4.	No regressions:
+
+	•	No styling/layout changes except the small new controls
+	•	No route behavior changes
+	•	No breaking changes to existing API calls
+
+⸻
+
+E) DELIVERABLES
+
+When done, output:
+	1.	List of files changed/added
+	2.	Setup steps for env vars
+	3.	How to generate VAPID keys
+	4.	How to test push quickly (include a simple “send test notification” action)
+	5.	Notes about iOS requirements (installed PWA + iOS 16.4+)
+
+Proceed with implementation now.
+
+⸻
+
+If you paste that into Replit Agent, it should do the right thing without “helpfully” redesigning your app.
+
+One blunt heads-up: iOS web push is picky—if you test in Safari without installing to Home Screen first, it’ll look “broken” even when your code is correct. That’s Apple being Apple, not you being you.
