@@ -88,3 +88,11 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **APScheduler**: Background task scheduling.
 - **Dropbox SDK**: Dropbox API client for Python (OAuth, file browsing, download links).
 - **Cryptography**: Token encryption/decryption for OAuth tokens at rest.
+- **pywebpush**: Web Push notification library for Python (VAPID-based push to service workers).
+
+### PWA (Progressive Web App)
+- **manifest.webmanifest**: App manifest with name, icons, theme color (#5B8A72), display: standalone.
+- **sw.js**: Service worker with offline shell caching (cache-first for static assets, network-first for API), push event handler, notification click navigation.
+- **Push Notifications**: VAPID-based web push via pywebpush. PushSubscription model stores per-user device subscriptions. Backend endpoints: /api/push/vapid-public-key, /subscribe, /unsubscribe, /send (admin), /test.
+- **Install Prompt**: beforeinstallprompt captured in Settings page, shows Install button or "Installed" badge.
+- **Service Worker Registration**: Registered in main.jsx on window load.

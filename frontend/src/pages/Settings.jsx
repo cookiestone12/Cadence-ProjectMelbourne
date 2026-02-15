@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, CloudArrowUpIcon, CloudIcon, FolderIcon, CheckCircleIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, CloudArrowUpIcon, CloudIcon, FolderIcon, CheckCircleIcon, XMarkIcon, DevicePhoneMobileIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 
 const NOTIFICATION_TYPES = {
   MISSING_ISRC: { label: 'Missing ISRC', description: 'Alert when songs are missing ISRC codes' },
@@ -51,6 +51,12 @@ export default function Settings() {
   const [currentFolderPath, setCurrentFolderPath] = useState('')
   const [loadingFolders, setLoadingFolders] = useState(false)
   const [testingConnection, setTestingConnection] = useState(false)
+  const [pushSupported, setPushSupported] = useState(false)
+  const [pushEnabled, setPushEnabled] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
+  const [sendingTestPush, setSendingTestPush] = useState(false)
+  const [installPrompt, setInstallPrompt] = useState(null)
+  const [isInstalled, setIsInstalled] = useState(false)
 
   useEffect(() => {
     fetchUserInfo()
@@ -58,9 +64,21 @@ export default function Settings() {
     fetchOrgData()
     fetchEmailDigest()
     fetchIntegrations()
+    checkPushStatus()
+
+    const installed = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
+    setIsInstalled(!!installed)
+
+    const handleBeforeInstall = (e) => {
+      e.preventDefault()
+      setInstallPrompt(e)
+    }
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall)
 
     const params = new URLSearchParams(window.location.search)
     if (params.get('tab') === 'integrations') setActiveTab('integrations')
+
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall)
   }, [])
 
   const fetchUserInfo = async () => {
@@ -256,6 +274,99 @@ export default function Settings() {
     } catch (error) {
       console.error('Error fetching integrations:', error)
     }
+  }
+
+  const checkPushStatus = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setPushSupported(false)
+      return
+    }
+    setPushSupported(true)
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.getSubscription()
+      setPushEnabled(!!sub)
+    } catch {
+      setPushEnabled(false)
+    }
+  }
+
+  const togglePush = async () => {
+    setPushLoading(true)
+    try {
+      const reg = await navigator.serviceWorker.ready
+      const existing = await reg.pushManager.getSubscription()
+
+      if (existing) {
+        await axios.post('/api/push/unsubscribe', { endpoint: existing.endpoint })
+        await existing.unsubscribe()
+        setPushEnabled(false)
+        setMessage('Push notifications disabled')
+      } else {
+        const keyResponse = await axios.get('/api/push/vapid-public-key')
+        const vapidKey = keyResponse.data.publicKey
+        const applicationServerKey = urlBase64ToUint8Array(vapidKey)
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey,
+        })
+        const subJSON = sub.toJSON()
+        await axios.post('/api/push/subscribe', {
+          endpoint: subJSON.endpoint,
+          keys: {
+            p256dh: subJSON.keys.p256dh,
+            auth: subJSON.keys.auth,
+          },
+          userAgent: navigator.userAgent,
+        })
+        setPushEnabled(true)
+        setMessage('Push notifications enabled')
+      }
+      setTimeout(() => setMessage(''), 3000)
+    } catch (err) {
+      console.error('Push toggle error:', err)
+      setMessage('Failed to update push notifications. Make sure notifications are allowed in your browser.')
+      setTimeout(() => setMessage(''), 5000)
+    } finally {
+      setPushLoading(false)
+    }
+  }
+
+  const sendTestPush = async () => {
+    setSendingTestPush(true)
+    try {
+      const res = await axios.post('/api/push/test')
+      setMessage(`Test notification sent (${res.data.sent} device${res.data.sent !== 1 ? 's' : ''})`)
+      setTimeout(() => setMessage(''), 4000)
+    } catch (err) {
+      setMessage(err.response?.data?.detail || 'Failed to send test notification')
+      setTimeout(() => setMessage(''), 5000)
+    } finally {
+      setSendingTestPush(false)
+    }
+  }
+
+  const handleInstall = async () => {
+    if (!installPrompt) return
+    installPrompt.prompt()
+    const result = await installPrompt.userChoice
+    if (result.outcome === 'accepted') {
+      setIsInstalled(true)
+      setInstallPrompt(null)
+      setMessage('App installed successfully!')
+      setTimeout(() => setMessage(''), 3000)
+    }
+  }
+
+  const urlBase64ToUint8Array = (base64String) => {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4)
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+    const rawData = window.atob(base64)
+    const outputArray = new Uint8Array(rawData.length)
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i)
+    }
+    return outputArray
   }
 
   const [dropboxCodeInput, setDropboxCodeInput] = useState('')
@@ -693,6 +804,85 @@ export default function Settings() {
                 </div>
               )}
             </div>
+
+            {pushSupported && (
+              <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-[rgba(91,138,114,0.1)] rounded-xl flex items-center justify-center">
+                      <DevicePhoneMobileIcon className="w-5 h-5 text-[#5B8A72]" />
+                    </div>
+                    <div>
+                      <h3 className="text-[18px] font-medium text-[#3D4A44]">Push Notifications</h3>
+                      <p className="text-[14px] text-[#7A8580] mt-0.5">Receive instant alerts on this device</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={togglePush}
+                    disabled={pushLoading}
+                    className={`w-14 h-8 rounded-full transition-colors relative flex-shrink-0 ${
+                      pushEnabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                    } ${pushLoading ? 'opacity-50' : ''}`}
+                  >
+                    <span className={`absolute top-1.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                      pushEnabled ? 'left-8' : 'left-1.5'
+                    }`} />
+                  </button>
+                </div>
+
+                {pushEnabled && (
+                  <div className="mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)]">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[13px] text-[#7A8580]">
+                        Push notifications are active on this device. You'll receive alerts even when the app isn't open.
+                      </p>
+                      <button
+                        onClick={sendTestPush}
+                        disabled={sendingTestPush}
+                        className="px-4 py-2 bg-[#5B8A72] text-white text-[13px] font-medium rounded-lg hover:bg-[#4A7862] transition-colors disabled:opacity-50 flex-shrink-0 ml-4"
+                      >
+                        {sendingTestPush ? 'Sending...' : 'Send Test'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(installPrompt || isInstalled) && (
+              <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 bg-[rgba(91,138,114,0.1)] rounded-xl flex items-center justify-center">
+                      <ArrowDownTrayIcon className="w-5 h-5 text-[#5B8A72]" />
+                    </div>
+                    <div>
+                      <h3 className="text-[18px] font-medium text-[#3D4A44]">Install App</h3>
+                      <p className="text-[14px] text-[#7A8580] mt-0.5">
+                        {isInstalled
+                          ? 'Rythm is installed on this device'
+                          : 'Add Rythm to your home screen for quick access'
+                        }
+                      </p>
+                    </div>
+                  </div>
+                  {isInstalled ? (
+                    <span className="inline-flex items-center space-x-1 px-3 py-1.5 rounded-full text-[13px] font-medium bg-[rgba(91,154,110,0.15)] text-[#5B9A6E]">
+                      <CheckCircleIcon className="w-4 h-4" />
+                      <span>Installed</span>
+                    </span>
+                  ) : installPrompt ? (
+                    <button
+                      onClick={handleInstall}
+                      className="px-5 py-2.5 bg-[#5B8A72] text-white text-[14px] font-medium rounded-xl hover:bg-[#4A7862] transition-colors flex items-center space-x-2"
+                    >
+                      <ArrowDownTrayIcon className="w-4 h-4" />
+                      <span>Install</span>
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
