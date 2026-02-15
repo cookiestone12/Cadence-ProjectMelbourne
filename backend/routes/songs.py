@@ -14,57 +14,32 @@ from ..utils.auth import get_current_user
 
 def _cleanup_song_dependencies(db: Session, song_ids: list):
     from sqlalchemy import text
-    import logging
-    logger = logging.getLogger("rythm")
 
     id_list = list(song_ids)
     if not id_list:
         return
 
-    nullable_refs = [
-        ("placements", "song_id"),
-        ("royalty_transactions", "song_id"),
-        ("contract_assets", "song_id"),
-        ("audio_assets", "song_id"),
-        ("action_items", "song_id"),
-        ("contract_documents", "song_id"),
-        ("expenses", "song_id"),
-        ("fees", "song_id"),
-        ("royalty_ledger_entries", "song_id"),
-        ("royalty_statement_lines", "matched_song_id"),
-    ]
+    db.execute(text("UPDATE placements SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("UPDATE royalty_transactions SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("UPDATE audio_assets SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("UPDATE action_items SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("UPDATE contract_documents SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("UPDATE expenses SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("UPDATE fees SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("UPDATE royalty_ledger_entries SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("UPDATE royalty_statement_lines SET matched_song_id = NULL WHERE matched_song_id = ANY(:ids)"), {"ids": id_list})
 
-    for table_name, col_name in nullable_refs:
-        try:
-            db.execute(
-                text(f"UPDATE {table_name} SET {col_name} = NULL WHERE {col_name} = ANY(:ids)"),
-                {"ids": id_list}
-            )
-        except Exception as e:
-            logger.warning(f"Failed to nullify {table_name}.{col_name}: {e}")
-
-    non_nullable_refs = [
-        "song_credits",
-        "song_dsp_links",
-        "song_checklist_status",
-        "song_valuation_snapshots",
-        "analytics",
-        "song_streaming_metrics",
-        "territory_revenue",
-        "valuation_calculations",
-        "song_contracts",
-        "work_tracks",
-        "release_tracks",
-    ]
-
-    for table_name in non_nullable_refs:
-        try:
-            db.execute(
-                text(f"DELETE FROM {table_name} WHERE song_id = ANY(:ids)"),
-                {"ids": id_list}
-            )
-        except Exception as e:
-            logger.warning(f"Failed to delete from {table_name}: {e}")
+    db.execute(text("DELETE FROM song_credits WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("DELETE FROM song_dsp_links WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("DELETE FROM song_checklist_status WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("DELETE FROM song_valuation_snapshots WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("DELETE FROM analytics WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("DELETE FROM song_streaming_metrics WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("DELETE FROM territory_revenue WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("DELETE FROM valuation_calculations WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("DELETE FROM song_contracts WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("DELETE FROM work_tracks WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("DELETE FROM release_tracks WHERE song_id = ANY(:ids)"), {"ids": id_list})
 
 router = APIRouter(prefix="/api/songs", tags=["songs"])
 
@@ -475,16 +450,22 @@ def bulk_delete_songs(
         if not membership and not current_user.is_super_admin:
             raise HTTPException(status_code=403, detail="Not authorized to delete songs from this organization")
 
-    from ..services.audit_service import log_action
-    for song in songs:
-        log_action(db, song.organization_id, current_user.id, "DELETE", "SONG", song.id, song.title)
+    try:
+        from ..services.audit_service import log_action
+        for song in songs:
+            log_action(db, song.organization_id, current_user.id, "DELETE", "SONG", song.id, song.title)
 
-    _cleanup_song_dependencies(db, request.song_ids)
+        _cleanup_song_dependencies(db, request.song_ids)
 
-    from sqlalchemy import text
-    db.execute(text("DELETE FROM songs WHERE id = ANY(:ids)"), {"ids": list(request.song_ids)})
-    db.commit()
-    return {"deleted": len(songs)}
+        from sqlalchemy import text
+        db.execute(text("DELETE FROM songs WHERE id = ANY(:ids)"), {"ids": list(request.song_ids)})
+        db.commit()
+        return {"deleted": len(songs)}
+    except Exception as e:
+        db.rollback()
+        import logging
+        logging.getLogger("rythm").error(f"Failed to delete songs {request.song_ids}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete songs: {str(e)}")
 
 @router.delete("/{song_id}")
 def delete_song(
@@ -503,15 +484,21 @@ def delete_song(
     if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized to delete this song")
 
-    from ..services.audit_service import log_action
-    log_action(db, song.organization_id, current_user.id, "DELETE", "SONG", song.id, song.title)
+    try:
+        from ..services.audit_service import log_action
+        log_action(db, song.organization_id, current_user.id, "DELETE", "SONG", song.id, song.title)
 
-    _cleanup_song_dependencies(db, [song_id])
+        _cleanup_song_dependencies(db, [song_id])
 
-    from sqlalchemy import text
-    db.execute(text("DELETE FROM songs WHERE id = :id"), {"id": song_id})
-    db.commit()
-    return {"message": "Song deleted successfully"}
+        from sqlalchemy import text
+        db.execute(text("DELETE FROM songs WHERE id = :id"), {"id": song_id})
+        db.commit()
+        return {"message": "Song deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        import logging
+        logging.getLogger("rythm").error(f"Failed to delete song {song_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete song: {str(e)}")
 
 @router.get("/org/{org_id}/duplicates")
 def find_duplicates(
