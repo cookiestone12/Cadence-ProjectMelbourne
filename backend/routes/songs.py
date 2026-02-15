@@ -14,6 +14,8 @@ from ..utils.auth import get_current_user
 
 def _cleanup_song_dependencies(db: Session, song_ids: list):
     from sqlalchemy import text
+    import logging
+    logger = logging.getLogger("rythm")
 
     id_list = list(song_ids)
     if not id_list:
@@ -25,15 +27,11 @@ def _cleanup_song_dependencies(db: Session, song_ids: list):
         ("contract_assets", "song_id"),
         ("audio_assets", "song_id"),
         ("action_items", "song_id"),
-        ("notifications", "song_id"),
-        ("royalty_statements", "song_id"),
-        ("royalty_statement_lines", "song_id"),
-        ("royalty_statement_lines", "matched_song_id"),
-        ("audit_logs", "song_id"),
         ("contract_documents", "song_id"),
         ("expenses", "song_id"),
         ("fees", "song_id"),
         ("royalty_ledger_entries", "song_id"),
+        ("royalty_statement_lines", "matched_song_id"),
     ]
 
     for table_name, col_name in nullable_refs:
@@ -42,8 +40,31 @@ def _cleanup_song_dependencies(db: Session, song_ids: list):
                 text(f"UPDATE {table_name} SET {col_name} = NULL WHERE {col_name} = ANY(:ids)"),
                 {"ids": id_list}
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to nullify {table_name}.{col_name}: {e}")
+
+    non_nullable_refs = [
+        "song_credits",
+        "song_dsp_links",
+        "song_checklist_status",
+        "song_valuation_snapshots",
+        "analytics",
+        "song_streaming_metrics",
+        "territory_revenue",
+        "valuation_calculations",
+        "song_contracts",
+        "work_tracks",
+        "release_tracks",
+    ]
+
+    for table_name in non_nullable_refs:
+        try:
+            db.execute(
+                text(f"DELETE FROM {table_name} WHERE song_id = ANY(:ids)"),
+                {"ids": id_list}
+            )
+        except Exception as e:
+            logger.warning(f"Failed to delete from {table_name}: {e}")
 
 router = APIRouter(prefix="/api/songs", tags=["songs"])
 
@@ -454,17 +475,16 @@ def bulk_delete_songs(
         if not membership and not current_user.is_super_admin:
             raise HTTPException(status_code=403, detail="Not authorized to delete songs from this organization")
 
+    from ..services.audit_service import log_action
+    for song in songs:
+        log_action(db, song.organization_id, current_user.id, "DELETE", "SONG", song.id, song.title)
+
     _cleanup_song_dependencies(db, request.song_ids)
 
-    deleted_count = 0
-    for song in songs:
-        from ..services.audit_service import log_action
-        log_action(db, song.organization_id, current_user.id, "DELETE", "SONG", song.id, song.title)
-        db.delete(song)
-        deleted_count += 1
-
+    from sqlalchemy import text
+    db.execute(text("DELETE FROM songs WHERE id = ANY(:ids)"), {"ids": list(request.song_ids)})
     db.commit()
-    return {"deleted": deleted_count}
+    return {"deleted": len(songs)}
 
 @router.delete("/{song_id}")
 def delete_song(
@@ -483,11 +503,13 @@ def delete_song(
     if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized to delete this song")
 
-    _cleanup_song_dependencies(db, [song_id])
-
     from ..services.audit_service import log_action
     log_action(db, song.organization_id, current_user.id, "DELETE", "SONG", song.id, song.title)
-    db.delete(song)
+
+    _cleanup_song_dependencies(db, [song_id])
+
+    from sqlalchemy import text
+    db.execute(text("DELETE FROM songs WHERE id = :id"), {"id": song_id})
     db.commit()
     return {"message": "Song deleted successfully"}
 
