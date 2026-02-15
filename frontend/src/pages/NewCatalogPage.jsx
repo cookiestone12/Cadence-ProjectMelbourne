@@ -1094,34 +1094,36 @@ export default function NewCatalogPage() {
       </div>
 
       {selectedSongIds.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40">
-          <div className="bg-[#3D4A44] text-white px-6 py-3 rounded-2xl shadow-[0_8px_32px_rgba(61,74,68,0.3)] flex items-center space-x-4">
-            <span className="text-sm font-medium">{selectedSongIds.size} song{selectedSongIds.size !== 1 ? 's' : ''} selected</span>
-            <div className="w-px h-5 bg-[#7A8580]"></div>
-            <button
-              onClick={openBulkEditModal}
-              className="px-4 py-1.5 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7A62] transition-colors"
-            >
-              Bulk Edit
-            </button>
-            <button
-              onClick={handleBulkDelete}
-              className="px-4 py-1.5 bg-[#C47068] text-white rounded-lg text-sm font-medium hover:bg-[#B45F58] transition-colors"
-            >
-              Delete
-            </button>
-            <button
-              onClick={selectAllSongs}
-              className="px-4 py-1.5 bg-[#EEF1EC] text-[#3D4A44] rounded-lg text-sm font-medium hover:bg-white transition-colors"
-            >
-              Select All
-            </button>
-            <button
-              onClick={clearSelection}
-              className="px-4 py-1.5 border border-[#7A8580] text-white rounded-lg text-sm font-medium hover:bg-[#4A5550] transition-colors"
-            >
-              Clear Selection
-            </button>
+        <div className="fixed bottom-4 left-2 right-2 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-40">
+          <div className="bg-[#3D4A44] text-white px-3 py-2.5 sm:px-6 sm:py-3 rounded-2xl shadow-[0_8px_32px_rgba(61,74,68,0.3)] flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
+            <span className="text-xs sm:text-sm font-medium whitespace-nowrap">{selectedSongIds.size} selected</span>
+            <div className="hidden sm:block w-px h-5 bg-[#7A8580]"></div>
+            <div className="flex items-center gap-1.5 sm:gap-3">
+              <button
+                onClick={openBulkEditModal}
+                className="px-2.5 sm:px-4 py-1.5 bg-[#5B8A72] text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-[#4A7A62] transition-colors whitespace-nowrap"
+              >
+                Edit
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="px-2.5 sm:px-4 py-1.5 bg-[#C47068] text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-[#B45F58] transition-colors whitespace-nowrap"
+              >
+                Delete
+              </button>
+              <button
+                onClick={selectAllSongs}
+                className="px-2.5 sm:px-4 py-1.5 bg-[#EEF1EC] text-[#3D4A44] rounded-lg text-xs sm:text-sm font-medium hover:bg-white transition-colors whitespace-nowrap"
+              >
+                All
+              </button>
+              <button
+                onClick={clearSelection}
+                className="px-2.5 sm:px-4 py-1.5 border border-[#7A8580] text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-[#4A5550] transition-colors whitespace-nowrap"
+              >
+                Clear
+              </button>
+            </div>
           </div>
         </div>
       )}
