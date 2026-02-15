@@ -3,7 +3,7 @@ import axios from 'axios'
 import { 
   FunnelIcon, MagnifyingGlassIcon, PlusIcon, ArrowUpTrayIcon,
   CheckCircleIcon, XCircleIcon, MinusCircleIcon, LinkIcon, TrashIcon,
-  SpeakerWaveIcon, ChevronDownIcon, ChevronUpIcon
+  SpeakerWaveIcon, ChevronDownIcon, ChevronUpIcon, ArrowPathIcon
 } from '@heroicons/react/24/outline'
 import SongDetailModal from '../components/SongDetailModal'
 import AddSongModal from '../components/AddSongModal'
@@ -13,6 +13,7 @@ export default function NewCatalogPage() {
   const [songs, setSongs] = useState([])
   const [creators, setCreators] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('all')
   const [selectedSong, setSelectedSong] = useState(null)
@@ -348,25 +349,28 @@ export default function NewCatalogPage() {
 
   const handleDeleteSong = async (songId, songTitle) => {
     if (!window.confirm(`Are you sure you want to delete "${songTitle}"? This cannot be undone.`)) return
+    setSongs(prev => prev.filter(s => s.id !== songId))
     try {
       await axios.delete(`/api/songs/${songId}`)
-      loadData()
     } catch (error) {
       console.error('Failed to delete song:', error)
       alert(error.response?.data?.detail || 'Failed to delete song')
+      loadData()
     }
   }
 
   const handleBulkDelete = async () => {
     const count = selectedSongIds.size
     if (!window.confirm(`Are you sure you want to delete ${count} song${count !== 1 ? 's' : ''}? This cannot be undone.`)) return
+    const idsToDelete = new Set(selectedSongIds)
+    setSongs(prev => prev.filter(s => !idsToDelete.has(s.id)))
+    setSelectedSongIds(new Set())
     try {
-      await axios.post('/api/songs/bulk-delete', { song_ids: Array.from(selectedSongIds) })
-      setSelectedSongIds(new Set())
-      loadData()
+      await axios.post('/api/songs/bulk-delete', { song_ids: Array.from(idsToDelete) })
     } catch (error) {
       console.error('Failed to delete songs:', error)
       alert(error.response?.data?.detail || 'Failed to delete songs')
+      loadData()
     }
   }
 
@@ -386,14 +390,15 @@ export default function NewCatalogPage() {
 
   const handleDeleteDuplicate = async (songId, songTitle) => {
     if (!window.confirm(`Delete "${songTitle}"?`)) return
+    setSongs(prev => prev.filter(s => s.id !== songId))
+    setDuplicateGroups(prev => 
+      prev.map(group => group.filter(s => s.id !== songId)).filter(g => g.length > 1)
+    )
     try {
       await axios.delete(`/api/songs/${songId}`)
-      setDuplicateGroups(prev => 
-        prev.map(group => group.filter(s => s.id !== songId)).filter(g => g.length > 1)
-      )
-      loadData()
     } catch (error) {
       alert(error.response?.data?.detail || 'Failed to delete')
+      loadData()
     }
   }
 
@@ -510,6 +515,13 @@ export default function NewCatalogPage() {
           <p className="text-[#7A8580]">{songs.length} total songs</p>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+          <button
+            className="p-1.5 sm:p-2 text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#E8F0EB] rounded-lg transition-colors"
+            onClick={async () => { setRefreshing(true); try { await loadData(); } finally { setRefreshing(false); } }}
+            title="Refresh catalog"
+          >
+            <ArrowPathIcon className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
           <button 
             className="flex items-center space-x-1.5 px-2.5 py-1.5 sm:px-4 sm:py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-xs sm:text-sm whitespace-nowrap"
             onClick={() => setShowAddModal(true)}
