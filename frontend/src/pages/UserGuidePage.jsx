@@ -1,7 +1,7 @@
 import React, { useRef } from 'react'
 import { ArrowDownTrayIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
 
-const VERSION = '2.3'
+const VERSION = '2.4'
 const LAST_UPDATED = 'February 2026'
 
 const sections = [
@@ -857,6 +857,31 @@ export default function UserGuidePage() {
           Each digest email groups your pending action items by priority level (Critical, High, Medium, Low), includes overdue warnings, and provides a summary of total items, overdue counts, and priority breakdowns. Use the <ButtonRef label="Send Test Email" color="green" /> button to preview what your digest will look like with your current settings and filters.
         </p>
         <Tip>Set your digest frequency to match your workflow. Daily digests work well for active catalog managers, while weekly digests suit periodic reviewers. The priority threshold filter helps you focus only on what matters most.</Tip>
+
+        <SubHeading>Push Notifications</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Rythm supports push notifications so you can receive instant alerts on your device, even when the app isn't open. Push notifications appear as native system notifications on desktop and mobile.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Enable/Disable" description="Toggle push notifications on or off per device using the switch in the Notifications tab of Settings." />
+          <FeatureCard title="Browser Permission" description="When you enable push for the first time, your browser will ask for notification permission. You must allow it for push to work." />
+          <FeatureCard title="Test Notification" description="Once enabled, use the Send Test button to verify push notifications are reaching your device correctly." />
+          <FeatureCard title="Multi-Device" description="Push subscriptions are per-device. Enable push on each device where you want to receive alerts (desktop, phone, tablet)." />
+        </div>
+        <Tip>Push notifications are great for time-sensitive alerts like placement status changes and contract expirations. Combine them with email digests for full coverage — push for urgent items, email for daily summaries.</Tip>
+
+        <SubHeading>Install App</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Rythm works as a Progressive Web App (PWA), meaning you can install it directly to your home screen or desktop for a native app-like experience. When installed, Rythm launches in its own window without browser chrome and supports offline access for previously loaded pages.
+        </p>
+        <StepList steps={[
+          'Go to Settings > Notifications.',
+          'If your browser supports installation, you\'ll see an "Install App" card with an Install button.',
+          'Click Install and follow the browser prompt to add Rythm to your device.',
+          'Once installed, the card will show a green "Installed" badge.',
+          'You can also install from your browser\'s menu (e.g., Chrome: "Install Rythm..." in the address bar or three-dot menu).',
+        ]} />
+        <Tip>Installing Rythm as an app gives you faster access, a dedicated window, and offline support for previously cached pages. It works on Chrome, Edge, Safari (iOS), and most Chromium-based browsers.</Tip>
 
         <SubHeading>Organization Admin Panel</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
