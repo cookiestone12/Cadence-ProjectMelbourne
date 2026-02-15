@@ -6,9 +6,53 @@ from typing import List, Optional
 from datetime import date
 from ..models import (
     get_db, Song, SongCredit, SongDSPLink, SongChecklistStatus,
-    ChecklistItem, Creator, OrganizationMember, User, SongValuationSnapshot
+    ChecklistItem, Creator, OrganizationMember, User, SongValuationSnapshot,
+    Placement, ContractAsset, AudioAsset,
 )
 from ..utils.auth import get_current_user
+
+
+def _cleanup_song_dependencies(db: Session, song_ids: list):
+    from ..models import (
+        RoyaltyTransaction, ActionItem, Notification,
+        RoyaltyStatement, RoyaltyStatementLine, AuditLog,
+    )
+
+    id_list = list(song_ids)
+    if not id_list:
+        return
+
+    db.query(Placement).filter(Placement.song_id.in_(id_list)).update(
+        {Placement.song_id: None}, synchronize_session=False
+    )
+    db.query(RoyaltyTransaction).filter(RoyaltyTransaction.song_id.in_(id_list)).update(
+        {RoyaltyTransaction.song_id: None}, synchronize_session=False
+    )
+    db.query(ContractAsset).filter(ContractAsset.song_id.in_(id_list)).update(
+        {ContractAsset.song_id: None}, synchronize_session=False
+    )
+    db.query(AudioAsset).filter(AudioAsset.song_id.in_(id_list)).update(
+        {AudioAsset.song_id: None}, synchronize_session=False
+    )
+
+    for model in [ActionItem, Notification, RoyaltyStatement, AuditLog]:
+        try:
+            if hasattr(model, 'song_id'):
+                db.query(model).filter(model.song_id.in_(id_list)).update(
+                    {model.song_id: None}, synchronize_session=False
+                )
+        except Exception:
+            pass
+
+    try:
+        db.query(RoyaltyStatementLine).filter(RoyaltyStatementLine.song_id.in_(id_list)).update(
+            {RoyaltyStatementLine.song_id: None}, synchronize_session=False
+        )
+        db.query(RoyaltyStatementLine).filter(RoyaltyStatementLine.matched_song_id.in_(id_list)).update(
+            {RoyaltyStatementLine.matched_song_id: None}, synchronize_session=False
+        )
+    except Exception:
+        pass
 
 router = APIRouter(prefix="/api/songs", tags=["songs"])
 
@@ -419,16 +463,7 @@ def bulk_delete_songs(
         if not membership and not current_user.is_super_admin:
             raise HTTPException(status_code=403, detail="Not authorized to delete songs from this organization")
 
-    from ..models import Placement, RoyaltyTransaction, ContractAsset
-    db.query(Placement).filter(Placement.song_id.in_(request.song_ids)).update(
-        {Placement.song_id: None}, synchronize_session=False
-    )
-    db.query(RoyaltyTransaction).filter(RoyaltyTransaction.song_id.in_(request.song_ids)).update(
-        {RoyaltyTransaction.song_id: None}, synchronize_session=False
-    )
-    db.query(ContractAsset).filter(ContractAsset.song_id.in_(request.song_ids)).update(
-        {ContractAsset.song_id: None}, synchronize_session=False
-    )
+    _cleanup_song_dependencies(db, request.song_ids)
 
     deleted_count = 0
     for song in songs:
@@ -457,16 +492,7 @@ def delete_song(
     if not membership and not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Not authorized to delete this song")
 
-    from ..models import Placement, RoyaltyTransaction, ContractAsset
-    db.query(Placement).filter(Placement.song_id == song_id).update(
-        {Placement.song_id: None}, synchronize_session=False
-    )
-    db.query(RoyaltyTransaction).filter(RoyaltyTransaction.song_id == song_id).update(
-        {RoyaltyTransaction.song_id: None}, synchronize_session=False
-    )
-    db.query(ContractAsset).filter(ContractAsset.song_id == song_id).update(
-        {ContractAsset.song_id: None}, synchronize_session=False
-    )
+    _cleanup_song_dependencies(db, [song_id])
 
     from ..services.audit_service import log_action
     log_action(db, song.organization_id, current_user.id, "DELETE", "SONG", song.id, song.title)

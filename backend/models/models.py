@@ -283,7 +283,7 @@ class Song(Base):
     dsp_links = relationship("SongDSPLink", back_populates="song", cascade="all, delete-orphan")
     checklist_statuses = relationship("SongChecklistStatus", back_populates="song", cascade="all, delete-orphan")
     valuation_snapshots = relationship("SongValuationSnapshot", back_populates="song", cascade="all, delete-orphan")
-    analytics = relationship("Analytics", back_populates="song", uselist=False)
+    analytics = relationship("Analytics", back_populates="song", uselist=False, cascade="all, delete-orphan")
     streaming_metrics = relationship("SongStreamingMetrics", back_populates="song", cascade="all, delete-orphan")
     territory_revenues = relationship("TerritoryRevenue", back_populates="song", cascade="all, delete-orphan")
     valuation_calculations = relationship("ValuationCalculation", back_populates="song", cascade="all, delete-orphan")
