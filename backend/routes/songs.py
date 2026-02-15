@@ -13,46 +13,37 @@ from ..utils.auth import get_current_user
 
 
 def _cleanup_song_dependencies(db: Session, song_ids: list):
-    from ..models import (
-        RoyaltyTransaction, ActionItem, Notification,
-        RoyaltyStatement, RoyaltyStatementLine, AuditLog,
-    )
+    from sqlalchemy import text
 
     id_list = list(song_ids)
     if not id_list:
         return
 
-    db.query(Placement).filter(Placement.song_id.in_(id_list)).update(
-        {Placement.song_id: None}, synchronize_session=False
-    )
-    db.query(RoyaltyTransaction).filter(RoyaltyTransaction.song_id.in_(id_list)).update(
-        {RoyaltyTransaction.song_id: None}, synchronize_session=False
-    )
-    db.query(ContractAsset).filter(ContractAsset.song_id.in_(id_list)).update(
-        {ContractAsset.song_id: None}, synchronize_session=False
-    )
-    db.query(AudioAsset).filter(AudioAsset.song_id.in_(id_list)).update(
-        {AudioAsset.song_id: None}, synchronize_session=False
-    )
+    nullable_refs = [
+        ("placements", "song_id"),
+        ("royalty_transactions", "song_id"),
+        ("contract_assets", "song_id"),
+        ("audio_assets", "song_id"),
+        ("action_items", "song_id"),
+        ("notifications", "song_id"),
+        ("royalty_statements", "song_id"),
+        ("royalty_statement_lines", "song_id"),
+        ("royalty_statement_lines", "matched_song_id"),
+        ("audit_logs", "song_id"),
+        ("contract_documents", "song_id"),
+        ("expenses", "song_id"),
+        ("fees", "song_id"),
+        ("royalty_ledger_entries", "song_id"),
+    ]
 
-    for model in [ActionItem, Notification, RoyaltyStatement, AuditLog]:
+    for table_name, col_name in nullable_refs:
         try:
-            if hasattr(model, 'song_id'):
-                db.query(model).filter(model.song_id.in_(id_list)).update(
-                    {model.song_id: None}, synchronize_session=False
-                )
+            db.execute(
+                text(f"UPDATE {table_name} SET {col_name} = NULL WHERE {col_name} = ANY(:ids)"),
+                {"ids": id_list}
+            )
         except Exception:
             pass
-
-    try:
-        db.query(RoyaltyStatementLine).filter(RoyaltyStatementLine.song_id.in_(id_list)).update(
-            {RoyaltyStatementLine.song_id: None}, synchronize_session=False
-        )
-        db.query(RoyaltyStatementLine).filter(RoyaltyStatementLine.matched_song_id.in_(id_list)).update(
-            {RoyaltyStatementLine.matched_song_id: None}, synchronize_session=False
-        )
-    except Exception:
-        pass
 
 router = APIRouter(prefix="/api/songs", tags=["songs"])
 
