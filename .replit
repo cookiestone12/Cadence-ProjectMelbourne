@@ -76,3 +76,7 @@ deploymentTarget = "autoscale"
 
 [userenv.production]
 PORT = "5000"
+
+[userenv.shared]
+VAPID_PUBLIC_KEY = "BIIxHjIBTJGpNAm-v1nQ0Q3DWK9gPKXY2z2ugFsbp1aPceYTorNkV2TZH83rRuAR0OGQGClXbtDZgr2FhJFXkHQ"
+VAPID_SUBJECT = "mailto:support@rythm-app.replit.app"

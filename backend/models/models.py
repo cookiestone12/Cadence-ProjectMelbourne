@@ -1889,3 +1889,19 @@ class PayoutItem(Base):
 
 RoyaltyStatement.statement_lines = relationship("RoyaltyStatementLine", back_populates="statement", cascade="all, delete-orphan")
 RoyaltyStatement.processing_runs = relationship("RoyaltyProcessingRun", backref="statement")
+
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    endpoint = Column(Text, nullable=False, unique=True)
+    p256dh = Column(String, nullable=False)
+    auth = Column(String, nullable=False)
+    user_agent = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User")
