@@ -1112,10 +1112,16 @@ class RoyaltyStatement(Base):
 
     uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
+    reported_gross = Column(Float, nullable=True)
+    reported_withholding = Column(Float, nullable=True)
+    reported_net = Column(Float, nullable=True)
+    reconciliation_result = Column(JSON, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     transactions = relationship("RoyaltyTransaction", back_populates="statement", cascade="all, delete-orphan")
+    statement_lines = relationship("RoyaltyStatementLine", back_populates="statement", cascade="all, delete-orphan")
     organization = relationship("Organization")
     uploaded_by = relationship("User")
 
@@ -1761,6 +1767,13 @@ class RoyaltyStatementLine(Base):
     match_method = Column(String, nullable=True)
     matched_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     matched_at = Column(DateTime, nullable=True)
+    canonical_right_category = Column(String, nullable=True)
+    canonical_channel = Column(String, nullable=True)
+    accounting_flags = Column(JSON, nullable=True)
+    territory_iso2 = Column(String, nullable=True)
+    territory_confidence = Column(String, nullable=True)
+    activity_period_start = Column(Date, nullable=True)
+    activity_period_end = Column(Date, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

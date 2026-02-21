@@ -1,0 +1,263 @@
+{
+  "kb_version": "1.0.0",
+  "kb_name": "rhythm_catalog_kb",
+  "principles": {
+    "immutability": "Raw ingests are immutable; all transforms are reproducible.",
+    "provenance": "Every normalized field must retain source_file/source_row or source_page reference.",
+    "three_time_axes": ["activity_period", "statement_period", "cash_posting_date"],
+    "earned_vs_cash": "Earned series is activity-based; cash series includes account transactions."
+  },
+  "schemas": {
+    "Catalog": {
+      "required": ["uid", "name", "base_currency", "timezone"],
+      "fields": {
+        "uid": "string",
+        "name": "string",
+        "base_currency": "ISO4217",
+        "timezone": "IANA",
+        "catalog_scope": {
+          "includes": ["publishing", "master"],
+          "territory_scope": ["WORLD", "US", "GB"],
+          "effective_start": "date",
+          "effective_end": "date|null"
+        }
+      }
+    },
+    "Party": {
+      "required": ["uid", "name"],
+      "fields": {
+        "uid": "string",
+        "name": "string",
+        "party_type": "enum:rightsholder|publisher|admin|label|pro|cmo|dsp|payee|vendor",
+        "external_ids": [
+          {"scheme": "enum:IPI|ISNI|DDEX_DPID|PRO_ID|VENDOR_ID", "value": "string"}
+        ]
+      }
+    },
+    "Work": {
+      "required": ["uid", "title"],
+      "fields": {
+        "uid": "string",
+        "title": "string",
+        "iswc": "string|null",
+        "alt_titles": ["string"],
+        "writers": [
+          {
+            "party_uid": "string",
+            "ipi": "string|null",
+            "share_type": "enum:manuscript|collection|payable",
+            "share_pct": "number"
+          }
+        ],
+        "publishers_admins": [
+          {
+            "party_uid": "string",
+            "ipi": "string|null",
+            "role": "enum:publisher|administrator|subpublisher",
+            "share_pct": "number"
+          }
+        ]
+      }
+    },
+    "Recording": {
+      "required": ["uid", "title"],
+      "fields": {
+        "uid": "string",
+        "title": "string",
+        "isrc": "string|null",
+        "upc": "string|null",
+        "artists": ["string"],
+        "linked_works": [
+          {"work_uid": "string", "allocation_rule": "enum:equal|usage_weighted|manual", "weight": "number|null"}
+        ]
+      }
+    },
+    "Statement": {
+      "required": ["uid", "issuer", "statement_period", "currency", "source_type"],
+      "fields": {
+        "uid": "string",
+        "issuer": "string",
+        "source_type": "enum:publisher_admin|pro|mlc|soundexchange|label_distributor|other",
+        "statement_period": {"start": "date", "end": "date"},
+        "currency": "ISO4217",
+        "settlement_lag_days": "number|null",
+        "totals": {
+          "gross_payable": "number|null",
+          "withholding_tax": "number|null",
+          "net_payable": "number|null"
+        },
+        "raw_refs": {"files": ["string"], "notes": "string|null"}
+      }
+    },
+    "StatementLine": {
+      "required": ["uid", "statement_uid", "amount", "currency", "activity_period"],
+      "fields": {
+        "uid": "string",
+        "statement_uid": "string",
+        "work_uid": "string|null",
+        "recording_uid": "string|null",
+        "activity_period": {"start": "date|null", "end": "date|null", "year_month": "string|null"},
+        "territory_raw": "string|null",
+        "territory_iso2": "string|null",
+        "source_provider": "string|null",
+        "exploitation_source": "string|null",
+        "units": "number|null",
+        "amount": "number",
+        "currency": "ISO4217",
+        "withholding_tax": "number|null",
+        "net_amount": "number|null",
+        "rate_pct": "number|null",
+        "raw_income_type": "string|null",
+        "canonical_right_category": "enum:mechanical|performance|sync|print_lyrics|neighboring_rights|other",
+        "canonical_channel": "enum:streaming|download|broadcast|live|av|ugc|social|physical|other",
+        "accounting_flags": {
+          "is_retro_adjustment": "boolean",
+          "is_withholding": "boolean",
+          "is_reserve_movement": "boolean",
+          "is_recoupment": "boolean",
+          "is_nonroyalty_charge": "boolean"
+        },
+        "provenance": {"source_file": "string", "source_row": "number|null"}
+      }
+    },
+    "AccountTransaction": {
+      "required": ["uid", "statement_uid", "txn_type", "amount", "currency", "posting_date"],
+      "fields": {
+        "uid": "string",
+        "statement_uid": "string",
+        "txn_type": "enum:payment|advance|recoupment|chargeback|retro_adjustment|reserve",
+        "posting_date": "date",
+        "covers_activity_range": {"start": "date|null", "end": "date|null"},
+        "amount": "number",
+        "currency": "ISO4217",
+        "memo": "string|null"
+      }
+    }
+  },
+  "rules": {
+    "territory_normalization": {
+      "method": "dictionary_then_fuzzy",
+      "dictionary": {
+        "US": "US", "United States": "US", "UNITED STATES": "US", "USA": "US", "U.S.A.": "US", "U.S.": "US",
+        "GB": "GB", "United Kingdom": "GB", "UNITED KINGDOM": "GB", "UK": "GB", "U.K.": "GB", "Great Britain": "GB",
+        "CA": "CA", "Canada": "CA", "CANADA": "CA",
+        "DE": "DE", "Germany": "DE", "GERMANY": "DE", "Deutschland": "DE",
+        "FR": "FR", "France": "FR", "FRANCE": "FR",
+        "JP": "JP", "Japan": "JP", "JAPAN": "JP",
+        "AU": "AU", "Australia": "AU", "AUSTRALIA": "AU",
+        "BR": "BR", "Brazil": "BR", "BRAZIL": "BR",
+        "MX": "MX", "Mexico": "MX", "MEXICO": "MX",
+        "IT": "IT", "Italy": "IT", "ITALY": "IT",
+        "ES": "ES", "Spain": "ES", "SPAIN": "ES",
+        "NL": "NL", "Netherlands": "NL", "NETHERLANDS": "NL", "Holland": "NL",
+        "SE": "SE", "Sweden": "SE", "SWEDEN": "SE",
+        "NO": "NO", "Norway": "NO", "NORWAY": "NO",
+        "DK": "DK", "Denmark": "DK", "DENMARK": "DK",
+        "FI": "FI", "Finland": "FI", "FINLAND": "FI",
+        "KR": "KR", "South Korea": "KR", "Korea": "KR",
+        "IN": "IN", "India": "IN", "INDIA": "IN",
+        "NZ": "NZ", "New Zealand": "NZ", "NEW ZEALAND": "NZ",
+        "ZA": "ZA", "South Africa": "ZA",
+        "AT": "AT", "Austria": "AT",
+        "BE": "BE", "Belgium": "BE",
+        "CH": "CH", "Switzerland": "CH",
+        "IE": "IE", "Ireland": "IE",
+        "PT": "PT", "Portugal": "PT",
+        "PL": "PL", "Poland": "PL",
+        "CZ": "CZ", "Czech Republic": "CZ",
+        "RO": "RO", "Romania": "RO",
+        "HU": "HU", "Hungary": "HU",
+        "AR": "AR", "Argentina": "AR",
+        "CL": "CL", "Chile": "CL",
+        "CO": "CO", "Colombia": "CO",
+        "PH": "PH", "Philippines": "PH",
+        "TH": "TH", "Thailand": "TH",
+        "ID": "ID", "Indonesia": "ID",
+        "MY": "MY", "Malaysia": "MY",
+        "SG": "SG", "Singapore": "SG",
+        "TW": "TW", "Taiwan": "TW",
+        "HK": "HK", "Hong Kong": "HK",
+        "IL": "IL", "Israel": "IL",
+        "AE": "AE", "United Arab Emirates": "AE", "UAE": "AE",
+        "SA": "SA", "Saudi Arabia": "SA",
+        "NG": "NG", "Nigeria": "NG",
+        "EG": "EG", "Egypt": "EG",
+        "KE": "KE", "Kenya": "KE",
+        "GH": "GH", "Ghana": "GH",
+        "TR": "TR", "Turkey": "TR", "Turkiye": "TR",
+        "RU": "RU", "Russia": "RU",
+        "UA": "UA", "Ukraine": "UA",
+        "GR": "GR", "Greece": "GR",
+        "HR": "HR", "Croatia": "HR",
+        "BG": "BG", "Bulgaria": "BG",
+        "SK": "SK", "Slovakia": "SK",
+        "LT": "LT", "Lithuania": "LT",
+        "LV": "LV", "Latvia": "LV",
+        "EE": "EE", "Estonia": "EE",
+        "PE": "PE", "Peru": "PE",
+        "EC": "EC", "Ecuador": "EC",
+        "VE": "VE", "Venezuela": "VE",
+        "CR": "CR", "Costa Rica": "CR",
+        "PA": "PA", "Panama": "PA",
+        "DO": "DO", "Dominican Republic": "DO",
+        "PR": "PR", "Puerto Rico": "PR",
+        "JM": "JM", "Jamaica": "JM",
+        "TT": "TT", "Trinidad and Tobago": "TT",
+        "VN": "VN", "Vietnam": "VN",
+        "PK": "PK", "Pakistan": "PK",
+        "BD": "BD", "Bangladesh": "BD",
+        "LK": "LK", "Sri Lanka": "LK",
+        "WORLD": "WW", "Worldwide": "WW", "WORLDWIDE": "WW", "Global": "WW", "GLOBAL": "WW", "WW": "WW"
+      }
+    },
+    "currency_fx": {
+      "base_currency_policy": "catalog.base_currency",
+      "fx_fields": ["transaction_currency", "reporting_currency", "invoicing_currency"],
+      "fx_timestamp_rule_default": "average_over_activity_period"
+    },
+    "classification": {
+      "right_category_rules": [
+        {"if_raw_contains": ["Mechanical"], "set": "mechanical"},
+        {"if_raw_contains": ["Performance"], "set": "performance"},
+        {"if_raw_contains": ["Synch", "Synchronisation", "Synchronization", "Sync"], "set": "sync"},
+        {"if_raw_contains": ["Print", "Lyrics", "Lyric"], "set": "print_lyrics"},
+        {"if_raw_contains": ["Neighboring", "Neighbouring", "Master Use", "Sound Recording"], "set": "neighboring_rights"}
+      ],
+      "channel_rules": [
+        {"if_raw_contains": ["Streaming", "Stream"], "set": "streaming"},
+        {"if_raw_contains": ["Download", "DPD", "Permanent"], "set": "download"},
+        {"if_raw_contains": ["Radio", "TV", "Film", "Broadcast", "Television"], "set": "broadcast"},
+        {"if_raw_contains": ["Live", "Concert"], "set": "live"},
+        {"if_raw_contains": ["UGC", "User Generated"], "set": "ugc"},
+        {"if_raw_contains": ["Social", "Short-Form", "Short Form", "TikTok", "Reels"], "set": "social"},
+        {"if_raw_contains": ["Physical", "CD", "Vinyl"], "set": "physical"},
+        {"if_raw_contains": ["Digital"], "set": "streaming"}
+      ]
+    },
+    "fuzzy_matching": {
+      "title_normalization": "upper_trim_strip_punct_collapse_ws",
+      "party_normalization": "upper_trim_strip_punct",
+      "auto_match_threshold": 85,
+      "review_threshold": 70,
+      "scoring_weights": {"title": 60, "parties": 30, "duration_or_version": 10}
+    },
+    "reconciliation_checks": {
+      "control_totals": [
+        "sum(StatementLine.amount) == Statement.totals.gross_payable",
+        "sum(StatementLine.withholding_tax) == Statement.totals.withholding_tax",
+        "sum(StatementLine.net_amount) == Statement.totals.net_payable"
+      ],
+      "balance_rollforward": [
+        "closing = opening + net_payable_royalties + adjustments - payments - advances"
+      ]
+    },
+    "analytics_formulas": {
+      "cagr": "((yT / y0) ** (1/dt_years)) - 1",
+      "exp_decay_k": "k = - sum(t * ln(y/y0)) / sum(t^2)",
+      "half_life": "t_half = ln(2)/k",
+      "log_r2": "1 - SSE(log(y), log(yhat))/SST(log(y))",
+      "concentration_top1": "max(work_amount)/sum(work_amount)",
+      "hhi": "sum((work_amount/total)^2)"
+    }
+  }
+}

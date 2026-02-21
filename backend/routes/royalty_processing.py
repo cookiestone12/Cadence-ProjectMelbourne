@@ -34,6 +34,18 @@ from ..services.royalty_processing_engine import (
     generate_statement_action_items,
     generate_reprocess_action_item,
 )
+from ..services.reconciliation_engine import (
+    run_control_totals,
+    get_classification_breakdown,
+    get_match_summary,
+)
+from ..services.decay_analytics_engine import (
+    get_portfolio_analytics,
+    get_song_analytics,
+    build_time_series,
+    fit_exponential_decay,
+    compute_cagr,
+)
 from .royalties import parse_uploaded_file, suggest_column_mapping, detect_pro_source
 
 logger = logging.getLogger(__name__)
@@ -1251,4 +1263,105 @@ async def upload_and_parse_statement(
         "total_lines": line_count,
         "match_stats": match_stats,
         "column_mapping": mapping,
+    }
+
+
+@router.get("/{org_id}/statements/{statement_id}/reconciliation")
+def get_reconciliation(
+    org_id: int,
+    statement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    result = run_control_totals(db, statement_id, org_id)
+    return result
+
+
+@router.get("/{org_id}/statements/{statement_id}/classification")
+def get_statement_classification(
+    org_id: int,
+    statement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    return get_classification_breakdown(db, statement_id, org_id)
+
+
+@router.get("/{org_id}/statements/{statement_id}/match-summary")
+def get_statement_match_summary(
+    org_id: int,
+    statement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    return get_match_summary(db, statement_id, org_id)
+
+
+@router.post("/{org_id}/statements/{statement_id}/set-reported-totals")
+def set_reported_totals(
+    org_id: int,
+    statement_id: int,
+    gross: Optional[float] = None,
+    withholding: Optional[float] = None,
+    net: Optional[float] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    statement = db.query(RoyaltyStatement).filter(
+        RoyaltyStatement.id == statement_id,
+        RoyaltyStatement.organization_id == org_id,
+    ).first()
+    if not statement:
+        raise HTTPException(status_code=404, detail="Statement not found")
+    if gross is not None:
+        statement.reported_gross = gross
+    if withholding is not None:
+        statement.reported_withholding = withholding
+    if net is not None:
+        statement.reported_net = net
+    db.commit()
+    return {"message": "Reported totals updated"}
+
+
+@router.get("/{org_id}/analytics/portfolio")
+def get_portfolio_analytics_endpoint(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    return get_portfolio_analytics(db, org_id)
+
+
+@router.get("/{org_id}/analytics/song/{song_id}")
+def get_song_analytics_endpoint(
+    org_id: int,
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    return get_song_analytics(db, org_id, song_id)
+
+
+@router.get("/{org_id}/analytics/time-series")
+def get_time_series_endpoint(
+    org_id: int,
+    song_id: Optional[int] = Query(None),
+    granularity: str = Query("quarter"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    series = build_time_series(db, org_id, song_id=song_id, granularity=granularity)
+    decay = fit_exponential_decay(series) if len(series) >= 3 else None
+    cagr_result = compute_cagr(series) if len(series) >= 2 else None
+    return {
+        "time_series": series,
+        "decay": decay,
+        "cagr": cagr_result,
     }

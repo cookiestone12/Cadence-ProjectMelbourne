@@ -21,6 +21,8 @@ import {
   HandThumbUpIcon,
   HandThumbDownIcon,
   NoSymbolIcon,
+  ShieldCheckIcon,
+  ChartBarIcon,
 } from '@heroicons/react/24/outline'
 
 const MATCH_STATUS_COLORS = {
@@ -64,6 +66,8 @@ const DETAIL_TABS = [
   { key: 'overview', label: 'Overview', icon: EyeIcon },
   { key: 'lines', label: 'Lines', icon: DocumentTextIcon },
   { key: 'matching', label: 'Matching', icon: LinkIcon },
+  { key: 'reconciliation', label: 'Reconciliation', icon: ShieldCheckIcon },
+  { key: 'classification', label: 'Classification', icon: ChartBarIcon },
   { key: 'allocation', label: 'Allocation Preview', icon: CurrencyDollarIcon },
   { key: 'runs', label: 'Run History', icon: ClockIcon },
   { key: 'exports', label: 'Exports', icon: ArrowDownTrayIcon },
@@ -417,6 +421,12 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
           bulkThreshold={bulkThreshold} setBulkThreshold={setBulkThreshold}
           onBulkConfirm={handleBulkConfirm} bulkConfirming={bulkConfirming}
         />
+      )}
+      {activeTab === 'reconciliation' && (
+        <ReconciliationPane orgId={orgId} statementId={statementId} />
+      )}
+      {activeTab === 'classification' && (
+        <ClassificationPane orgId={orgId} statementId={statementId} />
       )}
       {activeTab === 'allocation' && (
         <AllocationPane allocations={allocations} loading={allocLoading} />
@@ -963,6 +973,221 @@ function RunsPane({ runs, loading, showReprocess, setShowReprocess, reprocessRea
     </div>
   )
 }
+
+function ReconciliationPane({ orgId, statementId }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [reportedGross, setReportedGross] = useState('')
+  const [reportedWithholding, setReportedWithholding] = useState('')
+  const [reportedNet, setReportedNet] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!orgId || !statementId) return
+    setLoading(true)
+    axios.get(`/api/royalty-processing/${orgId}/statements/${statementId}/reconciliation`)
+      .then(res => setData(res.data))
+      .catch(err => console.error('Failed to load reconciliation:', err))
+      .finally(() => setLoading(false))
+  }, [orgId, statementId])
+
+  const handleSetTotals = async () => {
+    setSaving(true)
+    try {
+      const params = new URLSearchParams()
+      if (reportedGross) params.set('gross', reportedGross)
+      if (reportedWithholding) params.set('withholding', reportedWithholding)
+      if (reportedNet) params.set('net', reportedNet)
+      await axios.post(`/api/royalty-processing/${orgId}/statements/${statementId}/set-reported-totals?${params}`)
+      const res = await axios.get(`/api/royalty-processing/${orgId}/statements/${statementId}/reconciliation`)
+      setData(res.data)
+      setReportedGross('')
+      setReportedWithholding('')
+      setReportedNet('')
+    } catch (err) {
+      console.error('Failed to set totals:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#5B8A72]" /></div>
+
+  const statusColor = {
+    PASS: 'bg-green-100 text-green-700 border-green-200',
+    WARN: 'bg-amber-100 text-amber-700 border-amber-200',
+    FAIL: 'bg-red-100 text-red-700 border-red-200',
+  }
+
+  return (
+    <div className="space-y-6">
+      {data?.overall_status && (
+        <div className={`flex items-center gap-3 p-4 rounded-xl border ${statusColor[data.overall_status] || 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+          {data.overall_status === 'PASS' ? <CheckCircleIcon className="w-6 h-6" /> : <ExclamationCircleIcon className="w-6 h-6" />}
+          <div>
+            <p className="font-semibold text-sm">Reconciliation: {data.overall_status}</p>
+            <p className="text-xs opacity-75">{data.line_count} lines analyzed</p>
+          </div>
+        </div>
+      )}
+
+      {data?.computed_totals && (
+        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)] p-6">
+          <h4 className="text-sm font-semibold text-[#3D4A44] mb-4">Computed Totals</h4>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center p-3 bg-[rgba(91,138,114,0.06)] rounded-xl">
+              <p className="text-xs text-[#7A8580] mb-1">Gross</p>
+              <p className="text-lg font-bold text-[#3D4A44]">{formatDollars(data.computed_totals.gross)}</p>
+            </div>
+            <div className="text-center p-3 bg-[rgba(91,138,114,0.06)] rounded-xl">
+              <p className="text-xs text-[#7A8580] mb-1">Deductions</p>
+              <p className="text-lg font-bold text-[#3D4A44]">{formatDollars(data.computed_totals.deductions)}</p>
+            </div>
+            <div className="text-center p-3 bg-[rgba(91,138,114,0.06)] rounded-xl">
+              <p className="text-xs text-[#7A8580] mb-1">Net</p>
+              <p className="text-lg font-bold text-[#5B8A72]">{formatDollars(data.computed_totals.net)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {data?.checks?.length > 0 && (
+        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)] p-6">
+          <h4 className="text-sm font-semibold text-[#3D4A44] mb-4">Control Checks</h4>
+          <div className="space-y-3">
+            {data.checks.map((check, i) => (
+              <div key={i} className={`flex items-center justify-between p-3 rounded-xl border ${statusColor[check.status] || 'bg-gray-50 border-gray-200'}`}>
+                <div>
+                  <p className="text-sm font-medium capitalize">{(check.check || '').replace(/_/g, ' ')}</p>
+                  {check.reported != null && <p className="text-xs opacity-75">Reported: {formatDollars(check.reported)}</p>}
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold">{check.status}</p>
+                  {check.difference != null && <p className="text-xs opacity-75">Diff: {formatDollars(check.difference)}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)] p-6">
+        <h4 className="text-sm font-semibold text-[#3D4A44] mb-4">Set Reported Totals</h4>
+        <p className="text-xs text-[#7A8580] mb-4">Enter the totals from the original statement to compare against computed values.</p>
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div>
+            <label className="block text-xs text-[#7A8580] mb-1">Gross</label>
+            <input type="number" step="0.01" value={reportedGross} onChange={e => setReportedGross(e.target.value)} placeholder="0.00" className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] outline-none" />
+          </div>
+          <div>
+            <label className="block text-xs text-[#7A8580] mb-1">Withholding</label>
+            <input type="number" step="0.01" value={reportedWithholding} onChange={e => setReportedWithholding(e.target.value)} placeholder="0.00" className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] outline-none" />
+          </div>
+          <div>
+            <label className="block text-xs text-[#7A8580] mb-1">Net</label>
+            <input type="number" step="0.01" value={reportedNet} onChange={e => setReportedNet(e.target.value)} placeholder="0.00" className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] outline-none" />
+          </div>
+        </div>
+        <button onClick={handleSetTotals} disabled={saving || (!reportedGross && !reportedWithholding && !reportedNet)} className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium disabled:opacity-50">
+          {saving ? 'Saving...' : 'Save & Reconcile'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+
+function ClassificationPane({ orgId, statementId }) {
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!orgId || !statementId) return
+    setLoading(true)
+    axios.get(`/api/royalty-processing/${orgId}/statements/${statementId}/classification`)
+      .then(res => setData(res.data))
+      .catch(err => console.error('Failed to load classification:', err))
+      .finally(() => setLoading(false))
+  }, [orgId, statementId])
+
+  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#5B8A72]" /></div>
+
+  const rightColors = {
+    mechanical: 'bg-blue-100 text-blue-700',
+    performance: 'bg-purple-100 text-purple-700',
+    sync: 'bg-amber-100 text-amber-700',
+    print_lyrics: 'bg-pink-100 text-pink-700',
+    neighboring_rights: 'bg-teal-100 text-teal-700',
+    other: 'bg-gray-100 text-gray-600',
+    unclassified: 'bg-gray-100 text-gray-500',
+  }
+
+  const channelColors = {
+    streaming: 'bg-green-100 text-green-700',
+    download: 'bg-blue-100 text-blue-700',
+    broadcast: 'bg-orange-100 text-orange-700',
+    live: 'bg-red-100 text-red-700',
+    ugc: 'bg-yellow-100 text-yellow-700',
+    social: 'bg-pink-100 text-pink-700',
+    physical: 'bg-gray-100 text-gray-700',
+    other: 'bg-gray-100 text-gray-600',
+    unclassified: 'bg-gray-100 text-gray-500',
+  }
+
+  const renderBar = (items, colorMap, label) => {
+    const total = items.reduce((sum, i) => sum + Math.abs(i.net_total), 0)
+    if (total === 0) return null
+    return (
+      <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)] p-6">
+        <h4 className="text-sm font-semibold text-[#3D4A44] mb-4">{label}</h4>
+        <div className="space-y-3">
+          {items.sort((a, b) => Math.abs(b.net_total) - Math.abs(a.net_total)).map((item, i) => {
+            const pct = total > 0 ? (Math.abs(item.net_total) / total * 100) : 0
+            const key = item.category || item.channel || item.territory || 'unknown'
+            return (
+              <div key={i}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full capitalize ${colorMap[key] || 'bg-gray-100 text-gray-600'}`}>
+                      {key.replace(/_/g, ' ')}
+                    </span>
+                    <span className="text-xs text-[#7A8580]">{item.line_count} lines</span>
+                  </div>
+                  <span className="text-sm font-semibold text-[#3D4A44]">{formatDollars(item.net_total)}</span>
+                </div>
+                <div className="h-2 bg-[rgba(59,77,67,0.06)] rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {data?.by_right_category && renderBar(data.by_right_category, rightColors, 'By Right Category')}
+      {data?.by_channel && renderBar(data.by_channel, channelColors, 'By Channel')}
+      {data?.by_territory && (
+        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)] p-6">
+          <h4 className="text-sm font-semibold text-[#3D4A44] mb-4">Top Territories</h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {data.by_territory.map((t, i) => (
+              <div key={i} className="text-center p-3 bg-[rgba(91,138,114,0.06)] rounded-xl">
+                <p className="text-lg font-bold text-[#3D4A44]">{t.territory}</p>
+                <p className="text-xs text-[#7A8580]">{formatDollars(t.net_total)}</p>
+                <p className="text-xs text-[#A0A8A3]">{t.line_count} lines</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 function ExportsPane({ onExport }) {
   const exports = [

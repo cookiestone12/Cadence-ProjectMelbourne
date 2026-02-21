@@ -30,12 +30,14 @@ import {
 import ProcessingInboxPanel from '../components/ProcessingInboxPanel'
 import StatementDetailView from '../components/StatementDetailView'
 import PayablesTab from '../components/PayablesTab'
+import RoyaltyAnalyticsDashboard from '../components/RoyaltyAnalyticsDashboard'
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: ChartBarIcon },
   { key: 'processing', label: 'Processing', icon: ArrowPathIcon },
   { key: 'statements', label: 'Statements', icon: DocumentTextIcon },
   { key: 'earnings', label: 'Earnings', icon: CurrencyDollarIcon },
+  { key: 'analytics', label: 'Analytics', icon: ChartBarIcon },
   { key: 'money_out', label: 'Money Out', icon: ArrowUpTrayIcon },
   { key: 'fees', label: 'Fees & Advances', icon: CalculatorIcon },
   { key: 'payables', label: 'Payables', icon: BanknotesIcon },
@@ -2037,6 +2039,7 @@ export default function RoyaltiesPage() {
         {activeTab === 'processing' && <ProcessingTab orgId={orgId} />}
         {activeTab === 'statements' && <StatementsTab orgId={orgId} songs={songs} />}
         {activeTab === 'earnings' && <EarningsTab orgId={orgId} />}
+        {activeTab === 'analytics' && <RoyaltyAnalyticsDashboard orgId={orgId} />}
         {activeTab === 'money_out' && <MoneyOutTab orgId={orgId} creators={creators} contracts={contracts} />}
         {activeTab === 'fees' && <FeesAdvancesTab orgId={orgId} creators={creators} />}
         {activeTab === 'payables' && <PayablesTab orgId={orgId} />}

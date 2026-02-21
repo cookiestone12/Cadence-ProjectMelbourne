@@ -12,6 +12,7 @@ from ..models import (
     RoyaltyStatementLine, RoyaltyProcessingRun, RoyaltyLedgerEntry,
     Payee, AdvanceV2, PayoutBatch, PayoutItem, ActionItem,
 )
+from .classification_engine import classify_line
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,20 @@ def parse_statement_to_lines(
             gross_amount = safe_float(row, gross_col)
             unit_count_val = safe_float(row, qty_col)
 
+            rev_type_val = safe_get(row, rev_type_col)
+            territory_val = safe_get(row, territory_col)
+            store_val = safe_get(row, platform_col)
+
+            classification = classify_line(
+                revenue_type=rev_type_val,
+                usage_type=None,
+                store=store_val,
+                territory_raw=territory_val,
+                net_amount=net_amount,
+                gross_amount=gross_amount,
+                deductions=None,
+            )
+
             line = RoyaltyStatementLine(
                 org_id=org_id,
                 statement_id=statement_id,
@@ -144,15 +159,22 @@ def parse_statement_to_lines(
                 artist_name_raw=safe_get(row, artist_col),
                 release_title_raw=safe_get(row, release_title_col),
                 label_raw=safe_get(row, label_col),
-                territory=safe_get(row, territory_col),
-                store=safe_get(row, platform_col),
-                revenue_type=safe_get(row, rev_type_col),
+                territory=territory_val,
+                store=store_val,
+                revenue_type=rev_type_val,
                 unit_count=unit_count_val,
                 gross_amount=gross_amount,
                 net_amount=net_amount,
                 net_amount_statement_currency=net_amount,
                 currency=safe_get(row, currency_col) or statement.currency,
                 match_status="UNMATCHED",
+                canonical_right_category=classification["canonical_right_category"],
+                canonical_channel=classification["canonical_channel"],
+                accounting_flags=classification["accounting_flags"],
+                territory_iso2=classification["territory_iso2"],
+                territory_confidence=classification["territory_confidence"],
+                activity_period_start=statement.period_start,
+                activity_period_end=statement.period_end,
             )
             db.add(line)
             existing_hashes.add(line_hash)
