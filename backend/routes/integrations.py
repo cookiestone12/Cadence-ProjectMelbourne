@@ -112,11 +112,18 @@ async def list_dropbox_files(
 ):
     org_id = _get_org_id(current_user, db)
     normalized_path = path if path else "/"
-    try:
-        files = await asyncio.to_thread(storage_service.list_files, org_id, normalized_path, db)
-        return {"files": files, "path": normalized_path}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    last_error = None
+    for attempt in range(2):
+        try:
+            files = await asyncio.to_thread(storage_service.list_files, org_id, normalized_path, db)
+            return {"files": files, "path": normalized_path}
+        except ValueError as e:
+            last_error = e
+            if attempt == 0:
+                await asyncio.sleep(1)
+                continue
+            raise HTTPException(status_code=400, detail=str(e))
+    raise HTTPException(status_code=400, detail=str(last_error))
 
 
 @router.put("/dropbox/default-folder")

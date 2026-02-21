@@ -119,34 +119,98 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
           </div>
         </div>
       
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const active = isActive(item.path)
-            
-            return (
+        <div className="flex-1 overflow-y-auto">
+          <nav className="px-3 py-4 space-y-0.5">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const active = isActive(item.path)
+              
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => window.innerWidth < 1024 && onClose()}
+                  className={`
+                    flex items-center gap-3 px-3 py-2.5 rounded-xl
+                    transition-all duration-150 ease-am
+                    ${active 
+                      ? 'bg-gradient-to-r from-am-accent to-am-accent-light text-white shadow-am-button' 
+                      : 'text-am-text hover:bg-am-subtle'
+                    }
+                  `}
+                >
+                  <Icon className={`w-[22px] h-[22px] ${active ? 'stroke-[1.8]' : 'stroke-[1.5]'}`} />
+                  <span className={`text-[15px] ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                </Link>
+              )
+            })}
+          </nav>
+
+          <div className="px-3 pb-3 pt-2 border-t border-am-separator space-y-0.5">
+            {user?.is_super_admin ? (
               <Link
-                key={item.path}
-                to={item.path}
+                to="/admin"
                 onClick={() => window.innerWidth < 1024 && onClose()}
                 className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-xl
                   transition-all duration-150 ease-am
-                  ${active 
-                    ? 'bg-gradient-to-r from-am-accent to-am-accent-light text-white shadow-am-button' 
-                    : 'text-am-text hover:bg-am-subtle'
+                  ${isActive('/admin')
+                    ? 'bg-am-info/10 text-am-info font-medium'
+                    : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
                   }
                 `}
               >
-                <Icon className={`w-[22px] h-[22px] ${active ? 'stroke-[1.8]' : 'stroke-[1.5]'}`} />
-                <span className={`text-[15px] ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                <ShieldCheckIcon className="w-[20px] h-[20px] stroke-[1.5]" />
+                <span className="text-[14px]">Master Admin</span>
               </Link>
-            )
-          })}
-        </nav>
-      
-        <div className="flex-shrink-0 p-3 border-t border-am-separator space-y-1">
-          <div className="flex items-center gap-3 px-3 py-2.5">
+            ) : isOrgAdmin ? (
+              <Link
+                to="/org-admin"
+                onClick={() => window.innerWidth < 1024 && onClose()}
+                className={`
+                  flex items-center gap-3 px-3 py-2.5 rounded-xl
+                  transition-all duration-150 ease-am
+                  ${isActive('/org-admin')
+                    ? 'bg-am-accent/10 text-am-accent font-medium'
+                    : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
+                  }
+                `}
+              >
+                <BuildingOfficeIcon className="w-[20px] h-[20px] stroke-[1.5]" />
+                <span className="text-[14px]">Org Admin</span>
+              </Link>
+            ) : null}
+            
+            <Link
+              to="/settings"
+              onClick={() => window.innerWidth < 1024 && onClose()}
+              className={`
+                flex items-center gap-3 px-3 py-2.5 rounded-xl
+                transition-all duration-150 ease-am
+                ${isActive('/settings')
+                  ? 'bg-am-subtle text-am-accent font-medium'
+                  : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
+                }
+              `}
+            >
+              <Cog6ToothIcon className="w-[20px] h-[20px] stroke-[1.5]" />
+              <span className="text-[14px]">Settings</span>
+            </Link>
+            
+            <button 
+              onClick={onLogout}
+              className="w-full px-3 py-2.5 text-am-text-secondary hover:text-am-error hover:bg-red-50 rounded-xl transition-all duration-150 text-left flex items-center gap-3 group"
+            >
+              <svg className="w-[20px] h-[20px] stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+              </svg>
+              <span className="text-[14px]">Sign Out</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-shrink-0 p-3 border-t border-am-separator">
+          <div className="flex items-center gap-3 px-3 py-2">
             <div className="w-9 h-9 flex-shrink-0 rounded-full bg-gradient-to-br from-am-accent to-am-accent-light flex items-center justify-center text-[14px] font-semibold text-white shadow-am-sm">
               {user?.username?.charAt(0).toUpperCase() || 'U'}
             </div>
@@ -158,66 +222,6 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
               <NotificationBell />
             </div>
           </div>
-          
-          {user?.is_super_admin ? (
-            <Link
-              to="/admin"
-              onClick={() => window.innerWidth < 1024 && onClose()}
-              className={`
-                flex items-center gap-3 px-3 py-2.5 rounded-xl
-                transition-all duration-150 ease-am
-                ${isActive('/admin')
-                  ? 'bg-am-info/10 text-am-info font-medium'
-                  : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
-                }
-              `}
-            >
-              <ShieldCheckIcon className="w-[20px] h-[20px] stroke-[1.5]" />
-              <span className="text-[14px]">Master Admin</span>
-            </Link>
-          ) : isOrgAdmin ? (
-            <Link
-              to="/org-admin"
-              onClick={() => window.innerWidth < 1024 && onClose()}
-              className={`
-                flex items-center gap-3 px-3 py-2.5 rounded-xl
-                transition-all duration-150 ease-am
-                ${isActive('/org-admin')
-                  ? 'bg-am-accent/10 text-am-accent font-medium'
-                  : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
-                }
-              `}
-            >
-              <BuildingOfficeIcon className="w-[20px] h-[20px] stroke-[1.5]" />
-              <span className="text-[14px]">Org Admin</span>
-            </Link>
-          ) : null}
-          
-          <Link
-            to="/settings"
-            onClick={() => window.innerWidth < 1024 && onClose()}
-            className={`
-              flex items-center gap-3 px-3 py-2.5 rounded-xl
-              transition-all duration-150 ease-am
-              ${isActive('/settings')
-                ? 'bg-am-subtle text-am-accent font-medium'
-                : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
-              }
-            `}
-          >
-            <Cog6ToothIcon className="w-[20px] h-[20px] stroke-[1.5]" />
-            <span className="text-[14px]">Settings</span>
-          </Link>
-          
-          <button 
-            onClick={onLogout}
-            className="w-full px-3 py-2.5 text-am-text-secondary hover:text-am-error hover:bg-red-50 rounded-xl transition-all duration-150 text-left flex items-center gap-3 group"
-          >
-            <svg className="w-[20px] h-[20px] stroke-[1.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-            </svg>
-            <span className="text-[14px]">Sign Out</span>
-          </button>
         </div>
       </div>
     </>

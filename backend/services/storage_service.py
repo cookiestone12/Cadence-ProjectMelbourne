@@ -1,4 +1,5 @@
 import os
+import json
 import base64
 import logging
 from datetime import datetime
@@ -167,6 +168,12 @@ def list_files(org_id: int, path: str, db: Session) -> List[Dict[str, Any]]:
     except dropbox.exceptions.ApiError as e:
         logger.error(f"Dropbox list_folder error: {e}")
         raise ValueError(f"Could not list files at path: {path}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Dropbox SDK JSON parse error (empty API response): {e}")
+        raise ValueError(f"Dropbox returned an unexpected response. Please try again or reconnect your Dropbox account.")
+    except Exception as e:
+        logger.error(f"Dropbox SDK unexpected error: {type(e).__name__}: {e}")
+        raise ValueError(f"Dropbox error: {type(e).__name__}. Please try again or reconnect your Dropbox account.")
 
     files = []
     for entry in result.entries:
