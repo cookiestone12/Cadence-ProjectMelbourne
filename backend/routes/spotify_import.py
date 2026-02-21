@@ -263,3 +263,72 @@ def search_spotify(
 ):
     results = spotify_service.search_tracks(data.query, data.limit or 10)
     return {"results": results, "total": len(results)}
+
+
+class SpotifyLinkRequest(BaseModel):
+    song_id: int
+    spotify_url: str
+    spotify_id: Optional[str] = None
+    isrc: Optional[str] = None
+    album_art: Optional[str] = None
+    album_name: Optional[str] = None
+    release_date: Optional[str] = None
+    popularity: Optional[int] = None
+
+
+@router.post("/link-to-song")
+def link_spotify_to_song(
+    data: SpotifyLinkRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    song = db.query(Song).filter(Song.id == data.song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    verify_org_access(current_user, song.organization_id, db)
+
+    song.spotify_link = data.spotify_url
+
+    updated_fields = ["spotify_link"]
+
+    if data.isrc and not song.isrc:
+        song.isrc = data.isrc
+        updated_fields.append("isrc")
+
+    if data.album_name and not song.project_title:
+        song.project_title = data.album_name
+        updated_fields.append("project_title")
+
+    if data.release_date and not song.release_date:
+        from datetime import datetime as dt
+        try:
+            parsed = dt.strptime(data.release_date, "%Y-%m-%d").date()
+            song.release_date = parsed
+            updated_fields.append("release_date")
+        except (ValueError, TypeError):
+            pass
+
+    existing_link = db.query(SongDSPLink).filter(
+        SongDSPLink.song_id == song.id,
+        SongDSPLink.platform == "SPOTIFY"
+    ).first()
+
+    if existing_link:
+        existing_link.url = data.spotify_url
+    else:
+        dsp_link = SongDSPLink(
+            song_id=song.id,
+            platform="SPOTIFY",
+            url=data.spotify_url
+        )
+        db.add(dsp_link)
+
+    db.commit()
+    db.refresh(song)
+
+    return {
+        "message": "Spotify linked successfully",
+        "updated_fields": updated_fields,
+        "song_id": song.id
+    }

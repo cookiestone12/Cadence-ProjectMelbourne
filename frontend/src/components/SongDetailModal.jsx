@@ -47,6 +47,11 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [showAddTag, setShowAddTag] = useState(null)
   const [newTagName, setNewTagName] = useState('')
   const [newTagType, setNewTagType] = useState('MOOD')
+  const [showSpotifySearch, setShowSpotifySearch] = useState(false)
+  const [spotifyQuery, setSpotifyQuery] = useState('')
+  const [spotifyResults, setSpotifyResults] = useState([])
+  const [spotifySearching, setSpotifySearching] = useState(false)
+  const [spotifyLinking, setSpotifyLinking] = useState(null)
   
   useEffect(() => {
     loadSongDetails()
@@ -354,6 +359,58 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
 
   function handleEditChange(field, value) {
     setEditForm(prev => ({ ...prev, [field]: value }))
+  }
+
+  async function searchSpotify() {
+    if (!spotifyQuery.trim()) return
+    setSpotifySearching(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.post('/api/spotify/search', { query: spotifyQuery, limit: 5 }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setSpotifyResults(response.data.results || [])
+    } catch (err) {
+      console.error('Spotify search failed:', err)
+      setSpotifyResults([])
+    } finally {
+      setSpotifySearching(false)
+    }
+  }
+
+  async function linkSpotifyTrack(track) {
+    setSpotifyLinking(track.spotify_id)
+    try {
+      const token = localStorage.getItem('token')
+      await axios.post('/api/spotify/link-to-song', {
+        song_id: song.id,
+        spotify_url: track.spotify_url,
+        spotify_id: track.spotify_id,
+        isrc: track.isrc,
+        album_art: track.album_art,
+        album_name: track.album_name,
+        release_date: track.release_date,
+        popularity: track.popularity
+      }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setShowSpotifySearch(false)
+      setSpotifyResults([])
+      setSpotifyQuery('')
+      await loadSongDetails()
+      if (onSongUpdated) onSongUpdated()
+    } catch (err) {
+      console.error('Failed to link Spotify track:', err)
+    } finally {
+      setSpotifyLinking(null)
+    }
+  }
+
+  function openSpotifySearch() {
+    const q = songDetails ? `${songDetails.title || ''} ${songDetails.primary_artist || ''}`.trim() : ''
+    setSpotifyQuery(q)
+    setSpotifyResults([])
+    setShowSpotifySearch(true)
   }
 
   async function loadAudioAssets() {
@@ -1727,7 +1784,85 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
               </div>
               
               <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
-                <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">DSP Links</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[17px] font-semibold text-[#3D4A44]">DSP Links</h3>
+                  {!showSpotifySearch && (
+                    <button
+                      onClick={openSpotifySearch}
+                      className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#1DB954] text-white rounded-full font-medium text-[13px] hover:bg-[#1AA34A] transition-colors"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                      <span>Link Spotify</span>
+                    </button>
+                  )}
+                </div>
+
+                {showSpotifySearch && (
+                  <div className="mb-4 p-4 bg-[#F5F7F4] rounded-[14px] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[14px] font-semibold text-[#3D4A44]">Search Spotify</span>
+                      <button onClick={() => { setShowSpotifySearch(false); setSpotifyResults([]); setSpotifyQuery('') }} className="text-[#7A8580] hover:text-[#3D4A44]">
+                        <XMarkIcon className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={spotifyQuery}
+                        onChange={(e) => setSpotifyQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && searchSpotify()}
+                        placeholder="Search by title, artist..."
+                        className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[14px] text-[#3D4A44] focus:outline-none focus:ring-2 focus:ring-[#1DB954] focus:border-transparent"
+                      />
+                      <button
+                        onClick={searchSpotify}
+                        disabled={spotifySearching || !spotifyQuery.trim()}
+                        className="px-4 py-2 bg-[#1DB954] text-white rounded-[10px] font-medium text-[13px] hover:bg-[#1AA34A] transition-colors disabled:opacity-50"
+                      >
+                        {spotifySearching ? 'Searching...' : 'Search'}
+                      </button>
+                    </div>
+
+                    {spotifyResults.length > 0 && (
+                      <div className="space-y-2 max-h-[280px] overflow-y-auto">
+                        {spotifyResults.map((track) => (
+                          <div key={track.spotify_id} className="flex items-center gap-3 p-2.5 bg-white rounded-[12px] border border-[rgba(59,77,67,0.08)] hover:border-[#1DB954] transition-colors">
+                            {track.album_art ? (
+                              <img src={track.album_art} alt="" className="w-12 h-12 rounded-[8px] object-cover flex-shrink-0" />
+                            ) : (
+                              <div className="w-12 h-12 rounded-[8px] bg-[#EEF1EC] flex items-center justify-center flex-shrink-0">
+                                <MusicalNoteIcon className="w-6 h-6 text-[#7A8580]" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[14px] font-medium text-[#3D4A44] truncate">{track.title}</p>
+                              <p className="text-[12px] text-[#7A8580] truncate">{track.primary_artist}{track.album_name ? ` · ${track.album_name}` : ''}</p>
+                              {track.isrc && <p className="text-[11px] text-[#9CA8A2]">ISRC: {track.isrc}</p>}
+                            </div>
+                            <button
+                              onClick={() => linkSpotifyTrack(track)}
+                              disabled={spotifyLinking === track.spotify_id}
+                              className="flex-shrink-0 px-3 py-1.5 bg-[#1DB954] text-white rounded-full font-medium text-[12px] hover:bg-[#1AA34A] transition-colors disabled:opacity-50"
+                            >
+                              {spotifyLinking === track.spotify_id ? 'Linking...' : 'Link'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {spotifySearching && (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#1DB954]"></div>
+                      </div>
+                    )}
+
+                    {!spotifySearching && spotifyResults.length === 0 && spotifyQuery && (
+                      <p className="text-[13px] text-[#7A8580] text-center py-2">No results yet. Press Search or Enter.</p>
+                    )}
+                  </div>
+                )}
+
                 {songDetails.dsp_links && songDetails.dsp_links.length > 0 ? (
                   <div className="space-y-2">
                     {songDetails.dsp_links.map((link, idx) => (
@@ -1738,13 +1873,18 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                         rel="noopener noreferrer"
                         className="flex items-center justify-between p-3 bg-[#F5F7F4] rounded-[12px] hover:bg-[#EEF1EC] transition-colors"
                       >
-                        <span className="font-medium text-[#3D4A44]">{link.platform}</span>
+                        <div className="flex items-center space-x-2">
+                          {(link.platform === 'Spotify' || link.platform === 'SPOTIFY') && (
+                            <svg className="w-5 h-5 text-[#1DB954]" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+                          )}
+                          <span className="font-medium text-[#3D4A44]">{link.platform}</span>
+                        </div>
                         <LinkIcon className="w-5 h-5 text-[#7A8580]" />
                       </a>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-[#7A8580]">No DSP links added yet</p>
+                  !showSpotifySearch && <p className="text-[#7A8580]">No DSP links added yet</p>
                 )}
               </div>
             </div>
