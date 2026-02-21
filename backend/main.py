@@ -53,18 +53,39 @@ app.add_middleware(
 
 app_logger = logging.getLogger("rythm")
 
-@app.middleware("http")
-async def logging_middleware(request, call_next):
-    request_id = str(uuid.uuid4())[:8]
-    start = time.time()
-    response = await call_next(request)
-    duration = round((time.time() - start) * 1000, 2)
-    if not request.url.path.startswith("/assets"):
-        app_logger.info(
-            f"{request.method} {request.url.path} -> {response.status_code} ({duration}ms)",
-            extra={"request_id": request_id}
-        )
-    return response
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+class LoggingMiddleware:
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        from starlette.requests import Request
+        request = Request(scope)
+        request_id = str(uuid.uuid4())[:8]
+        start = time.time()
+        status_code = 0
+
+        async def send_wrapper(message):
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message.get("status", 0)
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+        duration = round((time.time() - start) * 1000, 2)
+        if not request.url.path.startswith("/assets"):
+            app_logger.info(
+                f"{request.method} {request.url.path} -> {status_code} ({duration}ms)",
+                extra={"request_id": request_id}
+            )
+
+app.add_middleware(LoggingMiddleware)
 
 @app.get("/")
 async def serve_root():
