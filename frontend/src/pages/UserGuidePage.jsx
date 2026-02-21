@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { ArrowDownTrayIcon, ChevronRightIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 
-const VERSION = '2.4'
+const VERSION = '2.5'
 const LAST_UPDATED = 'February 2026'
 
 const sections = [
@@ -17,11 +17,18 @@ const sections = [
   { id: 'actions', title: '10. Action Items' },
   { id: 'royalties', title: '11. Royalties' },
   { id: 'placements', title: '12. Placements' },
-  { id: 'reports', title: '13. Reports & Analytics' },
-  { id: 'valuation', title: '14. Catalog Valuation' },
-  { id: 'settings', title: '15. Settings' },
-  { id: 'tips', title: '16. Tips & Best Practices' },
-  { id: 'glossary', title: '17. Glossary' },
+  { id: 'sync-reports', title: '13. Sync Reports' },
+  { id: 'brief-builder', title: '14. Brief Builder' },
+  { id: 'directory', title: '15. Creative Directory' },
+  { id: 'registration-reports', title: '16. Registration Reports' },
+  { id: 'cloud-storage', title: '17. Cloud Storage Integration' },
+  { id: 'storage-scan', title: '18. Storage Scan' },
+  { id: 'audio-analysis', title: '19. Audio Analysis & Tagging' },
+  { id: 'reports', title: '20. Reports & Analytics' },
+  { id: 'valuation', title: '21. Catalog Valuation' },
+  { id: 'settings', title: '22. Settings & Integrations' },
+  { id: 'tips', title: '23. Tips & Best Practices' },
+  { id: 'glossary', title: '24. Glossary' },
 ]
 
 function SectionHeading({ id, children }) {
@@ -242,6 +249,7 @@ export default function UserGuidePage() {
               { icon: '🏠', label: 'Home', desc: 'Dashboard overview' },
               { icon: '🔍', label: 'Search', desc: 'Global search' },
               { icon: '👥', label: 'Roster', desc: 'Creator management' },
+              { icon: '📇', label: 'Directory', desc: 'Industry contacts' },
               { icon: '🎵', label: 'Catalog', desc: 'Song management' },
               { icon: '📝', label: 'Works', desc: 'Compositions' },
               { icon: '💿', label: 'Releases', desc: 'Albums & EPs' },
@@ -249,6 +257,10 @@ export default function UserGuidePage() {
               { icon: '✅', label: 'Actions', desc: 'Task inbox' },
               { icon: '💰', label: 'Royalties', desc: 'Financial engine' },
               { icon: '🎬', label: 'Placements', desc: 'Sync licensing' },
+              { icon: '📄', label: 'Sync Reports', desc: 'Placement reports' },
+              { icon: '✨', label: 'Brief Builder', desc: 'AI song matching' },
+              { icon: '☁️', label: 'Storage Scan', desc: 'File scanning' },
+              { icon: '📋', label: 'Reg. Reports', desc: 'PRO registration' },
               { icon: '📊', label: 'Reports', desc: 'Analytics' },
               { icon: '💎', label: 'Valuation', desc: 'Catalog value' },
             ].map(item => (
@@ -838,8 +850,222 @@ export default function UserGuidePage() {
           The top of the Placements page shows summary cards: total placements, total pipeline value (sum of all active license fees), total paid, and number of active pitches. Use the status filter buttons to view placements at specific pipeline stages.
         </p>
 
-        {/* ===== 13. REPORTS ===== */}
-        <SectionHeading id="reports">13. Reports & Analytics</SectionHeading>
+        {/* ===== 13. SYNC REPORTS ===== */}
+        <SectionHeading id="sync-reports">13. Sync Reports</SectionHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Sync Reports module generates customizable reports for your sync placement activity. Use it to create professional summaries for clients, internal reviews, or stakeholder updates.
+        </p>
+
+        <SubHeading>Creating a Sync Report</SubHeading>
+        <StepList steps={[
+          'Navigate to the Sync Reports page from the sidebar.',
+          'Use the filter controls to narrow placements by client, status, and date range.',
+          'Preview the filtered results to ensure the report captures the right data.',
+          'Choose your export format: PDF for branded, printable reports or CSV for spreadsheet analysis.',
+          'Click the export button to download your report.',
+        ]} />
+
+        <SubHeading>Report Contents</SubHeading>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Client Filtering" description="Filter placements by specific clients to create client-facing activity summaries." />
+          <FeatureCard title="Status Filtering" description="Include only placements at specific pipeline stages (e.g., Secured and Paid only)." />
+          <FeatureCard title="Date Range" description="Narrow the report to a specific time period for quarterly or annual reviews." />
+          <FeatureCard title="Branded PDF" description="PDF exports include your organization branding, placement details, and financial summaries." />
+        </div>
+        <Tip>Create monthly or quarterly sync reports for each client to demonstrate your pitching activity and success rate. Filter by client and date range for targeted summaries.</Tip>
+
+        {/* ===== 14. BRIEF BUILDER ===== */}
+        <SectionHeading id="brief-builder">14. Brief Builder</SectionHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Brief Builder is an AI-powered tool for matching songs in your catalog to sync briefs. Describe what you're looking for in natural language, add optional structured filters, and the system returns ranked song recommendations.
+        </p>
+
+        <SubHeading>How to Use Brief Builder</SubHeading>
+        <StepList steps={[
+          'Navigate to the Brief Builder page from the sidebar.',
+          'Enter a free-text description of the sync brief (e.g., "upbeat indie track with female vocals for a car commercial, summer vibes").',
+          'Optionally add structured filters: BPM range, key, mood tags, texture tags, vocal presence, stems availability.',
+          'Click Search to run the AI matching engine.',
+          'Review the ranked results — each song shows a match score and reasons why it was selected.',
+          'Click any result to view the full song details or add it to a pitch list.',
+        ]} />
+
+        <SubHeading>Matching Criteria</SubHeading>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Natural Language" description="Describe the vibe, mood, or use case in plain English. The AI parses your description into search parameters." />
+          <FeatureCard title="BPM Range" description="Set minimum and maximum BPM to match tempo requirements." />
+          <FeatureCard title="Key Filter" description="Specify a musical key to find songs in compatible keys." />
+          <FeatureCard title="Mood & Texture Tags" description="Select from AI-generated tags to filter by emotional qualities and sonic characteristics." />
+        </div>
+        <Tip>The Brief Builder works best when your catalog has been analyzed with the Audio Analysis tool. Songs with BPM, key, mood, and texture data produce more accurate matches.</Tip>
+
+        {/* ===== 15. CREATIVE DIRECTORY ===== */}
+        <SectionHeading id="directory">15. Creative Directory</SectionHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Creative Directory is a contact management system for industry collaborators — producers, engineers, mixers, session musicians, A&R contacts, and other professionals you work with regularly.
+        </p>
+
+        <SubHeading>Managing Contacts</SubHeading>
+        <StepList steps={[
+          'Navigate to the Directory page from the sidebar.',
+          'Click + Add Contact to create a new directory entry.',
+          'Fill in the contact details: name, role/title, company, email, phone, and notes.',
+          'Save the contact to your directory.',
+          'Use the search bar or role filter to find contacts quickly.',
+        ]} />
+
+        <SubHeading>Directory Features</SubHeading>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Search & Filter" description="Search contacts by name and filter by role for quick lookups." />
+          <FeatureCard title="CRUD Operations" description="Create, view, edit, and delete directory entries as needed." />
+          <FeatureCard title="PDF Export" description="Export your full directory or filtered contacts as a branded PDF document." />
+          <FeatureCard title="Organization Scoped" description="Directory contacts are private to your organization." />
+        </div>
+        <Tip>Use the Directory to keep track of all collaborators you might need for sync placements, recording sessions, or contract negotiations. It's separate from the Creator Roster, which focuses on your signed artists and writers.</Tip>
+
+        {/* ===== 16. REGISTRATION REPORTS ===== */}
+        <SectionHeading id="registration-reports">16. Registration Reports</SectionHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Registration Reports module helps you manage PRO (Performing Rights Organization) registrations for your songs and works. Track which assets are registered, generate branded reports, and email them directly to your admin or PRO contacts.
+        </p>
+
+        <SubHeading>Registration Workflow</SubHeading>
+        <StepList steps={[
+          'Navigate to Registration Reports from the sidebar.',
+          'View your songs and works organized by creator, with their PRO registration status.',
+          'Use the Outstanding/Registered filter tabs to focus on items needing registration.',
+          'Select items using checkboxes to aggregate them into a report.',
+          'Click Generate Report to create a branded PDF of the selected items.',
+          'Download the PDF, export as CSV, or email directly to your admin via the built-in email feature.',
+        ]} />
+
+        <SubHeading>Report Features</SubHeading>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Creator Grouping" description="Items are grouped by creator for organized reporting to PROs." />
+          <FeatureCard title="Outstanding Filter" description="Quickly find all songs and works that haven't been registered yet." />
+          <FeatureCard title="PDF Reports" description="Branded PDF documents listing selected items with creator info, song details, and PRO data." />
+          <FeatureCard title="Email to Admin" description="Send the generated PDF report directly to an admin email address via the built-in email feature." />
+          <FeatureCard title="CSV Export" description="Download registration data as a CSV for bulk processing or record keeping." />
+          <FeatureCard title="Registration Tracking" description="Mark songs and works as registered once submitted to your PRO." />
+        </div>
+        <Tip>Run a monthly registration check using the Outstanding filter to catch any new songs or works that haven't been submitted to your PRO yet.</Tip>
+
+        {/* ===== 17. CLOUD STORAGE INTEGRATION ===== */}
+        <SectionHeading id="cloud-storage">17. Cloud Storage Integration</SectionHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Rythm integrates with Dropbox and Google Drive to link audio files to your catalog without hosting files locally. This enables AI audio analysis and file management directly from your existing cloud storage.
+        </p>
+
+        <SubHeading>Connecting Dropbox</SubHeading>
+        <StepList steps={[
+          'Go to Settings and select the Integrations tab.',
+          'In the Dropbox section, click Connect.',
+          'You will be redirected to Dropbox to authorize the app. Grant all requested permissions.',
+          'After authorization, paste the auth code back into the app to complete the connection.',
+          'Once connected, you can browse your Dropbox folders and select a default folder.',
+        ]} />
+
+        <SubHeading>Dropbox App Permissions</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          For folder browsing and file access to work, the Dropbox app must have the following scopes enabled in the Dropbox Developer Console:
+        </p>
+        <ul className="list-disc pl-5 text-[#7A8580] space-y-1 mb-3">
+          <li><strong>files.metadata.read</strong> — Required to browse and list files and folders</li>
+          <li><strong>files.content.read</strong> — Required to download files for AI audio analysis</li>
+          <li><strong>account_info.read</strong> — Required to display the connected account name</li>
+        </ul>
+        <Tip>If you see an authentication error after connecting Dropbox, check that the required scopes are enabled in the Dropbox App Console (Permissions tab). After changing permissions, disconnect and reconnect Dropbox in Settings to get a fresh token with the updated scopes.</Tip>
+
+        <SubHeading>Browsing & Folder Selection</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Once connected, use the folder picker to browse your cloud storage and select a default folder. The folder picker provides:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Folder Navigation" description="Browse through your folder structure with breadcrumb navigation and back buttons." />
+          <FeatureCard title="Default Folder" description="Set a default folder that the system uses as the starting point for file scanning." />
+          <FeatureCard title="Test Connection" description="Verify your cloud storage connection is working with the Test Connection button." />
+          <FeatureCard title="Disconnect" description="Remove the connection at any time from the Integrations tab in Settings." />
+        </div>
+
+        <SubHeading>Google Drive</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Google Drive integration follows the same connection flow. Once connected, the folder picker uses Google Drive's folder ID system for navigation, with a visual breadcrumb trail showing your current path.
+        </p>
+
+        {/* ===== 18. STORAGE SCAN ===== */}
+        <SectionHeading id="storage-scan">18. Storage Scan</SectionHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Storage Scan module connects individual creators to specific folders in your cloud storage, then uses AI to scan files, match them to catalog entries, and link audio files to songs automatically.
+        </p>
+
+        <SubHeading>Per-Creator Storage Linking</SubHeading>
+        <StepList steps={[
+          'Navigate to the Storage Scan page from the sidebar.',
+          'Select a creator from your roster.',
+          'Use the folder picker to browse and select a cloud storage folder for that creator.',
+          'The folder is linked to the creator — this tells the system where to find their audio files.',
+        ]} />
+
+        <SubHeading>AI-Powered File Scanning</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Once a folder is linked, trigger a scan to analyze the files:
+        </p>
+        <StepList steps={[
+          'Click "Scan" on a creator\'s linked folder to start the AI scanning process.',
+          'The system recursively scans the folder for audio files.',
+          'AI-powered fuzzy matching compares filenames against your catalog entries.',
+          'Each match is assigned a confidence level: HIGH (85%+), MEDIUM (60-84%), LOW (40-59%), or NONE (below 40%).',
+          'Review the scan results in the review workflow.',
+        ]} />
+
+        <SubHeading>Review Workflow</SubHeading>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Approve" description="Accept a match to link the audio file to the catalog song." />
+          <FeatureCard title="Reject" description="Dismiss incorrect matches that don't belong." />
+          <FeatureCard title="Reassign" description="Manually assign a file to a different song if the AI match was close but wrong." />
+          <FeatureCard title="Bulk Approve" description="Accept all high-confidence matches at once to speed up the review process." />
+        </div>
+
+        <SubHeading>Scheduled Scans</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Set up automatic recurring scans per creator folder link. Choose a frequency (daily, weekly, etc.) and the system will scan for new files on schedule, automatically flagging new matches for your review.
+        </p>
+        <Tip>Start by scanning your most active creators' folders first. Use Bulk Approve for high-confidence matches, then manually review medium and low confidence results.</Tip>
+
+        {/* ===== 19. AUDIO ANALYSIS & TAGGING ===== */}
+        <SectionHeading id="audio-analysis">19. Audio Analysis & Tagging</SectionHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Audio Analysis system uses AI to analyze your linked audio files and generate detailed metadata tags. This enriches your catalog with searchable attributes that power the Brief Builder and catalog filtering.
+        </p>
+
+        <SubHeading>What Gets Analyzed</SubHeading>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="BPM" description="Beats per minute — the tempo of the song." />
+          <FeatureCard title="Key" description="The musical key of the song (e.g., C Major, A Minor)." />
+          <FeatureCard title="Loudness" description="Overall loudness level of the audio." />
+          <FeatureCard title="Mood Tags" description="Emotional qualities like 'uplifting', 'melancholic', 'aggressive', 'dreamy'." />
+          <FeatureCard title="Texture Tags" description="Sonic characteristics like 'atmospheric', 'gritty', 'lush', 'sparse'." />
+          <FeatureCard title="Sync Tags" description="Use-case descriptors like 'cinematic', 'commercial-friendly', 'trailer', 'underscore'." />
+          <FeatureCard title="Genre Tags" description="Genre classifications derived from audio characteristics." />
+        </div>
+
+        <SubHeading>Running Analysis</SubHeading>
+        <StepList steps={[
+          'Ensure the song has an audio file linked via cloud storage.',
+          'Click the Analyze button on a song to run AI analysis.',
+          'The analysis runs in the background — results typically appear within a few seconds.',
+          'View the generated tags in the song detail modal.',
+          'Use Bulk Analyze to process multiple songs at once.',
+        ]} />
+
+        <SubHeading>Tag Management</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          AI-generated tags include confidence scores. You can also manually add, edit, or override tags. Tag types include MOOD, TEXTURE, SYNC, GENRE, and USER (manually added). Tags power the catalog's audio filters and the Brief Builder's matching engine.
+        </p>
+        <Tip>Run audio analysis on your entire catalog to unlock the full power of the Brief Builder. Songs with complete audio metadata produce significantly better match results for sync briefs.</Tip>
+
+        {/* ===== 20. REPORTS ===== */}
+        <SectionHeading id="reports">20. Reports & Analytics</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           The Reports page provides comprehensive analytics across your entire catalog through a tabbed dashboard with interactive visualizations.
         </p>
@@ -859,8 +1085,8 @@ export default function UserGuidePage() {
           Reports use a variety of visualizations including area charts, pie charts, bar charts, line charts, funnel views, progress bars, and data tables. All charts are interactive — hover for details and tooltips.
         </p>
 
-        {/* ===== 14. VALUATION ===== */}
-        <SectionHeading id="valuation">14. Catalog Valuation</SectionHeading>
+        {/* ===== 21. VALUATION ===== */}
+        <SectionHeading id="valuation">21. Catalog Valuation</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           The Catalog Valuation tool estimates your catalog's financial value using industry-standard methodologies. It provides actionable insights for business planning, investment discussions, and catalog transactions.
         </p>
@@ -879,11 +1105,23 @@ export default function UserGuidePage() {
         </p>
         <Tip>Run valuations periodically to track how your catalog's estimated value changes over time as you add new content and grow revenue.</Tip>
 
-        {/* ===== 15. SETTINGS ===== */}
-        <SectionHeading id="settings">15. Settings</SectionHeading>
+        {/* ===== 22. SETTINGS ===== */}
+        <SectionHeading id="settings">22. Settings & Integrations</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          The Settings page allows you to configure your account and organization preferences.
+          The Settings page allows you to configure your account, organization preferences, and third-party integrations.
         </p>
+
+        <SubHeading>Integrations Tab</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Integrations tab manages connections to external services like Dropbox and Google Drive. From here you can:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Connect Dropbox" description="Link your Dropbox account to enable file browsing, audio linking, and AI analysis of your stored music files." />
+          <FeatureCard title="Connect Google Drive" description="Link your Google Drive account for the same cloud storage features (coming soon for some providers)." />
+          <FeatureCard title="Set Default Folder" description="Use the folder picker to browse and select the default folder the system starts from when scanning." />
+          <FeatureCard title="Test / Disconnect" description="Verify the connection is working or remove it entirely. Disconnecting revokes access." />
+        </div>
+        <Tip>After connecting Dropbox, always use the folder picker to set a default folder. This saves time when browsing files and sets the starting point for storage scans.</Tip>
 
         <SubHeading>Notification Preferences</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
@@ -946,8 +1184,8 @@ export default function UserGuidePage() {
           Link Individual accounts to Enterprise organizations for creators who work across multiple labels or publishers. Account linking requires mutual consent from both parties and enables cross-organization visibility where permitted.
         </p>
 
-        {/* ===== 16. TIPS ===== */}
-        <SectionHeading id="tips">16. Tips & Best Practices</SectionHeading>
+        {/* ===== 23. TIPS ===== */}
+        <SectionHeading id="tips">23. Tips & Best Practices</SectionHeading>
 
         <SubHeading>Catalog Health</SubHeading>
         <div className="space-y-3 my-4">
@@ -970,53 +1208,76 @@ export default function UserGuidePage() {
           <Tip>Pay attention to contract expiration alerts in your Action Items — renewing or renegotiating deals on time protects your catalog.</Tip>
         </div>
 
+        <SubHeading>Cloud Storage & Audio</SubHeading>
+        <div className="space-y-3 my-4">
+          <Tip>Connect Dropbox early and run AI audio analysis on your entire catalog. This enriches your songs with BPM, key, and mood tags that power the Brief Builder.</Tip>
+          <Tip>Use per-creator folder linking in Storage Scan to organize your audio files. Set up weekly scheduled scans to automatically detect new files as creators deliver content.</Tip>
+          <Tip>After changing Dropbox app permissions, always disconnect and reconnect in Settings to pick up the new scopes.</Tip>
+        </div>
+
+        <SubHeading>Sync & Placements</SubHeading>
+        <div className="space-y-3 my-4">
+          <Tip>Use the Brief Builder to quickly find songs matching sync briefs. The more analyzed songs in your catalog, the better the AI matching results.</Tip>
+          <Tip>Generate Sync Reports monthly for each client to showcase your pitching activity and placement wins.</Tip>
+          <Tip>Keep placement statuses up to date as they progress through the pipeline — this powers accurate dashboard metrics and automated action items.</Tip>
+        </div>
+
         <SubHeading>Workflow</SubHeading>
         <div className="space-y-3 my-4">
           <Tip>Use the Home Dashboard as your daily starting point. It surfaces the most urgent items across all modules.</Tip>
           <Tip>Keep the Action Items inbox clean by completing or updating tasks regularly. Use priority and due date to triage effectively.</Tip>
           <Tip>Run the Catalog Valuation tool quarterly to track your catalog's value growth and build a data-driven case for investment.</Tip>
           <Tip>Enable Email Digests in Settings to receive scheduled summaries of your action items. Set the priority threshold to "High & Above" to focus on critical tasks without inbox overload.</Tip>
+          <Tip>Run a monthly PRO registration check using the Registration Reports Outstanding filter to catch any unregistered songs.</Tip>
         </div>
 
-        {/* ===== 17. GLOSSARY ===== */}
-        <SectionHeading id="glossary">17. Glossary</SectionHeading>
+        {/* ===== 24. GLOSSARY ===== */}
+        <SectionHeading id="glossary">24. Glossary</SectionHeading>
         <div className="space-y-4 my-4">
           {[
+            ['Audio Analysis', 'AI-powered processing of audio files to extract BPM, key, loudness, and mood/texture/sync tags for catalog enrichment.'],
+            ['Advance', 'An upfront payment to a creator or rights holder, recouped from future royalty earnings before additional payments are made.'],
+            ['Brief Builder', 'An AI-powered tool that matches songs in your catalog to sync brief descriptions using natural language and structured filters.'],
+            ['Cloud Storage Integration', 'Connections to Dropbox or Google Drive that allow linking audio files to catalog entries without hosting files locally.'],
+            ['Creative Directory', 'A contact management system for industry collaborators (producers, engineers, A&R, etc.) separate from the Creator Roster.'],
+            ['Cross-Collateralization', 'A contract provision allowing revenue from multiple assets to be combined for the purpose of recouping a single advance.'],
+            ['Demo', 'A work type indicating a song with lyrics and melodies, as opposed to a purely instrumental track.'],
+            ['Distribution Readiness', 'A validation status indicating whether a release has all required metadata, identifiers, artwork, and legal clearances for distribution.'],
+            ['Email Digest', 'An automated, scheduled email summarizing your pending action items, grouped by priority level, sent at your chosen frequency.'],
+            ['Fee', 'A charge deducted from earnings for services such as management, administration, distribution, sync licensing, or legal representation.'],
+            ['Fuzzy Matching', 'AI-powered comparison of file names against catalog entries, assigning confidence levels (HIGH, MEDIUM, LOW, NONE) based on similarity.'],
+            ['Health Score', 'A percentage score indicating how complete a song\'s metadata and documentation is, calculated from a weighted checklist.'],
+            ['IPI', 'Interested Party Information — a unique number identifying a rights holder in royalty collection systems.'],
             ['ISRC', 'International Standard Recording Code — a unique identifier for a specific recording of a song.'],
             ['ISWC', 'International Standard Musical Work Code — a unique identifier for a musical composition (work).'],
-            ['UPC/EAN', 'Universal Product Code / European Article Number — a barcode identifier for a release (album, EP, single).'],
-            ['IPI', 'Interested Party Information — a unique number identifying a rights holder in royalty collection systems.'],
-            ['PRO', 'Performing Rights Organization — an organization that collects performance royalties on behalf of songwriters and publishers (e.g., ASCAP, BMI, SESAC, PRS).'],
-            ['Health Score', 'A percentage score indicating how complete a song\'s metadata and documentation is, calculated from a weighted checklist.'],
-            ['Master Rights', 'Rights to the sound recording itself (as opposed to the underlying composition).'],
-            ['Publishing Rights', 'Rights to the underlying musical composition, including mechanical, performance, and sync rights.'],
-            ['Mechanical Rights', 'Rights related to the reproduction of a musical composition (e.g., physical copies, downloads, interactive streams).'],
-            ['Performance Rights', 'Rights related to the public performance of a musical composition (radio, live venues, streaming).'],
-            ['Sync Rights', 'Synchronization rights — the right to use a musical composition in timed relation to visual media (film, TV, ads, games).'],
-            ['Placement', 'A sync licensing opportunity where a song is used in visual media such as TV shows, films, advertisements, or video games.'],
-            ['Recoupment', 'The process of recovering an advance paid to an artist or rights holder from subsequent royalty earnings.'],
-            ['Schedule A', 'A document listing all compositions or recordings covered by a contract, typically attached as an exhibit.'],
-            ['Distribution Readiness', 'A validation status indicating whether a release has all required metadata, identifiers, artwork, and legal clearances for distribution.'],
-            ['Multi-Tenant', 'An architecture where one instance of the software serves multiple organizations, with complete data isolation between them.'],
-            ['Work', 'A musical composition — the underlying song as written, separate from any particular recording of it.'],
-            ['Release', 'A package of recordings (single, EP, album, compilation) delivered to streaming platforms and retailers.'],
-            ['Rights Split', 'The percentage allocation of specific rights types (master, publishing, sync, etc.) among rights holders for a given asset.'],
-            ['Split Sheet', 'A document that records the ownership percentages of a song among its creators, typically signed by all parties before release.'],
-            ['Email Digest', 'An automated, scheduled email summarizing your pending action items, grouped by priority level, sent at your chosen frequency.'],
-            ['Advance', 'An upfront payment to a creator or rights holder, recouped from future royalty earnings before additional payments are made.'],
-            ['Fee', 'A charge deducted from earnings for services such as management, administration, distribution, sync licensing, or legal representation.'],
-            ['Demo', 'A work type indicating a song with lyrics and melodies, as opposed to a purely instrumental track.'],
-            ['Royalty Statement', 'A financial report from a PRO, DSP, or distributor detailing royalty earnings for a specific period.'],
-            ['Statement Line', 'A single row within a royalty statement representing earnings for one track/territory/store combination.'],
-            ['Matching Console', 'The two-pane interface for reviewing and confirming how statement lines connect to catalog assets (songs, works, releases).'],
             ['Ledger Entry', 'An individual accounting record in the royalty ledger, tracking earnings, fees, recoupment, payables, payments, and reversals.'],
+            ['Master Rights', 'Rights to the sound recording itself (as opposed to the underlying composition).'],
+            ['Matching Console', 'The two-pane interface for reviewing and confirming how statement lines connect to catalog assets (songs, works, releases).'],
+            ['Mechanical Rights', 'Rights related to the reproduction of a musical composition (e.g., physical copies, downloads, interactive streams).'],
+            ['Multi-Tenant', 'An architecture where one instance of the software serves multiple organizations, with complete data isolation between them.'],
             ['Payable', 'The net amount owed to a payee after earnings have been reduced by fees and advance recoupment.'],
+            ['Payout Batch', 'A grouped set of payment items that can be reviewed, approved, and marked as paid together.'],
+            ['Performance Rights', 'Rights related to the public performance of a musical composition (radio, live venues, streaming).'],
+            ['Placement', 'A sync licensing opportunity where a song is used in visual media such as TV shows, films, advertisements, or video games.'],
+            ['PRO', 'Performing Rights Organization — an organization that collects performance royalties on behalf of songwriters and publishers (e.g., ASCAP, BMI, SESAC, PRS).'],
+            ['Processing Run', 'A single execution of the processing engine against a statement, producing ledger entries and updating advance balances.'],
+            ['Publishing Rights', 'Rights to the underlying musical composition, including mechanical, performance, and sync rights.'],
+            ['Recoupment', 'The process of recovering an advance paid to an artist or rights holder from subsequent royalty earnings.'],
+            ['Recoupment Pool', 'The category of revenue from which an advance can be recouped: Master, Publishing, Both, or Custom.'],
+            ['Registration Report', 'A branded report listing songs and works for PRO registration, exportable as PDF or CSV and emailable to administrators.'],
+            ['Release', 'A package of recordings (single, EP, album, compilation) delivered to streaming platforms and retailers.'],
             ['Reprocessing', 'The act of re-running the processing engine on a previously processed statement, creating reversal entries first to maintain audit integrity.'],
             ['Reversal Entry', 'A ledger entry that negates a prior entry, created during reprocessing to correct allocations while preserving the full audit trail.'],
-            ['Recoupment Pool', 'The category of revenue from which an advance can be recouped: Master, Publishing, Both, or Custom.'],
-            ['Cross-Collateralization', 'A contract provision allowing revenue from multiple assets to be combined for the purpose of recouping a single advance.'],
-            ['Payout Batch', 'A grouped set of payment items that can be reviewed, approved, and marked as paid together.'],
-            ['Processing Run', 'A single execution of the processing engine against a statement, producing ledger entries and updating advance balances.'],
+            ['Rights Split', 'The percentage allocation of specific rights types (master, publishing, sync, etc.) among rights holders for a given asset.'],
+            ['Royalty Statement', 'A financial report from a PRO, DSP, or distributor detailing royalty earnings for a specific period.'],
+            ['Schedule A', 'A document listing all compositions or recordings covered by a contract, typically attached as an exhibit.'],
+            ['Split Sheet', 'A document that records the ownership percentages of a song among its creators, typically signed by all parties before release.'],
+            ['Statement Line', 'A single row within a royalty statement representing earnings for one track/territory/store combination.'],
+            ['Storage Scan', 'Per-creator folder linking and AI-powered recursive file scanning that matches audio files to catalog entries using fuzzy matching.'],
+            ['Sync Report', 'A customizable report summarizing sync placement activity, filterable by client, status, and date range, exportable as PDF or CSV.'],
+            ['Sync Rights', 'Synchronization rights — the right to use a musical composition in timed relation to visual media (film, TV, ads, games).'],
+            ['UPC/EAN', 'Universal Product Code / European Article Number — a barcode identifier for a release (album, EP, single).'],
+            ['Work', 'A musical composition — the underlying song as written, separate from any particular recording of it.'],
           ].map(([term, definition]) => (
             <div key={term} className="flex gap-3">
               <span className="font-semibold text-[#3D4A44] min-w-[160px] text-sm">{term}</span>
