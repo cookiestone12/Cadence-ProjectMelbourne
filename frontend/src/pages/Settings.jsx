@@ -1251,17 +1251,17 @@ export default function Settings() {
               ) : (
                 <div className="space-y-5">
                   <div className="p-4 bg-[#FAFBF9] rounded-xl">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {integrations.dropbox?.account_email && (
-                        <div>
+                        <div className="min-w-0">
                           <div className="text-[13px] text-[#7A8580] mb-1">Email</div>
-                          <div className="text-[15px] font-medium text-[#3D4A44]">{integrations.dropbox.account_email}</div>
+                          <div className="text-[15px] font-medium text-[#3D4A44] truncate">{integrations.dropbox.account_email}</div>
                         </div>
                       )}
                       {integrations.dropbox?.display_name && (
-                        <div>
+                        <div className="min-w-0">
                           <div className="text-[13px] text-[#7A8580] mb-1">Account</div>
-                          <div className="text-[15px] font-medium text-[#3D4A44]">{integrations.dropbox.display_name}</div>
+                          <div className="text-[15px] font-medium text-[#3D4A44] truncate">{integrations.dropbox.display_name}</div>
                         </div>
                       )}
                     </div>

@@ -100,9 +100,9 @@ export default function TenantAdminPage() {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto">
+    <div className="p-4 lg:p-8 max-w-7xl mx-auto overflow-hidden">
       <div className="mb-8">
-        <h1 className="text-[28px] font-bold text-[#3D4A44]">Organization Admin</h1>
+        <h1 className="text-[28px] font-bold text-[#3D4A44] truncate">Organization Admin</h1>
         <p className="text-[15px] text-[#7A8580] mt-1">Manage your team, branding, and client assignments</p>
       </div>
 
@@ -113,14 +113,14 @@ export default function TenantAdminPage() {
         </div>
       )}
 
-      <div className="flex gap-2 mb-6 border-b border-[#E5E8E3]">
+      <div className="flex gap-2 mb-6 border-b border-[#E5E8E3] overflow-x-auto -mx-4 px-4 lg:mx-0 lg:px-0">
         {tabs.map(tab => {
           const Icon = tab.icon
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                 activeTab === tab.id
                   ? 'border-[#5B8A72] text-[#5B8A72]'
                   : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
@@ -199,8 +199,8 @@ function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPasswor
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full">
+      <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
+        <table className="w-full min-w-[600px]">
           <thead className="bg-[#F5F7F4]">
             <tr>
               <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">User</th>
