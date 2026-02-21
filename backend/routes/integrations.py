@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -112,7 +113,7 @@ async def list_dropbox_files(
     org_id = _get_org_id(current_user, db)
     normalized_path = path if path else "/"
     try:
-        files = storage_service.list_files(org_id, normalized_path, db)
+        files = await asyncio.to_thread(storage_service.list_files, org_id, normalized_path, db)
         return {"files": files, "path": normalized_path}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -529,7 +530,7 @@ async def browse_provider_folders(
     verify_org_access(current_user, org_id, db)
     normalized_path = path if path else "/"
     try:
-        files = storage_service.list_files_for_provider(org_id, provider, normalized_path, db)
+        files = await asyncio.to_thread(storage_service.list_files_for_provider, org_id, provider, normalized_path, db)
         return {"files": files, "path": normalized_path, "provider": provider}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
