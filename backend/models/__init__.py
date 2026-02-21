@@ -24,6 +24,7 @@ from .models import (
     Payee, PayeeType, RecoupmentPool, PayoutStatus,
     RoyaltyStatementLine, RoyaltyProcessingRun, RoyaltyLedgerEntry,
     AdvanceV2, PayoutBatch, PayoutItem,
+    CreatorStorageLink, ScanStatus, MatchConfidence, StorageScanResult,
     PushSubscription,
 )
 
@@ -53,5 +54,6 @@ __all__ = [
     "Payee", "PayeeType", "RecoupmentPool", "PayoutStatus",
     "RoyaltyStatementLine", "RoyaltyProcessingRun", "RoyaltyLedgerEntry",
     "AdvanceV2", "PayoutBatch", "PayoutItem",
+    "CreatorStorageLink", "ScanStatus", "MatchConfidence", "StorageScanResult",
     "PushSubscription",
 ]

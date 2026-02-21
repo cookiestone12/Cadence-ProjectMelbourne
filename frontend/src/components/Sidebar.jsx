@@ -20,7 +20,8 @@ import {
   BuildingOfficeIcon,
   UserGroupIcon,
   DocumentDuplicateIcon,
-  SparklesIcon
+  SparklesIcon,
+  CloudArrowUpIcon
 } from '@heroicons/react/24/outline'
 import NotificationBell from './NotificationBell'
 
@@ -67,6 +68,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/placements', label: 'Sync Placements', icon: FilmIcon },
     { path: '/sync-reports', label: 'Sync Reports', icon: DocumentDuplicateIcon },
     { path: '/brief-builder', label: 'Brief Builder', icon: SparklesIcon },
+    { path: '/storage-scan', label: 'Storage Scan', icon: CloudArrowUpIcon },
     { path: '/registration-reports', label: 'Registration Reports', icon: DocumentTextIcon },
     { path: '/reports', label: 'Reports', icon: ChartBarIcon },
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },

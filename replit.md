@@ -68,6 +68,7 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Royalty Processing Pipeline**: Professional royalty processing with Processing Inbox, Statement Detail View (6 tabs: Overview/Lines/Matching/Allocation Preview/Run History/Exports), three-tier auto-matching (ISRC/UPC/fuzzy), Matching Console with bulk-confirm, allocation preview with contract splits and advance recoupment, audit-safe reprocessing with REVERSAL entries, Payables management with payout batches, and per-creator Ledger/Recoupment sub-tabs.
 - **Fees & Advances Tracking**: Per-creator fee and advance tracking with recoupment progress, integrated into royalty accounting.
 - **Release Delivery & Distribution Readiness**: Comprehensive validation checks for release and track metadata, artwork, legal, and credits, with a status workflow and export options (CSV, JSON, PDF).
+- **Per-Creator Storage Linking**: Link individual creators to Dropbox/Google Drive folders. AI-powered recursive file scanning with fuzzy filename matching (HIGH/MEDIUM/LOW/NONE confidence levels). Review workflow for approve/reject/reassign scan results. Bulk approve and bulk analyze integration. Scheduled scans via APScheduler (daily/weekly/etc.) with per-link frequency settings.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.

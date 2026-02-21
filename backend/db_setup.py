@@ -223,8 +223,15 @@ def seed_super_admin():
 
 def main():
     logger.info("Starting database setup...")
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables created/verified")
+    try:
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+        logger.info("Database tables created/verified")
+    except Exception as e:
+        logger.warning(f"Table creation warning (may be benign): {e}")
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        logger.info(f"Existing tables: {len(tables)}")
 
     try:
         ensure_schema_updates()

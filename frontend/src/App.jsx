@@ -56,6 +56,7 @@ import CreativeDirectoryPage from './pages/CreativeDirectoryPage'
 import RegistrationReportPage from './pages/RegistrationReportPage'
 import SyncReportsPage from './pages/SyncReportsPage'
 import BriefBuilderPage from './pages/BriefBuilderPage'
+import StorageScanPage from './pages/StorageScanPage'
 import Sidebar from './components/Sidebar'
 
 function App() {
@@ -177,6 +178,7 @@ function App() {
             <Route path="/registration-reports" element={<RegistrationReportPage />} />
             <Route path="/sync-reports" element={<SyncReportsPage />} />
             <Route path="/brief-builder" element={<BriefBuilderPage />} />
+            <Route path="/storage-scan" element={<StorageScanPage />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/guide" element={<UserGuidePage />} />
             <Route path="/org-admin" element={<TenantAdminPage />} />

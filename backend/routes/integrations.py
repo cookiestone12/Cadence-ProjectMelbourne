@@ -130,3 +130,83 @@ def set_default_folder(
     integration.default_folder_path = request.path
     db.commit()
     return {"success": True, "default_folder_path": request.path}
+
+
+@router.get("/google-drive/auth-url")
+def get_google_drive_auth_url(
+    redirect_uri: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    org_id = _get_org_id(current_user, db)
+    try:
+        result = storage_service.get_google_drive_auth_url(org_id, redirect_uri)
+        return {"auth_url": result["url"]}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/google-drive/callback")
+def google_drive_oauth_callback(
+    request: OAuthCallbackRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    org_id = _get_org_id(current_user, db)
+    try:
+        integration = storage_service.complete_google_drive_oauth(
+            code=request.code,
+            org_id=org_id,
+            user_id=current_user.id,
+            redirect_uri=request.redirect_uri or "",
+            db=db,
+        )
+        return {
+            "success": True,
+            "provider": integration.provider,
+            "account_email": integration.account_email,
+            "account_display_name": integration.account_display_name,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"OAuth failed: {str(e)}")
+
+
+@router.delete("/google-drive")
+def disconnect_google_drive(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    org_id = _get_org_id(current_user, db)
+    removed = storage_service.disconnect_integration(org_id, "GOOGLE_DRIVE", db)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Google Drive integration not found")
+    return {"success": True, "message": "Google Drive disconnected"}
+
+
+@router.get("/google-drive/files")
+def list_google_drive_files(
+    folder_id: str = Query("root"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    org_id = _get_org_id(current_user, db)
+    try:
+        files = storage_service.list_google_drive_files(org_id, folder_id, db)
+        return {"files": files, "folder_id": folder_id}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/files")
+def list_provider_files(
+    provider: str = Query(...),
+    path: str = Query("/"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    org_id = _get_org_id(current_user, db)
+    try:
+        files = storage_service.list_files_for_provider(org_id, provider, path, db)
+        return {"files": files, "path": path, "provider": provider}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

@@ -119,6 +119,50 @@ def check_and_send_digests():
         db.close()
 
 
+def run_scheduled_scans():
+    from ..models.database import SessionLocal
+    from ..models import CreatorStorageLink, IntegrationAccount
+    from . import scan_service
+
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        links = db.query(CreatorStorageLink).filter(
+            CreatorStorageLink.auto_scan_enabled == True,
+        ).all()
+
+        link_data = [(l.id, l.org_id, l.provider, l.auto_scan_frequency, l.last_scanned_at) for l in links]
+    except Exception as e:
+        logger.error(f"Scheduled scan query error: {e}")
+        return
+    finally:
+        db.close()
+
+    for link_id, org_id, provider, freq, last_scanned in link_data:
+        try:
+            hours = INTERVAL_HOURS.get(freq or "daily", 24)
+            if last_scanned and (now - last_scanned) < timedelta(hours=hours):
+                continue
+
+            link_db = SessionLocal()
+            try:
+                integration = link_db.query(IntegrationAccount).filter(
+                    IntegrationAccount.org_id == org_id,
+                    IntegrationAccount.provider == provider,
+                    IntegrationAccount.is_active == True,
+                ).first()
+                if not integration:
+                    logger.warning(f"Skipping scan for link {link_id}: no active {provider} integration for org {org_id}")
+                    continue
+
+                result = scan_service.scan_creator_storage(org_id, link_id, link_db)
+                logger.info(f"Scheduled scan for link {link_id}: {result['new_files']} new files found")
+            finally:
+                link_db.close()
+        except Exception as e:
+            logger.error(f"Scheduled scan failed for link {link_id}: {e}")
+
+
 def start_scheduler():
     global _scheduler
     if _scheduler is not None:
@@ -132,8 +176,16 @@ def start_scheduler():
         id="email_digest_check",
         replace_existing=True,
     )
+    _scheduler.add_job(
+        run_scheduled_scans,
+        "interval",
+        hours=1,
+        id="storage_scan_check",
+        replace_existing=True,
+    )
     _scheduler.start()
     logger.info("Email digest scheduler started (15-minute interval)")
+    logger.info("Storage scan scheduler started (hourly check)")
 
 
 def shutdown_scheduler():

@@ -201,3 +201,178 @@ def get_temp_download_link(org_id: int, path: str, db: Session) -> str:
     except dropbox.exceptions.ApiError as e:
         logger.error(f"Dropbox get_temporary_link error: {e}")
         raise ValueError(f"Could not get download link for: {path}")
+
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
+
+def get_google_drive_auth_url(org_id: int, redirect_uri: str) -> dict:
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+        raise ValueError("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured")
+
+    from google_auth_oauthlib.flow import Flow
+
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        },
+        scopes=["https://www.googleapis.com/auth/drive.readonly"],
+        redirect_uri=redirect_uri,
+    )
+    auth_url, _ = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+        state=str(org_id),
+    )
+    return {"url": auth_url}
+
+
+def complete_google_drive_oauth(
+    code: str,
+    org_id: int,
+    user_id: int,
+    redirect_uri: str,
+    db: Session,
+) -> IntegrationAccount:
+    from google_auth_oauthlib.flow import Flow
+    from googleapiclient.discovery import build
+
+    flow = Flow.from_client_config(
+        {
+            "web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        },
+        scopes=["https://www.googleapis.com/auth/drive.readonly"],
+        redirect_uri=redirect_uri,
+    )
+    flow.fetch_token(code=code)
+    credentials = flow.credentials
+
+    service = build("drive", "v3", credentials=credentials)
+    about = service.about().get(fields="user").execute()
+    account_email = about["user"].get("emailAddress", "")
+    account_name = about["user"].get("displayName", "")
+
+    access_token = credentials.token
+    refresh_token = credentials.refresh_token
+
+    existing = db.query(IntegrationAccount).filter(
+        IntegrationAccount.org_id == org_id,
+        IntegrationAccount.provider == "GOOGLE_DRIVE",
+    ).first()
+
+    if existing:
+        existing.access_token_encrypted = encrypt_token(access_token)
+        existing.refresh_token_encrypted = encrypt_token(refresh_token) if refresh_token else None
+        existing.connected_by_user_id = user_id
+        existing.account_email = account_email
+        existing.account_display_name = account_name
+        existing.is_active = True
+        existing.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    integration = IntegrationAccount(
+        org_id=org_id,
+        provider="GOOGLE_DRIVE",
+        access_token_encrypted=encrypt_token(access_token),
+        refresh_token_encrypted=encrypt_token(refresh_token) if refresh_token else None,
+        connected_by_user_id=user_id,
+        account_email=account_email,
+        account_display_name=account_name,
+        is_active=True,
+    )
+    db.add(integration)
+    db.commit()
+    db.refresh(integration)
+    return integration
+
+
+def get_google_drive_credentials(org_id: int, db: Session):
+    from google.oauth2.credentials import Credentials
+
+    integration = get_integration(org_id, "GOOGLE_DRIVE", db)
+    if not integration:
+        raise ValueError("Google Drive is not connected for this organization")
+
+    access_token = decrypt_token(integration.access_token_encrypted)
+    refresh_token = None
+    if integration.refresh_token_encrypted:
+        refresh_token = decrypt_token(integration.refresh_token_encrypted)
+
+    creds = Credentials(
+        token=access_token,
+        refresh_token=refresh_token,
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        token_uri="https://oauth2.googleapis.com/token",
+    )
+    return creds
+
+
+def list_google_drive_files(org_id: int, folder_id: str, db: Session) -> List[Dict[str, Any]]:
+    from googleapiclient.discovery import build
+
+    creds = get_google_drive_credentials(org_id, db)
+    service = build("drive", "v3", credentials=creds)
+
+    query = f"'{folder_id}' in parents and trashed = false"
+    results = service.files().list(
+        q=query,
+        pageSize=100,
+        fields="files(id, name, mimeType, size, modifiedTime, parents)",
+        orderBy="folder,name",
+    ).execute()
+
+    files = []
+    for item in results.get("files", []):
+        is_folder = item["mimeType"] == "application/vnd.google-apps.folder"
+        files.append({
+            "name": item["name"],
+            "path_display": item["name"],
+            "path_lower": item["name"].lower(),
+            "type": "folder" if is_folder else "file",
+            "is_folder": is_folder,
+            "id": item["id"],
+            "size": int(item.get("size", 0)) if not is_folder else None,
+            "client_modified": item.get("modifiedTime"),
+            "provider": "GOOGLE_DRIVE",
+        })
+
+    files.sort(key=lambda x: (0 if x.get("type") == "folder" else 1, x["name"].lower()))
+    return files
+
+
+def get_google_drive_download_link(org_id: int, file_id: str, db: Session) -> str:
+    from googleapiclient.discovery import build
+
+    creds = get_google_drive_credentials(org_id, db)
+    service = build("drive", "v3", credentials=creds)
+
+    file_meta = service.files().get(fileId=file_id, fields="webContentLink").execute()
+    link = file_meta.get("webContentLink")
+    if not link:
+        link = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media"
+    return link
+
+
+def list_files_for_provider(org_id: int, provider: str, path: str, db: Session) -> List[Dict[str, Any]]:
+    if provider == "DROPBOX":
+        return list_files(org_id, path, db)
+    elif provider == "GOOGLE_DRIVE":
+        folder_id = path if path and path != "/" else "root"
+        return list_google_drive_files(org_id, folder_id, db)
+    else:
+        raise ValueError(f"Unsupported provider: {provider}")

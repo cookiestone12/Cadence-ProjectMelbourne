@@ -1904,6 +1904,84 @@ RoyaltyStatement.statement_lines = relationship("RoyaltyStatementLine", back_pop
 RoyaltyStatement.processing_runs = relationship("RoyaltyProcessingRun", backref="statement")
 
 
+class CreatorStorageLink(Base):
+    __tablename__ = "creator_storage_links"
+    __table_args__ = (
+        Index('ix_creator_storage_links_creator_id', 'creator_id'),
+        Index('ix_creator_storage_links_org_id', 'org_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=False)
+    provider = Column(String, nullable=False, default="DROPBOX")
+    folder_path = Column(String, nullable=False)
+    container_name = Column(String, nullable=True)
+    scan_recursive = Column(Boolean, default=True)
+    auto_scan_enabled = Column(Boolean, default=False)
+    auto_scan_frequency = Column(String, nullable=True)
+    last_scanned_at = Column(DateTime, nullable=True)
+    last_scan_file_count = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    creator = relationship("Creator")
+
+
+class ScanStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    SCANNING = "SCANNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class MatchConfidence(str, enum.Enum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+    NONE = "NONE"
+
+
+class StorageScanResult(Base):
+    __tablename__ = "storage_scan_results"
+    __table_args__ = (
+        Index('ix_storage_scan_results_org_id', 'org_id'),
+        Index('ix_storage_scan_results_scan_batch_id', 'scan_batch_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    scan_batch_id = Column(String, nullable=False, index=True)
+    creator_storage_link_id = Column(Integer, ForeignKey("creator_storage_links.id"), nullable=True)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
+    provider = Column(String, nullable=False)
+    file_path = Column(String, nullable=False)
+    file_name = Column(String, nullable=False)
+    file_size = Column(Integer, nullable=True)
+    provider_file_id = Column(String, nullable=True)
+    matched_song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    matched_work_id = Column(Integer, ForeignKey("works.id"), nullable=True)
+    match_confidence = Column(String, nullable=True)
+    match_score = Column(Float, nullable=True)
+    match_reason = Column(String, nullable=True)
+    suggested_title = Column(String, nullable=True)
+    suggested_artist = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="PENDING")
+    reviewed = Column(Boolean, default=False)
+    approved = Column(Boolean, nullable=True)
+    linked_audio_asset_id = Column(Integer, ForeignKey("audio_assets.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    creator_storage_link = relationship("CreatorStorageLink")
+    creator = relationship("Creator")
+    matched_song = relationship("Song")
+    matched_work = relationship("Work")
+    linked_audio_asset = relationship("AudioAsset")
+
+
 class PushSubscription(Base):
     __tablename__ = "push_subscriptions"
 
