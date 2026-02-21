@@ -18,7 +18,7 @@ import { CheckCircleIcon } from '@heroicons/react/24/solid'
 export default function RegistrationReportPage() {
   const [loading, setLoading] = useState(true)
   const [orgId, setOrgId] = useState(null)
-  const [assetType, setAssetType] = useState('works')
+  const [assetType, setAssetType] = useState('songs')
   const [reportData, setReportData] = useState([])
   const [summary, setSummary] = useState({ total: 0, valid: 0, invalid: 0, outstanding: 0, registered: 0 })
   const [selectedCreatorId, setSelectedCreatorId] = useState('')
@@ -244,7 +244,7 @@ export default function RegistrationReportPage() {
               className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
             >
               <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Generate
+              Refresh
             </button>
             <button
               onClick={handleExportCSV}
@@ -274,20 +274,20 @@ export default function RegistrationReportPage() {
       <div className="flex flex-col sm:flex-row gap-3 mb-6 items-start sm:items-center flex-wrap">
         <div className="flex bg-white rounded-xl border border-[rgba(59,77,67,0.12)] p-1">
           <button
-            onClick={() => { setAssetType('works'); setSelectedItems(new Set()) }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              assetType === 'works' ? 'bg-[#5B8A72] text-white shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'
-            }`}
-          >
-            Works
-          </button>
-          <button
             onClick={() => { setAssetType('songs'); setSelectedItems(new Set()) }}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               assetType === 'songs' ? 'bg-[#5B8A72] text-white shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'
             }`}
           >
             Songs
+          </button>
+          <button
+            onClick={() => { setAssetType('works'); setSelectedItems(new Set()) }}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              assetType === 'works' ? 'bg-[#5B8A72] text-white shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'
+            }`}
+          >
+            Works
           </button>
         </div>
 
@@ -389,11 +389,23 @@ export default function RegistrationReportPage() {
         <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] p-12 text-center">
           <DocumentTextIcon className="w-12 h-12 text-[#B0BDB4] mx-auto mb-3" />
           <h3 className="text-lg font-semibold text-[#3D4A44] mb-1">No {assetType} found</h3>
-          <p className="text-sm text-[#7A8580]">
-            {statusFilter === 'outstanding' 
-              ? `All ${assetType} are registered! Try changing the filter.`
-              : `Add ${assetType} to your catalog to generate registration reports.`}
+          <p className="text-sm text-[#7A8580] max-w-md mx-auto">
+            {statusFilter === 'outstanding' && summary.registered > 0
+              ? `All ${assetType} are registered with your PRO. Try the "All" or "Registered" filter to view them.`
+              : statusFilter === 'registered' && summary.outstanding > 0
+              ? `No ${assetType} have been marked as registered yet. Switch to "Outstanding" to see items awaiting registration.`
+              : assetType === 'works'
+              ? 'No works found. Works represent compositions (the songwriting/publishing side). Try switching to the Songs tab — your catalog recordings will appear there.'
+              : `Add songs to your catalog to track PRO registration. Once added, outstanding songs will appear here for you to select and generate registration reports.`}
           </p>
+          {assetType === 'works' && (
+            <button
+              onClick={() => { setAssetType('songs'); setSelectedItems(new Set()) }}
+              className="mt-4 px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium"
+            >
+              Switch to Songs
+            </button>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] overflow-hidden">
