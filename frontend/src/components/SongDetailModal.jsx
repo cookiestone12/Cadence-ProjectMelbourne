@@ -691,7 +691,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
         </div>
         
         <div className="border-b border-[rgba(59,77,67,0.08)] px-6 bg-white">
-          <div className="flex space-x-8">
+          <div className="flex space-x-8 overflow-x-auto no-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
             {[
               { id: 'overview', label: 'Overview', icon: MusicalNoteIcon },
               { id: 'rights', label: 'Rights & Splits', icon: ScaleIcon },
@@ -709,8 +709,8 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                     : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
                 }`}
               >
-                <tab.icon className="w-5 h-5" />
-                <span>{tab.label}</span>
+                <tab.icon className="w-5 h-5 flex-shrink-0" />
+                <span className="whitespace-nowrap">{tab.label}</span>
               </button>
             ))}
           </div>
@@ -737,7 +737,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   </button>
                 </div>
               )}
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 space-y-4">
                   <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Basic Information</h3>
                   <div>
@@ -1510,7 +1510,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
           
           {activeTab === 'placement' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
                   <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Ownership</h3>
                   <div className="space-y-4">
