@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
@@ -10,7 +10,7 @@ from ..models import (
     AudioAsset, AudioAnalysis, Song,
 )
 from ..utils.auth import get_current_user
-from ..services import scan_service
+from ..services import scan_service, storage_service
 
 router = APIRouter(prefix="/api/storage-scan", tags=["storage-scan"])
 logger = logging.getLogger("rythm")
@@ -516,3 +516,19 @@ def get_connected_providers(
         "account_display_name": i.account_display_name,
         "connected_at": i.created_at.isoformat() if i.created_at else None,
     } for i in integrations]
+
+
+@router.get("/org/{org_id}/browse")
+def browse_provider_folders(
+    org_id: int,
+    provider: str = Query("DROPBOX"),
+    path: str = Query(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    try:
+        files = storage_service.list_files_for_provider(org_id, provider, path or "/", db)
+        return {"files": files, "path": path or "/", "provider": provider}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

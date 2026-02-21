@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, CloudArrowUpIcon, CloudIcon, FolderIcon, CheckCircleIcon, XMarkIcon, DevicePhoneMobileIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
+import FolderPicker from '../components/FolderPicker'
 
 const NOTIFICATION_TYPES = {
   MISSING_ISRC: { label: 'Missing ISRC', description: 'Alert when songs are missing ISRC codes' },
@@ -47,9 +48,6 @@ export default function Settings() {
   const [integrations, setIntegrations] = useState({})
   const [connectingDropbox, setConnectingDropbox] = useState(false)
   const [folderPickerOpen, setFolderPickerOpen] = useState(false)
-  const [folderContents, setFolderContents] = useState([])
-  const [currentFolderPath, setCurrentFolderPath] = useState('')
-  const [loadingFolders, setLoadingFolders] = useState(false)
   const [testingConnection, setTestingConnection] = useState(false)
   const [pushSupported, setPushSupported] = useState(false)
   const [pushEnabled, setPushEnabled] = useState(false)
@@ -421,17 +419,8 @@ export default function Settings() {
     }
   }
 
-  const browseFolders = async (path = '') => {
-    setLoadingFolders(true)
-    try {
-      const response = await axios.get(`/api/integrations/dropbox/files?path=${encodeURIComponent(path)}`)
-      setFolderContents(response.data?.files || response.data?.entries || [])
-      setCurrentFolderPath(path)
-    } catch (error) {
-      console.error('Error browsing folders:', error)
-    } finally {
-      setLoadingFolders(false)
-    }
+  const handleFolderSelected = async (path) => {
+    await setDefaultFolder(path)
   }
 
   const setDefaultFolder = async (path) => {
@@ -1283,7 +1272,7 @@ export default function Settings() {
                         </div>
                       </div>
                       <button
-                        onClick={() => { setFolderPickerOpen(true); browseFolders(integrations.dropbox?.default_folder || ''); }}
+                        onClick={() => setFolderPickerOpen(true)}
                         className="px-3 py-1.5 text-[13px] font-medium text-[#5B8A72] border border-[#5B8A72] rounded-lg hover:bg-[rgba(91,138,114,0.08)] transition-colors"
                       >
                         Change
@@ -1346,67 +1335,14 @@ export default function Settings() {
           </div>
         )}
 
-        {folderPickerOpen && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-[18px] shadow-xl w-full max-w-lg max-h-[70vh] flex flex-col">
-              <div className="flex items-center justify-between p-5 border-b border-[rgba(59,77,67,0.08)]">
-                <div>
-                  <h3 className="text-[18px] font-medium text-[#3D4A44]">Select Default Folder</h3>
-                  <p className="text-[13px] text-[#7A8580] mt-0.5">{currentFolderPath || '/ (root)'}</p>
-                </div>
-                <button
-                  onClick={() => setFolderPickerOpen(false)}
-                  className="p-1.5 text-[#7A8580] hover:text-[#3D4A44] rounded-lg hover:bg-[#FAFBF9] transition-colors"
-                >
-                  <XMarkIcon className="w-5 h-5" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4">
-                {currentFolderPath && (
-                  <button
-                    onClick={() => {
-                      const parentPath = currentFolderPath.split('/').slice(0, -1).join('/');
-                      browseFolders(parentPath);
-                    }}
-                    className="w-full flex items-center space-x-3 px-3 py-3 rounded-xl hover:bg-[#FAFBF9] transition-colors text-left mb-1"
-                  >
-                    <FolderIcon className="w-5 h-5 text-[#7A8580]" />
-                    <span className="text-[15px] text-[#7A8580]">..</span>
-                  </button>
-                )}
-                {loadingFolders ? (
-                  <div className="flex items-center justify-center py-8 text-[#7A8580]">
-                    <span className="text-[15px]">Loading folders...</span>
-                  </div>
-                ) : (
-                  folderContents
-                    .filter(item => item['.tag'] === 'folder' || item.type === 'folder')
-                    .map((folder, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => browseFolders(folder.path_lower || folder.path || folder.name)}
-                        className="w-full flex items-center space-x-3 px-3 py-3 rounded-xl hover:bg-[#FAFBF9] transition-colors text-left mb-1"
-                      >
-                        <FolderIcon className="w-5 h-5 text-[#5B8A72]" />
-                        <span className="text-[15px] text-[#3D4A44]">{folder.name}</span>
-                      </button>
-                    ))
-                )}
-                {!loadingFolders && folderContents.filter(item => item['.tag'] === 'folder' || item.type === 'folder').length === 0 && (
-                  <div className="text-center py-8 text-[#7A8580] text-[14px]">No subfolders found</div>
-                )}
-              </div>
-              <div className="p-4 border-t border-[rgba(59,77,67,0.08)]">
-                <button
-                  onClick={() => setDefaultFolder(currentFolderPath)}
-                  className="w-full px-4 py-3 bg-[#5B8A72] text-white font-medium rounded-xl hover:bg-[#4A7862] transition-colors"
-                >
-                  Select This Folder
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <FolderPicker
+          isOpen={folderPickerOpen}
+          onClose={() => setFolderPickerOpen(false)}
+          onSelect={handleFolderSelected}
+          provider="DROPBOX"
+          orgId={organizationId}
+          initialPath={integrations.dropbox?.default_folder || ''}
+        />
       </div>
     </div>
   )

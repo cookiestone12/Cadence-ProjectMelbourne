@@ -4,8 +4,9 @@ import {
   FolderIcon, CloudArrowUpIcon, MagnifyingGlassIcon, PlusIcon,
   TrashIcon, PencilSquareIcon, CheckCircleIcon, XCircleIcon,
   ArrowPathIcon, FunnelIcon, SparklesIcon, LinkIcon,
-  ChevronDownIcon, XMarkIcon
+  ChevronDownIcon, XMarkIcon, FolderOpenIcon
 } from '@heroicons/react/24/outline'
+import FolderPicker from '../components/FolderPicker'
 
 const CONFIDENCE_COLORS = {
   HIGH: 'bg-green-100 text-green-800',
@@ -67,6 +68,7 @@ export default function StorageScanPage() {
   const [editingLink, setEditingLink] = useState(null)
   const [linkForm, setLinkForm] = useState({ creator_id: '', provider: 'DROPBOX', folder_path: '', recursive: true })
   const [linkSaving, setLinkSaving] = useState(false)
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false)
   const [scanningId, setScanningId] = useState(null)
   const [scanningAll, setScanningAll] = useState(false)
 
@@ -685,13 +687,28 @@ export default function StorageScanPage() {
 
               <div>
                 <label className="block text-sm font-medium text-[#3D4A44] mb-1">Folder Path</label>
-                <input
-                  type="text"
-                  value={linkForm.folder_path}
-                  onChange={(e) => setLinkForm(prev => ({ ...prev, folder_path: e.target.value }))}
-                  placeholder="/Music/Artist Name"
-                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-xl px-3 py-2.5 text-sm bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent placeholder-[#7A8580]"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={linkForm.folder_path}
+                    onChange={(e) => setLinkForm(prev => ({ ...prev, folder_path: e.target.value }))}
+                    placeholder="/Music/Artist Name"
+                    className="flex-1 border border-[rgba(59,77,67,0.12)] rounded-xl px-3 py-2.5 text-sm bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent placeholder-[#7A8580]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFolderPickerOpen(true)}
+                    disabled={!providers.some(p => p.provider === linkForm.provider)}
+                    className="flex items-center gap-1.5 px-3 py-2.5 border border-[#5B8A72] text-[#5B8A72] rounded-xl text-sm font-medium hover:bg-[rgba(91,138,114,0.08)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                    title={providers.some(p => p.provider === linkForm.provider) ? 'Browse folders' : `Connect ${PROVIDER_LABELS[linkForm.provider]} first`}
+                  >
+                    <FolderOpenIcon className="w-4 h-4" />
+                    Browse
+                  </button>
+                </div>
+                {!providers.some(p => p.provider === linkForm.provider) && (
+                  <p className="text-[12px] text-amber-600 mt-1">Connect {PROVIDER_LABELS[linkForm.provider]} in Settings first to browse folders</p>
+                )}
               </div>
 
               <label className="flex items-center gap-2 cursor-pointer">
@@ -724,6 +741,17 @@ export default function StorageScanPage() {
           </div>
         </div>
       )}
+
+      <FolderPicker
+        isOpen={folderPickerOpen}
+        onClose={() => setFolderPickerOpen(false)}
+        onSelect={(path, displayPath) => {
+          setLinkForm(prev => ({ ...prev, folder_path: displayPath || path }))
+        }}
+        provider={linkForm.provider}
+        orgId={orgId}
+        initialPath={linkForm.folder_path}
+      />
 
       {showReassignModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowReassignModal(null)}>
