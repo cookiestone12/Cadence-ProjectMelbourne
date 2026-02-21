@@ -179,7 +179,7 @@ def seed_super_admin():
             admin = User(
                 username='MasterPAdmin',
                 email='admin@rythm.app',
-                hashed_password=get_password_hash('Male50Cent!'),
+                hashed_password=get_password_hash('Male50Cent'),
                 is_admin=True,
                 is_super_admin=True,
             )
