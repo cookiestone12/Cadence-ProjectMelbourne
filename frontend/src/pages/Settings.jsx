@@ -368,20 +368,20 @@ export default function Settings() {
   }
 
   const [dropboxCodeInput, setDropboxCodeInput] = useState('')
-  const [showCodeInput, setShowCodeInput] = useState(false)
+  const [showCodeInput, setShowCodeInput] = useState(() => sessionStorage.getItem('dropbox_code_pending') === 'true')
 
   const connectDropbox = async () => {
     setConnectingDropbox(true)
     try {
       const response = await axios.get('/api/integrations/dropbox/auth-url')
       const authUrl = response.data.auth_url
+      setShowCodeInput(true)
+      sessionStorage.setItem('dropbox_code_pending', 'true')
+      setConnectingDropbox(false)
       const authWindow = window.open(authUrl, '_blank')
       if (!authWindow || authWindow.closed) {
         window.location.href = authUrl
-        return
       }
-      setShowCodeInput(true)
-      setConnectingDropbox(false)
     } catch (error) {
       console.error('Error getting Dropbox auth URL:', error)
       setMessage('Failed to start Dropbox connection')
@@ -401,6 +401,7 @@ export default function Settings() {
       setMessage('Dropbox connected successfully!')
       setTimeout(() => setMessage(''), 3000)
       setShowCodeInput(false)
+      sessionStorage.removeItem('dropbox_code_pending')
       setDropboxCodeInput('')
     } catch (err) {
       console.error('Error completing Dropbox OAuth:', err)
@@ -1239,7 +1240,7 @@ export default function Settings() {
                         </div>
                       </div>
                       <button
-                        onClick={() => { setShowCodeInput(false); setDropboxCodeInput(''); }}
+                        onClick={() => { setShowCodeInput(false); setDropboxCodeInput(''); sessionStorage.removeItem('dropbox_code_pending'); }}
                         className="text-[13px] text-[#7A8580] hover:text-[#3D4A44] transition-colors"
                       >
                         Cancel
