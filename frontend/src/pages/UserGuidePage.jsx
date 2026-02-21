@@ -1,5 +1,5 @@
-import React, { useRef } from 'react'
-import { ArrowDownTrayIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import React, { useRef, useState } from 'react'
+import { ArrowDownTrayIcon, ChevronRightIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 
 const VERSION = '2.4'
 const LAST_UPDATED = 'February 2026'
@@ -81,8 +81,55 @@ function ButtonRef({ label, color }) {
   )
 }
 
+const GUIDE_PASSWORD = 'Rythm1225!'
+
 export default function UserGuidePage() {
   const contentRef = useRef(null)
+  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem('guide_unlocked') === 'true')
+  const [passwordInput, setPasswordInput] = useState('')
+  const [passwordError, setPasswordError] = useState(false)
+
+  const handleUnlock = (e) => {
+    e.preventDefault()
+    if (passwordInput === GUIDE_PASSWORD) {
+      setUnlocked(true)
+      sessionStorage.setItem('guide_unlocked', 'true')
+      setPasswordError(false)
+    } else {
+      setPasswordError(true)
+    }
+  }
+
+  if (!unlocked) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#F5F7F5] to-[#EEF6F0] flex items-center justify-center p-4">
+        <form onSubmit={handleUnlock} className="bg-white rounded-[20px] shadow-lg p-8 w-full max-w-sm text-center">
+          <div className="w-14 h-14 bg-[#EEF6F0] rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <LockClosedIcon className="w-7 h-7 text-[#5B8A72]" />
+          </div>
+          <h2 className="text-xl font-bold text-[#3D4A44] mb-1">User Guide</h2>
+          <p className="text-sm text-[#7A8580] mb-6">Enter the password to access the guide</p>
+          <input
+            type="password"
+            value={passwordInput}
+            onChange={e => { setPasswordInput(e.target.value); setPasswordError(false) }}
+            placeholder="Password"
+            className={`w-full px-4 py-3 rounded-xl border ${passwordError ? 'border-red-400 bg-red-50' : 'border-[rgba(59,77,67,0.15)]'} text-[15px] text-[#3D4A44] placeholder-[#B0B8B3] focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30 focus:border-[#5B8A72] transition-colors mb-3`}
+            autoFocus
+          />
+          {passwordError && (
+            <p className="text-red-500 text-sm mb-3">Incorrect password. Please try again.</p>
+          )}
+          <button
+            type="submit"
+            className="w-full px-4 py-3 bg-[#5B8A72] text-white font-medium rounded-xl hover:bg-[#4A7862] transition-colors"
+          >
+            Unlock Guide
+          </button>
+        </form>
+      </div>
+    )
+  }
 
   const handlePrint = () => {
     window.print()
