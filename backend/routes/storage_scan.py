@@ -519,7 +519,7 @@ def get_connected_providers(
 
 
 @router.get("/org/{org_id}/browse")
-def browse_provider_folders(
+async def browse_provider_folders(
     org_id: int,
     provider: str = Query("DROPBOX"),
     path: str = Query(""),
@@ -527,8 +527,9 @@ def browse_provider_folders(
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
+    normalized_path = path if path else "/"
     try:
-        files = storage_service.list_files_for_provider(org_id, provider, path or "/", db)
-        return {"files": files, "path": path or "/", "provider": provider}
+        files = storage_service.list_files_for_provider(org_id, provider, normalized_path, db)
+        return {"files": files, "path": normalized_path, "provider": provider}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
