@@ -375,7 +375,11 @@ export default function Settings() {
     try {
       const response = await axios.get('/api/integrations/dropbox/auth-url')
       const authUrl = response.data.auth_url
-      window.open(authUrl, 'dropbox_auth', 'width=600,height=700,scrollbars=yes')
+      const authWindow = window.open(authUrl, '_blank')
+      if (!authWindow || authWindow.closed) {
+        window.location.href = authUrl
+        return
+      }
       setShowCodeInput(true)
       setConnectingDropbox(false)
     } catch (error) {
