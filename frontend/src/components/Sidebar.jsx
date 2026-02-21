@@ -207,19 +207,19 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
               <span className="text-[14px]">Sign Out</span>
             </button>
           </div>
-        </div>
 
-        <div className="flex-shrink-0 p-3 border-t border-am-separator">
-          <div className="flex items-center gap-3 px-3 py-2">
-            <div className="w-9 h-9 flex-shrink-0 rounded-full bg-gradient-to-br from-am-accent to-am-accent-light flex items-center justify-center text-[14px] font-semibold text-white shadow-am-sm">
-              {user?.username?.charAt(0).toUpperCase() || 'U'}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[14px] font-medium text-am-text truncate">{user?.username || 'User'}</p>
-              <p className="text-[12px] text-am-text-secondary truncate">{user?.is_super_admin ? 'Super Admin' : user?.is_admin ? 'Admin' : 'Member'}</p>
-            </div>
-            <div className="flex-shrink-0">
-              <NotificationBell />
+          <div className="px-3 pb-3 pt-2 border-t border-am-separator">
+            <div className="flex items-center gap-3 px-3 py-2">
+              <div className="w-9 h-9 flex-shrink-0 rounded-full bg-gradient-to-br from-am-accent to-am-accent-light flex items-center justify-center text-[14px] font-semibold text-white shadow-am-sm">
+                {user?.username?.charAt(0).toUpperCase() || 'U'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-medium text-am-text truncate">{user?.username || 'User'}</p>
+                <p className="text-[12px] text-am-text-secondary truncate">{user?.is_super_admin ? 'Super Admin' : user?.is_admin ? 'Admin' : 'Member'}</p>
+              </div>
+              <div className="flex-shrink-0">
+                <NotificationBell />
+              </div>
             </div>
           </div>
         </div>

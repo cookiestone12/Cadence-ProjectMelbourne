@@ -152,6 +152,14 @@ def get_dropbox_client(org_id: int, db: Session) -> dropbox.Dropbox:
             app_key=DROPBOX_APP_KEY,
             app_secret=DROPBOX_APP_SECRET,
         )
+        try:
+            dbx.check_and_refresh_access_token()
+            if dbx._oauth2_access_token != access_token:
+                integration.access_token_encrypted = encrypt_token(dbx._oauth2_access_token)
+                db.commit()
+                logger.info(f"Refreshed Dropbox access token for org {org_id}")
+        except Exception as e:
+            logger.warning(f"Could not refresh Dropbox token for org {org_id}: {e}")
     else:
         dbx = dropbox.Dropbox(oauth2_access_token=access_token)
 
@@ -165,6 +173,12 @@ def list_files(org_id: int, path: str, db: Session) -> List[Dict[str, Any]]:
 
     try:
         result = dbx.files_list_folder(path)
+    except dropbox.exceptions.BadInputError as e:
+        logger.error(f"Dropbox BadInputError (likely expired/invalid token): {e}")
+        raise ValueError(f"Dropbox authentication error. Please disconnect and reconnect your Dropbox account in Settings.")
+    except dropbox.exceptions.AuthError as e:
+        logger.error(f"Dropbox AuthError: {e}")
+        raise ValueError(f"Dropbox authentication failed. Please disconnect and reconnect your Dropbox account in Settings.")
     except dropbox.exceptions.ApiError as e:
         logger.error(f"Dropbox list_folder error: {e}")
         raise ValueError(f"Could not list files at path: {path}")
