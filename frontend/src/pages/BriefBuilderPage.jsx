@@ -43,7 +43,7 @@ export default function BriefBuilderPage() {
   const [query, setQuery] = useState('')
   const [filters, setFilters] = useState({
     bpm_min: '', bpm_max: '', key: '', moods: [], textures: [],
-    vocal_present: null, has_stems: false, analyzed_only: true
+    vocal_present: null, has_stems: false, analyzed_only: false
   })
   const [results, setResults] = useState([])
   const [searching, setSearching] = useState(false)

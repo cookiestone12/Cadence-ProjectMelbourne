@@ -24,6 +24,7 @@ class BriefSearchRequest(BaseModel):
     textures: Optional[List[str]] = None
     vocal_present: Optional[bool] = None
     has_stems: Optional[bool] = None
+    analyzed_only: Optional[bool] = False
     limit: int = 20
 
 
@@ -83,47 +84,56 @@ Respond ONLY with valid JSON."""
     energy_level = parsed_criteria.get("energy_level")
     genres = parsed_criteria.get("genres", [])
 
-    query = (
-        db.query(Song, AudioAnalysis)
-        .join(AudioAsset, AudioAsset.song_id == Song.id)
-        .join(AudioAnalysis, AudioAnalysis.audio_asset_id == AudioAsset.id)
-        .filter(
-            Song.organization_id == org_id,
-            AudioAnalysis.status == "SUCCEEDED",
+    if request.analyzed_only:
+        q = (
+            db.query(Song, AudioAnalysis)
+            .join(AudioAsset, AudioAsset.song_id == Song.id)
+            .join(AudioAnalysis, AudioAnalysis.audio_asset_id == AudioAsset.id)
+            .filter(
+                Song.organization_id == org_id,
+                AudioAnalysis.status == "SUCCEEDED",
+            )
         )
-    )
+    else:
+        q = (
+            db.query(Song, AudioAnalysis)
+            .outerjoin(AudioAsset, AudioAsset.song_id == Song.id)
+            .outerjoin(AudioAnalysis, (AudioAnalysis.audio_asset_id == AudioAsset.id) & (AudioAnalysis.status == "SUCCEEDED"))
+            .filter(Song.organization_id == org_id)
+        )
 
     if bpm_min:
-        query = query.filter(AudioAnalysis.bpm >= bpm_min)
+        q = q.filter(AudioAnalysis.bpm >= bpm_min)
     if bpm_max:
-        query = query.filter(AudioAnalysis.bpm <= bpm_max)
+        q = q.filter(AudioAnalysis.bpm <= bpm_max)
     if key:
-        query = query.filter(AudioAnalysis.musical_key.ilike(f"%{key}%"))
+        q = q.filter(AudioAnalysis.musical_key.ilike(f"%{key}%"))
     if vocal_present is not None:
-        query = query.filter(AudioAnalysis.vocal_present == vocal_present)
+        q = q.filter(AudioAnalysis.vocal_present == vocal_present)
     if energy_level:
-        query = query.filter(AudioAnalysis.energy_level == energy_level)
+        q = q.filter(AudioAnalysis.energy_level == energy_level)
 
-    results_raw = query.distinct().limit(request.limit * 3).all()
+    results_raw = q.distinct().limit(request.limit * 3).all()
 
     scored_results = []
     for song, analysis in results_raw:
         score = 0.0
         match_reasons = []
 
-        if bpm_min or bpm_max:
-            if analysis.bpm:
-                if (not bpm_min or analysis.bpm >= bpm_min) and (not bpm_max or analysis.bpm <= bpm_max):
-                    score += 20
-                    match_reasons.append(f"BPM: {analysis.bpm}")
+        if analysis:
+            if bpm_min or bpm_max:
+                if analysis.bpm:
+                    if (not bpm_min or analysis.bpm >= bpm_min) and (not bpm_max or analysis.bpm <= bpm_max):
+                        score += 20
+                        match_reasons.append(f"BPM: {analysis.bpm}")
 
-        if key and analysis.musical_key and key.lower() in analysis.musical_key.lower():
-            score += 15
-            match_reasons.append(f"Key: {analysis.musical_key}")
+            if key and analysis.musical_key and key.lower() in analysis.musical_key.lower():
+                score += 15
+                match_reasons.append(f"Key: {analysis.musical_key}")
 
-        if vocal_present is not None and analysis.vocal_present == vocal_present:
-            score += 10
-            match_reasons.append(f"Vocals: {'Yes' if vocal_present else 'No'}")
+            if vocal_present is not None and analysis.vocal_present == vocal_present:
+                score += 10
+                match_reasons.append(f"Vocals: {'Yes' if vocal_present else 'No'}")
 
         asset_ids = [a.id for a in db.query(AudioAsset).filter(AudioAsset.song_id == song.id).all()]
         if asset_ids:
@@ -134,7 +144,6 @@ Respond ONLY with valid JSON."""
                 .all()
             )
             song_tag_names = {t.name.lower() for t in song_tags}
-            song_tag_types = {t.name.lower(): t.tag_type for t in song_tags}
 
             for mood in moods:
                 if mood.lower() in song_tag_names:
@@ -165,12 +174,12 @@ Respond ONLY with valid JSON."""
                 "song_id": song.id,
                 "title": song.title,
                 "primary_artist": song.primary_artist,
-                "bpm": analysis.bpm,
-                "musical_key": analysis.musical_key,
-                "energy_level": analysis.energy_level,
-                "vocal_present": analysis.vocal_present,
+                "bpm": analysis.bpm if analysis else None,
+                "musical_key": analysis.musical_key if analysis else None,
+                "energy_level": analysis.energy_level if analysis else None,
+                "vocal_present": analysis.vocal_present if analysis else None,
                 "score": score,
-                "match_reasons": match_reasons,
+                "match_reasons": match_reasons if match_reasons else (["Catalog match"] if not analysis else []),
             })
 
     scored_results.sort(key=lambda x: x["score"], reverse=True)

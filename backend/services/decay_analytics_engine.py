@@ -241,7 +241,7 @@ def get_portfolio_analytics(db: Session, org_id: int) -> dict:
     top_songs = db.query(
         RoyaltyStatementLine.matched_song_id,
         Song.title,
-        Song.artist,
+        Song.primary_artist,
         func.sum(RoyaltyStatementLine.net_amount).label("total_net"),
     ).join(
         Song, Song.id == RoyaltyStatementLine.matched_song_id
@@ -249,7 +249,7 @@ def get_portfolio_analytics(db: Session, org_id: int) -> dict:
         RoyaltyStatementLine.org_id == org_id,
         RoyaltyStatementLine.matched_song_id.isnot(None),
     ).group_by(
-        RoyaltyStatementLine.matched_song_id, Song.title, Song.artist
+        RoyaltyStatementLine.matched_song_id, Song.title, Song.primary_artist
     ).order_by(func.sum(RoyaltyStatementLine.net_amount).desc()).limit(10).all()
 
     return {
@@ -269,7 +269,7 @@ def get_portfolio_analytics(db: Session, org_id: int) -> dict:
             {
                 "song_id": s.matched_song_id,
                 "title": s.title,
-                "artist": s.artist,
+                "artist": s.primary_artist,
                 "net_total": round(float(s.total_net or 0), 2),
             }
             for s in top_songs
@@ -306,7 +306,7 @@ def get_song_analytics(db: Session, org_id: int, song_id: int) -> dict:
     ).limit(10).all()
 
     return {
-        "song": {"id": song.id, "title": song.title, "artist": song.artist},
+        "song": {"id": song.id, "title": song.title, "artist": song.primary_artist},
         "time_series": series,
         "decay": decay,
         "cagr": cagr,
