@@ -38,7 +38,7 @@ export default function Login({ onLogin }) {
             <img 
               src="/rythm-logo.png" 
               alt="Cadence - Catalog Intelligence" 
-              className="h-[148px] w-auto drop-shadow-md"
+              className="h-[170px] w-auto drop-shadow-md"
             />
           </div>
         </div>
