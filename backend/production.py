@@ -11,7 +11,7 @@ _real_app = None
 _loaded = threading.Event()
 
 DIST_DIR = Path(__file__).parent.parent / "frontend" / "dist"
-HEALTH_JSON = b'{"status":"healthy","service":"Rythm Catalog Intelligence"}'
+HEALTH_JSON = b'{"status":"healthy","service":"Cadence Catalog Intelligence"}'
 
 
 def _load():

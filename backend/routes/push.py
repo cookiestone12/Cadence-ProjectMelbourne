@@ -132,7 +132,7 @@ def send_push(
         "body": request.body,
         "url": request.url,
         "icon": request.icon,
-        "tag": request.tag or "rythm-notification",
+        "tag": request.tag or "cadence-notification",
     })
 
     sent = 0
@@ -190,7 +190,7 @@ def send_test_push(
     }
 
     payload = json.dumps({
-        "title": "Rythm Test",
+        "title": "Cadence Test",
         "body": "Push notifications are working!",
         "url": "/",
         "icon": "/favicon-192.png",

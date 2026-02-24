@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'rythm-v1';
+const CACHE_VERSION = 'cadence-v1';
 const STATIC_ASSETS = [
   '/',
   '/favicon.ico',

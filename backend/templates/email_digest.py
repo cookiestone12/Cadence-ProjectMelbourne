@@ -221,7 +221,7 @@ def generate_digest_html(user_name, grouped_items, summary_stats, platform_url="
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <title>Rythm - Action Items Digest</title>
+    <title>Cadence - Action Items Digest</title>
     <!--[if mso]>
     <style type="text/css">
         table {{border-collapse:collapse;border-spacing:0;margin:0;padding:0;}}
@@ -255,7 +255,7 @@ def generate_digest_html(user_name, grouped_items, summary_stats, platform_url="
                             <table cellpadding="0" cellspacing="0" border="0">
                                 <tr>
                                     <td align="center">
-                                        <img src="https://rythm-app.replit.app/rythm-logo.png" alt="Rythm Logo" style="height:50px;display:block;margin:0 auto;" />
+                                        <img src="https://rythm-app.replit.app/rythm-logo.png" alt="Cadence Logo" style="height:50px;display:block;margin:0 auto;" />
                                     </td>
                                 </tr>
                                 <tr>
@@ -301,12 +301,12 @@ def generate_digest_html(user_name, grouped_items, summary_stats, platform_url="
                             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #d4ddd8;">
                                 <tr>
                                     <td align="center" style="padding:20px 0 0 0;">
-                                        <img src="https://rythm-app.replit.app/rythm-logo.png" alt="Rythm Logo" style="height:30px;display:block;margin:0 auto;" />
+                                        <img src="https://rythm-app.replit.app/rythm-logo.png" alt="Cadence Logo" style="height:30px;display:block;margin:0 auto;" />
                                     </td>
                                 </tr>
                                 <tr>
                                     <td align="center" style="padding:12px 0 6px 0;font-size:12px;color:#7A8580;font-family:Arial,sans-serif;line-height:1.5;">
-                                        You received this because you have email digest enabled in Rythm settings.
+                                        You received this because you have email digest enabled in Cadence settings.
                                     </td>
                                 </tr>
                                 <tr>
@@ -316,7 +316,7 @@ def generate_digest_html(user_name, grouped_items, summary_stats, platform_url="
                                 </tr>
                                 <tr>
                                     <td align="center" style="padding:0 0 10px 0;font-size:11px;color:#a8b2ad;font-family:Arial,sans-serif;">
-                                        &copy; {datetime.utcnow().year} Rythm. All rights reserved.
+                                        &copy; {datetime.utcnow().year} Cadence. All rights reserved.
                                     </td>
                                 </tr>
                             </table>

@@ -418,7 +418,7 @@ export default function ActionItemsPage() {
       const link = document.createElement('a')
       link.href = url
       const creatorName = filterCreator ? creators.find(c => c.id === parseInt(filterCreator))?.display_name?.replace(/\s+/g, '-').toLowerCase() : null
-      link.download = creatorName ? `rythm-action-items-${creatorName}.html` : 'rythm-action-items.html'
+      link.download = creatorName ? `cadence-action-items-${creatorName}.html` : 'cadence-action-items.html'
       document.body.appendChild(link)
       link.click()
       link.remove()

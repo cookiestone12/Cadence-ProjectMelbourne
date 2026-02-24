@@ -1,6 +1,6 @@
 {
-  "name": "Rythm — Catalog Intelligence",
-  "short_name": "Rythm",
+  "name": "Cadence — Catalog Intelligence",
+  "short_name": "Cadence",
   "description": "Multi-tenant catalog intelligence platform for music labels, publishers, and creators",
   "start_url": "/",
   "display": "standalone",

@@ -1,7 +1,7 @@
-# Rythm - Catalog Intelligence - Multi-Tenant Rights & Catalog Administration
+# Cadence - Catalog Intelligence - Multi-Tenant Rights & Catalog Administration
 
 ## Overview
-Rythm is a multi-tenant platform designed for music labels, publishers, production companies, and creators to efficiently manage music catalogs and rights. It provides a comprehensive suite of tools for catalog valuation, rights administration, creator management, and placement tracking. The platform aims to offer actionable insights into catalog performance and value, leveraging an intuitive, Apple Music-inspired user interface.
+Cadence is a multi-tenant platform designed for music labels, publishers, production companies, and creators to efficiently manage music catalogs and rights. It provides a comprehensive suite of tools for catalog valuation, rights administration, creator management, and placement tracking. The platform aims to offer actionable insights into catalog performance and value, leveraging an intuitive, Apple Music-inspired user interface.
 
 ## User Preferences
 ### Coding Style

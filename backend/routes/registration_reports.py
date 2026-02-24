@@ -580,7 +580,7 @@ def send_registration_report_email(
             </p>
             <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #E5E7EB;">
                 <p style="color: #7A8580; font-size: 12px; margin: 0;">
-                    Sent via Rythm — Catalog Intelligence
+                    Sent via Cadence — Catalog Intelligence
                 </p>
             </div>
         </div>
@@ -722,7 +722,7 @@ def _generate_pdf(items, asset_type, org_name):
     elements.append(HRFlowable(width="100%", thickness=1, color=sage))
     elements.append(Spacer(1, 6))
     footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#7A8580'), alignment=1)
-    elements.append(Paragraph("Rythm — Catalog Intelligence | Confidential", footer_style))
+    elements.append(Paragraph("Cadence — Catalog Intelligence | Confidential", footer_style))
 
     doc.build(elements)
     buffer.seek(0)

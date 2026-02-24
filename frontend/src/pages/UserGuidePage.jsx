@@ -88,7 +88,7 @@ function ButtonRef({ label, color }) {
   )
 }
 
-const GUIDE_PASSWORD = 'Rythm1225!'
+const GUIDE_PASSWORD = 'Cadence1225!'
 
 export default function UserGuidePage() {
   const contentRef = useRef(null)
@@ -166,8 +166,8 @@ export default function UserGuidePage() {
 
       <div ref={contentRef} className="max-w-4xl mx-auto px-6 py-8 print:max-w-none print:px-12 print:py-8">
         <div className="text-center mb-12 print:mb-16">
-          <img src="/rythm-logo.png" alt="Rythm" className="h-24 w-auto mx-auto mb-6" />
-          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Rythm</h1>
+          <img src="/rythm-logo.png" alt="Cadence" className="h-24 w-auto mx-auto mb-6" />
+          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Cadence</h1>
           <p className="text-xl text-[#5B8A72] font-medium mb-1">Catalog Intelligence</p>
           <p className="text-lg text-[#7A8580]">User Guide & Reference Manual</p>
           <div className="mt-4 text-sm text-[#7A8580]">
@@ -208,7 +208,7 @@ export default function UserGuidePage() {
 
         <SubHeading>Understanding Your Organization</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          Rythm is a multi-tenant platform. All your data — songs, creators, contracts, and more — is scoped to your organization. Each user belongs to an organization, and all content you create is visible only to members of that organization.
+          Cadence is a multi-tenant platform. All your data — songs, creators, contracts, and more — is scoped to your organization. Each user belongs to an organization, and all content you create is visible only to members of that organization.
         </p>
 
         <SubHeading>User Roles</SubHeading>
@@ -416,7 +416,7 @@ export default function UserGuidePage() {
           Once splits are defined for a song, a <strong>Split Sheet PDF</strong> button appears in the Rights & Splits tab. Click it to download a branded PDF document containing all ownership information, ready for signing. The PDF includes:
         </p>
         <ul className="list-disc pl-5 text-[#7A8580] space-y-1 mb-3">
-          <li>Rythm branding and contract metadata</li>
+          <li>Cadence branding and contract metadata</li>
           <li>Complete split breakdown by rights type with percentage totals</li>
           <li>Rights holder details (PRO affiliation, IPI number, publisher)</li>
           <li>Signature blocks for all parties</li>
@@ -953,7 +953,7 @@ export default function UserGuidePage() {
         {/* ===== 17. CLOUD STORAGE INTEGRATION ===== */}
         <SectionHeading id="cloud-storage">17. Cloud Storage Integration</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          Rythm integrates with Dropbox and Google Drive to link audio files to your catalog without hosting files locally. This enables AI audio analysis and file management directly from your existing cloud storage.
+          Cadence integrates with Dropbox and Google Drive to link audio files to your catalog without hosting files locally. This enables AI audio analysis and file management directly from your existing cloud storage.
         </p>
 
         <SubHeading>Connecting Dropbox</SubHeading>
@@ -1145,7 +1145,7 @@ export default function UserGuidePage() {
 
         <SubHeading>Push Notifications</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          Rythm supports push notifications so you can receive instant alerts on your device, even when the app isn't open. Push notifications appear as native system notifications on desktop and mobile.
+          Cadence supports push notifications so you can receive instant alerts on your device, even when the app isn't open. Push notifications appear as native system notifications on desktop and mobile.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
           <FeatureCard title="Enable/Disable" description="Toggle push notifications on or off per device using the switch in the Notifications tab of Settings." />
@@ -1157,16 +1157,16 @@ export default function UserGuidePage() {
 
         <SubHeading>Install App</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          Rythm works as a Progressive Web App (PWA), meaning you can install it directly to your home screen or desktop for a native app-like experience. When installed, Rythm launches in its own window without browser chrome and supports offline access for previously loaded pages.
+          Cadence works as a Progressive Web App (PWA), meaning you can install it directly to your home screen or desktop for a native app-like experience. When installed, Cadence launches in its own window without browser chrome and supports offline access for previously loaded pages.
         </p>
         <StepList steps={[
           'Go to Settings > Notifications.',
           'If your browser supports installation, you\'ll see an "Install App" card with an Install button.',
-          'Click Install and follow the browser prompt to add Rythm to your device.',
+          'Click Install and follow the browser prompt to add Cadence to your device.',
           'Once installed, the card will show a green "Installed" badge.',
-          'You can also install from your browser\'s menu (e.g., Chrome: "Install Rythm..." in the address bar or three-dot menu).',
+          'You can also install from your browser\'s menu (e.g., Chrome: "Install Cadence..." in the address bar or three-dot menu).',
         ]} />
-        <Tip>Installing Rythm as an app gives you faster access, a dedicated window, and offline support for previously cached pages. It works on Chrome, Edge, Safari (iOS), and most Chromium-based browsers.</Tip>
+        <Tip>Installing Cadence as an app gives you faster access, a dedicated window, and offline support for previously cached pages. It works on Chrome, Edge, Safari (iOS), and most Chromium-based browsers.</Tip>
 
         <SubHeading>Organization Admin Panel</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
@@ -1288,7 +1288,7 @@ export default function UserGuidePage() {
 
         <div className="mt-16 pt-8 border-t border-[rgba(59,77,67,0.1)] text-center text-sm text-[#7A8580] print:mt-12">
           <img src="/logo-small.png" alt="Logo" className="h-8 w-auto mx-auto mb-3 opacity-60" />
-          <p className="font-medium text-[#3D4A44]">Rythm — Catalog Intelligence</p>
+          <p className="font-medium text-[#3D4A44]">Cadence — Catalog Intelligence</p>
           <p>Version {VERSION} &middot; {LAST_UPDATED}</p>
           <p className="mt-2">For support, contact your organization administrator.</p>
         </div>

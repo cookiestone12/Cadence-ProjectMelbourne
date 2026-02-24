@@ -902,8 +902,8 @@ export default function Settings() {
                       <h3 className="text-[18px] font-medium text-[#3D4A44]">Install App</h3>
                       <p className="text-[14px] text-[#7A8580] mt-0.5">
                         {isInstalled
-                          ? 'Rythm is installed on this device'
-                          : 'Add Rythm to your home screen for quick access'
+                          ? 'Cadence is installed on this device'
+                          : 'Add Cadence to your home screen for quick access'
                         }
                       </p>
                     </div>

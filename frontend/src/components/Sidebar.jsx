@@ -101,12 +101,12 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
               {orgBranding?.logo_url ? (
                 <img 
                   src={orgBranding.logo_url} 
-                  alt={orgBranding.display_name || orgBranding.name || 'Rythm'} 
+                  alt={orgBranding.display_name || orgBranding.name || 'Cadence'} 
                   className="h-10 max-w-[140px] object-contain"
                 />
               ) : (
                 <span className="text-lg font-bold text-[#3D4A44]">
-                  {orgBranding?.display_name || orgBranding?.name || 'Rythm'}
+                  {orgBranding?.display_name || orgBranding?.name || 'Cadence'}
                 </span>
               )}
             </div>

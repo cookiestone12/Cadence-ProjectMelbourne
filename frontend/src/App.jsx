@@ -189,7 +189,7 @@ function App() {
           </Routes>
           </ErrorBoundary>
           <div className="flex items-center justify-center py-6 opacity-30">
-            <img src="/rythm-logo.png" alt="Powered by Rythm" className="h-6 w-auto object-contain" />
+            <img src="/rythm-logo.png" alt="Powered by Cadence" className="h-6 w-auto object-contain" />
           </div>
         </main>
       </div>

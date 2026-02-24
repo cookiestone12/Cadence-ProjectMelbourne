@@ -37,7 +37,7 @@ export default function Login({ onLogin }) {
           <div className="flex justify-center">
             <img 
               src="/rythm-logo.png" 
-              alt="Rythm - Catalog Intelligence" 
+              alt="Cadence - Catalog Intelligence" 
               className="h-28 w-auto drop-shadow-md"
             />
           </div>

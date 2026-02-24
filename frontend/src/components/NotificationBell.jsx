@@ -16,7 +16,7 @@ function sendDesktopNotification(title, body, onClick) {
         body: body || '',
         icon: '/favicon-192.png',
         badge: '/favicon-192.png',
-        tag: 'rythm-notification-' + Date.now(),
+        tag: 'cadence-notification-' + Date.now(),
         requireInteraction: false,
       })
       if (onClick) {
@@ -55,14 +55,14 @@ export default function NotificationBell() {
           if (newNotifs.length > 0) {
             const latest = newNotifs[0]
             sendDesktopNotification(
-              latest.title || 'Rythm — New Notification',
+              latest.title || 'Cadence — New Notification',
               latest.message || `You have ${newCount - prevCount} new notification${(newCount - prevCount) > 1 ? 's' : ''}`,
               () => window.location.href = '/actions'
             )
           }
         } catch {
           sendDesktopNotification(
-            'Rythm — New Notification',
+            'Cadence — New Notification',
             `You have ${newCount - prevCount} new notification${(newCount - prevCount) > 1 ? 's' : ''}`,
             () => window.location.href = '/actions'
           )

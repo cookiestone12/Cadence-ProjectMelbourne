@@ -22,7 +22,7 @@ from pathlib import Path
 if not os.getenv("SESSION_SECRET"):
     raise RuntimeError("SESSION_SECRET environment variable must be set for production use")
 
-app = FastAPI(title="Rythm Catalog Intelligence API")
+app = FastAPI(title="Cadence Catalog Intelligence API")
 
 
 @app.on_event("startup")
@@ -93,11 +93,11 @@ async def serve_root():
     index_file = frontend_dist / "index.html"
     if index_file.exists():
         return FileResponse(index_file, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
-    return JSONResponse({"status": "healthy", "service": "Rythm Catalog Intelligence"})
+    return JSONResponse({"status": "healthy", "service": "Cadence Catalog Intelligence"})
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "healthy", "service": "Rythm Catalog Intelligence"}
+    return {"status": "healthy", "service": "Cadence Catalog Intelligence"}
 
 app.include_router(auth.router)
 app.include_router(catalog.router)
