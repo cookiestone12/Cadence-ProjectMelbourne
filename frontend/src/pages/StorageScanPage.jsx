@@ -66,7 +66,7 @@ export default function StorageScanPage() {
   const [providers, setProviders] = useState([])
   const [showLinkModal, setShowLinkModal] = useState(false)
   const [editingLink, setEditingLink] = useState(null)
-  const [linkForm, setLinkForm] = useState({ creator_id: '', provider: 'DROPBOX', folder_path: '', recursive: true })
+  const [linkForm, setLinkForm] = useState({ creator_id: '', provider: 'DROPBOX', folder_path: '', scan_recursive: true })
   const [linkSaving, setLinkSaving] = useState(false)
   const [folderPickerOpen, setFolderPickerOpen] = useState(false)
   const [scanningId, setScanningId] = useState(null)
@@ -150,16 +150,22 @@ export default function StorageScanPage() {
     if (!orgId || !linkForm.creator_id || !linkForm.folder_path) return
     setLinkSaving(true)
     try {
+      const payload = {
+        creator_id: parseInt(linkForm.creator_id),
+        provider: linkForm.provider,
+        folder_path: linkForm.folder_path,
+        scan_recursive: linkForm.scan_recursive,
+      }
       if (editingLink) {
-        await axios.put(`/api/storage-scan/org/${orgId}/links/${editingLink.id}`, linkForm, getAuthHeaders())
+        await axios.put(`/api/storage-scan/org/${orgId}/links/${editingLink.id}`, payload, getAuthHeaders())
         showToast('Link updated')
       } else {
-        await axios.post(`/api/storage-scan/org/${orgId}/links`, linkForm, getAuthHeaders())
+        await axios.post(`/api/storage-scan/org/${orgId}/links`, payload, getAuthHeaders())
         showToast('Link created')
       }
       setShowLinkModal(false)
       setEditingLink(null)
-      setLinkForm({ creator_id: '', provider: 'DROPBOX', folder_path: '', recursive: true })
+      setLinkForm({ creator_id: '', provider: 'DROPBOX', folder_path: '', scan_recursive: true })
       loadLinks()
     } catch (err) {
       showToast(err.response?.data?.detail || 'Failed to save link', 'error')
@@ -284,14 +290,14 @@ export default function StorageScanPage() {
       creator_id: link.creator_id || '',
       provider: link.provider || 'DROPBOX',
       folder_path: link.folder_path || '',
-      recursive: link.recursive !== false
+      scan_recursive: link.scan_recursive !== false
     })
     setShowLinkModal(true)
   }
 
   const openAddLink = () => {
     setEditingLink(null)
-    setLinkForm({ creator_id: '', provider: 'DROPBOX', folder_path: '', recursive: true })
+    setLinkForm({ creator_id: '', provider: 'DROPBOX', folder_path: '', scan_recursive: true })
     setShowLinkModal(true)
   }
 
@@ -395,7 +401,7 @@ export default function StorageScanPage() {
                               <span className="text-[13px] text-[#7A8580]">
                                 Scanned: {formatDate(link.last_scanned_at)}
                               </span>
-                              {link.recursive && (
+                              {link.scan_recursive && (
                                 <span className="text-[13px] text-[#7A8580]">Recursive</span>
                               )}
                             </div>
@@ -714,8 +720,8 @@ export default function StorageScanPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={linkForm.recursive}
-                  onChange={(e) => setLinkForm(prev => ({ ...prev, recursive: e.target.checked }))}
+                  checked={linkForm.scan_recursive}
+                  onChange={(e) => setLinkForm(prev => ({ ...prev, scan_recursive: e.target.checked }))}
                   className="w-4 h-4 rounded border-[rgba(59,77,67,0.2)] text-[#5B8A72] focus:ring-[#5B8A72]"
                 />
                 <span className="text-sm text-[#3D4A44]">Scan subfolders recursively</span>
