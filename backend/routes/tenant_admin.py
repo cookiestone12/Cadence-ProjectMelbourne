@@ -481,6 +481,62 @@ async def upload_org_logo(
     }
 
 
+class InviteUserRequest(BaseModel):
+    email: str
+    name: Optional[str] = None
+    role: str = "MEMBER"
+    subject: Optional[str] = None
+    message: Optional[str] = None
+
+
+@router.post("/org/{org_id}/invite")
+def invite_user(
+    org_id: int,
+    request: InviteUserRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id,
+    ).first()
+    if not membership and not current_user.is_super_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+    if membership and membership.role not in ("OWNER", "ADMIN") and not current_user.is_super_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    from ..templates.email_templates import app_invite
+    from ..services.email_provider import get_email_provider
+
+    inviter_name = getattr(current_user, 'full_name', None) or current_user.username
+    recipient_name = request.name or request.email.split("@")[0]
+
+    html_body = app_invite(
+        recipient_name=recipient_name,
+        recipient_email=request.email,
+        org_name=org.display_name or org.name,
+        inviter_name=inviter_name,
+        role=request.role,
+    )
+
+    email_subject = request.subject or f"Invitation to join {org.display_name or org.name} on Cadence"
+    provider = get_email_provider()
+    success = provider.send_email(
+        to=request.email,
+        subject=email_subject,
+        html_body=html_body,
+    )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send invitation email")
+
+    return {"success": True, "message": f"Invitation sent to {request.email}"}
+
+
 @router.get("/creators")
 def list_org_creators(
     db: Session = Depends(get_db),

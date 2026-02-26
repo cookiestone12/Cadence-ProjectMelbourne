@@ -17,8 +17,10 @@ import {
   EyeSlashIcon,
   ClipboardDocumentListIcon,
   ShareIcon,
+  EnvelopeIcon,
 } from '@heroicons/react/24/outline'
 import ClientSharingTab from '../components/ClientSharingModal'
+import EmailSendModal from '../components/EmailSendModal'
 
 export default function TenantAdminPage() {
   const [activeTab, setActiveTab] = useState('members')
@@ -33,6 +35,10 @@ export default function TenantAdminPage() {
   const [editingMember, setEditingMember] = useState(null)
   const [resetPasswordUser, setResetPasswordUser] = useState(null)
   const [assignCreatorsUser, setAssignCreatorsUser] = useState(null)
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [inviteSending, setInviteSending] = useState(false)
+  const [inviteResult, setInviteResult] = useState(null)
+  const [orgId, setOrgId] = useState(null)
 
   const showMsg = (text, isError = false) => {
     if (isError) setError(text)
@@ -49,6 +55,11 @@ export default function TenantAdminPage() {
       ])
       setMembers(membersRes.data)
       setBranding(brandingRes.data)
+
+      try {
+        const orgRes = await axios.get('/api/organizations/current')
+        if (orgRes.data?.id) setOrgId(orgRes.data.id)
+      } catch {}
 
       try {
         const creatorsRes = await axios.get('/api/tenant-admin/creators')
@@ -70,6 +81,24 @@ export default function TenantAdminPage() {
       showMsg(value ? 'Roster access granted' : 'Roster access revoked')
     } catch (err) {
       showMsg(err.response?.data?.detail || 'Failed to update permissions', true)
+    }
+  }
+
+  const handleInviteUser = async ({ to, subject, message }) => {
+    if (!orgId) return
+    setInviteSending(true)
+    setInviteResult(null)
+    try {
+      await axios.post(`/api/tenant-admin/org/${orgId}/invite`, {
+        email: to,
+        subject,
+        message
+      })
+      setInviteResult({ success: true, message: 'Invitation sent successfully!' })
+    } catch (err) {
+      setInviteResult({ success: false, message: err.response?.data?.detail || 'Failed to send invitation' })
+    } finally {
+      setInviteSending(false)
     }
   }
 
@@ -143,6 +172,7 @@ export default function TenantAdminPage() {
           onResetPassword={setResetPasswordUser}
           onAssignCreators={setAssignCreatorsUser}
           onToggleRoster={handleToggleRoster}
+          onInvite={() => { setShowInviteModal(true); setInviteResult(null) }}
         />
       )}
 
@@ -178,11 +208,23 @@ export default function TenantAdminPage() {
           onSave={() => { setAssignCreatorsUser(null); fetchData(); showMsg('Client assignments updated') }}
         />
       )}
+
+      <EmailSendModal
+        isOpen={showInviteModal}
+        onClose={() => { setShowInviteModal(false); setInviteResult(null) }}
+        onSend={handleInviteUser}
+        title="Invite User"
+        subtitle="Send a welcome email invitation to join your organization"
+        defaultSubject="You're invited to join our organization"
+        defaultMessage="You've been invited to join our team. Click the link in this email to set up your account and get started."
+        sending={inviteSending}
+        result={inviteResult}
+      />
     </div>
   )
 }
 
-function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPassword, onAssignCreators, onToggleRoster }) {
+function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPassword, onAssignCreators, onToggleRoster, onInvite }) {
   const roleColors = {
     OWNER: 'bg-purple-100 text-purple-700',
     ADMIN: 'bg-blue-100 text-blue-700',
@@ -193,10 +235,16 @@ function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPasswor
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-semibold text-[#3D4A44]">Team Members ({members.length})</h2>
-        <button onClick={onAdd} className="flex items-center gap-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] text-sm font-medium">
-          <PlusIcon className="w-4 h-4" />
-          Add Member
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={onInvite} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#5B8A72] text-[#5B8A72] rounded-lg hover:bg-[#5B8A72]/5 text-sm font-medium">
+            <EnvelopeIcon className="w-4 h-4" />
+            Invite User
+          </button>
+          <button onClick={onAdd} className="flex items-center gap-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] text-sm font-medium">
+            <PlusIcon className="w-4 h-4" />
+            Add Member
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm overflow-x-auto">

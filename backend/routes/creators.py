@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from typing import List, Optional
-from ..models import get_db, Creator, CreativeContact, Organization, OrganizationMember, User, Song, SongCredit, WorkCredit
+from ..models import get_db, Creator, CreativeContact, CreatorContact, Organization, OrganizationMember, User, Song, SongCredit, WorkCredit
 from ..utils.auth import get_current_user
 import os
 import uuid
@@ -803,3 +803,196 @@ def _build_roster_pdf(creators, org_name, request):
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+class CreatorContactCreate(BaseModel):
+    contact_id: int
+    role: str = "OTHER"
+    is_primary: bool = False
+    notes: Optional[str] = None
+
+class CreatorContactResponse(BaseModel):
+    id: int
+    creator_id: int
+    contact_id: int
+    role: str
+    is_primary: bool
+    notes: Optional[str]
+    contact_name: Optional[str] = None
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_roles: Optional[list] = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/{creator_id}/contacts")
+async def get_creator_contacts(
+    creator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    if not current_user.is_super_admin:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == creator.organization_id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+    contacts = db.query(CreatorContact).filter(
+        CreatorContact.creator_id == creator_id
+    ).all()
+
+    result = []
+    for cc in contacts:
+        contact = db.query(CreativeContact).filter(CreativeContact.id == cc.contact_id).first()
+        result.append({
+            "id": cc.id,
+            "creator_id": cc.creator_id,
+            "contact_id": cc.contact_id,
+            "role": cc.role,
+            "is_primary": cc.is_primary,
+            "notes": cc.notes,
+            "contact_name": contact.display_name if contact else None,
+            "contact_email": contact.email if contact else None,
+            "contact_phone": contact.phone if contact else None,
+            "contact_roles": contact.roles if contact else None,
+        })
+    return result
+
+
+@router.post("/{creator_id}/contacts")
+async def add_creator_contact(
+    creator_id: int,
+    data: CreatorContactCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    if not current_user.is_super_admin:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == creator.organization_id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+    contact = db.query(CreativeContact).filter(CreativeContact.id == data.contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+
+    existing = db.query(CreatorContact).filter(
+        CreatorContact.creator_id == creator_id,
+        CreatorContact.contact_id == data.contact_id,
+        CreatorContact.role == data.role,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="This contact is already assigned with this role")
+
+    if data.is_primary:
+        db.query(CreatorContact).filter(
+            CreatorContact.creator_id == creator_id,
+            CreatorContact.role == data.role,
+            CreatorContact.is_primary == True,
+        ).update({"is_primary": False})
+
+    cc = CreatorContact(
+        creator_id=creator_id,
+        contact_id=data.contact_id,
+        role=data.role,
+        is_primary=data.is_primary,
+        notes=data.notes,
+    )
+    db.add(cc)
+    db.commit()
+    db.refresh(cc)
+
+    return {
+        "id": cc.id,
+        "creator_id": cc.creator_id,
+        "contact_id": cc.contact_id,
+        "role": cc.role,
+        "is_primary": cc.is_primary,
+        "notes": cc.notes,
+        "contact_name": contact.display_name,
+        "contact_email": contact.email,
+        "contact_phone": contact.phone,
+        "contact_roles": contact.roles,
+    }
+
+
+@router.delete("/{creator_id}/contacts/{contact_link_id}")
+async def remove_creator_contact(
+    creator_id: int,
+    contact_link_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    if not current_user.is_super_admin:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == creator.organization_id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+    cc = db.query(CreatorContact).filter(
+        CreatorContact.id == contact_link_id,
+        CreatorContact.creator_id == creator_id,
+    ).first()
+    if not cc:
+        raise HTTPException(status_code=404, detail="Contact assignment not found")
+
+    db.delete(cc)
+    db.commit()
+    return {"detail": "Contact removed"}
+
+
+@router.get("/{creator_id}/contacts/by-role/{role}")
+async def get_creator_contact_by_role(
+    creator_id: int,
+    role: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found")
+    if not current_user.is_super_admin:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == creator.organization_id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+    contacts = db.query(CreatorContact).filter(
+        CreatorContact.creator_id == creator_id,
+        CreatorContact.role == role.upper(),
+    ).all()
+
+    result = []
+    for cc in contacts:
+        contact = db.query(CreativeContact).filter(CreativeContact.id == cc.contact_id).first()
+        result.append({
+            "id": cc.id,
+            "creator_id": cc.creator_id,
+            "contact_id": cc.contact_id,
+            "role": cc.role,
+            "is_primary": cc.is_primary,
+            "notes": cc.notes,
+            "contact_name": contact.display_name if contact else None,
+            "contact_email": contact.email if contact else None,
+            "contact_phone": contact.phone if contact else None,
+        })
+    return result

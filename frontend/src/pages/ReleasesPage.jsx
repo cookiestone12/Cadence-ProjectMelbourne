@@ -8,8 +8,9 @@ import {
   ShieldCheckIcon, ClipboardDocumentCheckIcon, PhotoIcon,
   InformationCircleIcon, CheckIcon, LinkIcon, DocumentTextIcon,
   SpeakerWaveIcon, FolderIcon, FolderOpenIcon, ArrowRightIcon,
-  SignalIcon, BoltIcon
+  SignalIcon, BoltIcon, EnvelopeIcon, PaperAirplaneIcon
 } from '@heroicons/react/24/outline'
+import EmailSendModal from '../components/EmailSendModal'
 
 const READINESS_TOOLTIPS = {
   'UPC/EAN code': 'A Universal Product Code is required by all digital stores and streaming platforms to identify your release.',
@@ -85,6 +86,9 @@ export default function ReleasesPage() {
   const [dropboxConnected, setDropboxConnected] = useState(false)
   const [bulkMatches, setBulkMatches] = useState({})
   const [bulkAnalyzing, setBulkAnalyzing] = useState(false)
+  const [showDistributionModal, setShowDistributionModal] = useState(false)
+  const [distributionSending, setDistributionSending] = useState(false)
+  const [distributionResult, setDistributionResult] = useState(null)
   const [createForm, setCreateForm] = useState({
     title: '',
     release_type: 'SINGLE',
@@ -493,6 +497,24 @@ export default function ReleasesPage() {
     }
   }
 
+  async function handleSendToDistribution({ to, subject, message }) {
+    if (!selectedRelease) return
+    setDistributionSending(true)
+    setDistributionResult(null)
+    try {
+      await axios.post(`/api/releases/${selectedRelease}/send-to-distribution`, {
+        recipient_email: to,
+        subject,
+        message
+      })
+      setDistributionResult({ success: true, message: 'Release sent to distribution successfully!' })
+    } catch (error) {
+      setDistributionResult({ success: false, message: error.response?.data?.detail || 'Failed to send to distribution' })
+    } finally {
+      setDistributionSending(false)
+    }
+  }
+
   async function handleBulkAnalyze(releaseId) {
     setBulkAnalyzing(true)
     try {
@@ -611,6 +633,13 @@ export default function ReleasesPage() {
             </div>
           </div>
           <div className="flex items-center space-x-3">
+            <button
+              onClick={() => { setShowDistributionModal(true); setDistributionResult(null) }}
+              className="flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7862] transition-colors"
+            >
+              <PaperAirplaneIcon className="w-5 h-5" />
+              <span>Send to Distribution</span>
+            </button>
             <button
               onClick={() => setEditMode(!editMode)}
               className="flex items-center space-x-2 px-4 py-2 bg-[#EEF1EC] text-[#3D4A44] rounded-lg hover:bg-[#E4E8E2] transition-colors"
@@ -1902,6 +1931,18 @@ export default function ReleasesPage() {
           </div>
         </div>
       )}
+
+      <EmailSendModal
+        isOpen={showDistributionModal}
+        onClose={() => { setShowDistributionModal(false); setDistributionResult(null) }}
+        onSend={handleSendToDistribution}
+        title="Send to Distribution"
+        subtitle={detailData ? `Send "${detailData.title}" to your distributor` : ''}
+        defaultSubject={detailData ? `Release for Distribution: ${detailData.title}` : ''}
+        defaultMessage={detailData ? `Please distribute the following release:\n\nTitle: ${detailData.title}\nArtist: ${detailData.primary_artist || 'N/A'}\nType: ${detailData.release_type || 'N/A'}\nUPC: ${detailData.upc || 'N/A'}\nRelease Date: ${detailData.release_date || 'TBD'}` : ''}
+        sending={distributionSending}
+        result={distributionResult}
+      />
     </div>
   )
 }

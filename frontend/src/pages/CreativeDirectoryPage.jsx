@@ -3,8 +3,9 @@ import { Link } from 'react-router-dom'
 import axios from 'axios'
 import {
   UserGroupIcon, PlusIcon, MagnifyingGlassIcon, XMarkIcon,
-  PencilIcon, TrashIcon, ArrowDownTrayIcon, ArrowPathIcon, LinkIcon
+  PencilIcon, TrashIcon, ArrowDownTrayIcon, ArrowPathIcon, LinkIcon, EnvelopeIcon
 } from '@heroicons/react/24/outline'
+import EmailSendModal from '../components/EmailSendModal'
 
 const PRO_OPTIONS = ['BMI', 'ASCAP', 'SESAC', 'SOCAN', 'PRS', 'GEMA', 'SACEM', 'SIAE', 'JASRAC', 'Other']
 const ROLE_OPTIONS = ['Songwriter', 'Producer', 'Artist', 'Musician', 'Engineer', 'Featured Artist', 'Composer', 'Lyricist', 'Arranger']
@@ -193,6 +194,9 @@ export default function CreativeDirectoryPage() {
   const [editingContact, setEditingContact] = useState(null)
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [shareModalContact, setShareModalContact] = useState(null)
+  const [shareSending, setShareSending] = useState(false)
+  const [shareResult, setShareResult] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -276,6 +280,24 @@ export default function CreativeDirectoryPage() {
       alert(error.response?.data?.detail || 'Failed to sync from roster')
     } finally {
       setSyncing(false)
+    }
+  }
+
+  async function handleShareCard({ to, subject, message }) {
+    if (!shareModalContact) return
+    setShareSending(true)
+    setShareResult(null)
+    try {
+      await axios.post(`/api/creative-directory/${shareModalContact.id}/share`, {
+        recipient_email: to,
+        subject,
+        message
+      })
+      setShareResult({ success: true, message: 'Contact card shared successfully!' })
+    } catch (err) {
+      setShareResult({ success: false, message: err.response?.data?.detail || 'Failed to share contact card' })
+    } finally {
+      setShareSending(false)
     }
   }
 
@@ -428,6 +450,13 @@ export default function CreativeDirectoryPage() {
                   Delete
                 </button>
                 <button
+                  onClick={() => { setShareModalContact(contact); setShareResult(null) }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#5B8A72] hover:bg-[#5B8A72]/10 rounded-lg transition-colors"
+                >
+                  <EnvelopeIcon className="w-3.5 h-3.5" />
+                  Share Card
+                </button>
+                <button
                   onClick={async () => {
                     try {
                       const res = await axios.get(`/api/creative-directory/${contact.id}/pdf`, { responseType: 'blob' })
@@ -454,6 +483,18 @@ export default function CreativeDirectoryPage() {
           ))}
         </div>
       )}
+
+      <EmailSendModal
+        isOpen={!!shareModalContact}
+        onClose={() => { setShareModalContact(null); setShareResult(null) }}
+        onSend={handleShareCard}
+        title="Share Contact Card"
+        subtitle={shareModalContact ? `Share ${shareModalContact.display_name}'s creative card` : ''}
+        defaultSubject={shareModalContact ? `Creative Card: ${shareModalContact.display_name}` : ''}
+        defaultMessage={shareModalContact ? `Here is the creative contact card for ${shareModalContact.display_name}.` : ''}
+        sending={shareSending}
+        result={shareResult}
+      />
 
       <ContactFormModal
         isOpen={showAddModal}

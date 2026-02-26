@@ -306,6 +306,74 @@ def sync_creators(
     }
 
 
+class ShareContactRequest(BaseModel):
+    recipient_email: str
+    recipient_name: Optional[str] = None
+    message: Optional[str] = None
+    subject: Optional[str] = None
+    include_pdf: Optional[bool] = True
+
+
+@router.post("/{contact_id}/share")
+def share_contact_card(
+    contact_id: int,
+    data: ShareContactRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    contact = db.query(CreativeContact).filter(CreativeContact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Creative contact not found")
+    verify_org_access(current_user, contact.organization_id, db)
+
+    from ..templates.email_templates import share_contact_card as share_template
+    from ..services.email_provider import get_email_provider
+
+    sender_name = getattr(current_user, 'full_name', None) or current_user.username
+    roles_str = ", ".join(contact.roles) if contact.roles else ""
+
+    html_body = share_template(
+        sender_name=sender_name,
+        contact_name=contact.display_name,
+        contact_role=roles_str,
+        contact_email=contact.email or "",
+        contact_phone=contact.phone or "",
+        contact_company=contact.publisher_name or "",
+        message=data.message or "",
+    )
+
+    attachments = []
+    if data.include_pdf:
+        try:
+            org = db.query(Organization).filter(Organization.id == contact.organization_id).first()
+            org_name = org.display_name or org.name if org else "Cadence"
+            pdf_response = download_creative_card_pdf(contact_id, db, current_user)
+            if hasattr(pdf_response, 'body'):
+                import base64
+                pdf_b64 = base64.b64encode(pdf_response.body).decode('utf-8')
+                safe_name = contact.display_name.replace(" ", "_").replace("/", "-")
+                attachments.append({
+                    "filename": f"Creative_Card_{safe_name}.pdf",
+                    "content": pdf_b64,
+                })
+        except Exception:
+            pass
+
+    email_subject = data.subject or f"Contact Shared: {contact.display_name}"
+    provider = get_email_provider()
+    success = provider.send_email(
+        to=data.recipient_email,
+        subject=email_subject,
+        html_body=html_body,
+        attachments=attachments if attachments else None,
+    )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send email")
+
+    return {"success": True, "message": f"Contact card shared with {data.recipient_email}"}
+
+
 @router.get("/{contact_id}/pdf")
 def download_creative_card_pdf(
     contact_id: int,

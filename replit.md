@@ -11,7 +11,7 @@ Cadence is a multi-tenant platform designed for music labels, publishers, produc
 - Imports: Absolute imports for backend modules
 
 ## System Architecture
-Rythm is built on a modern web stack: React 18 with Tailwind CSS for the frontend, and FastAPI with SQLAlchemy and PostgreSQL for the backend.
+Cadence is built on a modern web stack: React 18 with Tailwind CSS for the frontend, and FastAPI with SQLAlchemy and PostgreSQL for the backend.
 
 ### UI/UX Decisions
 The frontend employs an Apple Music-style aesthetic, featuring a collapsible sidebar, gradient headers, rounded cards, and smooth transitions, all designed for mobile responsiveness. The color palette is a sage-green theme. Key dashboards include a Creator Roster, detailed Creator Profiles, a spreadsheet-style Catalog View with advanced filtering, a Placement Tracking Timeline, comprehensive Reports with Recharts visualizations, and a Catalog Valuation dashboard offering financial insights and branded Excel report downloads.
@@ -25,7 +25,7 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Catalog Valuation Tool**: Uses a weighted average of Streaming Multiple, Revenue Multiple, Market Comparables, and a Black Box Algorithm.
 - **API Security**: Enforces JWT authentication, user-organization membership validation, and organization-scoped queries.
 - **AI-Powered CSV Import**: Utilizes OpenAI for intelligent column mapping during bulk song import. Also supports PDF and Word (.docx) Schedule A document parsing, extracting creator info (name, PRO IPI#, ID#), song entries with artist/title/percentage, and Schedule A/B sections.
-- **Notification System**: Customizable in-app and email notifications with user and organization-level preferences.
+- **Notification System**: Customizable in-app and email notifications with user and organization-level preferences. Real-time email alerts when `email_enabled` is set for notification types.
 - **Action Items System**: Manages proactive action items with deadlines and priorities, with auto-generation based on catalog gaps and cross-module tracking. Supports user assignment with inline dropdowns, "Assigned To" filtering, and scroll-to-top navigation.
 - **Placement Management**: Comprehensive sync licensing/placement tracking with a status pipeline from PITCHED to PAID, financial tracking, contract linking, release linking, creator/client filtering, catalog search pickers for works/releases, and automatic accounting integration (creates RoyaltyStatement + RoyaltyTransaction on PAID transition with license fee).
 - **Sync Reports**: Customizable sync placement reports filtered by client, status, and date range with PDF/CSV export and branded templates.
@@ -34,7 +34,9 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Works Folder Organization**: WorkFolder model with parent_folder_id for nesting, folder bar with counts, inline rename/delete, and move-to-folder functionality on the Works page.
 - **Cross-Module Task Auto-Generation**: Automated task creation for contract expirations, release readiness gaps, and placement follow-ups.
 - **Core Catalog & Creator Management**: Expanded data models for `Works` (compositions) and `Releases` (albums/EPs) with `work_type` and `IPAssetType` enum for broader IP management.
-- **Creative Directory**: A contact management system for industry collaborators with CRUD functionality, searchable UI, role filtering, and PDF export.
+- **Creative Directory**: A contact management system for industry collaborators with CRUD functionality, searchable UI, role filtering, PDF export, and email sharing of contact cards.
+- **Creator Contact Roles**: Multi-contact assignment system for creators via `CreatorContact` association model. Each creator can have multiple contacts with specific roles (DISTRIBUTION, LEGAL, ADMIN, MANAGER, PUBLISHER, A_AND_R, MARKETING, OTHER). Supports primary contact designation per role and auto-discovery for email routing (e.g., auto-find DISTRIBUTION contact when sending release info).
+- **Unified Email System**: App-wide email infrastructure powered by Resend via Replit Connector. Branded HTML templates (Cadence sage-green theme) for 7 use cases: (1) Registration Report emails with PDF attachments, (2) Share Contact/Creator Cards, (3) Real-time Notification Alerts, (4) App Invites (welcome/coming-soon), (5) Release Distribution info to contacts, (6) Action Items Push to creators, (7) Email Digests. Reusable `EmailSendModal` component for consistent email UI. Configurable sender with fallback chain.
 - **Registration Reports**: Operational PRO registration workflow. Tracks `is_registered_with_pro` flag on Songs and Works. Supports Outstanding/Registered filtering, creator grouping, checkbox selection for aggregating items into reports. Generates branded PDF reports for selected items. Includes direct email-to-admin feature via Resend with PDF attachment, plus CSV and manual PDF download options.
 - **Spotify Integration**: Integrates with the Spotify API for playlist import, track search, and release metadata lookup (auto-populate release details from Spotify album/track URLs).
 - **Cloud Storage Integration**: Multi-provider cloud storage integration supporting Dropbox and Google Drive (Box deferred). OAuth connect/disconnect per org per provider. Links audio files to songs/releases without hosting audio locally. Temporary downloads for AI analysis only. Browseable folder selection UI via reusable FolderPicker component with breadcrumb navigation, navigation stack for Google Drive folder IDs, and path-based navigation for Dropbox. Browse endpoints are async to prevent production streaming errors.

@@ -1,17 +1,28 @@
 import os
 import logging
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 import requests
 import resend
 
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 
 
 class EmailProvider(ABC):
     @abstractmethod
-    def send_email(self, to: str, subject: str, html_body: str, from_email: Optional[str] = None) -> bool:
+    def send_email(
+        self,
+        to: str,
+        subject: str,
+        html_body: str,
+        from_email: Optional[str] = None,
+        from_name: Optional[str] = None,
+        cc: Optional[List[str]] = None,
+        bcc: Optional[List[str]] = None,
+        reply_to: Optional[str] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+    ) -> bool:
         pass
 
 
@@ -60,21 +71,50 @@ def _get_resend_credentials() -> dict:
         raise RuntimeError(f"Failed to fetch Resend credentials: {e}")
 
 
+DEFAULT_FROM_NAME = "Cadence"
+DEFAULT_FROM_EMAIL = "onboarding@resend.dev"
+
+
 class ResendProvider(EmailProvider):
-    def send_email(self, to: str, subject: str, html_body: str, from_email: Optional[str] = None) -> bool:
+    def send_email(
+        self,
+        to: str,
+        subject: str,
+        html_body: str,
+        from_email: Optional[str] = None,
+        from_name: Optional[str] = None,
+        cc: Optional[List[str]] = None,
+        bcc: Optional[List[str]] = None,
+        reply_to: Optional[str] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+    ) -> bool:
         try:
             credentials = _get_resend_credentials()
             resend.api_key = credentials["api_key"]
             connector_from = credentials.get("from_email")
-            sender = from_email or connector_from or "onboarding@resend.dev"
+            sender_email = from_email or connector_from or DEFAULT_FROM_EMAIL
+            sender_name = from_name or DEFAULT_FROM_NAME
+            sender = f"{sender_name} <{sender_email}>"
 
             logger.info(f"Attempting to send email to {to} from {sender}")
-            result = resend.Emails.send({
+
+            payload: Dict[str, Any] = {
                 "from": sender,
-                "to": [to],
+                "to": [to] if isinstance(to, str) else to,
                 "subject": subject,
                 "html": html_body,
-            })
+            }
+
+            if cc:
+                payload["cc"] = cc
+            if bcc:
+                payload["bcc"] = bcc
+            if reply_to:
+                payload["reply_to"] = reply_to
+            if attachments:
+                payload["attachments"] = attachments
+
+            result = resend.Emails.send(payload)
             logger.info(f"Email sent to {to}: {subject} (result: {result})")
             return True
         except Exception as e:

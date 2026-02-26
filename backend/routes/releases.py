@@ -944,6 +944,86 @@ async def delete_release_artwork(
     return {"message": "Artwork removed"}
 
 
+class SendToDistributionRequest(BaseModel):
+    recipient_email: Optional[str] = None
+    recipient_name: Optional[str] = None
+    notes: Optional[str] = None
+    subject: Optional[str] = None
+    message: Optional[str] = None
+
+
+@router.post("/{release_id}/send-to-distribution")
+def send_release_to_distribution(
+    release_id: int,
+    data: SendToDistributionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from ..models import CreatorContact, CreativeContact
+    from ..templates.email_templates import release_distribution as release_dist_template
+    from ..services.email_provider import get_email_provider
+
+    release = db.query(Release).filter(Release.id == release_id).first()
+    if not release:
+        raise HTTPException(status_code=404, detail="Release not found")
+    verify_org_access(current_user, release.organization_id, db)
+
+    to_email = data.recipient_email
+    to_name = data.recipient_name or "Distribution Contact"
+
+    if not to_email and release.creator_id:
+        dist_contact = db.query(CreatorContact).filter(
+            CreatorContact.creator_id == release.creator_id,
+            CreatorContact.role == "DISTRIBUTION",
+        ).first()
+        if dist_contact:
+            contact = db.query(CreativeContact).filter(CreativeContact.id == dist_contact.contact_id).first()
+            if contact and contact.email:
+                to_email = contact.email
+                to_name = contact.display_name or to_name
+
+    if not to_email:
+        raise HTTPException(status_code=400, detail="No distribution contact email found. Please provide a recipient email or assign a DISTRIBUTION contact to this creator.")
+
+    release_tracks = db.query(ReleaseTrack).filter(
+        ReleaseTrack.release_id == release_id
+    ).order_by(ReleaseTrack.disc_number, ReleaseTrack.track_number).all()
+
+    tracks_list = []
+    for rt in release_tracks:
+        song = db.query(Song).filter(Song.id == rt.song_id).first()
+        if song:
+            tracks_list.append({"title": song.title, "isrc": song.isrc or ""})
+
+    sender_name = getattr(current_user, 'full_name', None) or current_user.username
+
+    html_body = release_dist_template(
+        recipient_name=to_name,
+        release_title=release.title,
+        artist_name=release.primary_artist or "",
+        release_date=release.release_date.isoformat() if release.release_date else "",
+        upc=release.upc or "",
+        label=release.label or "",
+        track_count=len(tracks_list),
+        tracks=tracks_list,
+        notes=data.notes or data.message or "",
+        sender_name=sender_name,
+    )
+
+    email_subject = data.subject or f"Release Delivery: {release.title} by {release.primary_artist or 'Unknown'}"
+    provider = get_email_provider()
+    success = provider.send_email(
+        to=to_email,
+        subject=email_subject,
+        html_body=html_body,
+    )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send email")
+
+    return {"success": True, "message": f"Release info sent to {to_email}", "recipient": to_email}
+
+
 class SpotifyLookupRequest(BaseModel):
     spotify_url: str
 

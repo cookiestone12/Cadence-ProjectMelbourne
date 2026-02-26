@@ -557,64 +557,47 @@ def send_registration_report_email(
 
     pdf_bytes = _generate_pdf(items, request.asset_type, org_name)
 
-    user_name = current_user.full_name or current_user.username
-    custom_msg = request.message or ""
     item_count = len(items)
+    registered_count = sum(1 for i in items if i.get("is_registered_with_pro"))
+    pending_count = item_count - registered_count
+    gaps_count = sum(1 for i in items if not i.get("is_valid"))
 
-    html_body = f"""
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #5B8A72, #7A8580); padding: 24px 32px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 22px; font-weight: 600;">Registration Report</h1>
-            <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0; font-size: 14px;">PRO Registration — {org_name}</p>
-        </div>
-        <div style="background: #F5F7F4; padding: 24px 32px; border: 1px solid #EEF1EC; border-top: none; border-radius: 0 0 12px 12px;">
-            <p style="color: #3D4A44; font-size: 15px; line-height: 1.6;">
-                Hi {to_name},
-            </p>
-            <p style="color: #3D4A44; font-size: 15px; line-height: 1.6;">
-                {user_name} has sent you a PRO registration report containing <strong>{item_count} {request.asset_type}</strong> that need to be registered.
-            </p>
-            {"<p style='color: #3D4A44; font-size: 15px; line-height: 1.6; background: white; padding: 16px; border-radius: 8px; border-left: 3px solid #5B8A72;'>" + custom_msg + "</p>" if custom_msg else ""}
-            <p style="color: #3D4A44; font-size: 15px; line-height: 1.6;">
-                Please find the attached branded PDF report with all details needed for registration.
-            </p>
-            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px solid #E5E7EB;">
-                <p style="color: #7A8580; font-size: 12px; margin: 0;">
-                    Sent via Cadence — Catalog Intelligence
-                </p>
-            </div>
-        </div>
-    </div>
-    """
+    report_date = datetime.utcnow().strftime("%B %d, %Y")
+    works_summary = [{"title": i.get("title", "Untitled"), "status": "registered" if i.get("is_registered_with_pro") else "pending"} for i in items[:20]]
+
+    from ..templates.email_templates import registration_report as reg_report_template
+    html_body = reg_report_template(
+        recipient_name=to_name,
+        org_name=org_name,
+        report_date=report_date,
+        total_works=item_count,
+        registered=registered_count,
+        pending=pending_count,
+        gaps=gaps_count,
+        works_summary=works_summary,
+    )
 
     import base64
     try:
         from ..services.email_provider import get_email_provider
         provider = get_email_provider()
 
-        import resend
-        from ..services.email_provider import _get_resend_credentials
-        credentials = _get_resend_credentials()
-        resend.api_key = credentials["api_key"]
-        connector_from = credentials.get("from_email") or "onboarding@resend.dev"
-
         filename = f"Registration_Report_{request.asset_type}_{org_name}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
         pdf_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
 
-        result = resend.Emails.send({
-            "from": connector_from,
-            "to": [to_email],
-            "subject": f"PRO Registration Report — {org_name} ({item_count} {request.asset_type})",
-            "html": html_body,
-            "attachments": [
-                {
-                    "filename": filename,
-                    "content": pdf_b64,
-                }
-            ]
-        })
+        success = provider.send_email(
+            to=to_email,
+            subject=f"PRO Registration Report — {org_name} ({item_count} {request.asset_type})",
+            html_body=html_body,
+            attachments=[{"filename": filename, "content": pdf_b64}],
+        )
 
-        return {"success": True, "message": f"Report sent to {to_email}", "email_id": str(result)}
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to send email")
+
+        return {"success": True, "message": f"Report sent to {to_email}"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 

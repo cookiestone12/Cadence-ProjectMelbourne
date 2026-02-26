@@ -1,9 +1,9 @@
 from .database import Base, engine, get_db
 from .models import (
     User, Songwriter, Song, Analytics, Settings, Catalog,
-    Organization, OrganizationMember, Creator, CreativeContact, SongCredit, SongDSPLink,
+    Organization, OrganizationMember, Creator, CreativeContact, CreatorContact, SongCredit, SongDSPLink,
     ChecklistItem, SongChecklistStatus, SongValuationSnapshot,
-    OrganizationType, OrganizationMemberRole, CreatorRole, CreditRole,
+    OrganizationType, OrganizationMemberRole, CreatorRole, CreditRole, CreatorContactRole,
     DSPPlatform, ChecklistStatus, ChecklistCategory, ValuationSource, PRO,
     AccountType, AccountLinkStatus, AccountLinkPermission,
     AccountLink, SongContract, ActionItem, Notification, NotificationPreference, OrgNotificationSetting, EmailDigestPreference,
@@ -31,9 +31,9 @@ from .models import (
 __all__ = [
     "Base", "engine", "get_db",
     "User", "Songwriter", "Song", "Analytics", "Settings", "Catalog",
-    "Organization", "OrganizationMember", "Creator", "CreativeContact", "SongCredit", "SongDSPLink",
+    "Organization", "OrganizationMember", "Creator", "CreativeContact", "CreatorContact", "SongCredit", "SongDSPLink",
     "ChecklistItem", "SongChecklistStatus", "SongValuationSnapshot",
-    "OrganizationType", "OrganizationMemberRole", "CreatorRole", "CreditRole",
+    "OrganizationType", "OrganizationMemberRole", "CreatorRole", "CreditRole", "CreatorContactRole",
     "DSPPlatform", "ChecklistStatus", "ChecklistCategory", "ValuationSource", "PRO",
     "AccountType", "AccountLinkStatus", "AccountLinkPermission",
     "AccountLink", "SongContract", "ActionItem", "Notification", "NotificationPreference", "OrgNotificationSetting", "EmailDigestPreference",

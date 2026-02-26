@@ -29,6 +29,16 @@ class CreditRole(str, enum.Enum):
     MIX_ENGINEER = "MIX_ENGINEER"
     OTHER = "OTHER"
 
+class CreatorContactRole(str, enum.Enum):
+    DISTRIBUTION = "DISTRIBUTION"
+    LEGAL = "LEGAL"
+    ADMIN = "ADMIN"
+    MANAGER = "MANAGER"
+    PUBLISHER = "PUBLISHER"
+    A_AND_R = "A_AND_R"
+    MARKETING = "MARKETING"
+    OTHER = "OTHER"
+
 class DSPPlatform(str, enum.Enum):
     APPLE_MUSIC = "APPLE_MUSIC"
     SPOTIFY = "SPOTIFY"
@@ -200,6 +210,26 @@ class Creator(Base):
     work_credits = relationship("WorkCredit", back_populates="creator")
     linked_user = relationship("User", foreign_keys=[linked_user_id])
     assigned_user = relationship("User", foreign_keys=[assigned_to_user_id])
+    creator_contacts = relationship("CreatorContact", back_populates="creator", cascade="all, delete-orphan")
+
+class CreatorContact(Base):
+    __tablename__ = "creator_contacts"
+    __table_args__ = (
+        UniqueConstraint('creator_id', 'contact_id', 'role', name='uq_creator_contact_role'),
+        Index('ix_creator_contacts_creator_id', 'creator_id'),
+        Index('ix_creator_contacts_contact_id', 'contact_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    creator_id = Column(Integer, ForeignKey("creators.id", ondelete="CASCADE"), nullable=False)
+    contact_id = Column(Integer, ForeignKey("creative_contacts.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String, nullable=False, default="OTHER")
+    is_primary = Column(Boolean, default=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    creator = relationship("Creator", back_populates="creator_contacts")
+    contact = relationship("CreativeContact")
 
 class CreativeContact(Base):
     __tablename__ = "creative_contacts"

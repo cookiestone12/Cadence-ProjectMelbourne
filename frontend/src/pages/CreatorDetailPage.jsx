@@ -38,6 +38,7 @@ export default function CreatorDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [creatorReleases, setCreatorReleases] = useState([])
+  const [releaseArtworkUrls, setReleaseArtworkUrls] = useState({})
   const [sortColumn, setSortColumn] = useState(null)
   const [sortDirection, setSortDirection] = useState('asc')
   const [showEditCreatorModal, setShowEditCreatorModal] = useState(false)
@@ -73,6 +74,21 @@ export default function CreatorDetailPage() {
   const [savingFee, setSavingFee] = useState(false)
   const [savingAdvance, setSavingAdvance] = useState(false)
   const [directoryContacts, setDirectoryContacts] = useState([])
+  const [creatorContacts, setCreatorContacts] = useState([])
+  const [addingContact, setAddingContact] = useState(false)
+  const [newContactId, setNewContactId] = useState('')
+  const [newContactRole, setNewContactRole] = useState('ADMIN')
+  const CONTACT_ROLES = ['DISTRIBUTION', 'LEGAL', 'ADMIN', 'MANAGER', 'PUBLISHER', 'A_AND_R', 'MARKETING', 'OTHER']
+  const CONTACT_ROLE_COLORS = {
+    DISTRIBUTION: 'bg-blue-100 text-blue-700',
+    LEGAL: 'bg-purple-100 text-purple-700',
+    ADMIN: 'bg-teal-100 text-teal-700',
+    MANAGER: 'bg-orange-100 text-orange-700',
+    PUBLISHER: 'bg-indigo-100 text-indigo-700',
+    A_AND_R: 'bg-pink-100 text-pink-700',
+    MARKETING: 'bg-yellow-100 text-yellow-700',
+    OTHER: 'bg-gray-100 text-gray-600',
+  }
   const [creatorForm, setCreatorForm] = useState({
     display_name: '',
     legal_name: '',
@@ -121,7 +137,19 @@ export default function CreatorDetailPage() {
 
         try {
           const relRes = await axios.get(`/api/releases/org/${orgId}?creator_id=${id}`)
-          setCreatorReleases(relRes.data.releases || relRes.data || [])
+          const releases = relRes.data.releases || relRes.data || []
+          setCreatorReleases(releases)
+          const withArt = releases.filter(r => r.cover_art_url)
+          if (withArt.length > 0) {
+            const urls = {}
+            await Promise.all(withArt.map(async (r) => {
+              try {
+                const resp = await axios.get(`/api/releases/${r.id}/artwork`, { responseType: 'blob' })
+                urls[r.id] = URL.createObjectURL(resp.data)
+              } catch {}
+            }))
+            setReleaseArtworkUrls(prev => ({ ...prev, ...urls }))
+          }
         } catch (e) {
           console.error('Failed to load creator releases:', e)
         }
@@ -133,6 +161,13 @@ export default function CreatorDetailPage() {
         } catch (e) {
           console.error('Failed to load directory contacts:', e)
         }
+
+        try {
+          const ccRes = await axios.get(`/api/creators/${id}/contacts`)
+          setCreatorContacts(Array.isArray(ccRes.data) ? ccRes.data : ccRes.data.contacts || [])
+        } catch (e) {
+          console.error('Failed to load creator contacts:', e)
+        }
       } catch (error) {
         console.error('Failed to load creator:', error)
       } finally {
@@ -142,6 +177,44 @@ export default function CreatorDetailPage() {
     
     loadCreatorData()
   }, [id])
+
+  const loadCreatorContacts = async () => {
+    try {
+      const res = await axios.get(`/api/creators/${id}/contacts`)
+      setCreatorContacts(Array.isArray(res.data) ? res.data : res.data.contacts || [])
+    } catch (e) {
+      console.error('Failed to load creator contacts:', e)
+    }
+  }
+
+  const handleAddCreatorContact = async () => {
+    if (!newContactId) return
+    setAddingContact(true)
+    try {
+      await axios.post(`/api/creators/${id}/contacts`, {
+        contact_id: parseInt(newContactId),
+        role: newContactRole
+      })
+      await loadCreatorContacts()
+      setNewContactId('')
+      setNewContactRole('ADMIN')
+    } catch (e) {
+      console.error('Failed to add contact:', e)
+      alert(e.response?.data?.detail || 'Failed to add contact')
+    } finally {
+      setAddingContact(false)
+    }
+  }
+
+  const handleRemoveCreatorContact = async (contactId) => {
+    try {
+      await axios.delete(`/api/creators/${id}/contacts/${contactId}`)
+      await loadCreatorContacts()
+    } catch (e) {
+      console.error('Failed to remove contact:', e)
+      alert(e.response?.data?.detail || 'Failed to remove contact')
+    }
+  }
   
   const loadAccounting = async () => {
     if (!organizationId) return
@@ -1058,6 +1131,77 @@ export default function CreatorDetailPage() {
                 </div>
               </div>
 
+              <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                <h2 className="text-xl font-semibold text-[#3D4A44] mb-5">Contacts</h2>
+                {creatorContacts.length > 0 ? (
+                  <div className="space-y-3 mb-4">
+                    {creatorContacts.map((cc) => (
+                      <div key={cc.id || cc.contact_id} className="flex items-start justify-between p-3 bg-[#F8F8FB] rounded-xl">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-medium text-[#3D4A44] text-sm truncate">{cc.display_name || cc.contact_name || cc.name || 'Contact'}</p>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${CONTACT_ROLE_COLORS[cc.role] || CONTACT_ROLE_COLORS.OTHER}`}>
+                              {(cc.role || 'OTHER').replace(/_/g, ' ')}
+                            </span>
+                          </div>
+                          {(cc.email || cc.contact_email) && (
+                            <p className="text-xs text-[#7A8580]">
+                              <a href={`mailto:${cc.email || cc.contact_email}`} className="hover:text-[#5B8A72] transition-colors">{cc.email || cc.contact_email}</a>
+                            </p>
+                          )}
+                          {(cc.phone || cc.contact_phone) && (
+                            <p className="text-xs text-[#7A8580] mt-0.5">{cc.phone || cc.contact_phone}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleRemoveCreatorContact(cc.id)}
+                          className="p-1 text-[#7A8580] hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0 ml-2"
+                          title="Remove contact"
+                        >
+                          <XMarkIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-[#7A8580] mb-4">No contacts assigned yet.</p>
+                )}
+                <div className="border-t border-[rgba(59,77,67,0.06)] pt-4 space-y-2">
+                  <select
+                    value={newContactId}
+                    onChange={e => setNewContactId(e.target.value)}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  >
+                    <option value="">Select a contact...</option>
+                    {directoryContacts
+                      .filter(dc => !creatorContacts.some(cc => (cc.contact_id || cc.id) === dc.id))
+                      .map(dc => (
+                        <option key={dc.id} value={dc.id}>{dc.display_name}{dc.email ? ` (${dc.email})` : ''}</option>
+                      ))
+                    }
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={newContactRole}
+                      onChange={e => setNewContactRole(e.target.value)}
+                      className="flex-1 border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    >
+                      {CONTACT_ROLES.map(role => (
+                        <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleAddCreatorContact}
+                      disabled={!newContactId || addingContact}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50"
+                    >
+                      <PlusIcon className="w-4 h-4" />
+                      {addingContact ? 'Adding...' : 'Add'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {creator.bio && (
                 <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
                   <h2 className="text-xl font-semibold text-[#3D4A44] mb-4">About</h2>
@@ -1446,8 +1590,8 @@ export default function CreatorDetailPage() {
                     className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow group"
                   >
                     <div className="aspect-square bg-[#EEF1EC] flex items-center justify-center">
-                      {rel.cover_art_url ? (
-                        <img src={rel.cover_art_url} alt={rel.title} className="w-full h-full object-cover" />
+                      {(releaseArtworkUrls[rel.id] || rel.cover_art_url) ? (
+                        <img src={releaseArtworkUrls[rel.id] || ''} alt={rel.title} className="w-full h-full object-cover" onError={(e) => e.target.style.display='none'} />
                       ) : (
                         <MusicalNoteIcon className="w-16 h-16 text-[#7A8580]" />
                       )}

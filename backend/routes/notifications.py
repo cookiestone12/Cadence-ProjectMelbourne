@@ -421,7 +421,7 @@ def send_action_items_email(
 ):
     from ..models import ActionItem, Creator
     from ..utils.priority_engine import sort_by_urgency, group_by_priority, calculate_priority_score
-    from ..templates.email_digest import generate_digest_html
+    from ..templates.email_templates import action_items_push
     from ..services.email_provider import get_email_provider
 
     creator = db.query(Creator).filter(Creator.id == request.creator_id).first()
@@ -441,48 +441,44 @@ def send_action_items_email(
     ).all()
 
     sorted_actions = sort_by_urgency(actions)
-    grouped = group_by_priority(sorted_actions)
 
     now = datetime.utcnow()
-    grouped_items = {}
-    for level, items in grouped.items():
-        grouped_items[level] = [{
+    priority_map = {1: "critical", 2: "high", 3: "medium", 4: "low", 5: "low"}
+    items_for_template = []
+    for a in sorted_actions:
+        p = priority_map.get(a.priority, "medium") if a.priority else "medium"
+        items_for_template.append({
             "title": a.title,
-            "description": a.description,
-            "deadline": a.deadline,
-            "entity_type": a.entity_type,
-            "entity_label": a.entity_label,
-            "action_type": a.action_type,
-            "priority_score": calculate_priority_score(a),
-        } for a in items]
-
-    overdue_count = sum(1 for a in actions if a.deadline and a.deadline < now)
-    summary_stats = {
-        "total_items": len(actions),
-        "overdue_count": overdue_count,
-        "critical_count": len(grouped.get("critical", [])),
-        "high_count": len(grouped.get("high", [])),
-    }
-
-    user_name = f"Action Items for {creator.display_name}"
-    html_body = generate_digest_html(user_name, grouped_items, summary_stats)
+            "description": a.description or "",
+            "priority": p,
+            "action_type": a.action_type or "",
+            "deadline": a.deadline.strftime("%b %d, %Y") if a.deadline else None,
+        })
 
     if request.send_to == "creator":
         recipient_email = creator.email
+        recipient_name = creator.display_name
         if not recipient_email:
             raise HTTPException(status_code=400, detail="This creator does not have an email address on file")
     elif request.send_to == "custom" and request.custom_email:
         recipient_email = request.custom_email
+        recipient_name = "Team"
     else:
         recipient_email = current_user.email
+        recipient_name = current_user.username
 
     if not recipient_email:
         raise HTTPException(status_code=400, detail="No valid email address to send to")
 
+    html_body = action_items_push(
+        recipient_name=recipient_name,
+        items=items_for_template,
+    )
+
     provider = get_email_provider()
     success = provider.send_email(
         to=recipient_email,
-        subject=f"Rythm - Action Items for {creator.display_name}",
+        subject=f"Cadence - Action Items for {creator.display_name}",
         html_body=html_body,
     )
 

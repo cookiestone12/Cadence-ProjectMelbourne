@@ -1,7 +1,10 @@
+import logging
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import List, Optional
 from ..models import ActionItem, Notification, NotificationPreference, User, OrganizationMember, OrgNotificationSetting
+
+logger = logging.getLogger("cadence")
 
 
 def get_effective_notification_preference(
@@ -85,8 +88,43 @@ def create_action_notification(
             }
         )
         db.add(notification)
+
+        if effective_pref.get("email_enabled"):
+            _send_notification_email(db, member.user_id, title, message, notification_type, action_item)
     
     db.commit()
+
+
+def _send_notification_email(db: Session, user_id: int, title: str, message: str, notification_type: str, action_item: ActionItem):
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not user.email:
+            return
+
+        from ..templates.email_templates import notification_alert
+        from ..services.email_provider import get_email_provider
+
+        priority_map = {1: "critical", 2: "high", 3: "medium", 4: "low", 5: "low"}
+        priority = priority_map.get(action_item.priority, "medium") if action_item.priority else "medium"
+
+        html_body = notification_alert(
+            recipient_name=user.username,
+            notification_title=title,
+            notification_body=message,
+            notification_type=notification_type,
+            entity_type=action_item.entity_type or "",
+            entity_label=action_item.entity_label or "",
+            priority=priority,
+        )
+
+        provider = get_email_provider()
+        provider.send_email(
+            to=user.email,
+            subject=title,
+            html_body=html_body,
+        )
+    except Exception as e:
+        logger.error(f"Failed to send notification email to user {user_id}: {e}")
 
 
 def check_upcoming_deadlines(db: Session) -> List[dict]:
