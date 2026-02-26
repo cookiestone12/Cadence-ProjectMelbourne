@@ -2012,6 +2012,37 @@ class StorageScanResult(Base):
     linked_audio_asset = relationship("AudioAsset")
 
 
+class RegistrationReport(Base):
+    __tablename__ = "registration_reports"
+    __table_args__ = (
+        Index('ix_registration_reports_org_id', 'organization_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    report_type = Column(String, nullable=False, default="SONGS")
+    title = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="GENERATED")
+    filter_creator_id = Column(Integer, nullable=True)
+    filter_status = Column(String, nullable=True)
+    item_count = Column(Integer, default=0)
+    outstanding_count = Column(Integer, default=0)
+    ready_count = Column(Integer, default=0)
+    needs_attention_count = Column(Integer, default=0)
+    report_data = Column(Text, nullable=True)
+    pdf_data = Column(LargeBinary, nullable=True)
+    pdf_mime = Column(String, nullable=True)
+    generated_at = Column(DateTime, nullable=True)
+    sent_at = Column(DateTime, nullable=True)
+    sent_to = Column(String, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    organization = relationship("Organization")
+    created_by = relationship("User")
+
+
 class PushSubscription(Base):
     __tablename__ = "push_subscriptions"
 

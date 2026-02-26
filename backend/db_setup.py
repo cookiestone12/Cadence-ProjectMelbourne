@@ -167,6 +167,14 @@ def ensure_schema_updates():
                 except Exception as e:
                     logger.warning(f"Could not create index {idx_name}: {e}")
 
+        if 'registration_reports' not in inspector.get_table_names():
+            try:
+                from backend.models.models import RegistrationReport
+                RegistrationReport.__table__.create(bind=engine, checkfirst=True)
+                logger.info("Created registration_reports table")
+            except Exception as e:
+                logger.warning(f"Could not create registration_reports table: {e}")
+
 
 def seed_super_admin():
     from backend.utils.auth import get_password_hash

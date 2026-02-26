@@ -11,9 +11,12 @@ import {
   FunnelIcon,
   PaperAirplaneIcon,
   XMarkIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  BookmarkIcon,
+  TrashIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline'
-import { CheckCircleIcon } from '@heroicons/react/24/solid'
+import { CheckCircleIcon, BookmarkIcon as BookmarkSolidIcon } from '@heroicons/react/24/solid'
 
 export default function RegistrationReportPage() {
   const [loading, setLoading] = useState(true)
@@ -33,6 +36,13 @@ export default function RegistrationReportPage() {
   const [adminContacts, setAdminContacts] = useState([])
   const [selectedAdminId, setSelectedAdminId] = useState('')
 
+  const [savedReports, setSavedReports] = useState([])
+  const [viewingSavedReport, setViewingSavedReport] = useState(null)
+  const [savingReport, setSavingReport] = useState(false)
+  const [refreshingSaved, setRefreshingSaved] = useState(false)
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [saveTitle, setSaveTitle] = useState('')
+
   useEffect(() => {
     async function init() {
       try {
@@ -50,6 +60,10 @@ export default function RegistrationReportPage() {
             const contacts = Array.isArray(res.data) ? res.data : res.data.contacts || []
             setAdminContacts(contacts.filter(c => c.email))
           })
+          .catch(() => {})
+
+        axios.get(`/api/registration-reports/org/${currentOrgId}/saved`)
+          .then(res => setSavedReports(Array.isArray(res.data) ? res.data : []))
           .catch(() => {})
       } catch {
         setLoading(false)
@@ -82,11 +96,12 @@ export default function RegistrationReportPage() {
   }, [])
 
   useEffect(() => {
-    if (orgId) fetchReport(orgId, assetType, selectedCreatorId, statusFilter)
-  }, [orgId, assetType, selectedCreatorId, statusFilter, fetchReport])
+    if (orgId && !viewingSavedReport) fetchReport(orgId, assetType, selectedCreatorId, statusFilter)
+  }, [orgId, assetType, selectedCreatorId, statusFilter, fetchReport, viewingSavedReport])
 
   function handleGenerateReport() {
     setSelectedItems(new Set())
+    setViewingSavedReport(null)
     fetchReport(orgId, assetType, selectedCreatorId, statusFilter)
   }
 
@@ -138,6 +153,25 @@ export default function RegistrationReportPage() {
 
   async function handleExportPDF() {
     if (!orgId) return
+    if (viewingSavedReport) {
+      try {
+        const res = await axios.get(
+          `/api/registration-reports/org/${orgId}/saved/${viewingSavedReport.id}/pdf`,
+          { responseType: 'blob' }
+        )
+        const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', `${viewingSavedReport.title || 'Report'}.pdf`)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+      } catch {
+        alert('Failed to export PDF')
+      }
+      return
+    }
     try {
       const itemIds = selectedItems.size > 0 ? Array.from(selectedItems) : []
       const res = await axios.post(
@@ -202,6 +236,94 @@ export default function RegistrationReportPage() {
     }
   }
 
+  async function handleSaveReport() {
+    if (!orgId) return
+    setSavingReport(true)
+    try {
+      const payload = {
+        title: saveTitle || undefined,
+        asset_type: assetType,
+        creator_id: selectedCreatorId ? parseInt(selectedCreatorId) : undefined,
+        filter_status: statusFilter || undefined,
+      }
+      const res = await axios.post(`/api/registration-reports/org/${orgId}/save`, payload)
+      setSavedReports(prev => [res.data, ...prev])
+      setShowSaveModal(false)
+      setSaveTitle('')
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to save report')
+    } finally {
+      setSavingReport(false)
+    }
+  }
+
+  async function handleViewSavedReport(report) {
+    if (!orgId) return
+    setLoading(true)
+    try {
+      const res = await axios.get(`/api/registration-reports/org/${orgId}/saved/${report.id}`)
+      const data = res.data
+      setViewingSavedReport(data)
+      setReportData(data.items || [])
+      setSummary({
+        total: data.item_count || 0,
+        valid: data.ready_count || 0,
+        invalid: data.needs_attention_count || 0,
+        outstanding: data.outstanding_count || 0,
+        registered: (data.item_count || 0) - (data.outstanding_count || 0)
+      })
+      setSelectedItems(new Set())
+      setExpandedItems(new Set())
+    } catch {
+      alert('Failed to load saved report')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleRefreshSavedReport() {
+    if (!orgId || !viewingSavedReport) return
+    setRefreshingSaved(true)
+    try {
+      const res = await axios.put(`/api/registration-reports/org/${orgId}/saved/${viewingSavedReport.id}/refresh`)
+      const data = res.data
+      setViewingSavedReport(prev => ({ ...prev, ...data }))
+      setReportData(data.items || [])
+      setSummary({
+        total: data.item_count || 0,
+        valid: data.ready_count || 0,
+        invalid: data.needs_attention_count || 0,
+        outstanding: data.outstanding_count || 0,
+        registered: (data.item_count || 0) - (data.outstanding_count || 0)
+      })
+      setSavedReports(prev => prev.map(r => r.id === data.id ? { ...r, ...data } : r))
+    } catch {
+      alert('Failed to refresh report')
+    } finally {
+      setRefreshingSaved(false)
+    }
+  }
+
+  async function handleDeleteSavedReport(reportId) {
+    if (!orgId) return
+    if (!window.confirm('Delete this saved report?')) return
+    try {
+      await axios.delete(`/api/registration-reports/org/${orgId}/saved/${reportId}`)
+      setSavedReports(prev => prev.filter(r => r.id !== reportId))
+      if (viewingSavedReport?.id === reportId) {
+        setViewingSavedReport(null)
+        fetchReport(orgId, assetType, selectedCreatorId, statusFilter)
+      }
+    } catch {
+      alert('Failed to delete report')
+    }
+  }
+
+  function exitSavedView() {
+    setViewingSavedReport(null)
+    fetchReport(orgId, assetType, selectedCreatorId, statusFilter)
+  }
+
   const groupedByCreator = useMemo(() => {
     const groups = {}
     reportData.forEach(item => {
@@ -226,6 +348,14 @@ export default function RegistrationReportPage() {
   const selectedCount = selectedItems.size
   const outstandingInView = reportData.filter(i => !i.is_registered_with_pro).length
 
+  function formatDate(dateStr) {
+    if (!dateStr) return ''
+    try {
+      const d = new Date(dateStr)
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+    } catch { return dateStr }
+  }
+
   return (
     <div className="p-4 sm:p-8">
       <div className="bg-gradient-to-r from-[#5B8A72] to-[#7A8580] rounded-2xl p-6 sm:p-8 mb-6 text-white">
@@ -235,93 +365,211 @@ export default function RegistrationReportPage() {
               <DocumentTextIcon className="w-8 h-8" />
               <h1 className="text-2xl sm:text-3xl font-bold">Registration Reports</h1>
             </div>
-            <p className="text-white/80 text-sm sm:text-base">PRO registration management — select, report, and send</p>
+            <p className="text-white/80 text-sm sm:text-base">
+              {viewingSavedReport
+                ? `Viewing: ${viewingSavedReport.title}`
+                : 'PRO registration management — select, report, and send'}
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={handleGenerateReport}
-              disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-            >
-              <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
-            <button
-              onClick={handleExportCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
-            >
-              <ArrowDownTrayIcon className="w-4 h-4" />
-              CSV
-            </button>
-            <button
-              onClick={handleExportPDF}
-              className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
-            >
-              <ArrowDownTrayIcon className="w-4 h-4" />
-              {selectedCount > 0 ? `PDF (${selectedCount})` : 'PDF'}
-            </button>
-            <button
-              onClick={openEmailModal}
-              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-white/90 text-[#5B8A72] rounded-xl text-sm font-semibold transition-colors shadow-sm"
-            >
-              <EnvelopeIcon className="w-4 h-4" />
-              {selectedCount > 0 ? `Send (${selectedCount})` : 'Send Report'}
-            </button>
+            {viewingSavedReport ? (
+              <>
+                <button
+                  onClick={handleRefreshSavedReport}
+                  disabled={refreshingSaved}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <ArrowPathIcon className={`w-4 h-4 ${refreshingSaved ? 'animate-spin' : ''}`} />
+                  Refresh Data
+                </button>
+                <button
+                  onClick={handleExportPDF}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4" />
+                  PDF
+                </button>
+                <button
+                  onClick={exitSavedView}
+                  className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-white/90 text-[#5B8A72] rounded-xl text-sm font-semibold transition-colors shadow-sm"
+                >
+                  <XMarkIcon className="w-4 h-4" />
+                  Back to Live
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleGenerateReport}
+                  disabled={loading}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+                <button
+                  onClick={() => { setSaveTitle(''); setShowSaveModal(true) }}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                >
+                  <BookmarkIcon className="w-4 h-4" />
+                  Save
+                </button>
+                <button
+                  onClick={handleExportCSV}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4" />
+                  CSV
+                </button>
+                <button
+                  onClick={handleExportPDF}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl text-sm font-medium transition-colors"
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4" />
+                  {selectedCount > 0 ? `PDF (${selectedCount})` : 'PDF'}
+                </button>
+                <button
+                  onClick={openEmailModal}
+                  className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-white/90 text-[#5B8A72] rounded-xl text-sm font-semibold transition-colors shadow-sm"
+                >
+                  <EnvelopeIcon className="w-4 h-4" />
+                  {selectedCount > 0 ? `Send (${selectedCount})` : 'Send Report'}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-6 items-start sm:items-center flex-wrap">
-        <div className="flex bg-white rounded-xl border border-[rgba(59,77,67,0.12)] p-1">
-          <button
-            onClick={() => { setAssetType('songs'); setSelectedItems(new Set()) }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              assetType === 'songs' ? 'bg-[#5B8A72] text-white shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'
-            }`}
-          >
-            Songs
-          </button>
-          <button
-            onClick={() => { setAssetType('works'); setSelectedItems(new Set()) }}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              assetType === 'works' ? 'bg-[#5B8A72] text-white shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'
-            }`}
-          >
-            Works
-          </button>
+      {savedReports.length > 0 && !viewingSavedReport && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <BookmarkSolidIcon className="w-4 h-4 text-[#5B8A72]" />
+            <h2 className="text-sm font-semibold text-[#3D4A44]">Saved Reports</h2>
+            <span className="text-xs text-[#7A8580]">({savedReports.length})</span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+            {savedReports.map(report => (
+              <div
+                key={report.id}
+                className="flex-shrink-0 w-64 bg-white rounded-xl border border-[rgba(59,77,67,0.12)] p-4 hover:shadow-md transition-shadow cursor-pointer group"
+                onClick={() => handleViewSavedReport(report)}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-[#3D4A44] truncate flex-1 mr-2">{report.title}</h3>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteSavedReport(report.id) }}
+                    className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all"
+                  >
+                    <TrashIcon className="w-3.5 h-3.5 text-red-400 hover:text-red-600" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                    report.report_type === 'SONGS' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
+                  }`}>
+                    {report.report_type || 'SONGS'}
+                  </span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                    report.status === 'SENT' ? 'bg-emerald-50 text-emerald-700' : 'bg-[#5B8A72]/10 text-[#5B8A72]'
+                  }`}>
+                    {report.status || 'GENERATED'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-[#7A8580]">
+                  <span>{report.item_count || 0} items</span>
+                  {report.outstanding_count > 0 && (
+                    <span className="text-red-500">{report.outstanding_count} outstanding</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 mt-2 text-[10px] text-[#B0BDB4]">
+                  <ClockIcon className="w-3 h-3" />
+                  {formatDate(report.generated_at || report.created_at)}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
+      )}
 
-        <div className="flex bg-white rounded-xl border border-[rgba(59,77,67,0.12)] p-1">
-          {[
-            { value: '', label: 'All' },
-            { value: 'outstanding', label: 'Outstanding' },
-            { value: 'registered', label: 'Registered' }
-          ].map(opt => (
+      {viewingSavedReport && (
+        <div className="mb-4 bg-[#5B8A72]/5 border border-[#5B8A72]/15 rounded-xl px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <BookmarkSolidIcon className="w-5 h-5 text-[#5B8A72]" />
+            <div>
+              <span className="text-sm font-medium text-[#3D4A44]">
+                Viewing saved report snapshot
+              </span>
+              <span className="text-xs text-[#7A8580] ml-2">
+                Last generated: {formatDate(viewingSavedReport.generated_at)}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              key={opt.value}
-              onClick={() => { setStatusFilter(opt.value); setSelectedItems(new Set()) }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                statusFilter === opt.value ? 'bg-[#3D4A44] text-white shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'
+              onClick={() => handleDeleteSavedReport(viewingSavedReport.id)}
+              className="flex items-center gap-1 px-3 py-1.5 text-red-600 hover:bg-red-50 rounded-lg text-xs font-medium transition-colors"
+            >
+              <TrashIcon className="w-3.5 h-3.5" />
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!viewingSavedReport && (
+        <div className="flex flex-col sm:flex-row gap-3 mb-6 items-start sm:items-center flex-wrap">
+          <div className="flex bg-white rounded-xl border border-[rgba(59,77,67,0.12)] p-1">
+            <button
+              onClick={() => { setAssetType('songs'); setSelectedItems(new Set()) }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                assetType === 'songs' ? 'bg-[#5B8A72] text-white shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'
               }`}
             >
-              {opt.label}
+              Songs
             </button>
-          ))}
-        </div>
+            <button
+              onClick={() => { setAssetType('works'); setSelectedItems(new Set()) }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                assetType === 'works' ? 'bg-[#5B8A72] text-white shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'
+              }`}
+            >
+              Works
+            </button>
+          </div>
 
-        {creators.length > 0 && (
-          <select
-            value={selectedCreatorId}
-            onChange={e => { setSelectedCreatorId(e.target.value); setSelectedItems(new Set()) }}
-            className="border border-[rgba(59,77,67,0.12)] rounded-xl px-3 py-2.5 bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-sm"
-          >
-            <option value="">All Creators</option>
-            {creators.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+          <div className="flex bg-white rounded-xl border border-[rgba(59,77,67,0.12)] p-1">
+            {[
+              { value: '', label: 'All' },
+              { value: 'outstanding', label: 'Outstanding' },
+              { value: 'registered', label: 'Registered' }
+            ].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => { setStatusFilter(opt.value); setSelectedItems(new Set()) }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  statusFilter === opt.value ? 'bg-[#3D4A44] text-white shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'
+                }`}
+              >
+                {opt.label}
+              </button>
             ))}
-          </select>
-        )}
-      </div>
+          </div>
+
+          {creators.length > 0 && (
+            <select
+              value={selectedCreatorId}
+              onChange={e => { setSelectedCreatorId(e.target.value); setSelectedItems(new Set()) }}
+              className="border border-[rgba(59,77,67,0.12)] rounded-xl px-3 py-2.5 bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-sm"
+            >
+              <option value="">All Creators</option>
+              {creators.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
         <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] p-5">
@@ -398,7 +646,7 @@ export default function RegistrationReportPage() {
               ? 'No works found. Works represent compositions (the songwriting/publishing side). Try switching to the Songs tab — your catalog recordings will appear there.'
               : `Add songs to your catalog to track PRO registration. Once added, outstanding songs will appear here for you to select and generate registration reports.`}
           </p>
-          {assetType === 'works' && (
+          {assetType === 'works' && !viewingSavedReport && (
             <button
               onClick={() => { setAssetType('songs'); setSelectedItems(new Set()) }}
               className="mt-4 px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium"
@@ -424,7 +672,7 @@ export default function RegistrationReportPage() {
             </span>
           </div>
 
-          {selectedCreatorId ? (
+          {selectedCreatorId || viewingSavedReport ? (
             <div className="divide-y divide-[rgba(59,77,67,0.06)]">
               {reportData.map(item => (
                 <ItemRow
@@ -461,6 +709,64 @@ export default function RegistrationReportPage() {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-5 border-b border-[rgba(59,77,67,0.1)]">
+              <div>
+                <h2 className="text-lg font-semibold text-[#3D4A44]">Save Report</h2>
+                <p className="text-sm text-[#7A8580] mt-0.5">
+                  Save a snapshot of the current report for quick access later
+                </p>
+              </div>
+              <button onClick={() => setShowSaveModal(false)} className="p-2 hover:bg-[#F5F7F4] rounded-lg transition-colors">
+                <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1.5">Report Title (optional)</label>
+                <input
+                  type="text"
+                  value={saveTitle}
+                  onChange={e => setSaveTitle(e.target.value)}
+                  placeholder={`Registration Report — ${assetType.charAt(0).toUpperCase() + assetType.slice(1)}`}
+                  className="w-full border border-[rgba(59,77,67,0.15)] rounded-xl px-3 py-2.5 text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-sm"
+                />
+              </div>
+              <div className="bg-[#F5F7F4] rounded-lg p-3 text-xs text-[#7A8580] space-y-1">
+                <p>Type: <span className="text-[#3D4A44] font-medium">{assetType.charAt(0).toUpperCase() + assetType.slice(1)}</span></p>
+                <p>Filter: <span className="text-[#3D4A44] font-medium">{statusFilter || 'All'}</span></p>
+                {selectedCreatorId && (
+                  <p>Creator: <span className="text-[#3D4A44] font-medium">{creators.find(c => c.id === parseInt(selectedCreatorId))?.name || 'Selected'}</span></p>
+                )}
+                <p>Items: <span className="text-[#3D4A44] font-medium">{reportData.length}</span></p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 p-5 border-t border-[rgba(59,77,67,0.1)]">
+              <button
+                onClick={() => setShowSaveModal(false)}
+                className="px-4 py-2 text-sm font-medium text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveReport}
+                disabled={savingReport}
+                className="flex items-center gap-2 px-5 py-2.5 bg-[#5B8A72] text-white rounded-xl text-sm font-semibold hover:bg-[#4A7660] transition-colors disabled:opacity-50"
+              >
+                {savingReport ? 'Saving...' : (
+                  <>
+                    <BookmarkIcon className="w-4 h-4" />
+                    Save Report
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

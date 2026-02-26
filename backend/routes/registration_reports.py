@@ -3,7 +3,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 import io
 import csv
@@ -18,6 +18,8 @@ router = APIRouter(prefix="/api/registration-reports", tags=["registration-repor
 
 
 def verify_org_access(user: User, org_id: int, db: Session):
+    if user.is_super_admin:
+        return True
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id,
         OrganizationMember.organization_id == org_id
@@ -27,73 +29,64 @@ def verify_org_access(user: User, org_id: int, db: Session):
     return membership
 
 
-def get_publisher_info(creator, db):
-    if creator.publisher_contact_id:
-        contact = db.query(CreativeContact).filter(CreativeContact.id == creator.publisher_contact_id).first()
-        if contact:
-            return {
-                "name": contact.display_name,
-                "company": contact.publisher_name,
-                "pro": contact.publisher_pro or contact.pro,
-                "ipi": contact.publisher_ipi or contact.ipi
-            }
-    if creator.publisher_name:
-        return {"name": creator.publisher_name, "company": None, "pro": None, "ipi": None}
-    return None
+class OrgLookups:
+    def __init__(self, db: Session, org_id: int):
+        creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
+        self.creators: Dict[int, Creator] = {c.id: c for c in creators}
+
+        contacts = db.query(CreativeContact).filter(CreativeContact.organization_id == org_id).all()
+        self.contacts: Dict[int, CreativeContact] = {c.id: c for c in contacts}
+
+        work_credits = db.query(WorkCredit).join(Work).filter(Work.organization_id == org_id).all()
+        self.work_credits: Dict[int, list] = {}
+        for wc in work_credits:
+            self.work_credits.setdefault(wc.work_id, []).append(wc)
+
+        song_credits = db.query(SongCredit).join(Song).filter(Song.organization_id == org_id).all()
+        self.song_credits: Dict[int, list] = {}
+        for sc in song_credits:
+            self.song_credits.setdefault(sc.song_id, []).append(sc)
+
+    def get_publisher_info(self, creator):
+        if creator.publisher_contact_id:
+            contact = self.contacts.get(creator.publisher_contact_id)
+            if contact:
+                return {
+                    "name": contact.display_name,
+                    "company": contact.publisher_name,
+                    "pro": contact.publisher_pro or contact.pro,
+                    "ipi": contact.publisher_ipi or contact.ipi
+                }
+        if creator.publisher_name:
+            return {"name": creator.publisher_name, "company": None, "pro": None, "ipi": None}
+        return None
+
+    def get_admin_info(self, creator):
+        if creator.admin_contact_id:
+            contact = self.contacts.get(creator.admin_contact_id)
+            if contact:
+                return {
+                    "id": contact.id,
+                    "name": contact.display_name,
+                    "email": contact.email,
+                    "company": contact.publisher_name,
+                    "pro": contact.pro,
+                    "ipi": contact.ipi
+                }
+        return None
 
 
-def get_admin_info(creator, db):
-    if creator.admin_contact_id:
-        contact = db.query(CreativeContact).filter(CreativeContact.id == creator.admin_contact_id).first()
-        if contact:
-            return {
-                "id": contact.id,
-                "name": contact.display_name,
-                "email": contact.email,
-                "company": contact.publisher_name,
-                "pro": contact.pro,
-                "ipi": contact.ipi
-            }
-    return None
-
-
-def get_creators_for_work(work_id, db):
-    credits = db.query(WorkCredit).filter(WorkCredit.work_id == work_id).all()
-    creator_ids = set()
-    for c in credits:
-        if c.creator_id:
-            creator_ids.add(c.creator_id)
-    creators = []
-    for cid in creator_ids:
-        creator = db.query(Creator).filter(Creator.id == cid).first()
-        if creator:
-            creators.append({"id": creator.id, "name": creator.display_name})
-    return creators
-
-
-def get_creators_for_song(song_id, db):
-    credits = db.query(SongCredit).filter(SongCredit.song_id == song_id).all()
-    creator_ids = set()
-    for c in credits:
-        if c.creator_id:
-            creator_ids.add(c.creator_id)
-    creators = []
-    for cid in creator_ids:
-        creator = db.query(Creator).filter(Creator.id == cid).first()
-        if creator:
-            creators.append({"id": creator.id, "name": creator.display_name})
-    return creators
-
-
-def build_work_registration_data(work, db):
-    credits = db.query(WorkCredit).filter(WorkCredit.work_id == work.id).all()
+def build_work_registration_data(work, lookups: OrgLookups):
+    credits = lookups.work_credits.get(work.id, [])
     writers = []
     validation_issues = []
 
+    creator_ids_seen = set()
     for credit in credits:
-        creator = db.query(Creator).filter(Creator.id == credit.creator_id).first()
+        creator = lookups.creators.get(credit.creator_id)
         if not creator:
             continue
+        creator_ids_seen.add(creator.id)
 
         writer_data = {
             "name": creator.display_name,
@@ -102,8 +95,8 @@ def build_work_registration_data(work, db):
             "share": credit.share_percentage,
             "pro": creator.primary_pro,
             "ipi": creator.primary_ipi,
-            "publisher": get_publisher_info(creator, db),
-            "administrator": get_admin_info(creator, db)
+            "publisher": lookups.get_publisher_info(creator),
+            "administrator": lookups.get_admin_info(creator)
         }
         writers.append(writer_data)
 
@@ -122,7 +115,8 @@ def build_work_registration_data(work, db):
     if not work.iswc:
         validation_issues.append("Missing ISWC")
 
-    creators_list = get_creators_for_work(work.id, db)
+    creators_list = [{"id": cid, "name": lookups.creators[cid].display_name}
+                     for cid in creator_ids_seen if cid in lookups.creators]
 
     return {
         "id": work.id,
@@ -140,15 +134,17 @@ def build_work_registration_data(work, db):
     }
 
 
-def build_song_registration_data(song, db):
-    credits = db.query(SongCredit).filter(SongCredit.song_id == song.id).all()
+def build_song_registration_data(song, lookups: OrgLookups):
+    credits = lookups.song_credits.get(song.id, [])
     writers = []
     validation_issues = []
 
+    creator_ids_seen = set()
     for credit in credits:
-        creator = db.query(Creator).filter(Creator.id == credit.creator_id).first()
+        creator = lookups.creators.get(credit.creator_id)
         if not creator:
             continue
+        creator_ids_seen.add(creator.id)
 
         writer_data = {
             "name": creator.display_name,
@@ -157,8 +153,8 @@ def build_song_registration_data(song, db):
             "share": credit.share_percentage,
             "pro": creator.primary_pro,
             "ipi": creator.primary_ipi,
-            "publisher": get_publisher_info(creator, db),
-            "administrator": get_admin_info(creator, db)
+            "publisher": lookups.get_publisher_info(creator),
+            "administrator": lookups.get_admin_info(creator)
         }
         writers.append(writer_data)
 
@@ -177,7 +173,8 @@ def build_song_registration_data(song, db):
     if not song.isrc:
         validation_issues.append("Missing ISRC")
 
-    creators_list = get_creators_for_song(song.id, db)
+    creators_list = [{"id": cid, "name": lookups.creators[cid].display_name}
+                     for cid in creator_ids_seen if cid in lookups.creators]
 
     return {
         "id": song.id,
@@ -196,6 +193,52 @@ def build_song_registration_data(song, db):
     }
 
 
+def _build_report_items(db, org_id, asset_type, creator_id=None, status=None, item_ids=None):
+    lookups = OrgLookups(db, org_id)
+
+    if asset_type == "works":
+        query = db.query(Work).filter(Work.organization_id == org_id)
+        if item_ids:
+            query = query.filter(Work.id.in_(item_ids))
+        if creator_id:
+            matching_work_ids = {wid for wid, creds in lookups.work_credits.items()
+                                 if any(c.creator_id == creator_id for c in creds)}
+            query = query.filter(Work.id.in_(matching_work_ids)) if matching_work_ids else query.filter(Work.id == -1)
+        if status == "outstanding":
+            query = query.filter(or_(Work.is_registered_with_pro == False, Work.is_registered_with_pro.is_(None)))
+        elif status == "registered":
+            query = query.filter(Work.is_registered_with_pro == True)
+        assets = query.all()
+        return [build_work_registration_data(w, lookups) for w in assets]
+    else:
+        query = db.query(Song).filter(Song.organization_id == org_id)
+        if item_ids:
+            query = query.filter(Song.id.in_(item_ids))
+        if creator_id:
+            matching_song_ids = {sid for sid, creds in lookups.song_credits.items()
+                                 if any(c.creator_id == creator_id for c in creds)}
+            query = query.filter(Song.id.in_(matching_song_ids)) if matching_song_ids else query.filter(Song.id == -1)
+        if status == "outstanding":
+            query = query.filter(or_(Song.is_registered_with_pro == False, Song.is_registered_with_pro.is_(None)))
+        elif status == "registered":
+            query = query.filter(Song.is_registered_with_pro == True)
+        assets = query.all()
+        return [build_song_registration_data(s, lookups) for s in assets]
+
+
+def _compute_report_stats(report_items):
+    total_count = len(report_items)
+    valid_count = sum(1 for item in report_items if item["is_valid"])
+    outstanding_count = sum(1 for item in report_items if not item["is_registered_with_pro"])
+    return {
+        "total": total_count,
+        "valid": valid_count,
+        "invalid": total_count - valid_count,
+        "outstanding": outstanding_count,
+        "registered": total_count - outstanding_count,
+    }
+
+
 @router.get("/org/{org_id}/works")
 def get_work_registration_report(
     org_id: int,
@@ -205,32 +248,9 @@ def get_work_registration_report(
     current_user: User = Depends(get_current_user)
 ):
     verify_org_access(current_user, org_id, db)
-
-    query = db.query(Work).filter(Work.organization_id == org_id)
-    if creator_id:
-        work_ids = db.query(WorkCredit.work_id).filter(WorkCredit.creator_id == creator_id).subquery()
-        query = query.filter(Work.id.in_(work_ids))
-    if status == "outstanding":
-        query = query.filter(or_(Work.is_registered_with_pro == False, Work.is_registered_with_pro.is_(None)))
-    elif status == "registered":
-        query = query.filter(Work.is_registered_with_pro == True)
-
-    works = query.all()
-    report_items = [build_work_registration_data(w, db) for w in works]
-
-    valid_count = sum(1 for item in report_items if item["is_valid"])
-    total_count = len(report_items)
-    outstanding_count = sum(1 for item in report_items if not item["is_registered_with_pro"])
-
-    return {
-        "type": "works",
-        "total": total_count,
-        "valid": valid_count,
-        "invalid": total_count - valid_count,
-        "outstanding": outstanding_count,
-        "registered": total_count - outstanding_count,
-        "items": report_items
-    }
+    report_items = _build_report_items(db, org_id, "works", creator_id=creator_id, status=status)
+    stats = _compute_report_stats(report_items)
+    return {"type": "works", **stats, "items": report_items}
 
 
 @router.get("/org/{org_id}/songs")
@@ -242,32 +262,9 @@ def get_song_registration_report(
     current_user: User = Depends(get_current_user)
 ):
     verify_org_access(current_user, org_id, db)
-
-    query = db.query(Song).filter(Song.organization_id == org_id)
-    if creator_id:
-        song_ids = db.query(SongCredit.song_id).filter(SongCredit.creator_id == creator_id).subquery()
-        query = query.filter(Song.id.in_(song_ids))
-    if status == "outstanding":
-        query = query.filter(or_(Song.is_registered_with_pro == False, Song.is_registered_with_pro.is_(None)))
-    elif status == "registered":
-        query = query.filter(Song.is_registered_with_pro == True)
-
-    songs = query.all()
-    report_items = [build_song_registration_data(s, db) for s in songs]
-
-    valid_count = sum(1 for item in report_items if item["is_valid"])
-    total_count = len(report_items)
-    outstanding_count = sum(1 for item in report_items if not item["is_registered_with_pro"])
-
-    return {
-        "type": "songs",
-        "total": total_count,
-        "valid": valid_count,
-        "invalid": total_count - valid_count,
-        "outstanding": outstanding_count,
-        "registered": total_count - outstanding_count,
-        "items": report_items
-    }
+    report_items = _build_report_items(db, org_id, "songs", creator_id=creator_id, status=status)
+    stats = _compute_report_stats(report_items)
+    return {"type": "songs", **stats, "items": report_items}
 
 
 @router.get("/org/{org_id}/creators")
@@ -297,29 +294,15 @@ def export_selected_registration_pdf(
 
     try:
         from reportlab.lib.pagesizes import letter, landscape
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
     except ImportError:
         raise HTTPException(status_code=500, detail="PDF generation not available")
 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     org_name = org.name if org else "Organization"
 
-    items = []
-    if request.asset_type == "works":
-        if request.item_ids:
-            works = db.query(Work).filter(Work.id.in_(request.item_ids), Work.organization_id == org_id).all()
-        else:
-            works = db.query(Work).filter(Work.organization_id == org_id, or_(Work.is_registered_with_pro == False, Work.is_registered_with_pro.is_(None))).all()
-        items = [build_work_registration_data(w, db) for w in works]
-    else:
-        if request.item_ids:
-            songs = db.query(Song).filter(Song.id.in_(request.item_ids), Song.organization_id == org_id).all()
-        else:
-            songs = db.query(Song).filter(Song.organization_id == org_id, or_(Song.is_registered_with_pro == False, Song.is_registered_with_pro.is_(None))).all()
-        items = [build_song_registration_data(s, db) for s in songs]
+    items = _build_report_items(db, org_id, request.asset_type, item_ids=request.item_ids or None)
+    if not request.item_ids:
+        items = [i for i in items if not i.get("is_registered_with_pro")]
 
     buffer = _generate_pdf(items, request.asset_type, org_name)
 
@@ -342,6 +325,8 @@ def export_registration_csv(
 ):
     verify_org_access(current_user, org_id, db)
 
+    items = _build_report_items(db, org_id, asset_type, creator_id=creator_id, status=status)
+
     output = io.StringIO()
     writer = csv.writer(output)
 
@@ -354,17 +339,7 @@ def export_registration_csv(
             "Administrator Name", "Admin PRO", "Admin IPI",
             "Validation Status"
         ])
-        query = db.query(Work).filter(Work.organization_id == org_id)
-        if creator_id:
-            work_ids = db.query(WorkCredit.work_id).filter(WorkCredit.creator_id == creator_id).subquery()
-            query = query.filter(Work.id.in_(work_ids))
-        if status == "outstanding":
-            query = query.filter(or_(Work.is_registered_with_pro == False, Work.is_registered_with_pro.is_(None)))
-        elif status == "registered":
-            query = query.filter(Work.is_registered_with_pro == True)
-        works = query.all()
-        for work in works:
-            data = build_work_registration_data(work, db)
+        for data in items:
             if not data["writers"]:
                 writer.writerow([
                     data["title"], data["iswc"] or "", data["work_type"] or "",
@@ -395,17 +370,7 @@ def export_registration_csv(
             "Administrator Name", "Admin PRO", "Admin IPI",
             "Validation Status"
         ])
-        query = db.query(Song).filter(Song.organization_id == org_id)
-        if creator_id:
-            song_ids = db.query(SongCredit.song_id).filter(SongCredit.creator_id == creator_id).subquery()
-            query = query.filter(Song.id.in_(song_ids))
-        if status == "outstanding":
-            query = query.filter(or_(Song.is_registered_with_pro == False, Song.is_registered_with_pro.is_(None)))
-        elif status == "registered":
-            query = query.filter(Song.is_registered_with_pro == True)
-        songs = query.all()
-        for song in songs:
-            data = build_song_registration_data(song, db)
+        for data in items:
             if not data["writers"]:
                 writer.writerow([
                     data["title"], data.get("primary_artist") or "", data["isrc"] or "",
@@ -455,37 +420,13 @@ def export_registration_pdf_get(
 
     try:
         from reportlab.lib.pagesizes import letter, landscape
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
     except ImportError:
         raise HTTPException(status_code=500, detail="PDF generation not available")
 
     org = db.query(Organization).filter(Organization.id == org_id).first()
     org_name = org.name if org else "Organization"
 
-    if asset_type == "works":
-        query = db.query(Work).filter(Work.organization_id == org_id)
-        if creator_id:
-            work_ids = db.query(WorkCredit.work_id).filter(WorkCredit.creator_id == creator_id).subquery()
-            query = query.filter(Work.id.in_(work_ids))
-        if status == "outstanding":
-            query = query.filter(or_(Work.is_registered_with_pro == False, Work.is_registered_with_pro.is_(None)))
-        elif status == "registered":
-            query = query.filter(Work.is_registered_with_pro == True)
-        items = [build_work_registration_data(w, db) for w in query.all()]
-    else:
-        query = db.query(Song).filter(Song.organization_id == org_id)
-        if creator_id:
-            song_ids = db.query(SongCredit.song_id).filter(SongCredit.creator_id == creator_id).subquery()
-            query = query.filter(Song.id.in_(song_ids))
-        if status == "outstanding":
-            query = query.filter(or_(Song.is_registered_with_pro == False, Song.is_registered_with_pro.is_(None)))
-        elif status == "registered":
-            query = query.filter(Song.is_registered_with_pro == True)
-        items = [build_song_registration_data(s, db) for s in query.all()]
-
+    items = _build_report_items(db, org_id, asset_type, creator_id=creator_id, status=status)
     buffer = _generate_pdf(items, asset_type, org_name)
     filename = f"Registration_Report_{asset_type}_{org_name}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
     return Response(
@@ -538,19 +479,9 @@ def send_registration_report_email(
     if not to_email:
         raise HTTPException(status_code=400, detail="No recipient email provided")
 
-    items = []
-    if request.asset_type == "works":
-        if request.item_ids:
-            works = db.query(Work).filter(Work.id.in_(request.item_ids), Work.organization_id == org_id).all()
-        else:
-            works = db.query(Work).filter(Work.organization_id == org_id, or_(Work.is_registered_with_pro == False, Work.is_registered_with_pro.is_(None))).all()
-        items = [build_work_registration_data(w, db) for w in works]
-    else:
-        if request.item_ids:
-            songs = db.query(Song).filter(Song.id.in_(request.item_ids), Song.organization_id == org_id).all()
-        else:
-            songs = db.query(Song).filter(Song.organization_id == org_id, or_(Song.is_registered_with_pro == False, Song.is_registered_with_pro.is_(None))).all()
-        items = [build_song_registration_data(s, db) for s in songs]
+    items = _build_report_items(db, org_id, request.asset_type, item_ids=request.item_ids or None)
+    if not request.item_ids:
+        items = [i for i in items if not i.get("is_registered_with_pro")]
 
     if not items:
         raise HTTPException(status_code=400, detail="No items to include in the report")
@@ -600,6 +531,240 @@ def send_registration_report_email(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+
+
+class SaveReportRequest(BaseModel):
+    title: Optional[str] = None
+    asset_type: str = "songs"
+    creator_id: Optional[int] = None
+    filter_status: Optional[str] = None
+
+
+@router.get("/org/{org_id}/saved")
+def list_saved_reports(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import RegistrationReport
+    verify_org_access(current_user, org_id, db)
+
+    reports = db.query(RegistrationReport).filter(
+        RegistrationReport.organization_id == org_id
+    ).order_by(RegistrationReport.created_at.desc()).all()
+
+    return [{
+        "id": r.id,
+        "title": r.title,
+        "report_type": r.report_type,
+        "status": r.status,
+        "filter_creator_id": r.filter_creator_id,
+        "filter_status": r.filter_status,
+        "item_count": r.item_count,
+        "outstanding_count": r.outstanding_count,
+        "ready_count": r.ready_count,
+        "needs_attention_count": r.needs_attention_count,
+        "generated_at": r.generated_at.isoformat() if r.generated_at else None,
+        "sent_at": r.sent_at.isoformat() if r.sent_at else None,
+        "sent_to": r.sent_to,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "created_by_user_id": r.created_by_user_id,
+    } for r in reports]
+
+
+@router.post("/org/{org_id}/save")
+def save_report(
+    org_id: int,
+    request: SaveReportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import RegistrationReport
+    verify_org_access(current_user, org_id, db)
+
+    report_items = _build_report_items(
+        db, org_id, request.asset_type,
+        creator_id=request.creator_id,
+        status=request.filter_status,
+    )
+    stats = _compute_report_stats(report_items)
+
+    now = datetime.utcnow()
+    title = request.title or f"Registration Report — {request.asset_type.title()} ({now.strftime('%b %d, %Y')})"
+
+    report = RegistrationReport(
+        organization_id=org_id,
+        report_type=request.asset_type.upper(),
+        title=title,
+        status="GENERATED",
+        filter_creator_id=request.creator_id,
+        filter_status=request.filter_status,
+        item_count=stats["total"],
+        outstanding_count=stats["outstanding"],
+        ready_count=stats["valid"],
+        needs_attention_count=stats["invalid"],
+        report_data=json.dumps(report_items),
+        generated_at=now,
+        created_by_user_id=current_user.id,
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+
+    return {
+        "id": report.id,
+        "title": report.title,
+        "report_type": report.report_type,
+        "status": report.status,
+        "item_count": report.item_count,
+        "outstanding_count": report.outstanding_count,
+        "ready_count": report.ready_count,
+        "needs_attention_count": report.needs_attention_count,
+        "generated_at": report.generated_at.isoformat() if report.generated_at else None,
+        "created_at": report.created_at.isoformat() if report.created_at else None,
+    }
+
+
+@router.get("/org/{org_id}/saved/{report_id}")
+def get_saved_report(
+    org_id: int,
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import RegistrationReport
+    verify_org_access(current_user, org_id, db)
+
+    report = db.query(RegistrationReport).filter(
+        RegistrationReport.id == report_id,
+        RegistrationReport.organization_id == org_id,
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    report_items = json.loads(report.report_data) if report.report_data else []
+
+    return {
+        "id": report.id,
+        "title": report.title,
+        "report_type": report.report_type,
+        "status": report.status,
+        "filter_creator_id": report.filter_creator_id,
+        "filter_status": report.filter_status,
+        "item_count": report.item_count,
+        "outstanding_count": report.outstanding_count,
+        "ready_count": report.ready_count,
+        "needs_attention_count": report.needs_attention_count,
+        "generated_at": report.generated_at.isoformat() if report.generated_at else None,
+        "sent_at": report.sent_at.isoformat() if report.sent_at else None,
+        "sent_to": report.sent_to,
+        "created_at": report.created_at.isoformat() if report.created_at else None,
+        "items": report_items,
+    }
+
+
+@router.put("/org/{org_id}/saved/{report_id}/refresh")
+def refresh_saved_report(
+    org_id: int,
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import RegistrationReport
+    verify_org_access(current_user, org_id, db)
+
+    report = db.query(RegistrationReport).filter(
+        RegistrationReport.id == report_id,
+        RegistrationReport.organization_id == org_id,
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    asset_type = report.report_type.lower() if report.report_type else "songs"
+    report_items = _build_report_items(
+        db, org_id, asset_type,
+        creator_id=report.filter_creator_id,
+        status=report.filter_status,
+    )
+    stats = _compute_report_stats(report_items)
+
+    report.report_data = json.dumps(report_items)
+    report.item_count = stats["total"]
+    report.outstanding_count = stats["outstanding"]
+    report.ready_count = stats["valid"]
+    report.needs_attention_count = stats["invalid"]
+    report.generated_at = datetime.utcnow()
+    report.status = "GENERATED"
+    db.commit()
+
+    return {
+        "id": report.id,
+        "title": report.title,
+        "item_count": report.item_count,
+        "outstanding_count": report.outstanding_count,
+        "ready_count": report.ready_count,
+        "needs_attention_count": report.needs_attention_count,
+        "generated_at": report.generated_at.isoformat() if report.generated_at else None,
+        "items": json.loads(report.report_data) if report.report_data else [],
+    }
+
+
+@router.delete("/org/{org_id}/saved/{report_id}")
+def delete_saved_report(
+    org_id: int,
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import RegistrationReport
+    verify_org_access(current_user, org_id, db)
+
+    report = db.query(RegistrationReport).filter(
+        RegistrationReport.id == report_id,
+        RegistrationReport.organization_id == org_id,
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    db.delete(report)
+    db.commit()
+    return {"detail": "Report deleted"}
+
+
+@router.get("/org/{org_id}/saved/{report_id}/pdf")
+def download_saved_report_pdf(
+    org_id: int,
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import RegistrationReport
+    verify_org_access(current_user, org_id, db)
+
+    report = db.query(RegistrationReport).filter(
+        RegistrationReport.id == report_id,
+        RegistrationReport.organization_id == org_id,
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    report_items = json.loads(report.report_data) if report.report_data else []
+    if not report_items:
+        raise HTTPException(status_code=400, detail="Report has no data")
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    org_name = org.name if org else "Organization"
+    asset_type = report.report_type.lower() if report.report_type else "songs"
+
+    buffer = _generate_pdf(report_items, asset_type, org_name)
+    import re
+    safe_title = re.sub(r'[^\w\s-]', '', report.title or 'Report').replace(' ', '_')[:80]
+    filename = f"Registration_Report_{safe_title}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+    return Response(
+        content=buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 def _generate_pdf(items, asset_type, org_name):

@@ -26,6 +26,7 @@ from .models import (
     AdvanceV2, PayoutBatch, PayoutItem,
     CreatorStorageLink, ScanStatus, MatchConfidence, StorageScanResult,
     PushSubscription,
+    RegistrationReport,
 )
 
 __all__ = [
@@ -56,4 +57,5 @@ __all__ = [
     "AdvanceV2", "PayoutBatch", "PayoutItem",
     "CreatorStorageLink", "ScanStatus", "MatchConfidence", "StorageScanResult",
     "PushSubscription",
+    "RegistrationReport",
 ]
