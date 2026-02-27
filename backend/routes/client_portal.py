@@ -53,7 +53,7 @@ def get_client_profile(
     return {
         "creator_id": creator.id,
         "organization_id": membership.organization_id,
-        "organization_name": org.name if org else None,
+        "organization_name": (org.display_name or org.name) if org else None,
         "role": membership.role,
         "client_access_scope": getattr(membership, 'client_access_scope', 'OWN') or 'OWN',
         "creator": {
@@ -172,18 +172,25 @@ def get_client_catalog(
             Song.id.in_(song_ids),
             Song.organization_id == org_id
         ).all()
+
+        all_credits = db.query(SongCredit).filter(SongCredit.song_id.in_(song_ids)).all()
+        creator_ids = list(set(c.creator_id for c in all_credits if c.creator_id))
+        creators_map = {}
+        if creator_ids:
+            creators = db.query(Creator).filter(Creator.id.in_(creator_ids)).all()
+            creators_map = {c.id: c.display_name for c in creators}
+
+        credits_by_song = {}
+        for c in all_credits:
+            credits_by_song.setdefault(c.song_id, []).append({
+                "id": c.id,
+                "creator_id": c.creator_id,
+                "creator_name": creators_map.get(c.creator_id, "Unknown"),
+                "role": c.role,
+                "share_percentage": c.share_percentage,
+            })
+
         for s in song_rows:
-            credits = db.query(SongCredit).filter(SongCredit.song_id == s.id).all()
-            credit_list = []
-            for c in credits:
-                cr = db.query(Creator).filter(Creator.id == c.creator_id).first()
-                credit_list.append({
-                    "id": c.id,
-                    "creator_id": c.creator_id,
-                    "creator_name": cr.display_name if cr else "Unknown",
-                    "role": c.role,
-                    "share_percentage": c.share_percentage,
-                })
             songs.append({
                 "id": s.id,
                 "title": s.title,
@@ -191,7 +198,7 @@ def get_client_catalog(
                 "isrc": s.isrc,
                 "release_date": str(s.release_date) if s.release_date else None,
                 "status": getattr(s, 'status', None),
-                "credits": credit_list,
+                "credits": credits_by_song.get(s.id, []),
             })
 
     work_credits = db.query(WorkCredit).filter(WorkCredit.creator_id == creator.id).all()
