@@ -10,6 +10,12 @@ import {
   PencilIcon,
   CheckIcon,
   XMarkIcon,
+  UserGroupIcon,
+  PlusIcon,
+  MagnifyingGlassIcon,
+  TrashIcon,
+  EnvelopeIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline'
 
 const TABS = [
@@ -18,6 +24,7 @@ const TABS = [
   { key: 'placements', label: 'Placements', icon: FilmIcon },
   { key: 'contracts', label: 'Contracts', icon: ClipboardDocumentListIcon },
   { key: 'accounting', label: 'Accounting', icon: BanknotesIcon },
+  { key: 'directory', label: 'Directory', icon: UserGroupIcon },
   { key: 'access', label: 'Access', icon: ShareIcon },
 ]
 
@@ -95,6 +102,7 @@ export default function ClientPortalPage() {
       {activeTab === 'placements' && <PlacementsTab />}
       {activeTab === 'contracts' && <ContractsTab />}
       {activeTab === 'accounting' && <AccountingTab />}
+      {activeTab === 'directory' && <DirectoryTab organizationId={profile.organization_id} />}
       {activeTab === 'access' && <AccessTab />}
     </div>
   )
@@ -632,6 +640,327 @@ function AccessTab() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+const DIR_ROLE_OPTIONS = ['Songwriter', 'Producer', 'Artist', 'Musician', 'Engineer', 'Featured Artist', 'Composer', 'Lyricist', 'Arranger', 'Manager', 'Lawyer', 'Publisher', 'A&R', 'Agent']
+
+const DIR_ROLE_COLORS = {
+  Songwriter: 'bg-blue-100 text-blue-700',
+  Producer: 'bg-purple-100 text-purple-700',
+  Artist: 'bg-green-100 text-green-700',
+  Musician: 'bg-orange-100 text-orange-700',
+  Engineer: 'bg-teal-100 text-teal-700',
+  'Featured Artist': 'bg-pink-100 text-pink-700',
+  Composer: 'bg-indigo-100 text-indigo-700',
+  Lyricist: 'bg-yellow-100 text-yellow-700',
+  Arranger: 'bg-red-100 text-red-700',
+  Manager: 'bg-emerald-100 text-emerald-700',
+  Lawyer: 'bg-slate-100 text-slate-700',
+  Publisher: 'bg-cyan-100 text-cyan-700',
+  'A&R': 'bg-violet-100 text-violet-700',
+  Agent: 'bg-amber-100 text-amber-700',
+}
+
+const dirEmptyForm = {
+  display_name: '', legal_name: '', email: '', phone: '',
+  pro: '', ipi: '', isni: '',
+  publisher_name: '', publisher_ipi: '', publisher_pro: '',
+  roles: [],
+  representation_name: '', representation_email: '', representation_phone: '',
+  territory: '', notes: ''
+}
+
+function DirectoryTab({ organizationId }) {
+  const [contacts, setContacts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [editingContact, setEditingContact] = useState(null)
+  const [form, setForm] = useState({ ...dirEmptyForm })
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (organizationId) loadContacts()
+  }, [organizationId])
+
+  useEffect(() => {
+    if (!organizationId) return
+    const timer = setTimeout(() => loadContacts(), 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  async function loadContacts() {
+    try {
+      const params = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ''
+      const res = await axios.get(`/api/creative-directory/org/${organizationId}${params}`)
+      setContacts(Array.isArray(res.data) ? res.data : res.data.contacts || [])
+    } catch (err) {
+      console.error('Failed to load contacts:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function openAdd() {
+    setEditingContact(null)
+    setForm({ ...dirEmptyForm })
+    setShowForm(true)
+  }
+
+  function openEdit(contact) {
+    setEditingContact(contact)
+    setForm({ ...dirEmptyForm, ...contact, roles: contact.roles || [] })
+    setShowForm(true)
+  }
+
+  function closeForm() {
+    setShowForm(false)
+    setEditingContact(null)
+    setForm({ ...dirEmptyForm })
+  }
+
+  async function handleSave(e) {
+    e.preventDefault()
+    if (!form.display_name.trim()) return
+    setSaving(true)
+    try {
+      if (editingContact) {
+        await axios.put(`/api/creative-directory/${editingContact.id}`, form)
+      } else {
+        await axios.post(`/api/creative-directory/org/${organizationId}`, form)
+      }
+      closeForm()
+      await loadContacts()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to save contact')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(contact) {
+    if (!window.confirm(`Delete "${contact.display_name}" from your directory?`)) return
+    try {
+      await axios.delete(`/api/creative-directory/${contact.id}`)
+      await loadContacts()
+    } catch (err) {
+      console.error('Failed to delete contact:', err)
+    }
+  }
+
+  function handleRoleToggle(role) {
+    setForm(prev => ({
+      ...prev,
+      roles: prev.roles.includes(role) ? prev.roles.filter(r => r !== role) : [...prev.roles, role]
+    }))
+  }
+
+  const filtered = roleFilter ? contacts.filter(c => c.roles && c.roles.includes(roleFilter)) : contacts
+
+  if (loading) return <LoadingSpinner />
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+          <h2 className="text-lg font-semibold text-[#3D4A44]">My Contacts ({contacts.length})</h2>
+          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm font-medium">
+            <PlusIcon className="w-4 h-4" />
+            Add Contact
+          </button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#7A8580]" />
+            <input
+              type="text"
+              placeholder="Search contacts..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+            />
+          </div>
+          <select
+            value={roleFilter}
+            onChange={e => setRoleFilter(e.target.value)}
+            className="border border-[#D1D5CE] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+          >
+            <option value="">All Roles</option>
+            {DIR_ROLE_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+
+        {filtered.length === 0 ? (
+          <EmptyState text={contacts.length === 0 ? "No contacts yet. Add your first contact!" : "No contacts match your filter."} />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filtered.map(contact => (
+              <div key={contact.id} className="border border-[#E5E8E3] rounded-xl p-4 hover:shadow-sm transition-shadow flex flex-col">
+                <div className="flex-1 min-w-0 mb-2">
+                  <h3 className="text-sm font-semibold text-[#3D4A44] truncate">{contact.display_name}</h3>
+                  {contact.legal_name && <p className="text-xs text-[#7A8580] truncate">{contact.legal_name}</p>}
+                </div>
+
+                {contact.roles && contact.roles.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {contact.roles.map(role => (
+                      <span key={role} className={`px-2 py-0.5 rounded-full text-xs font-medium ${DIR_ROLE_COLORS[role] || 'bg-gray-100 text-gray-700'}`}>
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="space-y-1 text-xs text-[#7A8580] flex-1">
+                  {contact.email && <p className="truncate">{contact.email}</p>}
+                  {contact.phone && <p>{contact.phone}</p>}
+                  {contact.pro && <p>PRO: <span className="text-[#3D4A44] font-medium">{contact.pro}</span>{contact.ipi ? ` · IPI: ${contact.ipi}` : ''}</p>}
+                  {contact.publisher_name && <p>Publisher: <span className="text-[#3D4A44]">{contact.publisher_name}</span></p>}
+                  {contact.representation_name && <p>Rep: <span className="text-[#3D4A44]">{contact.representation_name}</span></p>}
+                  {contact.territory && <p>Territory: {contact.territory}</p>}
+                </div>
+
+                <div className="flex items-center gap-2 mt-3 pt-2 border-t border-[rgba(59,77,67,0.08)]">
+                  <button onClick={() => openEdit(contact)} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#5B8A72] hover:bg-[#5B8A72]/10 rounded-lg transition-colors">
+                    <PencilIcon className="w-3.5 h-3.5" />
+                    Edit
+                  </button>
+                  <button onClick={() => handleDelete(contact)} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                    <TrashIcon className="w-3.5 h-3.5" />
+                    Delete
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await axios.get(`/api/creative-directory/${contact.id}/pdf`, { responseType: 'blob' })
+                        const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+                        const link = document.createElement('a')
+                        link.href = url
+                        link.setAttribute('download', `Contact_Card_${contact.display_name.replace(/\s+/g, '_')}.pdf`)
+                        document.body.appendChild(link)
+                        link.click()
+                        link.remove()
+                        window.URL.revokeObjectURL(url)
+                      } catch (err) {
+                        alert('Failed to download contact card')
+                      }
+                    }}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg transition-colors ml-auto"
+                  >
+                    <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                    PDF
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showForm && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-[#E5E8E3]">
+              <h2 className="text-lg font-bold text-[#3D4A44]">{editingContact ? 'Edit Contact' : 'Add Contact'}</h2>
+              <button onClick={closeForm} className="w-8 h-8 flex items-center justify-center rounded-full text-[#7A8580] hover:text-[#3D4A44] hover:bg-[#EEF1EC]">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSave} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Display Name *</label>
+                  <input type="text" required value={form.display_name} onChange={e => setForm(p => ({ ...p, display_name: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Legal Name</label>
+                  <input type="text" value={form.legal_name} onChange={e => setForm(p => ({ ...p, legal_name: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Email</label>
+                  <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Phone</label>
+                  <input type="text" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">PRO</label>
+                  <input type="text" value={form.pro} onChange={e => setForm(p => ({ ...p, pro: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">IPI</label>
+                  <input type="text" value={form.ipi} onChange={e => setForm(p => ({ ...p, ipi: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Publisher</label>
+                  <input type="text" value={form.publisher_name} onChange={e => setForm(p => ({ ...p, publisher_name: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-2">Roles</label>
+                <div className="flex flex-wrap gap-2">
+                  {DIR_ROLE_OPTIONS.map(role => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => handleRoleToggle(role)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
+                        form.roles.includes(role)
+                          ? 'bg-[#5B8A72] text-white border-[#5B8A72]'
+                          : 'bg-white text-[#7A8580] border-[#D1D5CE] hover:border-[#5B8A72] hover:text-[#5B8A72]'
+                      }`}
+                    >
+                      {role}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Rep Name</label>
+                  <input type="text" value={form.representation_name} onChange={e => setForm(p => ({ ...p, representation_name: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Rep Email</label>
+                  <input type="email" value={form.representation_email} onChange={e => setForm(p => ({ ...p, representation_email: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Rep Phone</label>
+                  <input type="text" value={form.representation_phone} onChange={e => setForm(p => ({ ...p, representation_phone: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Territory</label>
+                  <input type="text" value={form.territory} onChange={e => setForm(p => ({ ...p, territory: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" placeholder="e.g. United States" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Notes</label>
+                  <input type="text" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={closeForm} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44]">Cancel</button>
+                <button type="submit" disabled={saving || !form.display_name.trim()} className="px-5 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] text-sm font-medium disabled:opacity-50">
+                  {saving ? 'Saving...' : 'Save Contact'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

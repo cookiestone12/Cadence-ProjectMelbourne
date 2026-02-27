@@ -498,7 +498,7 @@ function CreateClientLoginModal({ creators, existingMembers, onClose, onSave }) 
   const [error, setError] = useState(null)
 
   const linkedCreatorIds = new Set(
-    existingMembers.filter(m => m.linked_creator_id).map(m => m.linked_creator_id)
+    existingMembers.filter(m => m.linked_creator_id && m.role === 'CLIENT').map(m => m.linked_creator_id)
   )
   const availableCreators = creators.filter(c => !linkedCreatorIds.has(c.id))
 

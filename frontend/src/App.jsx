@@ -58,6 +58,7 @@ import SyncReportsPage from './pages/SyncReportsPage'
 import BriefBuilderPage from './pages/BriefBuilderPage'
 import StorageScanPage from './pages/StorageScanPage'
 import ClientPortalPage from './pages/ClientPortalPage'
+import SharedContactsPage from './pages/SharedContactsPage'
 import Sidebar from './components/Sidebar'
 
 function App() {
@@ -134,6 +135,7 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
           <Route path="/guide" element={<UserGuidePage />} />
+          <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>
       </Router>
@@ -192,6 +194,7 @@ function App() {
                 <Route path="/client-portal" element={<ClientPortalPage />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/guide" element={<UserGuidePage />} />
+                <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
                 <Route path="/org-admin" element={<TenantAdminPage />} />
                 {user?.is_super_admin && (
                   <Route path="/admin" element={<AdminDashboard />} />

@@ -5,10 +5,11 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import io
-from ..models import get_db, CreativeContact, Creator, OrganizationMember, User, Organization
+from ..models import get_db, CreativeContact, Creator, OrganizationMember, User, Organization, SharedContactLink
 from ..utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/creative-directory", tags=["creative-directory"])
+public_router = APIRouter(prefix="/api/public", tags=["public"])
 
 
 def verify_org_access(user: User, org_id: int, db: Session):
@@ -555,3 +556,152 @@ def download_creative_card_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+class BulkShareRequest(BaseModel):
+    contact_ids: List[int]
+    recipient_email: str
+    recipient_name: Optional[str] = None
+    message: Optional[str] = None
+    subject: Optional[str] = None
+    include_pdf: Optional[bool] = True
+
+
+@router.post("/org/{org_id}/bulk-share")
+def bulk_share_contacts(
+    org_id: int,
+    data: BulkShareRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    contacts = db.query(CreativeContact).filter(
+        CreativeContact.id.in_(data.contact_ids),
+        CreativeContact.organization_id == org_id,
+    ).all()
+    if not contacts:
+        raise HTTPException(status_code=404, detail="No contacts found")
+
+    from ..templates.email_templates import share_contact_card as share_template
+    from ..services.email_provider import get_email_provider
+    import base64
+
+    sender_name = getattr(current_user, 'full_name', None) or current_user.username
+    contact_names = ", ".join(c.display_name for c in contacts)
+
+    summary_lines = []
+    for c in contacts:
+        roles_str = ", ".join(c.roles) if c.roles else ""
+        line = f"<b>{c.display_name}</b>"
+        if roles_str:
+            line += f" — {roles_str}"
+        if c.email:
+            line += f" ({c.email})"
+        summary_lines.append(line)
+
+    html_body = share_template(
+        sender_name=sender_name,
+        contact_name=contact_names,
+        contact_role=f"{len(contacts)} contacts shared",
+        contact_email="",
+        contact_phone="",
+        contact_company="",
+        message=(data.message or "") + "<br><br><b>Contacts included:</b><br>" + "<br>".join(summary_lines),
+    )
+
+    attachments = []
+    if data.include_pdf:
+        for contact in contacts:
+            try:
+                pdf_response = download_creative_card_pdf(contact.id, db, current_user)
+                if hasattr(pdf_response, 'body'):
+                    pdf_b64 = base64.b64encode(pdf_response.body).decode('utf-8')
+                    safe_name = contact.display_name.replace(" ", "_").replace("/", "-")
+                    attachments.append({
+                        "filename": f"Creative_Card_{safe_name}.pdf",
+                        "content": pdf_b64,
+                    })
+            except Exception:
+                pass
+
+    email_subject = data.subject or f"Creative Cards: {contact_names}"
+    provider = get_email_provider()
+    success = provider.send_email(
+        to=data.recipient_email,
+        subject=email_subject,
+        html_body=html_body,
+        attachments=attachments if attachments else None,
+    )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send email")
+
+    return {"success": True, "message": f"{len(contacts)} contact cards shared with {data.recipient_email}"}
+
+
+class ShareLinkRequest(BaseModel):
+    contact_ids: List[int]
+    expires_in_days: Optional[int] = 7
+
+
+@router.post("/org/{org_id}/share-link")
+def create_share_link(
+    org_id: int,
+    data: ShareLinkRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    contacts = db.query(CreativeContact).filter(
+        CreativeContact.id.in_(data.contact_ids),
+        CreativeContact.organization_id == org_id,
+    ).all()
+    if not contacts:
+        raise HTTPException(status_code=404, detail="No contacts found")
+
+    import uuid
+    from datetime import timedelta
+    token = uuid.uuid4().hex
+    expires_at = datetime.utcnow() + timedelta(days=data.expires_in_days or 7)
+
+    link = SharedContactLink(
+        organization_id=org_id,
+        contact_ids=[c.id for c in contacts],
+        token=token,
+        expires_at=expires_at,
+        created_by_user_id=current_user.id,
+    )
+    db.add(link)
+    db.commit()
+
+    return {
+        "success": True,
+        "token": token,
+        "expires_at": expires_at.isoformat(),
+        "contact_count": len(contacts),
+    }
+
+
+@public_router.get("/shared-contacts/{token}")
+def get_shared_contacts(
+    token: str,
+    db: Session = Depends(get_db),
+):
+    link = db.query(SharedContactLink).filter(SharedContactLink.token == token).first()
+    if not link:
+        raise HTTPException(status_code=404, detail="Shared link not found")
+    if link.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=410, detail="This shared link has expired")
+
+    contacts = db.query(CreativeContact).filter(
+        CreativeContact.id.in_(link.contact_ids),
+    ).all()
+
+    org = db.query(Organization).filter(Organization.id == link.organization_id).first()
+    org_name = org.display_name or org.name if org else "Cadence"
+
+    return {
+        "organization_name": org_name,
+        "contacts": [_contact_to_dict(c) for c in contacts],
+        "expires_at": link.expires_at.isoformat(),
+    }

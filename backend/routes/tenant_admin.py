@@ -644,7 +644,9 @@ def list_org_creators(
         {
             "id": c.id,
             "name": c.name,
-            "assigned_to_user_id": getattr(c, 'assigned_to_user_id', None)
+            "display_name": getattr(c, 'display_name', None) or c.name,
+            "assigned_to_user_id": getattr(c, 'assigned_to_user_id', None),
+            "linked_user_id": getattr(c, 'linked_user_id', None)
         }
         for c in creators
     ]

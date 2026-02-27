@@ -27,12 +27,13 @@ from .models import (
     CreatorStorageLink, ScanStatus, MatchConfidence, StorageScanResult,
     PushSubscription,
     RegistrationReport,
+    SharedContactLink,
 )
 
 __all__ = [
     "Base", "engine", "get_db",
     "User", "Songwriter", "Song", "Analytics", "Settings", "Catalog",
-    "Organization", "OrganizationMember", "Creator", "CreativeContact", "CreatorContact", "SongCredit", "SongDSPLink",
+    "Organization", "OrganizationMember", "Creator", "CreativeContact", "CreatorContact", "SharedContactLink", "SongCredit", "SongDSPLink",
     "ChecklistItem", "SongChecklistStatus", "SongValuationSnapshot",
     "OrganizationType", "OrganizationMemberRole", "CreatorRole", "CreditRole", "CreatorContactRole",
     "DSPPlatform", "ChecklistStatus", "ChecklistCategory", "ValuationSource", "PRO",

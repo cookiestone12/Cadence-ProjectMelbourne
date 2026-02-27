@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import axios from 'axios'
 import {
   UserGroupIcon, PlusIcon, MagnifyingGlassIcon, XMarkIcon,
-  PencilIcon, TrashIcon, ArrowDownTrayIcon, ArrowPathIcon, LinkIcon, EnvelopeIcon
+  PencilIcon, TrashIcon, ArrowDownTrayIcon, ArrowPathIcon, LinkIcon, EnvelopeIcon,
+  CheckIcon, ClipboardDocumentIcon
 } from '@heroicons/react/24/outline'
 import EmailSendModal from '../components/EmailSendModal'
 
@@ -197,6 +198,10 @@ export default function CreativeDirectoryPage() {
   const [shareModalContact, setShareModalContact] = useState(null)
   const [shareSending, setShareSending] = useState(false)
   const [shareResult, setShareResult] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [bulkShareOpen, setBulkShareOpen] = useState(false)
+  const [shareLinkLoading, setShareLinkLoading] = useState(false)
+  const [copiedLink, setCopiedLink] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -306,6 +311,61 @@ export default function CreativeDirectoryPage() {
     setShowEditModal(true)
   }
 
+  function toggleSelect(id) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === filteredContacts.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(filteredContacts.map(c => c.id)))
+    }
+  }
+
+  async function handleBulkShare({ to, subject, message }) {
+    setShareSending(true)
+    setShareResult(null)
+    try {
+      await axios.post(`/api/creative-directory/org/${organizationId}/bulk-share`, {
+        contact_ids: Array.from(selectedIds),
+        recipient_email: to,
+        subject,
+        message,
+      })
+      setShareResult({ success: true, message: `${selectedIds.size} contact cards shared successfully!` })
+    } catch (err) {
+      setShareResult({ success: false, message: err.response?.data?.detail || 'Failed to share contact cards' })
+    } finally {
+      setShareSending(false)
+    }
+  }
+
+  async function handleGenerateShareLink() {
+    if (selectedIds.size === 0) return
+    setShareLinkLoading(true)
+    try {
+      const res = await axios.post(`/api/creative-directory/org/${organizationId}/share-link`, {
+        contact_ids: Array.from(selectedIds),
+        expires_in_days: 7,
+      })
+      const link = `${window.location.origin}/shared/contacts/${res.data.token}`
+      await navigator.clipboard.writeText(link)
+      setCopiedLink(link)
+      setTimeout(() => setCopiedLink(null), 4000)
+    } catch (err) {
+      console.error('Failed to generate share link:', err)
+      alert(err.response?.data?.detail || 'Failed to generate share link')
+    } finally {
+      setShareLinkLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (!organizationId) return
     const timer = setTimeout(() => {
@@ -372,6 +432,33 @@ export default function CreativeDirectoryPage() {
         </button>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 mb-4 p-3 bg-[#5B8A72]/5 border border-[#5B8A72]/20 rounded-xl">
+          <span className="text-sm font-medium text-[#3D4A44]">{selectedIds.size} selected</span>
+          <button
+            onClick={() => { setBulkShareOpen(true); setShareResult(null) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+          >
+            <EnvelopeIcon className="w-3.5 h-3.5" />
+            Share via Email
+          </button>
+          <button
+            onClick={handleGenerateShareLink}
+            disabled={shareLinkLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-[rgba(59,77,67,0.12)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] transition-colors disabled:opacity-50"
+          >
+            <ClipboardDocumentIcon className="w-3.5 h-3.5" />
+            {shareLinkLoading ? 'Generating...' : copiedLink ? 'Link Copied!' : 'Copy Share Link'}
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="ml-auto text-xs text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+          >
+            Clear Selection
+          </button>
+        </div>
+      )}
+
       {filteredContacts.length === 0 ? (
         <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] p-12 text-center">
           <UserGroupIcon className="w-12 h-12 text-[#B0BDB4] mx-auto mb-3" />
@@ -379,15 +466,38 @@ export default function CreativeDirectoryPage() {
           <p className="text-sm text-[#7A8580]">Add your first collaborator or sync from your roster.</p>
         </div>
       ) : (
+        <>
+        <div className="flex items-center gap-2 mb-3">
+          <button
+            onClick={toggleSelectAll}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg transition-colors"
+          >
+            <input
+              type="checkbox"
+              checked={filteredContacts.length > 0 && selectedIds.size === filteredContacts.length}
+              onChange={toggleSelectAll}
+              className="rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
+            />
+            Select All
+          </button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredContacts.map(contact => (
-            <div key={contact.id} className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] p-5 hover:shadow-md transition-shadow flex flex-col">
+            <div key={contact.id} className={`bg-white rounded-2xl border p-5 hover:shadow-md transition-shadow flex flex-col ${selectedIds.has(contact.id) ? 'border-[#5B8A72] ring-1 ring-[#5B8A72]/30' : 'border-[rgba(59,77,67,0.12)]'}`}>
               <div className="flex items-start justify-between mb-3">
-                <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-2 flex-1 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(contact.id)}
+                    onChange={() => toggleSelect(contact.id)}
+                    className="mt-1.5 rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
+                  />
+                  <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-bold text-[#3D4A44] truncate">{contact.display_name}</h3>
                   {contact.legal_name && (
                     <p className="text-sm text-[#7A8580] truncate">{contact.legal_name}</p>
                   )}
+                  </div>
                 </div>
                 {contact.creator_id && (
                   <Link
@@ -482,6 +592,7 @@ export default function CreativeDirectoryPage() {
             </div>
           ))}
         </div>
+        </>
       )}
 
       <EmailSendModal
@@ -492,6 +603,18 @@ export default function CreativeDirectoryPage() {
         subtitle={shareModalContact ? `Share ${shareModalContact.display_name}'s creative card` : ''}
         defaultSubject={shareModalContact ? `Creative Card: ${shareModalContact.display_name}` : ''}
         defaultMessage={shareModalContact ? `Here is the creative contact card for ${shareModalContact.display_name}.` : ''}
+        sending={shareSending}
+        result={shareResult}
+      />
+
+      <EmailSendModal
+        isOpen={bulkShareOpen}
+        onClose={() => { setBulkShareOpen(false); setShareResult(null) }}
+        onSend={handleBulkShare}
+        title="Share Selected Contacts"
+        subtitle={`Share ${selectedIds.size} contact card${selectedIds.size !== 1 ? 's' : ''} via email`}
+        defaultSubject={`Creative Cards (${selectedIds.size} contacts)`}
+        defaultMessage={`Here are ${selectedIds.size} creative contact cards from our directory.`}
         sending={shareSending}
         result={shareResult}
       />
