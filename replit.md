@@ -46,7 +46,7 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Royalty Accounting System**: Financial engine for statement ingestion, asset matching, royalty calculation, advance recoupment, and payment management, supporting multi-currency and PRO statements. Includes a professional royalty processing pipeline with matching, allocation preview, audit-safe reprocessing, and payables management.
 - **Release Delivery & Distribution Readiness**: Comprehensive validation checks for release and track metadata, artwork, legal, and credits, with a status workflow and export options.
 - **Per-Creator Storage Linking**: Links individual creators to Dropbox/Google Drive folders with AI-powered recursive file scanning, fuzzy filename matching, a review workflow, and scheduled scans.
-- **Client Portal**: Org-managed client login system for creators to view their profiles, catalog, placements, contracts, accounting, creative directory, and manage access for other organizations.
+- **Client Portal**: Org-managed client login system for creators to view their profiles, catalog, placements, contracts, accounting, creative directory, and manage access for other organizations. Supports configurable `client_access_scope` (`OWN`/`ALL`) per client user to control whether they can browse other client profiles.
 - **Bulk & Cross-Org Contact Sharing**: Multi-select contact cards for bulk email sharing with PDF attachments, and shareable public links (token-based, expiring) for cross-organization contact card viewing without login. Model: `SharedContactLink`, public page: `/shared/contacts/:token`.
 - **Progressive Web App (PWA)**: Includes a web manifest, service worker for offline caching and push notifications, and an install prompt.
 

@@ -11,6 +11,7 @@ import {
   CheckIcon,
   XMarkIcon,
   UserGroupIcon,
+  UsersIcon,
   PlusIcon,
   MagnifyingGlassIcon,
   TrashIcon,
@@ -18,7 +19,7 @@ import {
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline'
 
-const TABS = [
+const BASE_TABS = [
   { key: 'profile', label: 'Profile', icon: UserCircleIcon },
   { key: 'catalog', label: 'Catalog', icon: MusicalNoteIcon },
   { key: 'placements', label: 'Placements', icon: FilmIcon },
@@ -58,6 +59,10 @@ export default function ClientPortalPage() {
     )
   }
 
+  const tabs = profile.client_access_scope === 'ALL'
+    ? [...BASE_TABS.slice(0, 6), { key: 'clients', label: 'Clients', icon: UsersIcon }, BASE_TABS[6]]
+    : BASE_TABS
+
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
       <div className="bg-gradient-to-r from-[#5B8A72] to-[#7BAF9E] rounded-2xl p-6 text-white shadow-sm">
@@ -78,7 +83,7 @@ export default function ClientPortalPage() {
 
       <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)]">
         <div className="flex overflow-x-auto no-scrollbar border-b border-[#E5E8E3]">
-          {TABS.map(tab => {
+          {tabs.map(tab => {
             const Icon = tab.icon
             const active = activeTab === tab.key
             return (
@@ -103,6 +108,7 @@ export default function ClientPortalPage() {
       {activeTab === 'contracts' && <ContractsTab />}
       {activeTab === 'accounting' && <AccountingTab />}
       {activeTab === 'directory' && <DirectoryTab organizationId={profile.organization_id} />}
+      {activeTab === 'clients' && profile.client_access_scope === 'ALL' && <ClientsTab />}
       {activeTab === 'access' && <AccessTab />}
     </div>
   )
@@ -670,6 +676,93 @@ const dirEmptyForm = {
   roles: [],
   representation_name: '', representation_email: '', representation_phone: '',
   territory: '', notes: ''
+}
+
+function ClientsTab() {
+  const [clients, setClients] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    axios.get('/api/client-portal/clients')
+      .then(res => setClients(res.data.clients || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-32">
+        <div className="w-6 h-6 border-2 border-[#5B8A72] border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (clients.length === 0) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-8 text-center">
+        <UsersIcon className="w-12 h-12 text-[#B0BDB4] mx-auto mb-3" />
+        <h3 className="text-lg font-semibold text-[#3D4A44] mb-1">No Other Clients</h3>
+        <p className="text-sm text-[#7A8580]">There are no other client profiles to display.</p>
+      </div>
+    )
+  }
+
+  const ROLE_COLORS = {
+    Songwriter: 'bg-blue-100 text-blue-700',
+    Producer: 'bg-purple-100 text-purple-700',
+    Artist: 'bg-green-100 text-green-700',
+    Musician: 'bg-orange-100 text-orange-700',
+    Engineer: 'bg-teal-100 text-teal-700',
+    'Featured Artist': 'bg-pink-100 text-pink-700',
+    Composer: 'bg-indigo-100 text-indigo-700',
+    Lyricist: 'bg-yellow-100 text-yellow-700',
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {clients.map(client => (
+        <div key={client.id} className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-5 flex flex-col">
+          <div className="flex items-center gap-3 mb-3">
+            {client.hero_image_url ? (
+              <img src={client.hero_image_url} alt="" className="w-12 h-12 rounded-full object-cover" />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-[#5B8A72]/10 flex items-center justify-center text-lg font-bold text-[#5B8A72]">
+                {client.display_name?.charAt(0) || '?'}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-semibold text-[#3D4A44] truncate">{client.display_name}</h3>
+              {client.primary_territory && (
+                <p className="text-xs text-[#7A8580]">{client.primary_territory}</p>
+              )}
+            </div>
+          </div>
+          {client.roles && client.roles.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {client.roles.map(role => (
+                <span key={role} className={`px-2 py-0.5 rounded-full text-xs font-medium ${ROLE_COLORS[role] || 'bg-gray-100 text-gray-700'}`}>
+                  {role}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="space-y-1 text-sm flex-1">
+            {client.email && (
+              <p className="text-[#7A8580] truncate">
+                <a href={`mailto:${client.email}`} className="hover:text-[#5B8A72] transition-colors">{client.email}</a>
+              </p>
+            )}
+            {client.primary_pro && (
+              <p className="text-[#7A8580]">PRO: <span className="text-[#3D4A44]">{client.primary_pro}</span></p>
+            )}
+            {client.publisher_name && (
+              <p className="text-[#7A8580]">Publisher: <span className="text-[#3D4A44]">{client.publisher_name}</span></p>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function DirectoryTab({ organizationId }) {

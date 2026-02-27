@@ -43,6 +43,7 @@ class TenantUserResponse(BaseModel):
     can_manage_roster: bool = False
     linked_creator_id: Optional[int] = None
     linked_creator_name: Optional[str] = None
+    client_access_scope: Optional[str] = "OWN"
     created_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
     assigned_creators: List[dict] = []
@@ -53,6 +54,7 @@ class TenantUserResponse(BaseModel):
 
 class UpdatePermissionsRequest(BaseModel):
     can_manage_roster: Optional[bool] = None
+    client_access_scope: Optional[str] = None
 
 
 class CreateTenantUserRequest(BaseModel):
@@ -61,6 +63,7 @@ class CreateTenantUserRequest(BaseModel):
     password: str
     role: str = "MEMBER"
     creator_id: Optional[int] = None
+    client_access_scope: Optional[str] = "OWN"
 
 
 class UpdateTenantUserRequest(BaseModel):
@@ -121,9 +124,10 @@ def list_tenant_members(
             can_manage_roster=getattr(member, 'can_manage_roster', False) or False,
             linked_creator_id=getattr(member, 'linked_creator_id', None),
             linked_creator_name=linked_creator_name,
+            client_access_scope=getattr(member, 'client_access_scope', 'OWN') or 'OWN',
             created_at=user.created_at,
             last_login_at=user.last_login_at if hasattr(user, 'last_login_at') else None,
-            assigned_creators=[{"id": c.id, "name": c.name} for c in creators]
+            assigned_creators=[{"id": c.id, "name": c.display_name} for c in creators]
         ))
 
     return result
@@ -182,7 +186,8 @@ def create_tenant_member(
         organization_id=org_id,
         user_id=user.id,
         role=request.role,
-        linked_creator_id=linked_creator_id
+        linked_creator_id=linked_creator_id,
+        client_access_scope=request.client_access_scope if request.role == "CLIENT" else None
     )
     db.add(membership)
     db.commit()
@@ -196,6 +201,7 @@ def create_tenant_member(
         is_active=user.is_active,
         linked_creator_id=linked_creator_id,
         linked_creator_name=linked_creator_name,
+        client_access_scope=membership.client_access_scope,
         created_at=user.created_at,
         last_login_at=None,
         assigned_creators=[]
@@ -249,7 +255,7 @@ def update_tenant_member(
         Creator.organization_id == org_id,
         Creator.assigned_to_user_id == user_id
     ).all()
-    creators = [{"id": c.id, "name": c.name} for c in assigned]
+    creators = [{"id": c.id, "name": c.display_name} for c in assigned]
 
     linked_creator_name = None
     if getattr(membership, 'linked_creator_id', None):
@@ -405,6 +411,8 @@ def update_member_permissions(
 
     if request.can_manage_roster is not None:
         membership.can_manage_roster = request.can_manage_roster
+    if request.client_access_scope is not None and request.client_access_scope in ("OWN", "ALL"):
+        membership.client_access_scope = request.client_access_scope
 
     db.commit()
     db.refresh(membership)
@@ -415,7 +423,7 @@ def update_member_permissions(
         Creator.organization_id == org_id,
         Creator.assigned_to_user_id == user_id
     ).all()
-    creators_list = [{"id": c.id, "name": c.name} for c in assigned]
+    creators_list = [{"id": c.id, "name": c.display_name} for c in assigned]
 
     return TenantUserResponse(
         id=user.id,
@@ -469,7 +477,7 @@ def assign_creators_to_member(
 
     return {
         "message": f"Assigned {len(assigned)} creators to user",
-        "assigned_creators": [{"id": c.id, "name": c.name} for c in assigned]
+        "assigned_creators": [{"id": c.id, "name": c.display_name} for c in assigned]
     }
 
 
@@ -643,8 +651,8 @@ def list_org_creators(
     return [
         {
             "id": c.id,
-            "name": c.name,
-            "display_name": getattr(c, 'display_name', None) or c.name,
+            "name": c.display_name,
+            "display_name": c.display_name,
             "assigned_to_user_id": getattr(c, 'assigned_to_user_id', None),
             "linked_user_id": getattr(c, 'linked_user_id', None)
         }

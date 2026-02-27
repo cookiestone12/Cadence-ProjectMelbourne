@@ -42,6 +42,7 @@ def get_client_profile(
         "organization_id": membership.organization_id,
         "organization_name": org.name if org else None,
         "role": membership.role,
+        "client_access_scope": getattr(membership, 'client_access_scope', 'OWN') or 'OWN',
         "creator": {
             "id": creator.id,
             "display_name": creator.display_name,
@@ -66,6 +67,40 @@ def get_client_profile(
             "custom_links": creator.custom_links or [],
         }
     }
+
+
+@router.get("/clients")
+def list_client_profiles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership, creator = get_client_context(db, current_user)
+    scope = getattr(membership, 'client_access_scope', 'OWN') or 'OWN'
+    if scope != "ALL":
+        raise HTTPException(status_code=403, detail="You do not have access to view other client profiles")
+
+    client_members = db.query(OrganizationMember).filter(
+        OrganizationMember.organization_id == membership.organization_id,
+        OrganizationMember.role == "CLIENT",
+        OrganizationMember.linked_creator_id.isnot(None),
+        OrganizationMember.user_id != current_user.id,
+    ).all()
+
+    profiles = []
+    for cm in client_members:
+        c = db.query(Creator).filter(Creator.id == cm.linked_creator_id).first()
+        if c:
+            profiles.append({
+                "id": c.id,
+                "display_name": c.display_name,
+                "email": c.email,
+                "roles": c.roles or [],
+                "primary_territory": c.primary_territory,
+                "primary_pro": c.primary_pro,
+                "publisher_name": c.publisher_name,
+                "hero_image_url": c.hero_image_url,
+            })
+    return {"clients": profiles}
 
 
 class UpdateCreatorProfileRequest(BaseModel):

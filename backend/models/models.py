@@ -138,6 +138,7 @@ class OrganizationMember(Base):
     role = Column(String, nullable=False)
     can_manage_roster = Column(Boolean, default=False)
     linked_creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
+    client_access_scope = Column(String, nullable=True, default="OWN")
     created_at = Column(DateTime, default=datetime.utcnow)
     
     organization = relationship("Organization", back_populates="members")

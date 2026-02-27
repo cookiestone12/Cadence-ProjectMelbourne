@@ -171,6 +171,12 @@ def ensure_schema_updates():
                 except Exception as e:
                     logger.warning(f"Could not create index {idx_name}: {e}")
 
+        om_cols = [c['name'] for c in inspector.get_columns('organization_members')]
+        if 'client_access_scope' not in om_cols:
+            conn.execute(text("ALTER TABLE organization_members ADD COLUMN client_access_scope VARCHAR DEFAULT 'OWN'"))
+            conn.commit()
+            logger.info("Added client_access_scope column to organization_members")
+
         if 'registration_reports' not in inspector.get_table_names():
             try:
                 from backend.models.models import RegistrationReport

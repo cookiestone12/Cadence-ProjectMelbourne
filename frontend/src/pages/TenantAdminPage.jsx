@@ -298,6 +298,9 @@ function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPasswor
                     {member.role === 'CLIENT' && member.linked_creator_name && (
                       <span className="text-xs text-teal-600 font-medium">{member.linked_creator_name}</span>
                     )}
+                    {member.role === 'CLIENT' && member.client_access_scope === 'ALL' && (
+                      <span className="text-[10px] text-[#7A8580] bg-[#EEF1EC] px-1.5 py-0.5 rounded">All Clients</span>
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3">
@@ -493,6 +496,7 @@ function CreateClientLoginModal({ creators, existingMembers, onClose, onSave }) 
     email: '',
     password: '',
     creator_id: '',
+    client_access_scope: 'OWN',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -521,6 +525,7 @@ function CreateClientLoginModal({ creators, existingMembers, onClose, onSave }) 
         password: form.password,
         role: 'CLIENT',
         creator_id: parseInt(form.creator_id),
+        client_access_scope: form.client_access_scope,
       })
       onSave()
     } catch (err) {
@@ -584,6 +589,18 @@ function CreateClientLoginModal({ creators, existingMembers, onClose, onSave }) 
               className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
               placeholder="Min 6 characters"
             />
+          </div>
+          <div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.client_access_scope === 'ALL'}
+                onChange={(e) => setForm({...form, client_access_scope: e.target.checked ? 'ALL' : 'OWN'})}
+                className="w-4 h-4 text-[#5B8A72] border-[#D1D5CE] rounded focus:ring-[#5B8A72]"
+              />
+              <span className="text-sm text-[#3D4A44]">Can view other client profiles</span>
+            </label>
+            <p className="text-xs text-[#7A8580] mt-1 ml-6">When enabled, this client can see other creators on your roster who also have client logins.</p>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg">Cancel</button>
