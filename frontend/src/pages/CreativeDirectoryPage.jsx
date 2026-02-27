@@ -4,7 +4,7 @@ import axios from 'axios'
 import {
   UserGroupIcon, PlusIcon, MagnifyingGlassIcon, XMarkIcon,
   PencilIcon, TrashIcon, ArrowDownTrayIcon, ArrowPathIcon, LinkIcon, EnvelopeIcon,
-  CheckIcon, ClipboardDocumentIcon
+  CheckIcon, ClipboardDocumentIcon, UsersIcon
 } from '@heroicons/react/24/outline'
 import EmailSendModal from '../components/EmailSendModal'
 
@@ -184,6 +184,85 @@ function ContactFormModal({ isOpen, onClose, onSubmit, initialData, title, loadi
   )
 }
 
+function ShareToClientModal({ isOpen, onClose, clientUsers, onShare, loading }) {
+  const [selectedClients, setSelectedClients] = useState(new Set())
+
+  useEffect(() => {
+    if (isOpen) setSelectedClients(new Set())
+  }, [isOpen])
+
+  function toggleClient(userId) {
+    setSelectedClients(prev => {
+      const next = new Set(prev)
+      if (next.has(userId)) next.delete(userId)
+      else next.add(userId)
+      return next
+    })
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.12)]">
+          <h2 className="text-xl font-bold text-[#3D4A44]">Share to Client</h2>
+          <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full text-[#7A8580] hover:text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors">
+            <XMarkIcon className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-6">
+          <p className="text-sm text-[#7A8580] mb-4">Select client accounts to share the selected contacts with:</p>
+          {clientUsers.length === 0 ? (
+            <div className="text-center py-8">
+              <UsersIcon className="w-10 h-10 text-[#B0BDB4] mx-auto mb-2" />
+              <p className="text-sm text-[#7A8580]">No client accounts found.</p>
+              <p className="text-xs text-[#B0BDB4] mt-1">Create client accounts in Tenant Admin first.</p>
+            </div>
+          ) : (
+            <div className="space-y-2 mb-6">
+              {clientUsers.map(client => (
+                <label
+                  key={client.id}
+                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${
+                    selectedClients.has(client.id)
+                      ? 'border-[#5B8A72] bg-[#5B8A72]/5'
+                      : 'border-[rgba(59,77,67,0.12)] hover:bg-[#F5F7F4]'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedClients.has(client.id)}
+                    onChange={() => toggleClient(client.id)}
+                    className="rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[#3D4A44] truncate">{client.username}</p>
+                    <p className="text-xs text-[#7A8580] truncate">{client.email}</p>
+                    {client.linked_creator_name && (
+                      <p className="text-xs text-[#5B8A72] truncate">Linked: {client.linked_creator_name}</p>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-2 border-t border-[rgba(59,77,67,0.12)]">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
+            <button
+              onClick={() => onShare(Array.from(selectedClients))}
+              disabled={loading || selectedClients.size === 0}
+              className="px-5 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm font-medium disabled:opacity-50"
+            >
+              {loading ? 'Sharing...' : `Share with ${selectedClients.size || 0} Client${selectedClients.size !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function CreativeDirectoryPage() {
   const [contacts, setContacts] = useState([])
   const [loading, setLoading] = useState(true)
@@ -202,6 +281,10 @@ export default function CreativeDirectoryPage() {
   const [bulkShareOpen, setBulkShareOpen] = useState(false)
   const [shareLinkLoading, setShareLinkLoading] = useState(false)
   const [copiedLink, setCopiedLink] = useState(null)
+  const [shareToClientOpen, setShareToClientOpen] = useState(false)
+  const [shareToClientLoading, setShareToClientLoading] = useState(false)
+  const [clientUsers, setClientUsers] = useState([])
+  const [clientShares, setClientShares] = useState([])
 
   useEffect(() => {
     loadData()
@@ -214,10 +297,31 @@ export default function CreativeDirectoryPage() {
       if (!orgId) { setLoading(false); return }
       setOrganizationId(orgId)
       await loadContacts(orgId)
+      loadClientUsers()
+      loadClientShares(orgId)
     } catch (error) {
       console.error('Failed to load directory:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadClientUsers() {
+    try {
+      const res = await axios.get('/api/tenant-admin/members')
+      const clients = (Array.isArray(res.data) ? res.data : []).filter(m => m.role === 'CLIENT')
+      setClientUsers(clients)
+    } catch (error) {
+      console.error('Failed to load client users:', error)
+    }
+  }
+
+  async function loadClientShares(orgId) {
+    try {
+      const res = await axios.get(`/api/creative-directory/org/${orgId || organizationId}/client-shares`)
+      setClientShares(res.data?.shares || [])
+    } catch (error) {
+      console.error('Failed to load client shares:', error)
     }
   }
 
@@ -366,6 +470,32 @@ export default function CreativeDirectoryPage() {
     }
   }
 
+  async function handleShareToClient(clientUserIds) {
+    if (selectedIds.size === 0 || clientUserIds.length === 0) return
+    setShareToClientLoading(true)
+    try {
+      await axios.post(`/api/creative-directory/org/${organizationId}/share-to-client`, {
+        contact_ids: Array.from(selectedIds),
+        client_user_ids: clientUserIds,
+      })
+      setShareToClientOpen(false)
+      loadClientShares(organizationId)
+      alert(`Shared ${selectedIds.size} contact(s) with ${clientUserIds.length} client(s)`)
+    } catch (err) {
+      console.error('Failed to share to client:', err)
+      alert(err.response?.data?.detail || 'Failed to share contacts with client')
+    } finally {
+      setShareToClientLoading(false)
+    }
+  }
+
+  function getContactSharedClients(contactId) {
+    return clientShares
+      .filter(s => s.creative_contact_id === contactId)
+      .map(s => s.shared_with_username)
+      .filter(Boolean)
+  }
+
   useEffect(() => {
     if (!organizationId) return
     const timer = setTimeout(() => {
@@ -443,6 +573,13 @@ export default function CreativeDirectoryPage() {
             Share via Email
           </button>
           <button
+            onClick={() => setShareToClientOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-[#5B8A72] text-[#5B8A72] rounded-lg hover:bg-[#5B8A72]/10 transition-colors"
+          >
+            <UsersIcon className="w-3.5 h-3.5" />
+            Share to Client
+          </button>
+          <button
             onClick={handleGenerateShareLink}
             disabled={shareLinkLoading}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-[rgba(59,77,67,0.12)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] transition-colors disabled:opacity-50"
@@ -517,6 +654,15 @@ export default function CreativeDirectoryPage() {
                       {role}
                     </span>
                   ))}
+                </div>
+              )}
+
+              {getContactSharedClients(contact.id).length > 0 && (
+                <div className="flex items-center gap-1.5 mb-3 px-2 py-1 bg-blue-50 border border-blue-100 rounded-lg">
+                  <UsersIcon className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                  <span className="text-xs text-blue-700 truncate">
+                    Shared with: {getContactSharedClients(contact.id).join(', ')}
+                  </span>
                 </div>
               )}
 
@@ -635,6 +781,14 @@ export default function CreativeDirectoryPage() {
         initialData={editingContact}
         title="Edit Contact"
         loading={saving}
+      />
+
+      <ShareToClientModal
+        isOpen={shareToClientOpen}
+        onClose={() => setShareToClientOpen(false)}
+        clientUsers={clientUsers}
+        onShare={handleShareToClient}
+        loading={shareToClientLoading}
       />
     </div>
   )

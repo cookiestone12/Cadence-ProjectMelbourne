@@ -12,9 +12,7 @@ import {
   XMarkIcon,
   UserGroupIcon,
   UsersIcon,
-  PlusIcon,
   MagnifyingGlassIcon,
-  TrashIcon,
   EnvelopeIcon,
   ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline'
@@ -107,7 +105,7 @@ export default function ClientPortalPage() {
       {activeTab === 'placements' && <PlacementsTab />}
       {activeTab === 'contracts' && <ContractsTab />}
       {activeTab === 'accounting' && <AccountingTab />}
-      {activeTab === 'directory' && <DirectoryTab organizationId={profile.organization_id} />}
+      {activeTab === 'directory' && <DirectoryTab />}
       {activeTab === 'clients' && profile.client_access_scope === 'ALL' && <ClientsTab />}
       {activeTab === 'access' && <AccessTab />}
     </div>
@@ -669,14 +667,6 @@ const DIR_ROLE_COLORS = {
   Agent: 'bg-amber-100 text-amber-700',
 }
 
-const dirEmptyForm = {
-  display_name: '', legal_name: '', email: '', phone: '',
-  pro: '', ipi: '', isni: '',
-  publisher_name: '', publisher_ipi: '', publisher_pro: '',
-  roles: [],
-  representation_name: '', representation_email: '', representation_phone: '',
-  territory: '', notes: ''
-}
 
 function ClientsTab() {
   const [clients, setClients] = useState([])
@@ -765,93 +755,40 @@ function ClientsTab() {
   )
 }
 
-function DirectoryTab({ organizationId }) {
+function DirectoryTab() {
   const [contacts, setContacts] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [editingContact, setEditingContact] = useState(null)
-  const [form, setForm] = useState({ ...dirEmptyForm })
-  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (organizationId) loadContacts()
-  }, [organizationId])
-
-  useEffect(() => {
-    if (!organizationId) return
-    const timer = setTimeout(() => loadContacts(), 300)
-    return () => clearTimeout(timer)
-  }, [searchTerm])
+    loadContacts()
+  }, [])
 
   async function loadContacts() {
     try {
-      const params = searchTerm ? `?search=${encodeURIComponent(searchTerm)}` : ''
-      const res = await axios.get(`/api/creative-directory/org/${organizationId}${params}`)
-      setContacts(Array.isArray(res.data) ? res.data : res.data.contacts || [])
+      const res = await axios.get('/api/client-portal/shared-contacts')
+      setContacts(res.data.contacts || [])
     } catch (err) {
-      console.error('Failed to load contacts:', err)
+      console.error('Failed to load shared contacts:', err)
     } finally {
       setLoading(false)
     }
   }
 
-  function openAdd() {
-    setEditingContact(null)
-    setForm({ ...dirEmptyForm })
-    setShowForm(true)
-  }
-
-  function openEdit(contact) {
-    setEditingContact(contact)
-    setForm({ ...dirEmptyForm, ...contact, roles: contact.roles || [] })
-    setShowForm(true)
-  }
-
-  function closeForm() {
-    setShowForm(false)
-    setEditingContact(null)
-    setForm({ ...dirEmptyForm })
-  }
-
-  async function handleSave(e) {
-    e.preventDefault()
-    if (!form.display_name.trim()) return
-    setSaving(true)
-    try {
-      if (editingContact) {
-        await axios.put(`/api/creative-directory/${editingContact.id}`, form)
-      } else {
-        await axios.post(`/api/creative-directory/org/${organizationId}`, form)
-      }
-      closeForm()
-      await loadContacts()
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to save contact')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function handleDelete(contact) {
-    if (!window.confirm(`Delete "${contact.display_name}" from your directory?`)) return
-    try {
-      await axios.delete(`/api/creative-directory/${contact.id}`)
-      await loadContacts()
-    } catch (err) {
-      console.error('Failed to delete contact:', err)
-    }
-  }
-
-  function handleRoleToggle(role) {
-    setForm(prev => ({
-      ...prev,
-      roles: prev.roles.includes(role) ? prev.roles.filter(r => r !== role) : [...prev.roles, role]
-    }))
-  }
-
-  const filtered = roleFilter ? contacts.filter(c => c.roles && c.roles.includes(roleFilter)) : contacts
+  const searched = searchTerm
+    ? contacts.filter(c => {
+        const term = searchTerm.toLowerCase()
+        return (
+          (c.display_name || '').toLowerCase().includes(term) ||
+          (c.legal_name || '').toLowerCase().includes(term) ||
+          (c.email || '').toLowerCase().includes(term) ||
+          (c.publisher_name || '').toLowerCase().includes(term) ||
+          (c.pro || '').toLowerCase().includes(term)
+        )
+      })
+    : contacts
+  const filtered = roleFilter ? searched.filter(c => c.roles && c.roles.includes(roleFilter)) : searched
 
   if (loading) return <LoadingSpinner />
 
@@ -859,11 +796,7 @@ function DirectoryTab({ organizationId }) {
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
-          <h2 className="text-lg font-semibold text-[#3D4A44]">My Contacts ({contacts.length})</h2>
-          <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm font-medium">
-            <PlusIcon className="w-4 h-4" />
-            Add Contact
-          </button>
+          <h2 className="text-lg font-semibold text-[#3D4A44]">Shared Contacts ({contacts.length})</h2>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
@@ -888,7 +821,7 @@ function DirectoryTab({ organizationId }) {
         </div>
 
         {filtered.length === 0 ? (
-          <EmptyState text={contacts.length === 0 ? "No contacts yet. Add your first contact!" : "No contacts match your filter."} />
+          <EmptyState text={contacts.length === 0 ? "No contacts have been shared with you yet." : "No contacts match your filter."} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {filtered.map(contact => (
@@ -918,14 +851,6 @@ function DirectoryTab({ organizationId }) {
                 </div>
 
                 <div className="flex items-center gap-2 mt-3 pt-2 border-t border-[rgba(59,77,67,0.08)]">
-                  <button onClick={() => openEdit(contact)} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#5B8A72] hover:bg-[#5B8A72]/10 rounded-lg transition-colors">
-                    <PencilIcon className="w-3.5 h-3.5" />
-                    Edit
-                  </button>
-                  <button onClick={() => handleDelete(contact)} className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                    <TrashIcon className="w-3.5 h-3.5" />
-                    Delete
-                  </button>
                   <button
                     onClick={async () => {
                       try {
@@ -953,107 +878,6 @@ function DirectoryTab({ organizationId }) {
           </div>
         )}
       </div>
-
-      {showForm && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-[#E5E8E3]">
-              <h2 className="text-lg font-bold text-[#3D4A44]">{editingContact ? 'Edit Contact' : 'Add Contact'}</h2>
-              <button onClick={closeForm} className="w-8 h-8 flex items-center justify-center rounded-full text-[#7A8580] hover:text-[#3D4A44] hover:bg-[#EEF1EC]">
-                <XMarkIcon className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Display Name *</label>
-                  <input type="text" required value={form.display_name} onChange={e => setForm(p => ({ ...p, display_name: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Legal Name</label>
-                  <input type="text" value={form.legal_name} onChange={e => setForm(p => ({ ...p, legal_name: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Email</label>
-                  <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Phone</label>
-                  <input type="text" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">PRO</label>
-                  <input type="text" value={form.pro} onChange={e => setForm(p => ({ ...p, pro: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">IPI</label>
-                  <input type="text" value={form.ipi} onChange={e => setForm(p => ({ ...p, ipi: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Publisher</label>
-                  <input type="text" value={form.publisher_name} onChange={e => setForm(p => ({ ...p, publisher_name: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-[#7A8580] mb-2">Roles</label>
-                <div className="flex flex-wrap gap-2">
-                  {DIR_ROLE_OPTIONS.map(role => (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => handleRoleToggle(role)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
-                        form.roles.includes(role)
-                          ? 'bg-[#5B8A72] text-white border-[#5B8A72]'
-                          : 'bg-white text-[#7A8580] border-[#D1D5CE] hover:border-[#5B8A72] hover:text-[#5B8A72]'
-                      }`}
-                    >
-                      {role}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Rep Name</label>
-                  <input type="text" value={form.representation_name} onChange={e => setForm(p => ({ ...p, representation_name: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Rep Email</label>
-                  <input type="email" value={form.representation_email} onChange={e => setForm(p => ({ ...p, representation_email: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Rep Phone</label>
-                  <input type="text" value={form.representation_phone} onChange={e => setForm(p => ({ ...p, representation_phone: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Territory</label>
-                  <input type="text" value={form.territory} onChange={e => setForm(p => ({ ...p, territory: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" placeholder="e.g. United States" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Notes</label>
-                  <input type="text" value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={closeForm} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44]">Cancel</button>
-                <button type="submit" disabled={saving || !form.display_name.trim()} className="px-5 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] text-sm font-medium disabled:opacity-50">
-                  {saving ? 'Saving...' : 'Save Contact'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

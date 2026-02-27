@@ -28,6 +28,7 @@ from .models import (
     PushSubscription,
     RegistrationReport,
     SharedContactLink,
+    ClientSharedContact,
 )
 
 __all__ = [
@@ -59,4 +60,5 @@ __all__ = [
     "CreatorStorageLink", "ScanStatus", "MatchConfidence", "StorageScanResult",
     "PushSubscription",
     "RegistrationReport",
+    "ClientSharedContact",
 ]

@@ -248,8 +248,15 @@ def main():
         logger.warning(f"Table creation warning (may be benign): {e}")
         from sqlalchemy import inspect
         inspector = inspect(engine)
-        tables = inspector.get_table_names()
-        logger.info(f"Existing tables: {len(tables)}")
+        existing = set(inspector.get_table_names())
+        logger.info(f"Existing tables: {len(existing)}")
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing:
+                try:
+                    table.create(bind=engine, checkfirst=True)
+                    logger.info(f"Created missing table: {table.name}")
+                except Exception as te:
+                    logger.warning(f"Failed to create table {table.name}: {te}")
 
     try:
         ensure_schema_updates()

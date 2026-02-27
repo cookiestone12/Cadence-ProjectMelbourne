@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import io
-from ..models import get_db, CreativeContact, Creator, OrganizationMember, User, Organization, SharedContactLink
+from ..models import get_db, CreativeContact, Creator, OrganizationMember, User, Organization, SharedContactLink, ClientSharedContact
 from ..utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/creative-directory", tags=["creative-directory"])
@@ -705,3 +705,122 @@ def get_shared_contacts(
         "contacts": [_contact_to_dict(c) for c in contacts],
         "expires_at": link.expires_at.isoformat(),
     }
+
+
+class ShareToClientRequest(BaseModel):
+    contact_ids: List[int]
+    client_user_ids: List[int]
+
+
+@router.post("/org/{org_id}/share-to-client")
+def share_contacts_to_client(
+    org_id: int,
+    data: ShareToClientRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+
+    contacts = db.query(CreativeContact).filter(
+        CreativeContact.id.in_(data.contact_ids),
+        CreativeContact.organization_id == org_id,
+    ).all()
+    if not contacts:
+        raise HTTPException(status_code=404, detail="No contacts found")
+
+    client_members = db.query(OrganizationMember).filter(
+        OrganizationMember.organization_id == org_id,
+        OrganizationMember.user_id.in_(data.client_user_ids),
+        OrganizationMember.role == "CLIENT",
+    ).all()
+    if not client_members:
+        raise HTTPException(status_code=404, detail="No valid client users found")
+
+    valid_user_ids = {m.user_id for m in client_members}
+    valid_contact_ids = {c.id for c in contacts}
+
+    created_count = 0
+    for user_id in valid_user_ids:
+        for contact_id in valid_contact_ids:
+            existing = db.query(ClientSharedContact).filter(
+                ClientSharedContact.creative_contact_id == contact_id,
+                ClientSharedContact.shared_with_user_id == user_id,
+            ).first()
+            if not existing:
+                share = ClientSharedContact(
+                    organization_id=org_id,
+                    creative_contact_id=contact_id,
+                    shared_with_user_id=user_id,
+                    shared_by_user_id=current_user.id,
+                )
+                db.add(share)
+                created_count += 1
+
+    if created_count > 0:
+        db.commit()
+
+    return {
+        "success": True,
+        "message": f"Shared {len(valid_contact_ids)} contact(s) with {len(valid_user_ids)} client(s)",
+        "created_count": created_count,
+    }
+
+
+class UnshareFromClientRequest(BaseModel):
+    contact_ids: List[int]
+    client_user_id: int
+
+
+@router.delete("/org/{org_id}/unshare-from-client")
+def unshare_contacts_from_client(
+    org_id: int,
+    data: UnshareFromClientRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+
+    deleted = db.query(ClientSharedContact).filter(
+        ClientSharedContact.organization_id == org_id,
+        ClientSharedContact.creative_contact_id.in_(data.contact_ids),
+        ClientSharedContact.shared_with_user_id == data.client_user_id,
+    ).delete(synchronize_session=False)
+
+    db.commit()
+
+    return {
+        "success": True,
+        "message": f"Unshared {deleted} contact(s) from client",
+        "deleted_count": deleted,
+    }
+
+
+@router.get("/org/{org_id}/client-shares")
+def get_client_shares(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+
+    shares = db.query(ClientSharedContact).filter(
+        ClientSharedContact.organization_id == org_id,
+    ).all()
+
+    result = []
+    for share in shares:
+        contact = db.query(CreativeContact).filter(CreativeContact.id == share.creative_contact_id).first()
+        shared_with = db.query(User).filter(User.id == share.shared_with_user_id).first()
+        shared_by = db.query(User).filter(User.id == share.shared_by_user_id).first()
+        result.append({
+            "id": share.id,
+            "creative_contact_id": share.creative_contact_id,
+            "contact_name": contact.display_name if contact else None,
+            "shared_with_user_id": share.shared_with_user_id,
+            "shared_with_username": shared_with.username if shared_with else None,
+            "shared_by_user_id": share.shared_by_user_id,
+            "shared_by_username": shared_by.username if shared_by else None,
+            "created_at": share.created_at.isoformat() if share.created_at else None,
+        })
+
+    return {"shares": result, "total": len(result)}

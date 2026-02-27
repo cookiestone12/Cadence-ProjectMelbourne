@@ -6,7 +6,8 @@ from typing import Optional, List
 from ..models import (
     get_db, User, OrganizationMember, Creator, Organization,
     Song, SongCredit, Work, WorkCredit, Contract, Placement,
-    RoyaltyStatement, RoyaltyTransaction, AccountLink
+    RoyaltyStatement, RoyaltyTransaction, AccountLink,
+    ClientSharedContact, CreativeContact
 )
 from ..utils.auth import get_current_user
 
@@ -172,7 +173,7 @@ def get_client_catalog(
             songs.append({
                 "id": s.id,
                 "title": s.title,
-                "artist": s.artist,
+                "artist": s.primary_artist,
                 "isrc": s.isrc,
                 "release_date": str(s.release_date) if s.release_date else None,
                 "status": getattr(s, 'status', None),
@@ -293,8 +294,8 @@ def get_client_accounting(
                 "song_id": tx.song_id,
                 "match_status": tx.match_status,
                 "match_confidence": tx.match_confidence,
-                "revenue_amount_cents": getattr(tx, 'revenue_amount_cents', 0),
-                "platform": getattr(tx, 'platform', None),
+                "revenue_amount_cents": tx.revenue_cents or 0,
+                "platform": tx.platform,
             })
 
     contracts = db.query(Contract).filter(
@@ -419,3 +420,52 @@ def revoke_access(
     db.commit()
 
     return {"message": "Access revoked"}
+
+
+@router.get("/shared-contacts")
+def get_shared_contacts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership, creator = get_client_context(db, current_user)
+    org_id = membership.organization_id
+
+    shares = db.query(ClientSharedContact).filter(
+        ClientSharedContact.organization_id == org_id,
+        ClientSharedContact.shared_with_user_id == current_user.id,
+    ).all()
+
+    contact_ids = [s.creative_contact_id for s in shares]
+    if not contact_ids:
+        return {"contacts": [], "total": 0}
+
+    contacts = db.query(CreativeContact).filter(
+        CreativeContact.id.in_(contact_ids),
+    ).order_by(CreativeContact.display_name).all()
+
+    def contact_to_dict(contact):
+        return {
+            "id": contact.id,
+            "organization_id": contact.organization_id,
+            "creator_id": contact.creator_id,
+            "display_name": contact.display_name,
+            "legal_name": contact.legal_name,
+            "email": contact.email,
+            "phone": contact.phone,
+            "pro": contact.pro,
+            "ipi": contact.ipi,
+            "isni": contact.isni,
+            "publisher_name": contact.publisher_name,
+            "publisher_ipi": contact.publisher_ipi,
+            "publisher_pro": contact.publisher_pro,
+            "roles": contact.roles or [],
+            "representation_name": contact.representation_name,
+            "representation_email": contact.representation_email,
+            "representation_phone": contact.representation_phone,
+            "territory": contact.territory,
+            "notes": contact.notes,
+            "created_at": contact.created_at.isoformat() if contact.created_at else None,
+            "updated_at": contact.updated_at.isoformat() if contact.updated_at else None,
+        }
+
+    return {"contacts": [contact_to_dict(c) for c in contacts], "total": len(contacts)}

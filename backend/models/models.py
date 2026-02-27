@@ -2071,3 +2071,25 @@ class PushSubscription(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User")
+
+
+class ClientSharedContact(Base):
+    __tablename__ = "client_shared_contacts"
+    __table_args__ = (
+        UniqueConstraint('creative_contact_id', 'shared_with_user_id', name='uq_client_shared_contact'),
+        Index('ix_client_shared_contacts_org_id', 'organization_id'),
+        Index('ix_client_shared_contacts_user_id', 'shared_with_user_id'),
+        Index('ix_client_shared_contacts_contact_id', 'creative_contact_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    creative_contact_id = Column(Integer, ForeignKey("creative_contacts.id", ondelete="CASCADE"), nullable=False)
+    shared_with_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    shared_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    organization = relationship("Organization")
+    creative_contact = relationship("CreativeContact")
+    shared_with_user = relationship("User", foreign_keys=[shared_with_user_id])
+    shared_by_user = relationship("User", foreign_keys=[shared_by_user_id])

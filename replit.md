@@ -48,6 +48,7 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Per-Creator Storage Linking**: Links individual creators to Dropbox/Google Drive folders with AI-powered recursive file scanning, fuzzy filename matching, a review workflow, and scheduled scans.
 - **Client Portal**: Org-managed client login system for creators to view their profiles, catalog, placements, contracts, accounting, creative directory, and manage access for other organizations. Supports configurable `client_access_scope` (`OWN`/`ALL`) per client user to control whether they can browse other client profiles.
 - **Bulk & Cross-Org Contact Sharing**: Multi-select contact cards for bulk email sharing with PDF attachments, and shareable public links (token-based, expiring) for cross-organization contact card viewing without login. Model: `SharedContactLink`, public page: `/shared/contacts/:token`.
+- **Per-Client Contact Sharing**: Admins explicitly share creative directory contacts with client accounts via `ClientSharedContact` model. Client portal Directory tab shows only contacts shared with that client (read-only). Admin UI supports single and bulk sharing via a "Share to Client" action in the multi-select bar.
 - **Progressive Web App (PWA)**: Includes a web manifest, service worker for offline caching and push notifications, and an install prompt.
 
 ## External Dependencies
