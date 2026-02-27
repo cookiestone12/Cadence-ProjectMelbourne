@@ -4,7 +4,8 @@ import {
   MagnifyingGlassIcon, PlusIcon, XMarkIcon, TrashIcon,
   PencilIcon, UserGroupIcon, LinkIcon, DocumentTextIcon,
   MusicalNoteIcon, CalendarIcon, CurrencyDollarIcon,
-  ChevronDownIcon, ArrowDownTrayIcon, PaperClipIcon, CloudArrowUpIcon
+  ChevronDownIcon, ArrowDownTrayIcon, PaperClipIcon, CloudArrowUpIcon,
+  SparklesIcon
 } from '@heroicons/react/24/outline'
 import ContractAdvancesSection from '../components/ContractAdvancesSection'
 
@@ -168,6 +169,9 @@ function ContractsPageInner() {
   const [createParties, setCreateParties] = useState([])
   const [createError, setCreateError] = useState('')
   const [createLoading, setCreateLoading] = useState(false)
+  const [parseFile, setParseFile] = useState(null)
+  const [parsing, setParsing] = useState(false)
+  const [parseSuccess, setParseSuccess] = useState(false)
   const [activeDetailTab, setActiveDetailTab] = useState('overview')
   const [partyForm, setPartyForm] = useState({ ...emptyPartyForm })
   const [assetSearch, setAssetSearch] = useState('')
@@ -353,6 +357,54 @@ function ContractsPageInner() {
     }
   }
 
+  async function handleParseContract() {
+    if (!parseFile) return
+    setParsing(true)
+    setCreateError('')
+    setParseSuccess(false)
+    try {
+      const formData = new FormData()
+      formData.append('file', parseFile)
+      const res = await axios.post('/api/rights/contracts/parse-document', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      const fields = res.data.parsed_fields
+      if (fields) {
+        setCreateForm(prev => ({
+          ...prev,
+          title: fields.title || prev.title,
+          contract_type: fields.contract_type || prev.contract_type,
+          payment_direction: fields.payment_direction || prev.payment_direction,
+          status: fields.status || prev.status,
+          reference_number: fields.reference_number || prev.reference_number,
+          start_date: fields.start_date || prev.start_date,
+          end_date: fields.end_date || prev.end_date,
+          territory: Array.isArray(fields.territory) ? fields.territory.join(', ') : (fields.territory || prev.territory),
+          advance_amount: fields.advance_amount != null ? String(fields.advance_amount) : prev.advance_amount,
+          advance_currency: fields.advance_currency || prev.advance_currency,
+          notes: fields.notes || prev.notes,
+          terms_summary: fields.terms_summary || prev.terms_summary,
+        }))
+        if (fields.parties && fields.parties.length > 0) {
+          const mapped = fields.parties.map(p => ({
+            party_name: p.party_name || '',
+            party_role: p.party_role?.toUpperCase() || 'OTHER',
+            creator_id: '',
+            contact_email: p.contact_email || '',
+          }))
+          setCreateParties(mapped)
+        }
+        setParseSuccess(true)
+        setTimeout(() => setParseSuccess(false), 5000)
+      }
+    } catch (error) {
+      const detail = error.response?.data?.detail
+      setCreateError(typeof detail === 'string' ? detail : 'Failed to parse document. Please try again or enter details manually.')
+    } finally {
+      setParsing(false)
+    }
+  }
+
   async function handleCreateContract() {
     if (!createForm.title.trim()) {
       setCreateError('Please enter a contract title.')
@@ -383,11 +435,26 @@ function ContractsPageInner() {
           return cleaned
         })
       }
-      await axios.post(`/api/rights/contracts/org/${organizationId}`, payload)
+      const res = await axios.post(`/api/rights/contracts/org/${organizationId}`, payload)
+      const newContractId = res.data?.id
+      if (parseFile && newContractId) {
+        try {
+          const docForm = new FormData()
+          docForm.append('file', parseFile)
+          docForm.append('description', parseFile.name)
+          await axios.post(`/api/rights/contracts/${newContractId}/documents`, docForm, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          })
+        } catch (docErr) {
+          console.error('Failed to attach document:', docErr)
+        }
+      }
       setShowCreateModal(false)
       setCreateForm({ ...emptyCreateForm })
       setCreateParties([])
       setCreateError('')
+      setParseFile(null)
+      setParseSuccess(false)
       await loadData()
     } catch (error) {
       console.error('Failed to create contract:', error)
@@ -799,11 +866,61 @@ function ContractsPageInner() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
               <h3 className="text-lg font-semibold text-[#3D4A44]">New Contract</h3>
-              <button onClick={() => { setShowCreateModal(false); setCreateParties([]) }} className="text-[#7A8580] hover:text-[#3D4A44]">
+              <button onClick={() => { setShowCreateModal(false); setCreateParties([]); setParseFile(null); setParseSuccess(false) }} className="text-[#7A8580] hover:text-[#3D4A44]">
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="border border-dashed border-[rgba(59,77,67,0.2)] rounded-xl p-4 bg-[#FAFBF9]">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    {parseFile ? (
+                      <div className="flex items-center gap-2">
+                        <DocumentTextIcon className="w-5 h-5 text-[#5B8A72]" />
+                        <span className="text-sm text-[#3D4A44] font-medium truncate">{parseFile.name}</span>
+                        <button onClick={() => { setParseFile(null); setParseSuccess(false) }} className="text-[#7A8580] hover:text-red-500 ml-1">
+                          <XMarkIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 cursor-pointer text-[#7A8580] hover:text-[#5B8A72] transition-colors">
+                        <CloudArrowUpIcon className="w-5 h-5" />
+                        <span className="text-sm">Upload contract document to auto-fill fields</span>
+                        <input
+                          type="file"
+                          accept=".pdf,.docx"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) { setParseFile(e.target.files[0]); setParseSuccess(false) }
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                  {parseFile && !parsing && (
+                    <button
+                      onClick={handleParseContract}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm font-medium whitespace-nowrap"
+                    >
+                      <SparklesIcon className="w-4 h-4" />
+                      Scan with AI
+                    </button>
+                  )}
+                  {parsing && (
+                    <div className="flex items-center gap-2 text-sm text-[#5B8A72]">
+                      <div className="w-4 h-4 border-2 border-[#5B8A72] border-t-transparent rounded-full animate-spin" />
+                      Analyzing...
+                    </div>
+                  )}
+                </div>
+                {parseSuccess && (
+                  <div className="mt-2 flex items-center gap-1.5 text-sm text-[#5B8A72] bg-[#EEF1EC] rounded-lg px-3 py-1.5">
+                    <SparklesIcon className="w-4 h-4" />
+                    Fields auto-filled from document — review and edit below before saving
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-[#3D4A44] mb-1">Title *</label>
@@ -1001,7 +1118,7 @@ function ContractsPageInner() {
             )}
             <div className="flex justify-end space-x-3 p-6 border-t border-[rgba(59,77,67,0.08)]">
               <button
-                onClick={() => { setShowCreateModal(false); setCreateParties([]); setCreateError('') }}
+                onClick={() => { setShowCreateModal(false); setCreateParties([]); setCreateError(''); setParseFile(null); setParseSuccess(false) }}
                 className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
               >
                 Cancel

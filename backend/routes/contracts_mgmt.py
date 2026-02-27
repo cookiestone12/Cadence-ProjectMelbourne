@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -11,6 +11,7 @@ from ..models import (
     Song, Work, Release, Creator, OrganizationMember, User, AudioAsset
 )
 from ..utils.auth import get_current_user
+from ..services.contract_parser import parse_contract_document
 
 router = APIRouter(prefix="/api/rights", tags=["rights-management"])
 
@@ -497,6 +498,30 @@ def list_contracts(
 
     contracts = query.order_by(Contract.created_at.desc()).all()
     return {"contracts": [_contract_to_dict(c, db) for c in contracts], "total": len(contracts)}
+
+
+@router.post("/contracts/parse-document")
+async def parse_contract_doc(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
+    if ext not in ("pdf", "docx"):
+        raise HTTPException(status_code=400, detail="Please upload a PDF or Word document (.pdf, .docx)")
+
+    file_bytes = await file.read()
+    if len(file_bytes) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 20MB.")
+
+    result = parse_contract_document(file_bytes, file.filename)
+
+    if not result.get("success"):
+        raise HTTPException(status_code=422, detail=result.get("error", "Failed to parse document"))
+
+    return result
 
 
 @router.post("/contracts/org/{org_id}")

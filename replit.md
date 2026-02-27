@@ -39,6 +39,7 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Registration Reports**: Operational PRO registration workflow for tracking and generating branded PDF reports for songs/works, with direct email and CSV/manual PDF download options.
 - **Spotify Integration**: Integrates with the Spotify API for playlist import, track search, and release metadata lookup.
 - **Cloud Storage Integration**: Multi-provider cloud storage integration (Dropbox, Google Drive) for linking audio files to songs/releases, with OAuth and a browsable folder selection UI.
+- **AI Contract Parsing**: Upload a PDF or DOCX contract document during contract creation, and AI (OpenAI gpt-4o-mini) extracts key terms (title, type, dates, territory, advance amounts, parties, terms summary) to auto-fill the contract form. Parsed document is auto-attached after creation. Service: `backend/services/contract_parser.py`, endpoint: `POST /api/rights/contracts/parse-document`.
 - **AI Audio Analysis**: Background analysis pipeline using OpenAI for generating BPM, key, loudness, mood/texture/sync tags from audio files.
 - **Audio Tagging System**: AI-generated tags with confidence scores and user-editable overrides, powering catalog filtering and Brief Builder.
 - **Brief Builder**: Sync brief matching tool that uses OpenAI for natural language query parsing from free-text descriptions and structured filters, returning ranked song results.
