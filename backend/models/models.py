@@ -15,6 +15,7 @@ class OrganizationMemberRole(str, enum.Enum):
     OWNER = "OWNER"
     ADMIN = "ADMIN"
     MEMBER = "MEMBER"
+    CLIENT = "CLIENT"
 
 class CreatorRole(str, enum.Enum):
     ARTIST = "ARTIST"
@@ -136,10 +137,12 @@ class OrganizationMember(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     role = Column(String, nullable=False)
     can_manage_roster = Column(Boolean, default=False)
+    linked_creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     organization = relationship("Organization", back_populates="members")
     user = relationship("User", back_populates="organization_memberships")
+    linked_creator = relationship("Creator", foreign_keys=[linked_creator_id])
 
 class ContributorType(str, enum.Enum):
     ARTIST = "ARTIST"

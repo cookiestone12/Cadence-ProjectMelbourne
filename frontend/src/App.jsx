@@ -57,6 +57,7 @@ import RegistrationReportPage from './pages/RegistrationReportPage'
 import SyncReportsPage from './pages/SyncReportsPage'
 import BriefBuilderPage from './pages/BriefBuilderPage'
 import StorageScanPage from './pages/StorageScanPage'
+import ClientPortalPage from './pages/ClientPortalPage'
 import Sidebar from './components/Sidebar'
 
 function App() {
@@ -161,31 +162,43 @@ function App() {
           </div>
           <ErrorBoundary>
           <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="/roster" element={<RosterPage />} />
-            <Route path="/roster/:id" element={<CreatorDetailPage />} />
-            <Route path="/directory" element={<CreativeDirectoryPage />} />
-            <Route path="/catalog" element={<NewCatalogPage />} />
-            <Route path="/works" element={<WorksPage />} />
-            <Route path="/releases" element={<ReleasesPage />} />
-            <Route path="/contracts" element={<ContractsPage />} />
-            <Route path="/actions" element={<ActionItemsPage />} />
-            <Route path="/royalties" element={<RoyaltiesPage />} />
-            <Route path="/placements" element={<PlacementsPage />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/valuation" element={<ValuationPage />} />
-            <Route path="/registration-reports" element={<RegistrationReportPage />} />
-            <Route path="/sync-reports" element={<SyncReportsPage />} />
-            <Route path="/brief-builder" element={<BriefBuilderPage />} />
-            <Route path="/storage-scan" element={<StorageScanPage />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/guide" element={<UserGuidePage />} />
-            <Route path="/org-admin" element={<TenantAdminPage />} />
-            {user?.is_super_admin && (
-              <Route path="/admin" element={<AdminDashboard />} />
+            {user?.role === 'CLIENT' ? (
+              <>
+                <Route path="/client-portal" element={<ClientPortalPage />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/guide" element={<UserGuidePage />} />
+                <Route path="*" element={<Navigate to="/client-portal" />} />
+              </>
+            ) : (
+              <>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/search" element={<SearchPage />} />
+                <Route path="/roster" element={<RosterPage />} />
+                <Route path="/roster/:id" element={<CreatorDetailPage />} />
+                <Route path="/directory" element={<CreativeDirectoryPage />} />
+                <Route path="/catalog" element={<NewCatalogPage />} />
+                <Route path="/works" element={<WorksPage />} />
+                <Route path="/releases" element={<ReleasesPage />} />
+                <Route path="/contracts" element={<ContractsPage />} />
+                <Route path="/actions" element={<ActionItemsPage />} />
+                <Route path="/royalties" element={<RoyaltiesPage />} />
+                <Route path="/placements" element={<PlacementsPage />} />
+                <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/valuation" element={<ValuationPage />} />
+                <Route path="/registration-reports" element={<RegistrationReportPage />} />
+                <Route path="/sync-reports" element={<SyncReportsPage />} />
+                <Route path="/brief-builder" element={<BriefBuilderPage />} />
+                <Route path="/storage-scan" element={<StorageScanPage />} />
+                <Route path="/client-portal" element={<ClientPortalPage />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/guide" element={<UserGuidePage />} />
+                <Route path="/org-admin" element={<TenantAdminPage />} />
+                {user?.is_super_admin && (
+                  <Route path="/admin" element={<AdminDashboard />} />
+                )}
+                <Route path="*" element={<Navigate to="/" />} />
+              </>
             )}
-            <Route path="*" element={<Navigate to="/" />} />
           </Routes>
           </ErrorBoundary>
           <div className="flex items-center justify-center py-6 opacity-30">

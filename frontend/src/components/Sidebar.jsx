@@ -30,6 +30,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
   const [orgBranding, setOrgBranding] = useState(null)
   const [isOrgAdmin, setIsOrgAdmin] = useState(false)
   const [canManageRoster, setCanManageRoster] = useState(false)
+  const [isClient, setIsClient] = useState(false)
 
   useEffect(() => {
     const fetchOrgData = async () => {
@@ -40,6 +41,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
         ])
         setOrgBranding(orgRes.data)
         const role = memberRes.data.role
+        setIsClient(role === 'CLIENT')
         setIsOrgAdmin(role === 'OWNER' || role === 'ADMIN')
         setCanManageRoster(
           role === 'OWNER' || role === 'ADMIN' || memberRes.data.can_manage_roster === true
@@ -54,6 +56,10 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     return location.pathname.startsWith(path)
   }
   
+  const clientNavItems = [
+    { path: '/client-portal', label: 'My Portal', icon: HomeIcon },
+  ]
+
   const allNavItems = [
     { path: '/', label: 'Home', icon: HomeIcon },
     { path: '/search', label: 'Search', icon: MagnifyingGlassIcon },
@@ -74,7 +80,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
   ]
 
-  const navItems = allNavItems.filter(item => {
+  const navItems = isClient ? clientNavItems : allNavItems.filter(item => {
     if (item.requiresRoster) return canManageRoster
     return true
   })
@@ -147,7 +153,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
           </nav>
 
           <div className="px-3 pb-3 pt-2 border-t border-am-separator space-y-0.5">
-            {user?.is_super_admin ? (
+            {isClient ? null : user?.is_super_admin ? (
               <Link
                 to="/admin"
                 onClick={() => window.innerWidth < 1024 && onClose()}
@@ -215,7 +221,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-medium text-am-text truncate">{user?.username || 'User'}</p>
-                <p className="text-[12px] text-am-text-secondary truncate">{user?.is_super_admin ? 'Super Admin' : user?.is_admin ? 'Admin' : 'Member'}</p>
+                <p className="text-[12px] text-am-text-secondary truncate">{isClient ? 'Client' : user?.is_super_admin ? 'Super Admin' : user?.is_admin ? 'Admin' : 'Member'}</p>
               </div>
               <div className="flex-shrink-0">
                 <NotificationBell />

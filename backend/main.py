@@ -10,7 +10,7 @@ from .routes import (
     works, releases, bulk, spotify_import, royalties, placements, analytics,
     tenant_admin, creative_directory, registration_reports, audit_log, expenses,
     client_sharing, integrations, audio, brief_builder, royalty_processing,
-    push, storage_scan
+    push, storage_scan, client_portal
 )
 from .utils.logging_config import logger
 import os
@@ -138,6 +138,7 @@ app.include_router(brief_builder.router)
 app.include_router(royalty_processing.router)
 app.include_router(push.router)
 app.include_router(storage_scan.router)
+app.include_router(client_portal.router)
 
 uploads_dir = Path(__file__).parent / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)

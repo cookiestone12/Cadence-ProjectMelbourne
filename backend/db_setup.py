@@ -113,6 +113,10 @@ def ensure_schema_updates():
             conn.execute(text("ALTER TABLE organization_members ADD COLUMN can_manage_roster BOOLEAN DEFAULT FALSE"))
             conn.commit()
             logger.info("Added can_manage_roster column to organization_members")
+        if 'linked_creator_id' not in om_cols:
+            conn.execute(text("ALTER TABLE organization_members ADD COLUMN linked_creator_id INTEGER REFERENCES creators(id)"))
+            conn.commit()
+            logger.info("Added linked_creator_id column to organization_members")
 
         bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
         for field in bool_to_string_fields:

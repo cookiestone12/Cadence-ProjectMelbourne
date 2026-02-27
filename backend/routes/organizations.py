@@ -101,7 +101,8 @@ def get_current_membership(
         "organization_id": membership.organization_id,
         "user_id": membership.user_id,
         "role": membership.role,
-        "can_manage_roster": getattr(membership, 'can_manage_roster', False) or False
+        "can_manage_roster": getattr(membership, 'can_manage_roster', False) or False,
+        "linked_creator_id": getattr(membership, 'linked_creator_id', None),
     }
 
 @router.get("/{org_id}", response_model=OrganizationResponse)

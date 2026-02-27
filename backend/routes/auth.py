@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
-from ..models import get_db, User
+from ..models import get_db, User, OrganizationMember
 from ..utils.auth import verify_password, get_password_hash, create_access_token, get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -86,16 +86,24 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
     
     access_token = create_access_token(data={"sub": user.username})
     
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == user.id
+    ).first()
+    
+    user_data = {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "is_admin": user.is_admin,
+        "is_super_admin": getattr(user, 'is_super_admin', False),
+        "role": membership.role if membership else None,
+        "linked_creator_id": getattr(membership, 'linked_creator_id', None) if membership else None,
+    }
+    
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "is_admin": user.is_admin,
-            "is_super_admin": getattr(user, 'is_super_admin', False)
-        }
+        "user": user_data
     }
 
 

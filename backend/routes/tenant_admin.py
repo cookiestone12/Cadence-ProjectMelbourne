@@ -41,6 +41,8 @@ class TenantUserResponse(BaseModel):
     role: str
     is_active: bool
     can_manage_roster: bool = False
+    linked_creator_id: Optional[int] = None
+    linked_creator_name: Optional[str] = None
     created_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
     assigned_creators: List[dict] = []
@@ -58,6 +60,7 @@ class CreateTenantUserRequest(BaseModel):
     email: str
     password: str
     role: str = "MEMBER"
+    creator_id: Optional[int] = None
 
 
 class UpdateTenantUserRequest(BaseModel):
@@ -104,6 +107,11 @@ def list_tenant_members(
             Creator.assigned_to_user_id == user.id
         ).all()
 
+        linked_creator_name = None
+        if getattr(member, 'linked_creator_id', None):
+            lc = db.query(Creator).filter(Creator.id == member.linked_creator_id).first()
+            linked_creator_name = lc.display_name if lc else None
+
         result.append(TenantUserResponse(
             id=user.id,
             username=user.username,
@@ -111,6 +119,8 @@ def list_tenant_members(
             role=member.role,
             is_active=user.is_active if hasattr(user, 'is_active') else True,
             can_manage_roster=getattr(member, 'can_manage_roster', False) or False,
+            linked_creator_id=getattr(member, 'linked_creator_id', None),
+            linked_creator_name=linked_creator_name,
             created_at=user.created_at,
             last_login_at=user.last_login_at if hasattr(user, 'last_login_at') else None,
             assigned_creators=[{"id": c.id, "name": c.name} for c in creators]
@@ -147,10 +157,32 @@ def create_tenant_member(
     db.add(user)
     db.flush()
 
+    linked_creator_id = None
+    linked_creator_name = None
+    if request.role == "CLIENT" and request.creator_id:
+        creator = db.query(Creator).filter(
+            Creator.id == request.creator_id,
+            Creator.organization_id == org_id
+        ).first()
+        if not creator:
+            raise HTTPException(status_code=404, detail="Creator not found in this organization")
+        if creator.linked_user_id:
+            raise HTTPException(status_code=400, detail="This creator is already linked to another user account")
+        existing_link = db.query(OrganizationMember).filter(
+            OrganizationMember.linked_creator_id == creator.id,
+            OrganizationMember.organization_id == org_id
+        ).first()
+        if existing_link:
+            raise HTTPException(status_code=400, detail="This creator already has a linked client account")
+        linked_creator_id = creator.id
+        linked_creator_name = creator.display_name
+        creator.linked_user_id = user.id
+
     membership = OrganizationMember(
         organization_id=org_id,
         user_id=user.id,
-        role=request.role
+        role=request.role,
+        linked_creator_id=linked_creator_id
     )
     db.add(membership)
     db.commit()
@@ -162,6 +194,8 @@ def create_tenant_member(
         email=user.email,
         role=request.role,
         is_active=user.is_active,
+        linked_creator_id=linked_creator_id,
+        linked_creator_name=linked_creator_name,
         created_at=user.created_at,
         last_login_at=None,
         assigned_creators=[]
@@ -217,16 +251,76 @@ def update_tenant_member(
     ).all()
     creators = [{"id": c.id, "name": c.name} for c in assigned]
 
+    linked_creator_name = None
+    if getattr(membership, 'linked_creator_id', None):
+        lc = db.query(Creator).filter(Creator.id == membership.linked_creator_id).first()
+        linked_creator_name = lc.display_name if lc else None
+
     return TenantUserResponse(
         id=user.id,
         username=user.username,
         email=user.email,
         role=membership.role,
         is_active=user.is_active,
+        linked_creator_id=getattr(membership, 'linked_creator_id', None),
+        linked_creator_name=linked_creator_name,
         created_at=user.created_at,
         last_login_at=user.last_login_at if hasattr(user, 'last_login_at') else None,
         assigned_creators=creators
     )
+
+
+class LinkCreatorRequest(BaseModel):
+    creator_id: Optional[int] = None
+
+
+@router.put("/members/{user_id}/link-creator")
+def link_creator_to_member(
+    user_id: int,
+    request: LinkCreatorRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    org_id, _ = get_org_admin(db, current_user)
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.organization_id == org_id,
+        OrganizationMember.user_id == user_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="User not found in this organization")
+
+    if membership.linked_creator_id:
+        old_creator = db.query(Creator).filter(Creator.id == membership.linked_creator_id).first()
+        if old_creator and old_creator.linked_user_id == user_id:
+            old_creator.linked_user_id = None
+
+    if request.creator_id:
+        creator = db.query(Creator).filter(
+            Creator.id == request.creator_id,
+            Creator.organization_id == org_id
+        ).first()
+        if not creator:
+            raise HTTPException(status_code=404, detail="Creator not found in this organization")
+        if creator.linked_user_id and creator.linked_user_id != user_id:
+            raise HTTPException(status_code=400, detail="This creator is already linked to another user")
+        existing_link = db.query(OrganizationMember).filter(
+            OrganizationMember.linked_creator_id == creator.id,
+            OrganizationMember.organization_id == org_id,
+            OrganizationMember.user_id != user_id
+        ).first()
+        if existing_link:
+            raise HTTPException(status_code=400, detail="This creator already has a linked client account")
+        membership.linked_creator_id = creator.id
+        membership.role = "CLIENT"
+        creator.linked_user_id = user_id
+    else:
+        membership.linked_creator_id = None
+        if membership.role == "CLIENT":
+            membership.role = "MEMBER"
+
+    db.commit()
+    return {"message": "Creator link updated"}
 
 
 @router.post("/members/{user_id}/reset-password")

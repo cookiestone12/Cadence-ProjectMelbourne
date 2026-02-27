@@ -32,6 +32,7 @@ export default function TenantAdminPage() {
   const [message, setMessage] = useState(null)
 
   const [showAddModal, setShowAddModal] = useState(false)
+  const [showClientModal, setShowClientModal] = useState(false)
   const [editingMember, setEditingMember] = useState(null)
   const [resetPasswordUser, setResetPasswordUser] = useState(null)
   const [assignCreatorsUser, setAssignCreatorsUser] = useState(null)
@@ -173,6 +174,7 @@ export default function TenantAdminPage() {
           onAssignCreators={setAssignCreatorsUser}
           onToggleRoster={handleToggleRoster}
           onInvite={() => { setShowInviteModal(true); setInviteResult(null) }}
+          onAddClient={() => setShowClientModal(true)}
         />
       )}
 
@@ -189,6 +191,15 @@ export default function TenantAdminPage() {
           member={editingMember}
           onClose={() => { setShowAddModal(false); setEditingMember(null) }}
           onSave={() => { setShowAddModal(false); setEditingMember(null); fetchData(); showMsg(editingMember ? 'Member updated' : 'Member added') }}
+        />
+      )}
+
+      {showClientModal && (
+        <CreateClientLoginModal
+          creators={creators}
+          existingMembers={members}
+          onClose={() => setShowClientModal(false)}
+          onSave={() => { setShowClientModal(false); fetchData(); showMsg('Client login created') }}
         />
       )}
 
@@ -224,21 +235,26 @@ export default function TenantAdminPage() {
   )
 }
 
-function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPassword, onAssignCreators, onToggleRoster, onInvite }) {
+function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPassword, onAssignCreators, onToggleRoster, onInvite, onAddClient }) {
   const roleColors = {
     OWNER: 'bg-purple-100 text-purple-700',
     ADMIN: 'bg-blue-100 text-blue-700',
     MEMBER: 'bg-gray-100 text-gray-600',
+    CLIENT: 'bg-teal-100 text-teal-700',
   }
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h2 className="text-lg font-semibold text-[#3D4A44]">Team Members ({members.length})</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={onInvite} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#5B8A72] text-[#5B8A72] rounded-lg hover:bg-[#5B8A72]/5 text-sm font-medium">
             <EnvelopeIcon className="w-4 h-4" />
             Invite User
+          </button>
+          <button onClick={onAddClient} className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm font-medium">
+            <UserGroupIcon className="w-4 h-4" />
+            Create Client Login
           </button>
           <button onClick={onAdd} className="flex items-center gap-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] text-sm font-medium">
             <PlusIcon className="w-4 h-4" />
@@ -275,9 +291,14 @@ function MembersTab({ members, creators, onAdd, onEdit, onDelete, onResetPasswor
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${roleColors[member.role] || roleColors.MEMBER}`}>
-                    {member.role}
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full w-fit ${roleColors[member.role] || roleColors.MEMBER}`}>
+                      {member.role}
+                    </span>
+                    {member.role === 'CLIENT' && member.linked_creator_name && (
+                      <span className="text-xs text-teal-600 font-medium">{member.linked_creator_name}</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex items-center gap-1 text-xs font-medium ${member.is_active ? 'text-green-600' : 'text-red-500'}`}>
@@ -458,6 +479,116 @@ function AddEditMemberModal({ member, onClose, onSave }) {
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg">Cancel</button>
             <button type="submit" disabled={saving} className="px-4 py-2 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] disabled:opacity-50">
               {saving ? 'Saving...' : member ? 'Update' : 'Create Member'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function CreateClientLoginModal({ creators, existingMembers, onClose, onSave }) {
+  const [form, setForm] = useState({
+    username: '',
+    email: '',
+    password: '',
+    creator_id: '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState(null)
+
+  const linkedCreatorIds = new Set(
+    existingMembers.filter(m => m.linked_creator_id).map(m => m.linked_creator_id)
+  )
+  const availableCreators = creators.filter(c => !linkedCreatorIds.has(c.id))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.creator_id) {
+      setError('Please select a creator to link')
+      return
+    }
+    if (!form.password || form.password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      await axios.post('/api/tenant-admin/members', {
+        username: form.username,
+        email: form.email,
+        password: form.password,
+        role: 'CLIENT',
+        creator_id: parseInt(form.creator_id),
+      })
+      onSave()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to create client login')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 mx-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-semibold text-[#3D4A44]">Create Client Login</h3>
+          <button onClick={onClose} className="p-1 hover:bg-[#EEF1EC] rounded-lg"><XMarkIcon className="w-5 h-5 text-[#7A8580]" /></button>
+        </div>
+        <p className="text-sm text-[#7A8580] mb-5">Create a login for a creator on your roster. They will be able to view and edit their own profile, catalog, and related data.</p>
+
+        {error && <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[#3D4A44] mb-1">Link to Creator</label>
+            <select
+              required value={form.creator_id}
+              onChange={(e) => setForm({...form, creator_id: e.target.value})}
+              className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+            >
+              <option value="">Select a creator...</option>
+              {availableCreators.map(c => (
+                <option key={c.id} value={c.id}>{c.display_name || c.name}</option>
+              ))}
+            </select>
+            {availableCreators.length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">All creators already have linked accounts</p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[#3D4A44] mb-1">Username</label>
+            <input
+              type="text" required value={form.username}
+              onChange={(e) => setForm({...form, username: e.target.value})}
+              className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              placeholder="e.g. artist_john"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[#3D4A44] mb-1">Email</label>
+            <input
+              type="email" required value={form.email}
+              onChange={(e) => setForm({...form, email: e.target.value})}
+              className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              placeholder="client@email.com"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[#3D4A44] mb-1">Password</label>
+            <input
+              type="password" required value={form.password}
+              onChange={(e) => setForm({...form, password: e.target.value})}
+              className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              placeholder="Min 6 characters"
+            />
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg">Cancel</button>
+            <button type="submit" disabled={saving || availableCreators.length === 0} className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50">
+              {saving ? 'Creating...' : 'Create Client Login'}
             </button>
           </div>
         </form>
