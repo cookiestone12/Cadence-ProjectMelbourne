@@ -191,7 +191,26 @@ function ProfileTab({ creator, onUpdate }) {
         <Field label="Territory" field="primary_territory" />
         <Field label="PRO" field="primary_pro" />
         <Field label="IPI Number" field="primary_ipi" />
-        <Field label="Publisher" field="publisher_name" />
+        <div>
+          <label className="block text-xs font-medium text-[#7A8580] mb-1">Publisher</label>
+          <p className="text-sm text-[#3D4A44]">
+            {creator.publisher_contact
+              ? <>{creator.publisher_contact.display_name}{creator.publisher_contact.company ? <span className="text-[#7A8580]"> ({creator.publisher_contact.company})</span> : ''}</>
+              : creator.publisher_name
+                ? creator.publisher_name
+                : <span className="text-[#A0A8A3] italic">Not set</span>
+            }
+          </p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-[#7A8580] mb-1">Administrator</label>
+          <p className="text-sm text-[#3D4A44]">
+            {creator.admin_contact
+              ? <>{creator.admin_contact.display_name}{creator.admin_contact.company ? <span className="text-[#7A8580]"> ({creator.admin_contact.company})</span> : ''}</>
+              : <span className="text-[#A0A8A3] italic">Not set</span>
+            }
+          </p>
+        </div>
         <Field label="Label Affiliation" field="label_affiliation" />
         <Field label="Website" field="website_url" type="url" />
       </div>

@@ -38,6 +38,18 @@ def get_client_profile(
     membership, creator = get_client_context(db, current_user)
     org = db.query(Organization).filter(Organization.id == membership.organization_id).first()
 
+    publisher_contact = None
+    if creator.publisher_contact_id:
+        pc = db.query(CreativeContact).filter(CreativeContact.id == creator.publisher_contact_id).first()
+        if pc:
+            publisher_contact = {"id": pc.id, "display_name": pc.display_name, "company": pc.publisher_name}
+
+    admin_contact = None
+    if creator.admin_contact_id:
+        ac = db.query(CreativeContact).filter(CreativeContact.id == creator.admin_contact_id).first()
+        if ac:
+            admin_contact = {"id": ac.id, "display_name": ac.display_name, "company": ac.publisher_name}
+
     return {
         "creator_id": creator.id,
         "organization_id": membership.organization_id,
@@ -57,6 +69,8 @@ def get_client_profile(
             "contributor_type": creator.contributor_type,
             "phone": creator.phone,
             "publisher_name": creator.publisher_name,
+            "publisher_contact": publisher_contact,
+            "admin_contact": admin_contact,
             "label_affiliation": creator.label_affiliation,
             "bio": creator.bio,
             "website_url": creator.website_url,
