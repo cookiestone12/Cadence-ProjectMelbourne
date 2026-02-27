@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import axios from 'axios'
-import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon, CloudArrowUpIcon, PaperClipIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon, CloudArrowUpIcon, PaperClipIcon, LinkIcon } from '@heroicons/react/24/outline'
 import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/24/solid'
 import ActionsTab from '../components/ActionsTab'
 import CreatorAccountingEnhanced from '../components/CreatorAccountingEnhanced'
@@ -36,6 +36,9 @@ export default function CreatorDetailPage() {
   })
   const [selectedSongs, setSelectedSongs] = useState(new Set())
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showMergeModal, setShowMergeModal] = useState(false)
+  const [mergePrimaryId, setMergePrimaryId] = useState(null)
+  const [merging, setMerging] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [creatorReleases, setCreatorReleases] = useState([])
   const [releaseArtworkUrls, setReleaseArtworkUrls] = useState({})
@@ -79,6 +82,7 @@ export default function CreatorDetailPage() {
   const [newContactId, setNewContactId] = useState('')
   const [newContactRole, setNewContactRole] = useState('ADMIN')
   const CONTACT_ROLES = ['DISTRIBUTION', 'LEGAL', 'ADMIN', 'MANAGER', 'PUBLISHER', 'A_AND_R', 'MARKETING', 'OTHER']
+  const ROLE_DISPLAY = { A_AND_R: 'A&R', DISTRIBUTION: 'Distribution', LEGAL: 'Legal', ADMIN: 'Admin', MANAGER: 'Manager', PUBLISHER: 'Publisher', MARKETING: 'Marketing', OTHER: 'Other' }
   const CONTACT_ROLE_COLORS = {
     DISTRIBUTION: 'bg-blue-100 text-blue-700',
     LEGAL: 'bg-purple-100 text-purple-700',
@@ -848,6 +852,26 @@ export default function CreatorDetailPage() {
     }
   }
 
+  const handleMergeSongs = async () => {
+    if (!mergePrimaryId || selectedSongs.size < 2) return
+    setMerging(true)
+    try {
+      const mergeIds = Array.from(selectedSongs).filter(id => id !== mergePrimaryId)
+      await axios.post(`/api/songs/org/${organizationId}/merge`, {
+        primary_song_id: mergePrimaryId,
+        merge_song_ids: mergeIds,
+      })
+      setShowMergeModal(false)
+      setSelectedSongs(new Set())
+      setMergePrimaryId(null)
+      if (organizationId) await loadSongs(organizationId)
+    } catch (err) {
+      alert('Failed to merge songs: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setMerging(false)
+    }
+  }
+
   const PARTY_ROLES = ['LICENSOR', 'LICENSEE', 'PUBLISHER', 'ARTIST', 'LABEL', 'MANAGER', 'PRODUCER', 'OTHER']
 
   const handleCreateContract = async () => {
@@ -1141,7 +1165,7 @@ export default function CreatorDetailPage() {
                           <div className="flex items-center gap-2 mb-1">
                             <p className="font-medium text-[#3D4A44] text-sm truncate">{cc.display_name || cc.contact_name || cc.name || 'Contact'}</p>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${CONTACT_ROLE_COLORS[cc.role] || CONTACT_ROLE_COLORS.OTHER}`}>
-                              {(cc.role || 'OTHER').replace(/_/g, ' ')}
+                              {ROLE_DISPLAY[cc.role] || (cc.role || 'Other').replace(/_/g, ' ')}
                             </span>
                           </div>
                           {(cc.email || cc.contact_email) && (
@@ -1187,7 +1211,7 @@ export default function CreatorDetailPage() {
                       className="flex-1 border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                     >
                       {CONTACT_ROLES.map(role => (
-                        <option key={role} value={role}>{role.replace(/_/g, ' ')}</option>
+                        <option key={role} value={role}>{ROLE_DISPLAY[role] || role.replace(/_/g, ' ')}</option>
                       ))}
                     </select>
                     <button
@@ -1303,6 +1327,19 @@ export default function CreatorDetailPage() {
                 }
               </p>
               <div className="flex items-center gap-2">
+                {selectedSongs.size >= 2 && (
+                  <button
+                    onClick={() => {
+                      const firstSelected = songs.find(s => selectedSongs.has(s.id))
+                      setMergePrimaryId(firstSelected?.id || null)
+                      setShowMergeModal(true)
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#5A8A9A] text-white rounded-xl font-medium hover:bg-[#4A7A8A] transition-colors text-sm"
+                  >
+                    <LinkIcon className="w-4 h-4" />
+                    Merge Songs ({selectedSongs.size})
+                  </button>
+                )}
                 {selectedSongs.size > 0 && (
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
@@ -2664,6 +2701,78 @@ export default function CreatorDetailPage() {
           </div>
         </div>
       )}
+
+      {showMergeModal && (() => {
+        const mergeSongsList = songs.filter(s => selectedSongs.has(s.id))
+        return (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+              <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+                <div>
+                  <h3 className="text-lg font-semibold text-[#3D4A44]">Merge Songs</h3>
+                  <p className="text-sm text-[#7A8580] mt-0.5">Select which song to keep as the primary. All credits and data from other songs will be merged into it.</p>
+                </div>
+                <button onClick={() => { setShowMergeModal(false); setMergePrimaryId(null) }} className="text-[#7A8580] hover:text-[#3D4A44]">
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-3">
+                {mergeSongsList.map(song => (
+                  <div
+                    key={song.id}
+                    onClick={() => setMergePrimaryId(song.id)}
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                      mergePrimaryId === song.id
+                        ? 'border-[#5B8A72] bg-[#EDF5F0]'
+                        : 'border-[rgba(59,77,67,0.1)] hover:border-[rgba(59,77,67,0.2)]'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-[#3D4A44] text-sm truncate">{song.title}</p>
+                        <p className="text-xs text-[#7A8580]">{song.primary_artist || 'No artist'}</p>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-[#A0A8A3]">
+                          {song.isrc && <span>ISRC: {song.isrc}</span>}
+                          {song.release_date && <span>Released: {song.release_date}</span>}
+                          {song.client_name && <span>Client: {song.client_name}</span>}
+                        </div>
+                      </div>
+                      {mergePrimaryId === song.id && (
+                        <span className="px-2.5 py-1 bg-[#5B8A72] text-white text-xs font-semibold rounded-full ml-3 whitespace-nowrap">Primary</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div className="bg-[#FAFBF9] rounded-xl p-3 text-xs text-[#7A8580]">
+                  <p className="font-medium text-[#3D4A44] mb-1">What happens when you merge:</p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    <li>All credits from merged songs are combined onto the primary</li>
+                    <li>Placements, contracts, and accounting data are transferred</li>
+                    <li>Missing metadata on the primary is filled from merged songs</li>
+                    <li>Merged songs are permanently deleted</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="flex gap-3 p-6 border-t border-[rgba(59,77,67,0.08)]">
+                <button
+                  onClick={() => { setShowMergeModal(false); setMergePrimaryId(null) }}
+                  disabled={merging}
+                  className="flex-1 px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl text-[#3D4A44] font-medium hover:bg-[#F5F7F4] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleMergeSongs}
+                  disabled={merging || !mergePrimaryId}
+                  className="flex-1 px-4 py-3 bg-[#5A8A9A] text-white rounded-xl font-medium hover:bg-[#4A7A8A] transition-colors disabled:opacity-50"
+                >
+                  {merging ? 'Merging...' : `Merge into Primary`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {showCreateContractModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">

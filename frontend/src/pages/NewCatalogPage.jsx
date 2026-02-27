@@ -49,6 +49,10 @@ export default function NewCatalogPage() {
   const [quickCreatorName, setQuickCreatorName] = useState('')
   const [showDuplicateModal, setShowDuplicateModal] = useState(false)
   const [duplicateGroups, setDuplicateGroups] = useState([])
+  const [showMergeModal, setShowMergeModal] = useState(false)
+  const [mergeGroupSongs, setMergeGroupSongs] = useState([])
+  const [mergePrimaryId, setMergePrimaryId] = useState(null)
+  const [merging, setMerging] = useState(false)
   const [duplicateLoading, setDuplicateLoading] = useState(false)
 
   const [audioData, setAudioData] = useState({})
@@ -399,6 +403,38 @@ export default function NewCatalogPage() {
     } catch (error) {
       alert(error.response?.data?.detail || 'Failed to delete')
       loadData()
+    }
+  }
+
+  const openMergeForGroup = (group) => {
+    setMergeGroupSongs(group)
+    setMergePrimaryId(group[0]?.id || null)
+    setShowMergeModal(true)
+  }
+
+  const handleMergeSongs = async () => {
+    if (!mergePrimaryId || mergeGroupSongs.length < 2 || !organizationId) return
+    setMerging(true)
+    try {
+      const mergeIds = mergeGroupSongs.filter(s => s.id !== mergePrimaryId).map(s => s.id)
+      await axios.post(`/api/songs/org/${organizationId}/merge`, {
+        primary_song_id: mergePrimaryId,
+        merge_song_ids: mergeIds,
+      })
+      setShowMergeModal(false)
+      setMergeGroupSongs([])
+      setMergePrimaryId(null)
+      setDuplicateGroups(prev =>
+        prev.filter(group => {
+          const groupIds = new Set(group.map(s => s.id))
+          return !mergeGroupSongs.some(s => groupIds.has(s.id))
+        })
+      )
+      loadData()
+    } catch (err) {
+      alert('Failed to merge songs: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setMerging(false)
     }
   }
 
@@ -1105,6 +1141,17 @@ export default function NewCatalogPage() {
               >
                 Edit
               </button>
+              {selectedSongIds.size >= 2 && (
+                <button
+                  onClick={() => {
+                    const selected = songs.filter(s => selectedSongIds.has(s.id))
+                    openMergeForGroup(selected)
+                  }}
+                  className="px-2.5 sm:px-4 py-1.5 bg-[#5A8A9A] text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-[#4A7A8A] transition-colors whitespace-nowrap"
+                >
+                  Merge
+                </button>
+              )}
               <button
                 onClick={handleBulkDelete}
                 className="px-2.5 sm:px-4 py-1.5 bg-[#C47068] text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-[#B45F58] transition-colors whitespace-nowrap"
@@ -1549,8 +1596,15 @@ export default function NewCatalogPage() {
               <div className="flex-1 overflow-y-auto space-y-4">
                 {duplicateGroups.map((group, gi) => (
                   <div key={gi} className="border border-[rgba(59,77,67,0.12)] rounded-xl overflow-hidden">
-                    <div className="bg-[#FFF8F0] px-4 py-2 text-xs font-medium text-[#856404]">
-                      Duplicate group — {group.length} matching songs
+                    <div className="bg-[#FFF8F0] px-4 py-2 flex items-center justify-between">
+                      <span className="text-xs font-medium text-[#856404]">Duplicate group — {group.length} matching songs</span>
+                      <button
+                        onClick={() => openMergeForGroup(group)}
+                        className="flex items-center gap-1 px-2.5 py-1 bg-[#5A8A9A] text-white rounded-lg text-xs font-medium hover:bg-[#4A7A8A] transition-colors"
+                      >
+                        <LinkIcon className="w-3.5 h-3.5" />
+                        Merge
+                      </button>
                     </div>
                     {group.map((song, si) => (
                       <div key={song.id} className={`px-4 py-3 flex items-center justify-between ${si > 0 ? 'border-t border-[rgba(59,77,67,0.08)]' : ''}`}>
@@ -1581,6 +1635,76 @@ export default function NewCatalogPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {showMergeModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <div>
+                <h3 className="text-lg font-semibold text-[#3D4A44]">Merge Songs</h3>
+                <p className="text-sm text-[#7A8580] mt-0.5">Select which song to keep as the primary. All data from the others will be merged into it.</p>
+              </div>
+              <button onClick={() => { setShowMergeModal(false); setMergePrimaryId(null); setMergeGroupSongs([]) }} className="text-[#7A8580] hover:text-[#3D4A44]">
+                <XCircleIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+              {mergeGroupSongs.map(song => (
+                <div
+                  key={song.id}
+                  onClick={() => setMergePrimaryId(song.id)}
+                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    mergePrimaryId === song.id
+                      ? 'border-[#5B8A72] bg-[#EDF5F0]'
+                      : 'border-[rgba(59,77,67,0.1)] hover:border-[rgba(59,77,67,0.2)]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-[#3D4A44] text-sm truncate">{song.title}</p>
+                      <p className="text-xs text-[#7A8580]">{song.primary_artist || 'No artist'}</p>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-[#A0A8A3]">
+                        {song.isrc && <span>ISRC: {song.isrc}</span>}
+                        {song.is_released && <span className="text-[#5B9A6E]">Released</span>}
+                        {song.has_contract_executed && <span className="text-[#5A8A9A]">Contract</span>}
+                        {song.is_registered_with_pro && <span className="text-[#5B8A72]">PRO</span>}
+                        <span>Health: {song.status_health_score?.toFixed(0) || 0}%</span>
+                      </div>
+                    </div>
+                    {mergePrimaryId === song.id && (
+                      <span className="px-2.5 py-1 bg-[#5B8A72] text-white text-xs font-semibold rounded-full ml-3 whitespace-nowrap">Primary</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div className="bg-[#FAFBF9] rounded-xl p-3 text-xs text-[#7A8580]">
+                <p className="font-medium text-[#3D4A44] mb-1">What happens when you merge:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>All credits from merged songs are combined onto the primary</li>
+                  <li>Placements, contracts, and accounting data are transferred</li>
+                  <li>Missing metadata on the primary is filled from merged songs</li>
+                  <li>Merged songs are permanently deleted</li>
+                </ul>
+              </div>
+            </div>
+            <div className="flex gap-3 p-6 border-t border-[rgba(59,77,67,0.08)]">
+              <button
+                onClick={() => { setShowMergeModal(false); setMergePrimaryId(null); setMergeGroupSongs([]) }}
+                disabled={merging}
+                className="flex-1 px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl text-[#3D4A44] font-medium hover:bg-[#F5F7F4] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMergeSongs}
+                disabled={merging || !mergePrimaryId}
+                className="flex-1 px-4 py-3 bg-[#5A8A9A] text-white rounded-xl font-medium hover:bg-[#4A7A8A] transition-colors disabled:opacity-50"
+              >
+                {merging ? 'Merging...' : 'Merge into Primary'}
+              </button>
+            </div>
           </div>
         </div>
       )}

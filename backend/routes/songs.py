@@ -7,7 +7,7 @@ from datetime import date
 from ..models import (
     get_db, Song, SongCredit, SongDSPLink, SongChecklistStatus,
     ChecklistItem, Creator, OrganizationMember, User, SongValuationSnapshot,
-    Placement, ContractAsset, AudioAsset,
+    Placement, ContractAsset, AudioAsset, RoyaltyTransaction,
 )
 from ..utils.auth import get_current_user
 
@@ -719,4 +719,169 @@ def update_song(
         "contract_location": song.contract_location,
         "notes": song.notes,
         "media_url": song.media_url
+    }
+
+
+class MergeSongsRequest(BaseModel):
+    primary_song_id: int
+    merge_song_ids: List[int]
+
+
+@router.post("/org/{org_id}/merge")
+def merge_songs(
+    org_id: int,
+    request: MergeSongsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from sqlalchemy import text
+    from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
+    import sqlalchemy
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+    if not membership and not current_user.is_super_admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    primary = db.query(Song).filter(Song.id == request.primary_song_id, Song.organization_id == org_id).first()
+    if not primary:
+        raise HTTPException(status_code=404, detail="Primary song not found")
+
+    merge_songs_list = db.query(Song).filter(
+        Song.id.in_(request.merge_song_ids),
+        Song.organization_id == org_id
+    ).all()
+    if len(merge_songs_list) != len(request.merge_song_ids):
+        raise HTTPException(status_code=404, detail="One or more merge songs not found")
+
+    if request.primary_song_id in request.merge_song_ids:
+        raise HTTPException(status_code=400, detail="Primary song cannot be in the merge list")
+
+    merge_ids = list(request.merge_song_ids)
+    ids_param = {"ids": merge_ids}
+    pid_ids_param = {"pid": primary.id, "ids": merge_ids}
+    arr_type = sqlalchemy.ARRAY(sqlalchemy.Integer)
+
+    try:
+        existing_credits = db.query(SongCredit).filter(SongCredit.song_id == primary.id).all()
+        existing_credit_keys = {(c.creator_id, c.role) for c in existing_credits}
+
+        for merge_song in merge_songs_list:
+            merge_credits = db.query(SongCredit).filter(SongCredit.song_id == merge_song.id).all()
+            for credit in merge_credits:
+                if (credit.creator_id, credit.role) not in existing_credit_keys:
+                    new_credit = SongCredit(
+                        song_id=primary.id,
+                        creator_id=credit.creator_id,
+                        role=credit.role,
+                        share_percentage=credit.share_percentage,
+                        pub_share=credit.pub_share,
+                        master_share=credit.master_share,
+                    )
+                    db.add(new_credit)
+                    existing_credit_keys.add((credit.creator_id, credit.role))
+
+        update_stmt = text("UPDATE placements SET song_id = :pid WHERE song_id = ANY(CAST(:ids AS INTEGER[]))")
+        db.execute(update_stmt, pid_ids_param)
+        db.execute(text("UPDATE royalty_transactions SET song_id = :pid WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), pid_ids_param)
+        db.execute(text("UPDATE audio_assets SET song_id = :pid WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), pid_ids_param)
+        db.execute(text("UPDATE action_items SET song_id = :pid WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), pid_ids_param)
+        db.execute(text("UPDATE contract_documents SET song_id = :pid WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), pid_ids_param)
+        db.execute(text("UPDATE expenses SET song_id = :pid WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), pid_ids_param)
+        db.execute(text("UPDATE fees SET song_id = :pid WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), pid_ids_param)
+        db.execute(text("UPDATE royalty_ledger_entries SET song_id = :pid WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), pid_ids_param)
+        db.execute(text("UPDATE royalty_statement_lines SET matched_song_id = :pid WHERE matched_song_id = ANY(CAST(:ids AS INTEGER[]))"), pid_ids_param)
+
+        contract_assets = db.query(ContractAsset).filter(
+            ContractAsset.asset_type == "SONG",
+            ContractAsset.asset_id.in_(merge_ids)
+        ).all()
+        for ca in contract_assets:
+            existing_ca = db.query(ContractAsset).filter(
+                ContractAsset.contract_id == ca.contract_id,
+                ContractAsset.asset_type == "SONG",
+                ContractAsset.asset_id == primary.id
+            ).first()
+            if existing_ca:
+                db.delete(ca)
+            else:
+                ca.asset_id = primary.id
+
+        metadata_fields = [
+            'isrc', 'iswc', 'project_title', 'release_date', 'label',
+            'publishing_percentage', 'master_percentage', 'advance_amount',
+            'recording_code', 'media_url', 'spotify_link', 'notes'
+        ]
+        for field in metadata_fields:
+            primary_val = getattr(primary, field, None)
+            if not primary_val:
+                for merge_song in merge_songs_list:
+                    merge_val = getattr(merge_song, field, None)
+                    if merge_val:
+                        setattr(primary, field, merge_val)
+                        break
+
+        if not primary.is_released:
+            for merge_song in merge_songs_list:
+                if merge_song.is_released:
+                    primary.is_released = True
+                    break
+
+        if not primary.is_registered_with_pro:
+            for merge_song in merge_songs_list:
+                if merge_song.is_registered_with_pro:
+                    primary.is_registered_with_pro = True
+                    break
+
+        del_stmt = text("DELETE FROM song_credits WHERE song_id = ANY(CAST(:ids AS INTEGER[]))")
+        db.execute(del_stmt, ids_param)
+        db.execute(text("DELETE FROM song_dsp_links WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
+        db.execute(text("DELETE FROM song_checklist_status WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
+        db.execute(text("DELETE FROM song_valuation_snapshots WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
+        db.execute(text("DELETE FROM analytics WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
+        db.execute(text("DELETE FROM song_streaming_metrics WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
+        db.execute(text("DELETE FROM territory_revenue WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
+        db.execute(text("DELETE FROM valuation_calculations WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
+        db.execute(text("DELETE FROM song_contracts WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
+        db.execute(text("DELETE FROM work_tracks WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
+        db.execute(text("DELETE FROM release_tracks WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
+
+        for merge_song in merge_songs_list:
+            db.delete(merge_song)
+
+        from ..services.audit_service import log_action
+        log_action(db, org_id, current_user.id, "MERGE", "SONG", primary.id,
+                   f"Merged songs {merge_ids} into {primary.title}")
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Merge failed: {str(e)}")
+
+    db.refresh(primary)
+
+    final_credits = db.query(SongCredit).filter(SongCredit.song_id == primary.id).all()
+    credit_list = []
+    for c in final_credits:
+        creator = db.query(Creator).filter(Creator.id == c.creator_id).first()
+        credit_list.append({
+            "id": c.id,
+            "creator_id": c.creator_id,
+            "creator_name": creator.display_name if creator else None,
+            "role": c.role,
+            "share_percentage": c.share_percentage,
+        })
+
+    return {
+        "message": f"Successfully merged {len(merge_ids)} song(s) into '{primary.title}'",
+        "primary_song": {
+            "id": primary.id,
+            "title": primary.title,
+            "primary_artist": primary.primary_artist,
+            "isrc": primary.isrc,
+        },
+        "credits": credit_list,
+        "merged_count": len(merge_ids),
     }
