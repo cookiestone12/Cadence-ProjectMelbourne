@@ -122,6 +122,8 @@ class Organization(Base):
     logo_orientation = Column(String, default="square")
     primary_color = Column(String, nullable=True)
     
+    access_code = Column(String, unique=True, nullable=True, index=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

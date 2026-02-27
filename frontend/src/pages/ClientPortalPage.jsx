@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import {
   UserCircleIcon,
@@ -15,7 +15,59 @@ import {
   MagnifyingGlassIcon,
   EnvelopeIcon,
   ArrowDownTrayIcon,
+  PlusIcon,
+  CloudArrowUpIcon,
+  SparklesIcon,
+  DocumentTextIcon,
+  PaperClipIcon,
+  TrashIcon,
+  ArrowUpTrayIcon,
+  ArrowLeftIcon,
+  CheckCircleIcon,
+  ExclamationCircleIcon,
 } from '@heroicons/react/24/outline'
+import AddSongModal from '../components/AddSongModal'
+import ScheduleAUploadModal from '../components/ScheduleAUploadModal'
+import SongDetailModal from '../components/SongDetailModal'
+
+const TARGET_FIELDS = [
+  { value: '', label: '— Skip —' },
+  { value: 'track_title', label: 'Track / Work Title' },
+  { value: 'artist', label: 'Artist / Writer' },
+  { value: 'isrc', label: 'ISRC' },
+  { value: 'upc', label: 'UPC' },
+  { value: 'iswc', label: 'ISWC' },
+  { value: 'revenue', label: 'Revenue / Amount' },
+  { value: 'quantity', label: 'Quantity / Performances' },
+  { value: 'territory', label: 'Territory' },
+  { value: 'platform', label: 'Platform / Licensee' },
+  { value: 'revenue_type', label: 'Revenue / Rights Type' },
+  { value: 'publisher', label: 'Publisher' },
+  { value: 'work_id', label: 'Work ID / Song Code' },
+  { value: 'share_percentage', label: 'Share %' },
+]
+
+const SOURCE_TYPE_OPTIONS = [
+  { value: '', label: 'Auto-detect' },
+  { value: 'DSP', label: 'DSP / Distributor (Spotify, Apple Music, DistroKid, etc.)' },
+  { value: 'BMI', label: 'BMI' },
+  { value: 'ASCAP', label: 'ASCAP' },
+  { value: 'SESAC', label: 'SESAC' },
+  { value: 'SoundExchange', label: 'SoundExchange' },
+  { value: 'SOCAN', label: 'SOCAN' },
+  { value: 'PRS', label: 'PRS for Music' },
+  { value: 'OTHER_PRO', label: 'Other PRO' },
+]
+
+const STATEMENT_STATUS_COLORS = {
+  PENDING: 'bg-amber-100 text-amber-700',
+  PROCESSING: 'bg-blue-100 text-blue-700',
+  PROCESSED: 'bg-green-100 text-green-700',
+  FAILED: 'bg-red-100 text-red-700',
+  PARTIALLY_MATCHED: 'bg-orange-100 text-orange-700',
+}
+
+const CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY']
 
 const BASE_TABS = [
   { key: 'profile', label: 'Profile', icon: UserCircleIcon },
@@ -101,10 +153,10 @@ export default function ClientPortalPage() {
       </div>
 
       {activeTab === 'profile' && <ProfileTab creator={profile.creator} onUpdate={setProfile} />}
-      {activeTab === 'catalog' && <CatalogTab />}
+      {activeTab === 'catalog' && <CatalogTab organizationId={profile.organization_id} creatorId={profile.creator_id} />}
       {activeTab === 'placements' && <PlacementsTab />}
       {activeTab === 'contracts' && <ContractsTab />}
-      {activeTab === 'accounting' && <AccountingTab />}
+      {activeTab === 'accounting' && <AccountingTab orgId={profile.organization_id} />}
       {activeTab === 'directory' && <DirectoryTab />}
       {activeTab === 'clients' && profile.client_access_scope === 'ALL' && <ClientsTab />}
       {activeTab === 'access' && <AccessTab />}
@@ -233,16 +285,23 @@ function ProfileTab({ creator, onUpdate }) {
   )
 }
 
-function CatalogTab() {
+function CatalogTab({ organizationId, creatorId }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('songs')
+  const [showAddSong, setShowAddSong] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [selectedSong, setSelectedSong] = useState(null)
 
-  useEffect(() => {
+  const loadCatalog = () => {
     axios.get('/api/client-portal/catalog').then(res => {
       setData(res.data)
       setLoading(false)
     }).catch(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadCatalog()
   }, [])
 
   if (loading) return <LoadingSpinner />
@@ -250,15 +309,31 @@ function CatalogTab() {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-lg font-semibold text-[#3D4A44]">My Catalog</h2>
-        <div className="flex bg-[#F5F7F4] rounded-lg p-0.5">
-          <button onClick={() => setView('songs')} className={`px-3 py-1.5 text-sm rounded-md transition-colors ${view === 'songs' ? 'bg-white text-[#3D4A44] shadow-sm font-medium' : 'text-[#7A8580]'}`}>
-            Songs ({data.songs?.length || 0})
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowImport(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#5B8A72] hover:bg-[#EEF1EC] rounded-lg border border-[#5B8A72]/30 transition-colors"
+          >
+            <CloudArrowUpIcon className="w-4 h-4" />
+            Import Catalog
           </button>
-          <button onClick={() => setView('works')} className={`px-3 py-1.5 text-sm rounded-md transition-colors ${view === 'works' ? 'bg-white text-[#3D4A44] shadow-sm font-medium' : 'text-[#7A8580]'}`}>
-            Works ({data.works?.length || 0})
+          <button
+            onClick={() => setShowAddSong(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+          >
+            <PlusIcon className="w-4 h-4" />
+            Add Song
           </button>
+          <div className="flex bg-[#F5F7F4] rounded-lg p-0.5">
+            <button onClick={() => setView('songs')} className={`px-3 py-1.5 text-sm rounded-md transition-colors ${view === 'songs' ? 'bg-white text-[#3D4A44] shadow-sm font-medium' : 'text-[#7A8580]'}`}>
+              Songs ({data.songs?.length || 0})
+            </button>
+            <button onClick={() => setView('works')} className={`px-3 py-1.5 text-sm rounded-md transition-colors ${view === 'works' ? 'bg-white text-[#3D4A44] shadow-sm font-medium' : 'text-[#7A8580]'}`}>
+              Works ({data.works?.length || 0})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -276,7 +351,11 @@ function CatalogTab() {
             </thead>
             <tbody className="divide-y divide-[#E5E8E3]">
               {data.songs.map(s => (
-                <tr key={s.id} className="hover:bg-[#FAFBF9]">
+                <tr
+                  key={s.id}
+                  className="hover:bg-[#FAFBF9] cursor-pointer"
+                  onClick={() => setSelectedSong({ id: s.id, title: s.title, primary_artist: s.artist })}
+                >
                   <td className="px-4 py-3 text-sm font-medium text-[#3D4A44]">{s.title}</td>
                   <td className="px-4 py-3 text-sm text-[#7A8580]">{s.artist}</td>
                   <td className="px-4 py-3 text-sm text-[#7A8580] font-mono">{s.isrc || '-'}</td>
@@ -320,6 +399,30 @@ function CatalogTab() {
           </table>
           {data.works.length === 0 && <EmptyState text="No works in your catalog" />}
         </div>
+      )}
+
+      {showAddSong && (
+        <AddSongModal
+          onClose={() => setShowAddSong(false)}
+          onSuccess={() => loadCatalog()}
+          organizationId={organizationId}
+        />
+      )}
+
+      {showImport && (
+        <ScheduleAUploadModal
+          onClose={() => setShowImport(false)}
+          onSuccess={() => loadCatalog()}
+          organizationId={organizationId}
+        />
+      )}
+
+      {selectedSong && (
+        <SongDetailModal
+          song={selectedSong}
+          onClose={() => setSelectedSong(null)}
+          onSongUpdated={() => loadCatalog()}
+        />
       )}
     </div>
   )
@@ -382,16 +485,199 @@ function PlacementsTab() {
   )
 }
 
+const CONTRACT_TYPES = [
+  { value: 'MASTER', label: 'Master' },
+  { value: 'PUBLISHING', label: 'Publishing' },
+  { value: 'SYNC_LICENSE', label: 'Sync License' },
+  { value: 'DISTRIBUTION', label: 'Distribution' },
+  { value: 'MECHANICAL', label: 'Mechanical' },
+  { value: 'PERFORMANCE', label: 'Performance' },
+  { value: 'OTHER', label: 'Other' },
+]
+
+const CONTRACT_STATUSES = ['DRAFT', 'ACTIVE', 'EXPIRED', 'TERMINATED']
+const CONTRACT_CURRENCIES = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY']
+
+const emptyContractForm = {
+  title: '', contract_type: 'MASTER', payment_direction: 'INCOMING', status: 'DRAFT',
+  reference_number: '', start_date: '', end_date: '', territory: '',
+  advance_amount: '', advance_currency: 'USD', notes: '', terms_summary: '',
+}
+
 function ContractsTab() {
   const [contracts, setContracts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [orgId, setOrgId] = useState(null)
+  const [creatorId, setCreatorId] = useState(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createForm, setCreateForm] = useState({ ...emptyContractForm })
+  const [createLoading, setCreateLoading] = useState(false)
+  const [createError, setCreateError] = useState('')
+  const [parseFile, setParseFile] = useState(null)
+  const [parsing, setParsing] = useState(false)
+  const [parseSuccess, setParseSuccess] = useState(false)
+  const [selectedContract, setSelectedContract] = useState(null)
+  const [contractDocuments, setContractDocuments] = useState([])
+  const [docUploading, setDocUploading] = useState(false)
+  const [showUploadDoc, setShowUploadDoc] = useState(false)
+  const parseFileRef = useRef(null)
+  const docFileRef = useRef(null)
 
   useEffect(() => {
+    axios.get('/api/client-portal/me').then(res => {
+      setOrgId(res.data.organization_id)
+      setCreatorId(res.data.creator_id)
+    })
+  }, [])
+
+  useEffect(() => {
+    loadContracts()
+  }, [])
+
+  function loadContracts() {
     axios.get('/api/client-portal/contracts').then(res => {
       setContracts(res.data)
       setLoading(false)
     }).catch(() => setLoading(false))
-  }, [])
+  }
+
+  async function loadDocuments(contractId) {
+    try {
+      const res = await axios.get(`/api/rights/contracts/${contractId}/documents`)
+      setContractDocuments(Array.isArray(res.data) ? res.data : [])
+    } catch {
+      setContractDocuments([])
+    }
+  }
+
+  async function handleParseContract() {
+    if (!parseFile) return
+    setParsing(true)
+    setCreateError('')
+    setParseSuccess(false)
+    try {
+      const formData = new FormData()
+      formData.append('file', parseFile)
+      const res = await axios.post('/api/rights/contracts/parse-document', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      const fields = res.data.parsed_fields
+      if (fields) {
+        setCreateForm(prev => ({
+          ...prev,
+          title: fields.title || prev.title,
+          contract_type: fields.contract_type || prev.contract_type,
+          payment_direction: fields.payment_direction || prev.payment_direction,
+          status: fields.status || prev.status,
+          reference_number: fields.reference_number || prev.reference_number,
+          start_date: fields.start_date || prev.start_date,
+          end_date: fields.end_date || prev.end_date,
+          territory: Array.isArray(fields.territory) ? fields.territory.join(', ') : (fields.territory || prev.territory),
+          advance_amount: fields.advance_amount != null ? String(fields.advance_amount) : prev.advance_amount,
+          advance_currency: fields.advance_currency || prev.advance_currency,
+          notes: fields.notes || prev.notes,
+          terms_summary: fields.terms_summary || prev.terms_summary,
+        }))
+        setParseSuccess(true)
+        setTimeout(() => setParseSuccess(false), 5000)
+      }
+    } catch (error) {
+      const detail = error.response?.data?.detail
+      setCreateError(typeof detail === 'string' ? detail : 'Failed to parse document. Please try again or enter details manually.')
+    } finally {
+      setParsing(false)
+    }
+  }
+
+  async function handleCreateContract() {
+    if (!createForm.title.trim()) {
+      setCreateError('Please enter a contract title.')
+      return
+    }
+    if (!orgId) {
+      setCreateError('Organization not found.')
+      return
+    }
+    setCreateError('')
+    setCreateLoading(true)
+    try {
+      const payload = { ...createForm }
+      payload.creator_id = creatorId
+      if (payload.advance_amount) payload.advance_amount = parseFloat(payload.advance_amount)
+      else delete payload.advance_amount
+      if (!payload.start_date) delete payload.start_date
+      if (!payload.end_date) delete payload.end_date
+      if (!payload.reference_number) delete payload.reference_number
+      if (payload.territory && typeof payload.territory === 'string') {
+        payload.territory = payload.territory.split(',').map(t => t.trim()).filter(Boolean)
+      } else if (!payload.territory) {
+        payload.territory = []
+      }
+
+      const res = await axios.post(`/api/rights/contracts/org/${orgId}`, payload)
+      const newContractId = res.data?.id
+
+      if (parseFile && newContractId) {
+        try {
+          const docForm = new FormData()
+          docForm.append('file', parseFile)
+          docForm.append('description', parseFile.name)
+          await axios.post(`/api/rights/contracts/${newContractId}/documents`, docForm, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          })
+        } catch {}
+      }
+
+      setShowCreateModal(false)
+      setCreateForm({ ...emptyContractForm })
+      setCreateError('')
+      setParseFile(null)
+      setParseSuccess(false)
+      loadContracts()
+    } catch (error) {
+      const detail = error.response?.data?.detail
+      setCreateError(typeof detail === 'string' ? detail : 'Failed to create contract. Please try again.')
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
+  async function handleUploadDocument(file) {
+    if (!selectedContract) return
+    setDocUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('description', file.name)
+      await axios.post(`/api/rights/contracts/${selectedContract.id}/documents`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      loadDocuments(selectedContract.id)
+      setShowUploadDoc(false)
+    } catch (error) {
+      alert(error.response?.data?.detail || 'Failed to upload document')
+    } finally {
+      setDocUploading(false)
+    }
+  }
+
+  async function handleDownloadDocument(doc) {
+    try {
+      const res = await axios.get(`/api/rights/contracts/documents/${doc.id}/download`, {
+        responseType: 'blob'
+      })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', doc.file_name)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      alert('Failed to download document')
+    }
+  }
 
   const statusColors = {
     DRAFT: 'bg-gray-100 text-gray-600',
@@ -400,55 +686,415 @@ function ContractsTab() {
     TERMINATED: 'bg-red-100 text-red-600',
   }
 
+  const typeLabels = {
+    MASTER: 'Master', PUBLISHING: 'Publishing', SYNC_LICENSE: 'Sync License',
+    DISTRIBUTION: 'Distribution', MECHANICAL: 'Mechanical', PERFORMANCE: 'Performance', OTHER: 'Other',
+  }
+
   if (loading) return <LoadingSpinner />
 
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6 space-y-4">
-      <h2 className="text-lg font-semibold text-[#3D4A44]">Contracts ({contracts.length})</h2>
-      {contracts.length === 0 ? (
-        <EmptyState text="No contracts linked to your profile" />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {contracts.map(c => (
-            <div key={c.id} className="border border-[#E5E8E3] rounded-xl p-4 hover:shadow-sm transition-shadow">
-              <div className="flex items-start justify-between mb-2">
-                <h3 className="text-sm font-semibold text-[#3D4A44]">{c.title}</h3>
-                <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${statusColors[c.status] || 'bg-gray-100 text-gray-600'}`}>
-                  {c.status}
-                </span>
+  if (selectedContract) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { setSelectedContract(null); setContractDocuments([]) }}
+                className="text-sm text-[#7A8580] hover:text-[#3D4A44]"
+              >
+                &larr; Back
+              </button>
+              <h2 className="text-lg font-semibold text-[#3D4A44]">{selectedContract.title}</h2>
+              <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${statusColors[selectedContract.status] || 'bg-gray-100 text-gray-600'}`}>
+                {selectedContract.status}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-[#7A8580] mb-1">Type</label>
+              <p className="text-sm text-[#3D4A44]">{typeLabels[selectedContract.contract_type] || selectedContract.contract_type}</p>
+            </div>
+            {selectedContract.start_date && (
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Start Date</label>
+                <p className="text-sm text-[#3D4A44]">{selectedContract.start_date}</p>
               </div>
-              <div className="space-y-1 text-xs text-[#7A8580]">
-                <p>Type: {c.contract_type}</p>
-                {c.start_date && <p>Start: {c.start_date}</p>}
-                {c.end_date && <p>End: {c.end_date}</p>}
-                {c.advance_amount > 0 && (
-                  <div className="mt-2">
-                    <div className="flex justify-between text-xs mb-1">
-                      <span>Advance Recoupment</span>
-                      <span className="font-medium text-[#3D4A44]">
-                        {c.advance_currency} {(c.advance_recouped || 0).toLocaleString()} / {c.advance_amount.toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="w-full bg-[#E5E8E3] rounded-full h-2">
-                      <div
-                        className="bg-[#5B8A72] h-2 rounded-full transition-all"
-                        style={{ width: `${Math.min(100, ((c.advance_recouped || 0) / c.advance_amount) * 100)}%` }}
-                      />
+            )}
+            {selectedContract.end_date && (
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">End Date</label>
+                <p className="text-sm text-[#3D4A44]">{selectedContract.end_date}</p>
+              </div>
+            )}
+            {selectedContract.advance_amount > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Advance</label>
+                <p className="text-sm text-[#3D4A44]">
+                  {selectedContract.advance_currency} {selectedContract.advance_amount?.toLocaleString()}
+                </p>
+                <div className="mt-1">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-[#7A8580]">Recouped</span>
+                    <span className="font-medium text-[#3D4A44]">
+                      {(selectedContract.advance_recouped || 0).toLocaleString()} / {selectedContract.advance_amount.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="w-full bg-[#E5E8E3] rounded-full h-2">
+                    <div
+                      className="bg-[#5B8A72] h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min(100, ((selectedContract.advance_recouped || 0) / selectedContract.advance_amount) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+            {selectedContract.notes && (
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-[#7A8580] mb-1">Notes</label>
+                <p className="text-sm text-[#3D4A44] whitespace-pre-wrap">{selectedContract.notes}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-[#3D4A44]">Documents ({contractDocuments.length})</h3>
+            <button
+              onClick={() => { setShowUploadDoc(true) }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62]"
+            >
+              <CloudArrowUpIcon className="w-4 h-4" />
+              Upload Document
+            </button>
+          </div>
+
+          {showUploadDoc && (
+            <div className="border border-dashed border-[#5B8A72] rounded-lg p-4 bg-[#F0F5F2]">
+              <input
+                ref={docFileRef}
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={(e) => {
+                  if (e.target.files?.[0]) handleUploadDocument(e.target.files[0])
+                }}
+                className="text-sm"
+              />
+              {docUploading && <p className="text-xs text-[#5B8A72] mt-2">Uploading...</p>}
+              <button
+                onClick={() => setShowUploadDoc(false)}
+                className="mt-2 text-xs text-[#7A8580] hover:text-[#3D4A44]"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {contractDocuments.length === 0 ? (
+            <p className="text-sm text-[#7A8580] text-center py-4">No documents attached</p>
+          ) : (
+            <div className="space-y-2">
+              {contractDocuments.map(doc => (
+                <div key={doc.id} className="flex items-center justify-between p-3 border border-[#E5E8E3] rounded-lg">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <PaperClipIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[#3D4A44] truncate">{doc.file_name}</p>
+                      {doc.description && <p className="text-xs text-[#7A8580] truncate">{doc.description}</p>}
                     </div>
                   </div>
+                  <button
+                    onClick={() => handleDownloadDocument(doc)}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-[#5B8A72] hover:bg-[#EEF1EC] rounded-lg flex-shrink-0"
+                  >
+                    <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                    Download
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-[#3D4A44]">Contracts ({contracts.length})</h2>
+          <button
+            onClick={() => { setShowCreateModal(true); setCreateForm({ ...emptyContractForm }); setParseFile(null); setCreateError(''); setParseSuccess(false) }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62]"
+          >
+            <PlusIcon className="w-4 h-4" />
+            New Contract
+          </button>
+        </div>
+        {contracts.length === 0 ? (
+          <EmptyState text="No contracts linked to your profile" />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {contracts.map(c => (
+              <div
+                key={c.id}
+                onClick={() => { setSelectedContract(c); loadDocuments(c.id) }}
+                className="border border-[#E5E8E3] rounded-xl p-4 hover:shadow-sm transition-shadow cursor-pointer"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-[#3D4A44]">{c.title}</h3>
+                  <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${statusColors[c.status] || 'bg-gray-100 text-gray-600'}`}>
+                    {c.status}
+                  </span>
+                </div>
+                <div className="space-y-1 text-xs text-[#7A8580]">
+                  <p>Type: {typeLabels[c.contract_type] || c.contract_type}</p>
+                  {c.start_date && <p>Start: {c.start_date}</p>}
+                  {c.end_date && <p>End: {c.end_date}</p>}
+                  {c.advance_amount > 0 && (
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span>Advance Recoupment</span>
+                        <span className="font-medium text-[#3D4A44]">
+                          {c.advance_currency} {(c.advance_recouped || 0).toLocaleString()} / {c.advance_amount.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="w-full bg-[#E5E8E3] rounded-full h-2">
+                        <div
+                          className="bg-[#5B8A72] h-2 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, ((c.advance_recouped || 0) / c.advance_amount) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-[#E5E8E3]">
+              <h2 className="text-lg font-semibold text-[#3D4A44]">New Contract</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div className="border border-dashed border-[#5B8A72] rounded-xl p-4 bg-[#F0F5F2] space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-[#5B8A72]">
+                  <SparklesIcon className="w-4 h-4" />
+                  AI Contract Parser
+                </div>
+                <p className="text-xs text-[#7A8580]">Upload a contract document (PDF or Word) to auto-fill form fields using AI.</p>
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={parseFileRef}
+                    type="file"
+                    accept=".pdf,.docx"
+                    onChange={(e) => setParseFile(e.target.files?.[0] || null)}
+                    className="text-sm flex-1"
+                  />
+                  <button
+                    onClick={handleParseContract}
+                    disabled={!parseFile || parsing}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] disabled:opacity-50"
+                  >
+                    <SparklesIcon className="w-4 h-4" />
+                    {parsing ? 'Parsing...' : 'Parse'}
+                  </button>
+                </div>
+                {parseSuccess && (
+                  <p className="text-xs text-green-600 font-medium">Fields populated from document</p>
                 )}
               </div>
+
+              {createError && (
+                <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{createError}</div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Title *</label>
+                  <input
+                    type="text"
+                    value={createForm.title}
+                    onChange={(e) => setCreateForm({ ...createForm, title: e.target.value })}
+                    className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    placeholder="Contract title"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Type</label>
+                  <select
+                    value={createForm.contract_type}
+                    onChange={(e) => setCreateForm({ ...createForm, contract_type: e.target.value })}
+                    className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  >
+                    {CONTRACT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Status</label>
+                  <select
+                    value={createForm.status}
+                    onChange={(e) => setCreateForm({ ...createForm, status: e.target.value })}
+                    className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  >
+                    {CONTRACT_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Payment Direction</label>
+                  <select
+                    value={createForm.payment_direction}
+                    onChange={(e) => setCreateForm({ ...createForm, payment_direction: e.target.value })}
+                    className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  >
+                    <option value="INCOMING">Incoming</option>
+                    <option value="OUTGOING">Outgoing</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Reference Number</label>
+                  <input
+                    type="text"
+                    value={createForm.reference_number}
+                    onChange={(e) => setCreateForm({ ...createForm, reference_number: e.target.value })}
+                    className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    placeholder="Optional"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    value={createForm.start_date}
+                    onChange={(e) => setCreateForm({ ...createForm, start_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={createForm.end_date}
+                    onChange={(e) => setCreateForm({ ...createForm, end_date: e.target.value })}
+                    className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Territory</label>
+                  <input
+                    type="text"
+                    value={createForm.territory}
+                    onChange={(e) => setCreateForm({ ...createForm, territory: e.target.value })}
+                    className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    placeholder="e.g. US, UK, Worldwide"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Advance Amount</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={createForm.advance_currency}
+                      onChange={(e) => setCreateForm({ ...createForm, advance_currency: e.target.value })}
+                      className="px-2 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent w-20"
+                    >
+                      {CONTRACT_CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <input
+                      type="number"
+                      value={createForm.advance_amount}
+                      onChange={(e) => setCreateForm({ ...createForm, advance_amount: e.target.value })}
+                      className="flex-1 px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                    />
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Terms Summary</label>
+                  <textarea
+                    value={createForm.terms_summary}
+                    onChange={(e) => setCreateForm({ ...createForm, terms_summary: e.target.value })}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    placeholder="Key terms..."
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-[#7A8580] mb-1">Notes</label>
+                  <textarea
+                    value={createForm.notes}
+                    onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    placeholder="Additional notes..."
+                  />
+                </div>
+              </div>
             </div>
-          ))}
+
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-[#E5E8E3]">
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateContract}
+                disabled={createLoading}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] disabled:opacity-50"
+              >
+                {createLoading ? 'Creating...' : 'Create Contract'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function AccountingTab() {
+function AccountingTab({ orgId }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [statements, setStatements] = useState([])
+  const [statementsLoading, setStatementsLoading] = useState(true)
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploadStep, setUploadStep] = useState(1)
+  const [uploadFile, setUploadFile] = useState(null)
+  const [uploadSource, setUploadSource] = useState('')
+  const [uploadSourceType, setUploadSourceType] = useState('')
+  const [detectedSourceType, setDetectedSourceType] = useState(null)
+  const [uploadPeriodStart, setUploadPeriodStart] = useState('')
+  const [uploadPeriodEnd, setUploadPeriodEnd] = useState('')
+  const [uploadCurrency, setUploadCurrency] = useState('USD')
+  const [previewData, setPreviewData] = useState(null)
+  const [columnMappings, setColumnMappings] = useState({})
+  const [uploading, setUploading] = useState(false)
+  const [uploadResult, setUploadResult] = useState(null)
 
   useEffect(() => {
     axios.get('/api/client-portal/accounting').then(res => {
@@ -456,6 +1102,96 @@ function AccountingTab() {
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
+
+  const loadStatements = () => {
+    if (!orgId) return
+    setStatementsLoading(true)
+    axios.get(`/api/royalties/statements/${orgId}`)
+      .then(res => {
+        setStatements(Array.isArray(res.data) ? res.data : res.data.statements || [])
+      })
+      .catch(() => {})
+      .finally(() => setStatementsLoading(false))
+  }
+
+  useEffect(() => { loadStatements() }, [orgId])
+
+  const handlePreview = async () => {
+    if (!uploadFile) return
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+      formData.append('source_name', uploadSourceType || uploadSource)
+      const res = await axios.post(`/api/royalties/statements/${orgId}/preview`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setPreviewData(res.data)
+      if (res.data.detected_source_type) {
+        setDetectedSourceType(res.data.detected_source_type)
+      }
+      const rawMapping = res.data.mapping || res.data.suggested_mappings || res.data.mappings || {}
+      const inverted = {}
+      Object.entries(rawMapping).forEach(([field, header]) => {
+        if (header) inverted[header] = field
+      })
+      setColumnMappings(inverted)
+      setUploadStep(2)
+    } catch (err) {
+      alert('Failed to preview file. Please check the format.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleUpload = async () => {
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+      formData.append('source_name', uploadSource || uploadSourceType)
+      formData.append('source_type', detectedSourceType || uploadSourceType || '')
+      formData.append('period_start', uploadPeriodStart)
+      formData.append('period_end', uploadPeriodEnd)
+      formData.append('currency', uploadCurrency)
+      const backendMapping = {}
+      Object.entries(columnMappings).forEach(([header, field]) => {
+        if (field) backendMapping[field] = header
+      })
+      formData.append('column_mapping', JSON.stringify(backendMapping))
+      const res = await axios.post(`/api/royalties/statements/${orgId}/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setUploadResult(res.data)
+      setUploadStep(3)
+      loadStatements()
+      axios.get('/api/client-portal/accounting').then(r => setData(r.data)).catch(() => {})
+    } catch (err) {
+      alert('Failed to upload statement.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const resetUpload = () => {
+    setShowUpload(false)
+    setUploadStep(1)
+    setUploadFile(null)
+    setUploadSource('')
+    setUploadSourceType('')
+    setDetectedSourceType(null)
+    setUploadPeriodStart('')
+    setUploadPeriodEnd('')
+    setUploadCurrency('USD')
+    setPreviewData(null)
+    setColumnMappings({})
+    setUploadResult(null)
+  }
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '—'
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
 
   if (loading) return <LoadingSpinner />
   if (!data) return <EmptyState text="Could not load accounting data" />
@@ -469,6 +1205,252 @@ function AccountingTab() {
         <p className="text-3xl font-bold">${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
         <p className="text-white/60 text-xs mt-1">{data.transactions?.length || 0} transactions</p>
       </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-[#3D4A44]">Statements</h3>
+          <button
+            onClick={() => setShowUpload(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] font-medium"
+          >
+            <ArrowUpTrayIcon className="w-4 h-4" />
+            Upload Statement
+          </button>
+        </div>
+
+        {statementsLoading ? (
+          <LoadingSpinner />
+        ) : statements.length === 0 ? (
+          <EmptyState text="No statements uploaded yet" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px]">
+              <thead className="bg-[#F5F7F4]">
+                <tr>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Source</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Period</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Status</th>
+                  <th className="text-right px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Revenue</th>
+                  <th className="text-right px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Matched</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Uploaded</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E5E8E3]">
+                {statements.map(s => (
+                  <tr key={s.id} className="hover:bg-[#FAFBF9]">
+                    <td className="px-4 py-3 text-sm font-medium text-[#3D4A44]">{s.source_name || s.file_name || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">
+                      {s.period_start ? `${formatDate(s.period_start)} – ${formatDate(s.period_end)}` : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex px-2 py-0.5 text-xs rounded-full font-medium ${STATEMENT_STATUS_COLORS[s.status] || 'bg-gray-100 text-gray-600'}`}>
+                        {s.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-[#3D4A44]">
+                      ${((s.total_revenue_cents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right text-[#7A8580]">
+                      {s.matched_transactions || 0}/{s.total_transactions || 0}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">{formatDate(s.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {showUpload && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-[#E5E8E3]">
+              <h2 className="text-lg font-semibold text-[#3D4A44]">
+                {uploadStep === 1 && 'Upload Statement'}
+                {uploadStep === 2 && 'Map Columns'}
+                {uploadStep === 3 && 'Upload Complete'}
+              </h2>
+              <button onClick={resetUpload} className="text-[#7A8580] hover:text-[#3D4A44]">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {uploadStep === 1 && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Statement File</label>
+                    <input
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      onChange={e => setUploadFile(e.target.files?.[0] || null)}
+                      className="w-full text-sm border border-[#D1D5CE] rounded-lg px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-[#5B8A72] file:text-white hover:file:bg-[#4A7A62]"
+                    />
+                    <p className="text-xs text-[#7A8580] mt-1">CSV or Excel (.xlsx) files supported</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Type</label>
+                    <select
+                      value={uploadSourceType}
+                      onChange={e => setUploadSourceType(e.target.value)}
+                      className="w-full border border-[#D1D5CE] rounded-lg px-3 py-2 text-sm"
+                    >
+                      {SOURCE_TYPE_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Name</label>
+                    <input
+                      type="text"
+                      value={uploadSource}
+                      onChange={e => setUploadSource(e.target.value)}
+                      placeholder="e.g., DistroKid Q1 2025"
+                      className="w-full border border-[#D1D5CE] rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period Start</label>
+                      <input
+                        type="date"
+                        value={uploadPeriodStart}
+                        onChange={e => setUploadPeriodStart(e.target.value)}
+                        className="w-full border border-[#D1D5CE] rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period End</label>
+                      <input
+                        type="date"
+                        value={uploadPeriodEnd}
+                        onChange={e => setUploadPeriodEnd(e.target.value)}
+                        className="w-full border border-[#D1D5CE] rounded-lg px-3 py-2 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Currency</label>
+                    <select
+                      value={uploadCurrency}
+                      onChange={e => setUploadCurrency(e.target.value)}
+                      className="w-full border border-[#D1D5CE] rounded-lg px-3 py-2 text-sm"
+                    >
+                      {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button onClick={resetUpload} className="px-4 py-2 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg">
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handlePreview}
+                      disabled={!uploadFile || uploading}
+                      className="px-4 py-2 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] font-medium disabled:opacity-50"
+                    >
+                      {uploading ? 'Analyzing...' : 'Preview & Map Columns'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {uploadStep === 2 && previewData && (
+                <>
+                  <div className="bg-[#F5F7F4] rounded-lg p-3 text-sm text-[#3D4A44]">
+                    <p><strong>{previewData.row_count}</strong> rows detected</p>
+                    {detectedSourceType && (
+                      <p className="text-[#5B8A72] mt-1">Detected source: <strong>{detectedSourceType}</strong></p>
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-[#3D4A44] mb-2">Column Mapping</h4>
+                    <p className="text-xs text-[#7A8580] mb-3">Map your file columns to the correct fields. Auto-detected mappings are pre-selected.</p>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {(previewData.headers || []).map(header => (
+                        <div key={header} className="flex items-center gap-3">
+                          <span className="text-sm text-[#3D4A44] w-40 truncate font-mono" title={header}>{header}</span>
+                          <span className="text-[#7A8580]">→</span>
+                          <select
+                            value={columnMappings[header] || ''}
+                            onChange={e => setColumnMappings(prev => ({ ...prev, [header]: e.target.value }))}
+                            className="flex-1 border border-[#D1D5CE] rounded-lg px-2 py-1.5 text-sm"
+                          >
+                            {TARGET_FIELDS.map(f => (
+                              <option key={f.value} value={f.value}>{f.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {previewData.preview_rows?.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-[#3D4A44] mb-2">Preview (first {previewData.preview_rows.length} rows)</h4>
+                      <div className="overflow-x-auto border border-[#E5E8E3] rounded-lg">
+                        <table className="w-full text-xs">
+                          <thead className="bg-[#F5F7F4]">
+                            <tr>
+                              {(previewData.headers || []).slice(0, 6).map(h => (
+                                <th key={h} className="px-2 py-1.5 text-left font-medium text-[#7A8580] whitespace-nowrap">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#E5E8E3]">
+                            {previewData.preview_rows.slice(0, 5).map((row, i) => (
+                              <tr key={i}>
+                                {(previewData.headers || []).slice(0, 6).map(h => (
+                                  <td key={h} className="px-2 py-1.5 text-[#3D4A44] whitespace-nowrap max-w-[150px] truncate">{row[h] || ''}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex justify-between pt-2">
+                    <button onClick={() => setUploadStep(1)} className="px-4 py-2 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg">
+                      Back
+                    </button>
+                    <button
+                      onClick={handleUpload}
+                      disabled={uploading}
+                      className="px-4 py-2 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] font-medium disabled:opacity-50"
+                    >
+                      {uploading ? 'Uploading...' : 'Confirm & Upload'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {uploadStep === 3 && uploadResult && (
+                <div className="text-center space-y-4">
+                  <CheckCircleIcon className="w-16 h-16 text-[#5B8A72] mx-auto" />
+                  <h3 className="text-lg font-semibold text-[#3D4A44]">Statement Uploaded</h3>
+                  <div className="bg-[#F5F7F4] rounded-lg p-4 text-sm space-y-1">
+                    <p className="text-[#3D4A44]"><strong>{uploadResult.total_transactions}</strong> transactions processed</p>
+                    <p className="text-green-700"><strong>{uploadResult.matched_transactions}</strong> matched</p>
+                    {uploadResult.unmatched_transactions > 0 && (
+                      <p className="text-amber-700"><strong>{uploadResult.unmatched_transactions}</strong> unmatched</p>
+                    )}
+                    <p className="text-[#3D4A44] font-medium mt-2">
+                      Total Revenue: ${((uploadResult.total_revenue_cents || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={resetUpload}
+                    className="px-4 py-2 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] font-medium"
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {data.advances?.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6 space-y-4">
@@ -537,7 +1519,7 @@ function AccountingTab() {
 function AccessTab() {
   const [links, setLinks] = useState([])
   const [loading, setLoading] = useState(true)
-  const [orgName, setOrgName] = useState('')
+  const [accessCode, setAccessCode] = useState('')
   const [permission, setPermission] = useState('VIEW_ONLY')
   const [granting, setGranting] = useState(false)
   const [msg, setMsg] = useState(null)
@@ -557,10 +1539,10 @@ function AccessTab() {
     setMsg(null)
     try {
       await axios.post('/api/client-portal/grant-access', {
-        organization_name: orgName,
+        access_code: accessCode,
         permission_level: permission,
       })
-      setOrgName('')
+      setAccessCode('')
       setPermission('VIEW_ONLY')
       fetchAccess()
       setMsg({ type: 'success', text: 'Access granted successfully' })
@@ -599,7 +1581,7 @@ function AccessTab() {
     <div className="space-y-6">
       <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6 space-y-4">
         <h2 className="text-lg font-semibold text-[#3D4A44]">Grant Company Access</h2>
-        <p className="text-sm text-[#7A8580]">Allow a management company or label to access your catalog by entering their organization name.</p>
+        <p className="text-sm text-[#7A8580]">Allow a management company or label to access your catalog by entering their access code.</p>
 
         {msg && (
           <div className={`p-3 rounded-lg text-sm ${msg.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
@@ -611,10 +1593,10 @@ function AccessTab() {
           <input
             type="text"
             required
-            value={orgName}
-            onChange={(e) => setOrgName(e.target.value)}
-            placeholder="Organization name"
-            className="flex-1 px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+            value={accessCode}
+            onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
+            placeholder="Enter access code (e.g. AB12CD34)"
+            className="flex-1 px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent font-mono tracking-wider"
           />
           <select
             value={permission}

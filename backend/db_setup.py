@@ -177,6 +177,15 @@ def ensure_schema_updates():
             conn.commit()
             logger.info("Added client_access_scope column to organization_members")
 
+        org_cols = [c['name'] for c in inspector.get_columns('organizations')]
+        if 'access_code' not in org_cols:
+            conn.execute(text("ALTER TABLE organizations ADD COLUMN access_code VARCHAR"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_organizations_access_code ON organizations(access_code)"))
+            conn.commit()
+            logger.info("Added access_code column to organizations")
+
+        _generate_missing_access_codes()
+
         if 'registration_reports' not in inspector.get_table_names():
             try:
                 from backend.models.models import RegistrationReport
@@ -184,6 +193,33 @@ def ensure_schema_updates():
                 logger.info("Created registration_reports table")
             except Exception as e:
                 logger.warning(f"Could not create registration_reports table: {e}")
+
+
+def _generate_access_code():
+    import string
+    import random
+    chars = string.ascii_uppercase + string.digits
+    return ''.join(random.choices(chars, k=8))
+
+
+def _generate_missing_access_codes():
+    from backend.models.models import Organization
+    db = SessionLocal()
+    try:
+        orgs = db.query(Organization).filter(Organization.access_code.is_(None)).all()
+        for org in orgs:
+            code = _generate_access_code()
+            while db.query(Organization).filter(Organization.access_code == code).first():
+                code = _generate_access_code()
+            org.access_code = code
+        if orgs:
+            db.commit()
+            logger.info(f"Generated access codes for {len(orgs)} organizations")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Error generating access codes: {e}")
+    finally:
+        db.close()
 
 
 def seed_super_admin():

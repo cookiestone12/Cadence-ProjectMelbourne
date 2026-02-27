@@ -337,7 +337,7 @@ def get_client_accounting(
 
 
 class GrantAccessRequest(BaseModel):
-    organization_name: str
+    access_code: str
     permission_level: str = "VIEW_ONLY"
 
 
@@ -382,10 +382,10 @@ def grant_access(
         raise HTTPException(status_code=400, detail="Invalid permission level")
 
     enterprise_org = db.query(Organization).filter(
-        func.lower(Organization.name) == request.organization_name.lower()
+        func.upper(Organization.access_code) == request.access_code.strip().upper()
     ).first()
     if not enterprise_org:
-        raise HTTPException(status_code=404, detail="Organization not found")
+        raise HTTPException(status_code=404, detail="Invalid access code")
 
     if enterprise_org.id == org_id:
         raise HTTPException(status_code=400, detail="Cannot grant access to your own organization")

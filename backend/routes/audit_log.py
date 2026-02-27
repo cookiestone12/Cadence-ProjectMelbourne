@@ -26,6 +26,7 @@ def get_audit_logs(
     org_id: int,
     action: Optional[str] = None,
     entity_type: Optional[str] = None,
+    user_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     limit: int = Query(default=50, le=200),
@@ -41,6 +42,8 @@ def get_audit_logs(
         query = query.filter(AuditLog.action == action)
     if entity_type:
         query = query.filter(AuditLog.entity_type == entity_type)
+    if user_id:
+        query = query.filter(AuditLog.user_id == user_id)
     if start_date:
         try:
             start = datetime.fromisoformat(start_date)

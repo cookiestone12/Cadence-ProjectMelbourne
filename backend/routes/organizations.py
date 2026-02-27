@@ -1,3 +1,5 @@
+import string
+import random
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -5,6 +7,11 @@ from pydantic import BaseModel
 from typing import List, Optional
 from ..models import get_db, Organization, OrganizationMember, User, Creator, Song
 from ..utils.auth import get_current_user
+
+
+def _generate_access_code():
+    chars = string.ascii_uppercase + string.digits
+    return ''.join(random.choices(chars, k=8))
 
 router = APIRouter(prefix="/api/organizations", tags=["organizations"])
 
@@ -166,6 +173,55 @@ def create_organization(
         "song_count": 0,
         "created_at": org.created_at.isoformat() if org.created_at else ""
     }
+
+@router.get("/{org_id}/access-code")
+def get_access_code(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+    if not membership or membership.role not in ("OWNER", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Only admins can view the access code")
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if not org.access_code:
+        code = _generate_access_code()
+        while db.query(Organization).filter(Organization.access_code == code).first():
+            code = _generate_access_code()
+        org.access_code = code
+        db.commit()
+        db.refresh(org)
+    return {"access_code": org.access_code}
+
+
+@router.post("/{org_id}/regenerate-access-code")
+def regenerate_access_code(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+    if not membership or membership.role not in ("OWNER", "ADMIN"):
+        raise HTTPException(status_code=403, detail="Only admins can regenerate the access code")
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    code = _generate_access_code()
+    while db.query(Organization).filter(Organization.access_code == code).first():
+        code = _generate_access_code()
+    org.access_code = code
+    db.commit()
+    db.refresh(org)
+    return {"access_code": org.access_code}
+
 
 @router.get("/{org_id}/members", response_model=List[OrganizationMemberResponse])
 def get_organization_members(

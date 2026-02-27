@@ -18,6 +18,8 @@ import {
   ClipboardDocumentListIcon,
   ShareIcon,
   EnvelopeIcon,
+  ClipboardDocumentIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 import ClientSharingTab from '../components/ClientSharingModal'
 import EmailSendModal from '../components/EmailSendModal'
@@ -920,6 +922,77 @@ function BrandingTab({ branding, onSave, onError }) {
           </div>
         </div>
       </div>
+
+      <AccessCodeSection />
+    </div>
+  )
+}
+
+function AccessCodeSection() {
+  const [accessCode, setAccessCode] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [regenerating, setRegenerating] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [orgId, setOrgId] = useState(null)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const orgRes = await axios.get('/api/organizations/current')
+        const id = orgRes.data?.id
+        if (!id) return
+        setOrgId(id)
+        const codeRes = await axios.get(`/api/organizations/${id}/access-code`)
+        setAccessCode(codeRes.data.access_code)
+      } catch {}
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  const handleCopy = () => {
+    if (!accessCode) return
+    navigator.clipboard.writeText(accessCode)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleRegenerate = async () => {
+    if (!orgId || !confirm('Regenerate access code? The old code will stop working immediately.')) return
+    setRegenerating(true)
+    try {
+      const res = await axios.post(`/api/organizations/${orgId}/regenerate-access-code`)
+      setAccessCode(res.data.access_code)
+    } catch {}
+    setRegenerating(false)
+  }
+
+  if (loading) return null
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-6">
+      <h3 className="text-lg font-semibold text-[#3D4A44] mb-2">Client Access Code</h3>
+      <p className="text-sm text-[#7A8580] mb-4">Share this code with clients so they can grant your organization access to their catalog.</p>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 px-4 py-3 bg-[#F5F7F4] rounded-lg font-mono text-lg tracking-widest text-[#3D4A44] font-semibold select-all">
+          {accessCode || '—'}
+        </div>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 px-4 py-2.5 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] font-medium"
+        >
+          <ClipboardDocumentIcon className="w-4 h-4" />
+          {copied ? 'Copied!' : 'Copy Code'}
+        </button>
+        <button
+          onClick={handleRegenerate}
+          disabled={regenerating}
+          className="flex items-center gap-1.5 px-4 py-2.5 text-sm border border-[#D1D5CE] text-[#7A8580] rounded-lg hover:bg-[#F5F7F4] font-medium disabled:opacity-50"
+        >
+          <ArrowPathIcon className={`w-4 h-4 ${regenerating ? 'animate-spin' : ''}`} />
+          Regenerate
+        </button>
+      </div>
     </div>
   )
 }
@@ -931,11 +1004,23 @@ function AuditLogTab() {
   const [offset, setOffset] = useState(0)
   const [filterAction, setFilterAction] = useState('')
   const [filterEntity, setFilterEntity] = useState('')
+  const [filterUserId, setFilterUserId] = useState('')
+  const [orgMembers, setOrgMembers] = useState([])
   const limit = 50
 
   useEffect(() => {
+    const fetchMembers = async () => {
+      try {
+        const res = await axios.get('/api/tenant-admin/members')
+        setOrgMembers(res.data || [])
+      } catch {}
+    }
+    fetchMembers()
+  }, [])
+
+  useEffect(() => {
     loadLogs()
-  }, [offset, filterAction, filterEntity])
+  }, [offset, filterAction, filterEntity, filterUserId])
 
   const loadLogs = async () => {
     setLoading(true)
@@ -948,6 +1033,7 @@ function AuditLogTab() {
       params.append('offset', offset)
       if (filterAction) params.append('action', filterAction)
       if (filterEntity) params.append('entity_type', filterEntity)
+      if (filterUserId) params.append('user_id', filterUserId)
       const res = await axios.get(`/api/audit-log/org/${orgId}?${params}`)
       setLogs(res.data.logs || [])
       setTotal(res.data.total || 0)
@@ -995,6 +1081,18 @@ function AuditLogTab() {
           <option value="CREATOR">Creator</option>
           <option value="PLACEMENT">Placement</option>
           <option value="CONTRACT">Contract</option>
+        </select>
+        <select
+          value={filterUserId}
+          onChange={(e) => { setFilterUserId(e.target.value); setOffset(0) }}
+          className="px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-sm bg-white text-[#3D4A44]"
+        >
+          <option value="">All Users</option>
+          {orgMembers.map(m => (
+            <option key={m.id} value={m.id}>
+              {m.username}{m.role === 'CLIENT' ? ' (Client)' : ''}
+            </option>
+          ))}
         </select>
         <span className="text-sm text-[#7A8580] ml-auto">{total} total entries</span>
       </div>
