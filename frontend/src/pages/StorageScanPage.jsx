@@ -61,7 +61,7 @@ export default function StorageScanPage() {
   const [toast, setToast] = useState(null)
 
   const [links, setLinks] = useState([])
-  const [linksLoading, setLinksLoading] = useState(true)
+  const [linksLoading, setLinksLoading] = useState(false)
   const [creators, setCreators] = useState([])
   const [providers, setProviders] = useState([])
   const [showLinkModal, setShowLinkModal] = useState(false)
@@ -93,22 +93,30 @@ export default function StorageScanPage() {
   }, [])
 
   const loadLinks = useCallback(async () => {
-    if (!orgId) return
+    if (!orgId) {
+      setLinksLoading(false)
+      return
+    }
     setLinksLoading(true)
     try {
-      const [linksRes, creatorsRes, providersRes] = await Promise.all([
-        axios.get(`/api/storage-scan/org/${orgId}/links`, getAuthHeaders()),
-        axios.get(`/api/creators/org/${orgId}`, getAuthHeaders()),
-        axios.get(`/api/storage-scan/org/${orgId}/providers`, getAuthHeaders())
-      ])
+      const linksRes = await axios.get(`/api/storage-scan/org/${orgId}/links`, getAuthHeaders())
       setLinks(linksRes.data || [])
-      setCreators(creatorsRes.data || [])
-      setProviders(providersRes.data || [])
     } catch (err) {
       console.error('Failed to load links:', err)
-    } finally {
-      setLinksLoading(false)
     }
+    try {
+      const creatorsRes = await axios.get(`/api/creators/org/${orgId}`, getAuthHeaders())
+      setCreators(creatorsRes.data || [])
+    } catch (err) {
+      console.error('Failed to load creators:', err)
+    }
+    try {
+      const providersRes = await axios.get(`/api/storage-scan/org/${orgId}/providers`, getAuthHeaders())
+      setProviders(providersRes.data || [])
+    } catch (err) {
+      console.error('Failed to load providers:', err)
+    }
+    setLinksLoading(false)
   }, [orgId])
 
   const loadBatches = useCallback(async () => {

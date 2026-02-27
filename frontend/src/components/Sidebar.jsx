@@ -103,7 +103,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
       `}>
         <div className="p-5 border-b border-am-separator">
           <div className="flex items-center justify-between">
-            <div className="flex items-center">
+            <div className="flex items-center gap-2">
               {orgBranding?.logo_url ? (
                 <img 
                   src={orgBranding.logo_url} 
@@ -115,6 +115,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
                   {orgBranding?.display_name || orgBranding?.name || 'Cadence'}
                 </span>
               )}
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold tracking-wide uppercase bg-[#5B8A72]/10 text-[#5B8A72] rounded-md">Beta</span>
             </div>
             <button
               onClick={onClose}

@@ -117,9 +117,9 @@ export default function ValuationPage() {
 
   return (
     <div className="p-4 sm:p-8">
-      <div className="fixed inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden" style={{opacity: 0.04}}>
+      <div className="fixed inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden" style={{opacity: 0.07}}>
         <div className="text-[#5B8A72] font-bold text-[120px] tracking-[0.3em] select-none whitespace-nowrap" style={{transform: 'rotate(-30deg)'}}>
-          RYTHM
+          CADENCE
         </div>
       </div>
 

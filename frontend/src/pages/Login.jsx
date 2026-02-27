@@ -41,6 +41,7 @@ export default function Login({ onLogin }) {
               className="h-[170px] w-auto drop-shadow-md"
             />
           </div>
+          <span className="inline-block mt-1 px-2.5 py-0.5 text-[10px] font-semibold tracking-widest uppercase bg-[#5B8A72]/10 text-[#5B8A72] rounded-full">Beta</span>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
