@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..models import IntegrationAccount
 
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 
 DROPBOX_APP_KEY = os.getenv("DROPBOX_APP_KEY", "")
 DROPBOX_APP_SECRET = os.getenv("DROPBOX_APP_SECRET", "")
@@ -25,7 +25,7 @@ def get_fernet() -> Fernet:
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=b"rythm-storage-salt",
+        salt=b"cadence-storage-salt",
         iterations=100_000,
     )
     key = base64.urlsafe_b64encode(kdf.derive(secret.encode()))

@@ -12,7 +12,7 @@ from ..models import (
 from ..utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/brief-builder", tags=["brief-builder"])
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 
 
 class BriefSearchRequest(BaseModel):

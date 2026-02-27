@@ -196,7 +196,7 @@ def seed_super_admin():
         if not existing:
             admin = User(
                 username='MasterPAdmin',
-                email='admin@rythm.app',
+                email='admin@cadence-ci.com',
                 hashed_password=get_password_hash('Male50Cent'),
                 is_admin=True,
                 is_super_admin=True,
@@ -215,8 +215,8 @@ def seed_super_admin():
                 first_org = db.query(Organization).order_by(Organization.id).first()
                 if not first_org:
                     first_org = Organization(
-                        name="Rythm",
-                        display_name="Rythm",
+                        name="Cadence",
+                        display_name="Cadence",
                         type="LABEL",
                         account_type="ENTERPRISE",
                     )

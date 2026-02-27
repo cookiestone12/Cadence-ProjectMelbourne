@@ -14,7 +14,7 @@ from ..models import (
 )
 from . import storage_service
 
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 
 AUDIO_EXTENSIONS = {
     '.mp3', '.wav', '.flac', '.aac', '.m4a', '.ogg', '.wma',

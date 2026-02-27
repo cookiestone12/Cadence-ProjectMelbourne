@@ -31,7 +31,7 @@ def startup_event():
         from .services.email_scheduler import start_scheduler
         start_scheduler()
     except Exception as e:
-        logging.getLogger("rythm").warning(f"Email scheduler failed to start: {e}")
+        logging.getLogger("cadence").warning(f"Email scheduler failed to start: {e}")
 
 
 @app.on_event("shutdown")
@@ -51,7 +51,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app_logger = logging.getLogger("rythm")
+app_logger = logging.getLogger("cadence")
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 

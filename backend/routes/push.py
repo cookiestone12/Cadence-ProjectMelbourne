@@ -9,7 +9,7 @@ import logging
 from ..models import get_db, PushSubscription, User
 from ..utils.auth import get_current_user
 
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 router = APIRouter(prefix="/api/push", tags=["push-notifications"])
 
 
@@ -112,7 +112,7 @@ def send_push(
 
     vapid_private_key = os.environ.get("VAPID_PRIVATE_KEY")
     vapid_claims = {
-        "sub": os.environ.get("VAPID_SUBJECT", "mailto:support@rythm-app.replit.app")
+        "sub": os.environ.get("VAPID_SUBJECT", "mailto:support@cadence-ci.com")
     }
 
     if not vapid_private_key:
@@ -186,7 +186,7 @@ def send_test_push(
     from pywebpush import webpush, WebPushException
 
     vapid_claims = {
-        "sub": os.environ.get("VAPID_SUBJECT", "mailto:support@rythm-app.replit.app")
+        "sub": os.environ.get("VAPID_SUBJECT", "mailto:support@cadence-ci.com")
     }
 
     payload = json.dumps({

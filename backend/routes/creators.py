@@ -562,7 +562,7 @@ def export_roster_pdf(
     current_user: User = Depends(get_current_user)
 ):
     import logging
-    logger = logging.getLogger("rythm")
+    logger = logging.getLogger("cadence")
     
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == current_user.id,

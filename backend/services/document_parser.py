@@ -8,7 +8,7 @@ import logging
 from typing import Optional, Dict, Any, List, Tuple
 from io import BytesIO
 
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 
 
 class DocumentParseResult:

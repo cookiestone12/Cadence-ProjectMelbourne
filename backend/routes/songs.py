@@ -464,7 +464,7 @@ def bulk_delete_songs(
     except Exception as e:
         db.rollback()
         import logging
-        logging.getLogger("rythm").error(f"Failed to delete songs {request.song_ids}: {e}")
+        logging.getLogger("cadence").error(f"Failed to delete songs {request.song_ids}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete songs: {str(e)}")
 
 @router.delete("/{song_id}")
@@ -497,7 +497,7 @@ def delete_song(
     except Exception as e:
         db.rollback()
         import logging
-        logging.getLogger("rythm").error(f"Failed to delete song {song_id}: {e}")
+        logging.getLogger("cadence").error(f"Failed to delete song {song_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete song: {str(e)}")
 
 @router.get("/org/{org_id}/duplicates")

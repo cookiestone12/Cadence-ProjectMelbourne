@@ -17,7 +17,7 @@ from ..utils.auth import get_current_user
 from ..services import storage_service
 
 router = APIRouter(prefix="/api/audio", tags=["audio"])
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 
 
 class LinkAudioRequest(BaseModel):

@@ -255,7 +255,7 @@ def generate_digest_html(user_name, grouped_items, summary_stats, platform_url="
                             <table cellpadding="0" cellspacing="0" border="0">
                                 <tr>
                                     <td align="center">
-                                        <img src="https://rythm-app.replit.app/rythm-logo.png" alt="Cadence Logo" style="height:50px;display:block;margin:0 auto;" />
+                                        <img src="https://cadence-catalog-intelligence.replit.app/cadence-logo.png" alt="Cadence Logo" style="height:50px;display:block;margin:0 auto;" />
                                     </td>
                                 </tr>
                                 <tr>
@@ -301,7 +301,7 @@ def generate_digest_html(user_name, grouped_items, summary_stats, platform_url="
                             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid #d4ddd8;">
                                 <tr>
                                     <td align="center" style="padding:20px 0 0 0;">
-                                        <img src="https://rythm-app.replit.app/rythm-logo.png" alt="Cadence Logo" style="height:30px;display:block;margin:0 auto;" />
+                                        <img src="https://cadence-catalog-intelligence.replit.app/cadence-logo.png" alt="Cadence Logo" style="height:30px;display:block;margin:0 auto;" />
                                     </td>
                                 </tr>
                                 <tr>

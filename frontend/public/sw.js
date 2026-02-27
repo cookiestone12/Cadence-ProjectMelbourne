@@ -5,7 +5,7 @@ const STATIC_ASSETS = [
   '/favicon-32.png',
   '/favicon-192.png',
   '/favicon-512.png',
-  '/rythm-logo.png',
+  '/cadence-logo.png',
   '/manifest.webmanifest',
 ];
 
@@ -74,7 +74,7 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'Rythm', body: 'New notification', url: '/' };
+  let data = { title: 'Cadence', body: 'New notification', url: '/' };
 
   if (event.data) {
     try {
@@ -90,7 +90,7 @@ self.addEventListener('push', (event) => {
     badge: '/favicon-192.png',
     data: { url: data.url || '/' },
     vibrate: [200, 100, 200],
-    tag: data.tag || 'rythm-notification',
+    tag: data.tag || 'cadence-notification',
     renotify: true,
   };
 

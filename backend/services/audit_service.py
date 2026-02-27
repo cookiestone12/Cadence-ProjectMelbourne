@@ -1,7 +1,7 @@
 import logging
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 
 
 def log_action(

@@ -401,7 +401,7 @@ def generate_org_actions(
     current_user: User = Depends(get_current_user)
 ):
     import logging
-    logger = logging.getLogger("rythm")
+    logger = logging.getLogger("cadence")
     from ..utils.catalog_gaps import generate_actions_from_gaps
     
     membership = db.query(OrganizationMember).filter(
@@ -442,7 +442,7 @@ def generate_cross_module_actions(
     current_user: User = Depends(get_current_user)
 ):
     import logging
-    logger = logging.getLogger("rythm")
+    logger = logging.getLogger("cadence")
     from ..utils.cross_module_tasks import generate_cross_module_tasks
 
     membership = db.query(OrganizationMember).filter(

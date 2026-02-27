@@ -205,7 +205,7 @@ function App() {
           </Routes>
           </ErrorBoundary>
           <div className="flex items-center justify-center gap-2 py-6 opacity-30">
-            <img src="/rythm-logo.png" alt="Powered by Cadence" className="h-6 w-auto object-contain" />
+            <img src="/cadence-logo.png" alt="Powered by Cadence" className="h-6 w-auto object-contain" />
             <span className="text-[9px] font-semibold tracking-wide uppercase text-[#5B8A72] bg-[#5B8A72]/10 px-1.5 py-0.5 rounded-md">Beta</span>
           </div>
         </main>

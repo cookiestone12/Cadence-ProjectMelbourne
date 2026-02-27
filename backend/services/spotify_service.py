@@ -19,7 +19,7 @@ def _get_replit_connector_header() -> Optional[str]:
 
 def _get_replit_access_token() -> Optional[str]:
     import logging
-    logger = logging.getLogger("rythm")
+    logger = logging.getLogger("cadence")
     hostname = os.getenv("REPLIT_CONNECTORS_HOSTNAME")
     x_replit_token = _get_replit_connector_header()
 
@@ -76,7 +76,7 @@ def _get_replit_access_token() -> Optional[str]:
 
 def _refresh_spotify_token(refresh_token: str, client_id: str) -> Optional[str]:
     import logging
-    logger = logging.getLogger("rythm")
+    logger = logging.getLogger("cadence")
     try:
         resp = requests.post(
             "https://accounts.spotify.com/api/token",
@@ -117,7 +117,7 @@ def _get_client_credentials_token() -> Optional[str]:
 
 def _get_access_token() -> Optional[str]:
     import logging
-    logger = logging.getLogger("rythm")
+    logger = logging.getLogger("cadence")
     cc_token = _get_client_credentials_token()
     if cc_token:
         logger.info("Spotify: Using client credentials token")
@@ -136,7 +136,7 @@ class SpotifyNotFoundError(Exception):
 
 def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dict]:
     import logging
-    logger = logging.getLogger("rythm")
+    logger = logging.getLogger("cadence")
     try:
         url = f"https://api.spotify.com/v1/{endpoint}"
         logger.info(f"Spotify API GET: {url} params={params}")
@@ -207,7 +207,7 @@ def get_track_data(spotify_link: str = None) -> Dict[str, Any]:
 
 def lookup_release_metadata(spotify_url: str) -> Dict[str, Any]:
     import logging
-    logger = logging.getLogger("rythm")
+    logger = logging.getLogger("cadence")
 
     token = _get_access_token()
     if not token:
@@ -551,7 +551,7 @@ def _fetch_with_retries(fetch_fn, resource_type: str, resource_id: str, tokens, 
 
 def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
     import logging
-    logger = logging.getLogger("rythm")
+    logger = logging.getLogger("cadence")
 
     url_type, resource_id = _extract_spotify_url_type(playlist_url)
 

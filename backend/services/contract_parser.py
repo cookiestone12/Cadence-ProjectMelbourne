@@ -4,7 +4,7 @@ import logging
 from typing import Dict, Any, Optional
 from io import BytesIO
 
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 
 CONTRACT_TYPES = ["MASTER", "PUBLISHING", "SYNC_LICENSE", "DISTRIBUTION", "MECHANICAL", "PERFORMANCE", "OTHER"]
 PAYMENT_DIRECTIONS = ["INCOMING", "OUTGOING"]

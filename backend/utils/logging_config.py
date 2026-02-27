@@ -52,7 +52,7 @@ def setup_logging():
         logging.DEBUG if os.getenv("SQL_DEBUG") == "true" else logging.WARNING
     )
 
-    return logging.getLogger("rythm")
+    return logging.getLogger("cadence")
 
 
 logger = setup_logging()

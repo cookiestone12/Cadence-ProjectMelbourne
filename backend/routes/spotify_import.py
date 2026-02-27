@@ -8,7 +8,7 @@ from ..models import get_db, Song, Creator, SongCredit, SongDSPLink, Organizatio
 from ..utils.auth import get_current_user
 from ..services import spotify_service
 
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 
 router = APIRouter(prefix="/api/spotify", tags=["spotify"])
 

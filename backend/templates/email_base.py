@@ -10,7 +10,7 @@ TEXT_FAINT = "#a8b2ad"
 BORDER_COLOR = "#d4ddd8"
 WHITE = "#ffffff"
 
-LOGO_URL = "https://cadence-catalog-intelligence.replit.app/rythm-logo.png"
+LOGO_URL = "https://cadence-catalog-intelligence.replit.app/cadence-logo.png"
 PLATFORM_NAME = "Cadence"
 
 

@@ -394,7 +394,7 @@ def send_test_digest(
     provider = get_email_provider()
     success = provider.send_email(
         to=current_user.email,
-        subject="[Test] Rythm Action Items Digest",
+        subject="[Test] Cadence Action Items Digest",
         html_body=html_body,
     )
 
@@ -576,9 +576,9 @@ def get_digest_pdf(
     html_body = generate_digest_html(user_name, grouped_items, summary_stats)
     
     # Determine filename
-    filename = "rythm-action-items.html"
+    filename = "cadence-action-items.html"
     if creator:
-        filename = f"rythm-action-items-{creator.display_name.replace(' ', '-').lower()}.html"
+        filename = f"cadence-action-items-{creator.display_name.replace(' ', '-').lower()}.html"
     
     # Return as HTML file with download header
     return Response(

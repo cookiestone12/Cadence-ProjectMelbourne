@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 
 INTERVAL_HOURS = {
     "daily": 24,
@@ -100,7 +100,7 @@ def check_and_send_digests():
 
                 success = provider.send_email(
                     to=user_record.email,
-                    subject="Rythm Action Items Digest",
+                    subject="Cadence Action Items Digest",
                     html_body=html_body,
                 )
 

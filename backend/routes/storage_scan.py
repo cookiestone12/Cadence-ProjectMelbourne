@@ -14,7 +14,7 @@ from ..utils.auth import get_current_user
 from ..services import scan_service, storage_service
 
 router = APIRouter(prefix="/api/storage-scan", tags=["storage-scan"])
-logger = logging.getLogger("rythm")
+logger = logging.getLogger("cadence")
 
 
 def verify_org_access(user: User, org_id: int, db: Session):
