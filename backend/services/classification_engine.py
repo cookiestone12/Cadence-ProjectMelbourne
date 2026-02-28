@@ -1,98 +1,39 @@
-import json
-import os
-import re
 import logging
 from typing import Optional, Dict, Tuple
 
+from ..kb import (
+    get_kb,
+    normalize_territory as kb_normalize_territory,
+    classify_right_type as kb_classify_right_type,
+    classify_channel as kb_classify_channel,
+    classify_accounting_flags as kb_classify_accounting_flags,
+)
+
 logger = logging.getLogger(__name__)
-
-KB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "kb", "royalty_knowledge_base.json")
-
-_kb_cache = None
-
-def _load_kb():
-    global _kb_cache
-    if _kb_cache is not None:
-        return _kb_cache
-    try:
-        with open(KB_PATH, "r") as f:
-            _kb_cache = json.load(f)
-        return _kb_cache
-    except Exception as e:
-        logger.error(f"Failed to load KB: {e}")
-        return None
-
-
-TERRITORY_MAP = None
-
-def _get_territory_map() -> dict:
-    global TERRITORY_MAP
-    if TERRITORY_MAP is not None:
-        return TERRITORY_MAP
-    kb = _load_kb()
-    if kb:
-        TERRITORY_MAP = kb.get("rules", {}).get("territory_normalization", {}).get("dictionary", {})
-    if not TERRITORY_MAP:
-        TERRITORY_MAP = {
-            "US": "US", "United States": "US", "UNITED STATES": "US", "USA": "US",
-            "GB": "GB", "United Kingdom": "GB", "UK": "GB",
-            "CA": "CA", "Canada": "CA",
-            "DE": "DE", "Germany": "DE",
-            "FR": "FR", "France": "FR",
-            "JP": "JP", "Japan": "JP",
-            "AU": "AU", "Australia": "AU",
-            "WORLD": "WW", "Worldwide": "WW", "WW": "WW",
-        }
-    return TERRITORY_MAP
-
-
-RIGHT_CATEGORY_RULES = [
-    (["Mechanical"], "mechanical"),
-    (["Synch", "Synchronisation", "Synchronization", "Sync License"], "sync"),
-    (["Performance"], "performance"),
-    (["Print", "Lyrics", "Lyric"], "print_lyrics"),
-    (["Neighboring", "Neighbouring", "Master Use", "Sound Recording"], "neighboring_rights"),
-]
-
-CHANNEL_RULES = [
-    (["Streaming", "Stream", "On Demand"], "streaming"),
-    (["Download", "DPD", "Permanent Digital"], "download"),
-    (["Radio", "TV", "Film", "Broadcast", "Television"], "broadcast"),
-    (["Live", "Concert"], "live"),
-    (["UGC", "User Generated"], "ugc"),
-    (["Social", "Short-Form", "Short Form", "TikTok", "Reels"], "social"),
-    (["Physical", "CD", "Vinyl"], "physical"),
-]
 
 
 def classify_right_category(raw_income_type: Optional[str], raw_revenue_type: Optional[str] = None) -> str:
     if not raw_income_type and not raw_revenue_type:
         return "other"
-    combined = f"{raw_income_type or ''} {raw_revenue_type or ''}".strip()
-    for keywords, category in RIGHT_CATEGORY_RULES:
-        for kw in keywords:
-            if kw.lower() in combined.lower():
-                return category
-    return "other"
+    return kb_classify_right_type(raw_income_type or "", raw_revenue_type or "")
 
 
 def classify_channel(raw_income_type: Optional[str], raw_revenue_type: Optional[str] = None, store: Optional[str] = None) -> str:
     if not raw_income_type and not raw_revenue_type and not store:
         return "other"
-    combined = f"{raw_income_type or ''} {raw_revenue_type or ''} {store or ''}".strip()
-    for keywords, channel in CHANNEL_RULES:
-        for kw in keywords:
-            if kw.lower() in combined.lower():
-                return channel
-    streaming_stores = ["spotify", "apple music", "amazon music", "youtube music", "tidal", "deezer", "pandora", "soundcloud"]
-    if store and any(s in store.lower() for s in streaming_stores):
-        return "streaming"
-    download_stores = ["itunes", "bandcamp"]
-    if store and any(s in store.lower() for s in download_stores):
-        return "download"
-    if store and any(s in (store or "").lower() for s in ["youtube", "facebook", "instagram"]):
-        return "ugc"
-    return "other"
+    source_text = f"{store or ''} {raw_income_type or ''}"
+    income_text = f"{raw_income_type or ''} {raw_revenue_type or ''}"
+    result = kb_classify_channel(source_text, income_text)
+    if result == "other" and store:
+        streaming_stores = ["spotify", "apple music", "amazon music", "youtube music", "tidal", "deezer", "pandora", "soundcloud"]
+        if any(s in store.lower() for s in streaming_stores):
+            return "streaming"
+        download_stores = ["itunes", "bandcamp"]
+        if any(s in store.lower() for s in download_stores):
+            return "download"
+        if any(s in store.lower() for s in ["youtube", "facebook", "instagram"]):
+            return "ugc"
+    return result
 
 
 def classify_accounting_flags(
@@ -102,25 +43,17 @@ def classify_accounting_flags(
     gross_amount: Optional[float] = None,
     deductions: Optional[float] = None,
 ) -> Dict[str, bool]:
-    flags = {
-        "is_retro_adjustment": False,
-        "is_withholding": False,
-        "is_reserve_movement": False,
-        "is_recoupment": False,
-        "is_nonroyalty_charge": False,
-    }
-    combined = f"{raw_income_type or ''} {raw_revenue_type or ''}".lower()
+    text_fields = [raw_income_type or "", raw_revenue_type or ""]
+    kb_flags = kb_classify_accounting_flags(text_fields)
 
-    if any(kw in combined for kw in ["adjustment", "retro", "true-up", "trueup", "correction"]):
-        flags["is_retro_adjustment"] = True
-    if any(kw in combined for kw in ["withholding", "tax", "w/h"]):
-        flags["is_withholding"] = True
-    if any(kw in combined for kw in ["reserve", "holdback"]):
-        flags["is_reserve_movement"] = True
-    if any(kw in combined for kw in ["recoup", "advance recovery"]):
-        flags["is_recoupment"] = True
-    if any(kw in combined for kw in ["charge", "fee", "cost", "deduction", "commission"]):
-        flags["is_nonroyalty_charge"] = True
+    flags = {
+        "is_retro_adjustment": "retro_adjustment" in kb_flags,
+        "is_withholding": "withholding" in kb_flags,
+        "is_reserve_movement": "reserve_movement" in kb_flags,
+        "is_recoupment": "recoupment" in kb_flags,
+        "is_nonroyalty_charge": "chargeback" in kb_flags,
+    }
+
     if deductions and deductions < 0:
         flags["is_withholding"] = True
 
@@ -130,19 +63,14 @@ def classify_accounting_flags(
 def normalize_territory(raw_territory: Optional[str]) -> Tuple[Optional[str], str]:
     if not raw_territory:
         return None, "none"
-    raw = raw_territory.strip()
-    territory_map = _get_territory_map()
-    if raw in territory_map:
-        return territory_map[raw], "exact"
-    raw_upper = raw.upper()
-    for key, val in territory_map.items():
-        if key.upper() == raw_upper:
-            return val, "exact"
-    if len(raw) == 2 and raw.upper().isalpha():
-        return raw.upper(), "assumed_iso2"
-    for key, val in territory_map.items():
-        if len(key) > 3 and key.lower() in raw.lower():
-            return val, "fuzzy"
+    result = kb_normalize_territory(raw_territory)
+    if result:
+        raw_upper = raw_territory.strip().upper()
+        if len(raw_upper) == 2 and raw_upper == result:
+            return result, "assumed_iso2"
+        return result, "exact"
+    if len(raw_territory.strip()) == 2 and raw_territory.strip().upper().isalpha():
+        return raw_territory.strip().upper(), "assumed_iso2"
     return None, "unresolved"
 
 

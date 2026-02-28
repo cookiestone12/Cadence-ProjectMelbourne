@@ -8,9 +8,11 @@ from ..models import get_db
 from ..models.models import (
     User, Organization, OrganizationMember, Song, SongCredit,
     ValuationCalculation, SongStreamingMetrics, TerritoryRevenue,
-    Creator
+    Creator, UnderwritingRun, RoyaltyStatement
 )
 from ..utils.auth import get_current_user
+from ..services.underwriting_engine import run_underwriting
+from ..services.underwriting_controls import run_reconciliation_controls
 import json
 
 router = APIRouter(prefix="/api/valuation", tags=["valuation_reports"])
@@ -358,3 +360,233 @@ def download_catalog_valuation_excel(
             "Content-Disposition": f"attachment; filename={filename}"
         }
     )
+
+
+class UnderwritingRunRequest(BaseModel):
+    periodization_mode: str = "activity"
+    granularity: str = "half"
+    exclude_right_types: List[str] = []
+    exclude_flags: List[str] = []
+    scope_creator_id: Optional[int] = None
+    include_sync: bool = True
+    use_gross: bool = False
+
+
+@router.post("/underwriting/run")
+def trigger_underwriting_run(
+    request: UnderwritingRunRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    try:
+        result = run_underwriting(
+            db=db,
+            org_id=membership.organization_id,
+            user_id=current_user.id,
+            periodization_mode=request.periodization_mode,
+            granularity=request.granularity,
+            exclude_right_types=request.exclude_right_types or None,
+            exclude_flags=request.exclude_flags or None,
+            scope_creator_id=request.scope_creator_id,
+            include_sync=request.include_sync,
+            use_gross=request.use_gross,
+        )
+        db.commit()
+        return result
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Underwriting run failed: {str(e)}")
+
+
+@router.get("/underwriting/runs")
+def list_underwriting_runs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    runs = db.query(UnderwritingRun).filter(
+        UnderwritingRun.organization_id == membership.organization_id
+    ).order_by(UnderwritingRun.created_at.desc()).limit(20).all()
+
+    return [
+        {
+            "id": r.id,
+            "status": r.status,
+            "kb_version": r.kb_version,
+            "inputs": r.inputs,
+            "portfolio_summary": r.outputs,
+            "valuation": r.valuation_data.get("blended") if r.valuation_data else None,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+        }
+        for r in runs
+    ]
+
+
+@router.get("/underwriting/runs/{run_id}")
+def get_underwriting_run(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    run = db.query(UnderwritingRun).filter(
+        UnderwritingRun.id == run_id,
+        UnderwritingRun.organization_id == membership.organization_id,
+    ).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Underwriting run not found")
+
+    return {
+        "id": run.id,
+        "status": run.status,
+        "kb_version": run.kb_version,
+        "inputs": run.inputs,
+        "portfolio_summary": run.outputs,
+        "spine": run.spine_data,
+        "decay": run.decay_data,
+        "concentration": run.concentration_data,
+        "projections": run.projection_data,
+        "valuation": run.valuation_data,
+        "exceptions": run.exceptions,
+        "created_at": run.created_at.isoformat() if run.created_at else None,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+    }
+
+
+@router.get("/underwriting/runs/{run_id}/spine")
+def get_underwriting_spine(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    run = db.query(UnderwritingRun).filter(
+        UnderwritingRun.id == run_id,
+        UnderwritingRun.organization_id == membership.organization_id,
+    ).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Underwriting run not found")
+
+    return run.spine_data or {"entries": [], "total_entries": 0}
+
+
+@router.get("/underwriting/runs/{run_id}/decay")
+def get_underwriting_decay(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    run = db.query(UnderwritingRun).filter(
+        UnderwritingRun.id == run_id,
+        UnderwritingRun.organization_id == membership.organization_id,
+    ).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Underwriting run not found")
+
+    return run.decay_data or {}
+
+
+@router.get("/underwriting/runs/{run_id}/concentration")
+def get_underwriting_concentration(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    run = db.query(UnderwritingRun).filter(
+        UnderwritingRun.id == run_id,
+        UnderwritingRun.organization_id == membership.organization_id,
+    ).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Underwriting run not found")
+
+    return run.concentration_data or {}
+
+
+@router.get("/underwriting/latest")
+def get_latest_underwriting(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    run = db.query(UnderwritingRun).filter(
+        UnderwritingRun.organization_id == membership.organization_id,
+        UnderwritingRun.status == "COMPLETED",
+    ).order_by(UnderwritingRun.created_at.desc()).first()
+
+    if not run:
+        return {"has_data": False}
+
+    return {
+        "has_data": True,
+        "run_id": run.id,
+        "status": run.status,
+        "kb_version": run.kb_version,
+        "inputs": run.inputs,
+        "portfolio_summary": run.outputs,
+        "spine": run.spine_data,
+        "decay": run.decay_data,
+        "concentration": run.concentration_data,
+        "projections": run.projection_data,
+        "valuation": run.valuation_data,
+        "exceptions": run.exceptions,
+        "created_at": run.created_at.isoformat() if run.created_at else None,
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+    }
+
+
+@router.get("/statements/{statement_id}/reconciliation")
+def get_statement_reconciliation(
+    statement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    result = run_reconciliation_controls(db, statement_id, membership.organization_id)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    db.commit()
+    return result

@@ -1,84 +1,164 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from 'recharts'
 import {
   CurrencyDollarIcon,
   ArrowTrendingUpIcon,
+  ArrowTrendingDownIcon,
   MusicalNoteIcon,
   ArrowDownTrayIcon,
   XMarkIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  PlayIcon,
+  ClockIcon,
+  AdjustmentsHorizontalIcon,
+  SparklesIcon,
+  ArrowPathIcon,
+  ExclamationTriangleIcon,
+  CheckCircleIcon,
+  InformationCircleIcon,
+  TableCellsIcon,
+  ChartPieIcon,
 } from '@heroicons/react/24/outline'
 
 export default function ValuationPage() {
   const [loading, setLoading] = useState(true)
   const [catalogData, setCatalogData] = useState(null)
+  const [uwData, setUwData] = useState(null)
+  const [uwLoading, setUwLoading] = useState(false)
+  const [runs, setRuns] = useState([])
+  const [activeTab, setActiveTab] = useState('overview')
+  const [runModalOpen, setRunModalOpen] = useState(false)
+  const [runConfig, setRunConfig] = useState({
+    periodization_mode: 'activity',
+    granularity: 'half',
+    include_sync: true,
+    use_gross: false,
+    exclude_right_types: [],
+    exclude_flags: [],
+  })
+  const [running, setRunning] = useState(false)
   const [selectedSong, setSelectedSong] = useState(null)
   const [songDetail, setSongDetail] = useState(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
 
   useEffect(() => {
-    loadCatalogData()
+    loadAll()
   }, [])
 
-  const loadCatalogData = async () => {
+  const loadAll = async () => {
+    setLoading(true)
     try {
-      setLoading(true)
-      const response = await axios.get('/api/valuation/catalog/summary')
-      setCatalogData(response.data)
-    } catch (error) {
-      console.error('Error loading catalog data:', error)
+      const [catRes, uwRes, runsRes] = await Promise.allSettled([
+        axios.get('/api/valuation/catalog/summary'),
+        axios.get('/api/valuation/underwriting/latest'),
+        axios.get('/api/valuation/underwriting/runs'),
+      ])
+      if (catRes.status === 'fulfilled') setCatalogData(catRes.value.data)
+      if (uwRes.status === 'fulfilled' && uwRes.value.data?.has_data) setUwData(uwRes.value.data)
+      if (runsRes.status === 'fulfilled') setRuns(runsRes.value.data)
+    } catch (e) {
+      console.error('Error loading data:', e)
     } finally {
       setLoading(false)
     }
   }
 
-  const loadSongDetail = async (songId) => {
+  const triggerRun = async () => {
+    setRunning(true)
     try {
-      setLoadingDetail(true)
-      const response = await axios.get(`/api/valuation/song/${songId}/detail`)
-      setSongDetail(response.data)
-    } catch (error) {
-      console.error('Error loading song detail:', error)
+      await axios.post('/api/valuation/underwriting/run', runConfig)
+      setRunModalOpen(false)
+      await loadAll()
+    } catch (e) {
+      console.error('Underwriting run failed:', e)
+      alert('Underwriting run failed. Check that you have processed royalty statements with matched assets.')
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  const loadSongDetail = async (songId) => {
+    setLoadingDetail(true)
+    try {
+      const res = await axios.get(`/api/valuation/song/${songId}/detail`)
+      setSongDetail(res.data)
+    } catch (e) {
+      console.error('Error loading song detail:', e)
     } finally {
       setLoadingDetail(false)
     }
   }
 
-  const handleSongClick = (song) => {
-    setSelectedSong(song)
-    loadSongDetail(song.song_id)
-  }
-
   const handleDownloadReport = async () => {
     try {
-      const response = await axios.get('/api/valuation/catalog/download/excel', {
-        responseType: 'blob'
-      })
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const res = await axios.get('/api/valuation/catalog/download/excel', { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
       const link = document.createElement('a')
       link.href = url
       link.setAttribute('download', `cadence_catalog_report_${new Date().toISOString().split('T')[0]}.xlsx`)
       document.body.appendChild(link)
       link.click()
       link.remove()
-    } catch (error) {
-      console.error('Error downloading report:', error)
+    } catch (e) {
+      console.error('Error downloading report:', e)
     }
   }
 
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value)
-  }
+  const fmt = (v) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v || 0)
+  const fmtDec = (v) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0)
+  const fmtPct = (v) => `${((v || 0) * 100).toFixed(1)}%`
+  const fmtNum = (v) => (v || 0).toLocaleString()
 
-  const formatPercentage = (value) => {
-    return `${(value * 100).toFixed(1)}%`
-  }
+  const ps = uwData?.portfolio_summary || {}
+  const val = uwData?.valuation || {}
+  const decay = uwData?.decay || {}
+  const conc = uwData?.concentration || {}
+  const spine = uwData?.spine?.entries || []
+  const projections = uwData?.projections || {}
+  const exceptions = uwData?.exceptions || []
+
+  const periods = useMemo(() => ps.periods || [], [ps.periods])
+
+  const concentrationChartData = useMemo(() => {
+    if (!conc || !periods.length) return []
+    return periods.map(p => ({
+      period: p,
+      'Top 1': (conc[p]?.top_1 || 0) * 100,
+      'Top 3': (conc[p]?.top_3 || 0) * 100,
+      'Top 5': (conc[p]?.top_5 || 0) * 100,
+      'HHI': (conc[p]?.hhi || 0) * 100,
+    }))
+  }, [conc, periods])
+
+  const projectionChartData = useMemo(() => {
+    if (!projections.base) return []
+    return (projections.base || []).map((b, i) => ({
+      year: `Y${b.year}`,
+      Downside: projections.downside?.[i]?.projected_net || 0,
+      Base: b.projected_net,
+      Upside: projections.upside?.[i]?.projected_net || 0,
+    }))
+  }, [projections])
+
+  const halfLifeChartData = useMemo(() => {
+    if (!decay.half_life_distribution) return []
+    return Object.entries(decay.half_life_distribution).map(([bin, count]) => ({
+      bin,
+      count,
+    }))
+  }, [decay])
+
+  const spineByPeriod = useMemo(() => {
+    const songMap = {}
+    spine.forEach(e => {
+      const key = e.song_id || `w${e.work_id}`
+      if (!songMap[key]) songMap[key] = { song_id: e.song_id, title: e.song_title || `Song ${e.song_id}`, isrc: e.isrc, periods: {}, total: 0 }
+      songMap[key].periods[e.period] = e.total_net
+      songMap[key].total += e.total_net
+    })
+    return Object.values(songMap).sort((a, b) => b.total - a.total).slice(0, 25)
+  }, [spine])
 
   if (loading) {
     return (
@@ -86,362 +166,631 @@ export default function ValuationPage() {
         <div className="animate-pulse">
           <div className="h-8 bg-[#EEF1EC] rounded w-1/4 mb-4"></div>
           <div className="h-4 bg-[#EEF1EC] rounded w-1/3 mb-8"></div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="h-32 bg-[#EEF1EC] rounded-xl"></div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-[#EEF1EC] rounded-xl"></div>)}
           </div>
         </div>
       </div>
     )
   }
 
-  if (!catalogData) {
-    return (
-      <div className="p-4 sm:p-8">
-        <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Catalog Valuation</h1>
-        <div className="mt-8 bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] rounded-xl shadow-sm p-12 text-center">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full mb-6">
-            <CurrencyDollarIcon className="w-10 h-10 text-white" />
-          </div>
-          <h2 className="text-2xl font-bold text-[#3D4A44] mb-3">No Valuation Data</h2>
-          <p className="text-[#7A8580] max-w-2xl mx-auto">
-            Your catalog doesn't have valuation data yet. Valuation calculations will be available once streaming metrics and revenue data are imported.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  const hasData = catalogData.top_songs && catalogData.top_songs.length > 0
+  const hasUW = !!uwData
 
   return (
     <div className="p-4 sm:p-8">
-      <div className="fixed inset-0 pointer-events-none z-10 flex items-center justify-center overflow-hidden" style={{opacity: 0.07}}>
-        <div className="text-[#5B8A72] font-bold text-[120px] tracking-[0.3em] select-none whitespace-nowrap" style={{transform: 'rotate(-30deg)'}}>
-          CADENCE
-        </div>
-      </div>
-
-      <div className="mb-8 flex items-center justify-between">
+      <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Catalog Valuation</h1>
-          <p className="text-[#7A8580]">{catalogData.organization_name}</p>
+          <div className="flex items-center space-x-3">
+            <h1 className="text-2xl sm:text-3xl font-bold text-[#3D4A44]">Catalog Valuation</h1>
+            <span className="px-1.5 py-0.5 text-[9px] font-semibold tracking-wide uppercase bg-[#5B8A72]/10 text-[#5B8A72] rounded-md">Beta</span>
+          </div>
+          <p className="text-[#7A8580] text-sm mt-1">{catalogData?.organization_name || 'Your Organization'}</p>
         </div>
-        <button
-          onClick={handleDownloadReport}
-          className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all shadow-md"
-        >
-          <ArrowDownTrayIcon className="w-5 h-5" />
-          <span>Download Report</span>
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] rounded-xl shadow-sm p-6 border border-[rgba(91,138,114,0.15)]">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="p-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-lg">
-              <CurrencyDollarIcon className="w-6 h-6 text-white" />
-            </div>
-            <h3 className="font-bold text-[#3D4A44]">Total Catalog Value</h3>
-          </div>
-          <div className="text-3xl font-bold bg-gradient-to-r from-[#5B8A72] to-[#7BA594] bg-clip-text text-transparent">
-            {formatCurrency(catalogData.total_catalog_value)}
-          </div>
-          <p className="text-sm text-[#7A8580] mt-1">{catalogData.total_songs} songs</p>
-        </div>
-
-        <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6 border border-[rgba(59,77,67,0.08)]">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="p-2 bg-[rgba(91,154,110,0.12)] rounded-lg">
-              <ArrowTrendingUpIcon className="w-6 h-6 text-[#5B9A6E]" />
-            </div>
-            <h3 className="font-bold text-[#3D4A44]">Annual Revenue</h3>
-          </div>
-          <div className="text-3xl font-bold text-[#3D4A44]">
-            {formatCurrency(catalogData.total_annual_revenue)}
-          </div>
-          <p className="text-sm text-[#5B9A6E] mt-1">
-            +{formatPercentage(catalogData.avg_growth_rate)} avg growth
-          </p>
-        </div>
-
-        <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6 border border-[rgba(59,77,67,0.08)]">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className="p-2 bg-[rgba(90,138,154,0.12)] rounded-lg">
-              <MusicalNoteIcon className="w-6 h-6 text-[#5A8A9A]" />
-            </div>
-            <h3 className="font-bold text-[#3D4A44]">30-Day Revenue</h3>
-          </div>
-          <div className="text-3xl font-bold text-[#3D4A44]">
-            {formatCurrency(catalogData.total_thirty_day_revenue)}
-          </div>
-          <p className="text-sm text-[#7A8580] mt-1">Last month projection</p>
+        <div className="flex items-center space-x-3">
+          <button onClick={() => setRunModalOpen(true)} className="flex items-center space-x-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-all text-sm font-medium shadow-sm">
+            <SparklesIcon className="w-4 h-4" />
+            <span>Run Underwriting</span>
+          </button>
+          <button onClick={handleDownloadReport} className="flex items-center space-x-2 px-4 py-2.5 border border-[rgba(59,77,67,0.15)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] transition-all text-sm">
+            <ArrowDownTrayIcon className="w-4 h-4" />
+            <span>Export</span>
+          </button>
         </div>
       </div>
 
-      {hasData ? (
-        <div className="bg-[#FAFBF9] rounded-xl shadow-sm mb-8">
-          <div className="p-6 border-b border-[rgba(59,77,67,0.08)]">
-            <h2 className="text-xl font-bold text-[#3D4A44]">Top Valued Songs</h2>
-          </div>
-          <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-[#EEF1EC]">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Song</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Artist</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Streams</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Valuation</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Annual Revenue</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Growth</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Black Box</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-[rgba(59,77,67,0.08)]">
-              {catalogData.top_songs.map((song) => (
-                <tr
-                  key={song.song_id}
-                  onClick={() => handleSongClick(song)}
-                  className="hover:bg-[#EEF1EC] cursor-pointer transition-colors"
-                >
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="font-medium text-[#3D4A44]">{song.title}</div>
-                    <div className="text-sm text-[#7A8580]">{song.isrc || 'No ISRC'}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-[#3D4A44]">
-                    {song.primary_artist}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-[#3D4A44]">
-                    {song.total_streams.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <div className="font-semibold text-[#5B8A72]">
-                      {formatCurrency(song.final_valuation)}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-[#3D4A44]">
-                    {formatCurrency(song.annual_revenue)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <span className={`text-sm font-medium ${song.growth_rate >= 0 ? 'text-[#5B9A6E]' : 'text-[#C47068]'}`}>
-                      {song.growth_rate >= 0 ? '+' : ''}{formatPercentage(song.growth_rate)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium text-[#3D4A44]">
-                    {formatCurrency(song.black_box_value)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      ) : (
-        <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-12 text-center mb-8">
-          <p className="text-[#7A8580]">No song valuation data available yet</p>
+      {hasUW && (
+        <div className="flex space-x-1 mb-6 bg-[#EEF1EC] rounded-lg p-1">
+          {[
+            { key: 'overview', label: 'Overview', icon: ChartBarIcon },
+            { key: 'spine', label: 'Revenue Spine', icon: TableCellsIcon },
+            { key: 'decay', label: 'Decay Analytics', icon: ArrowTrendingDownIcon },
+            { key: 'concentration', label: 'Concentration', icon: ChartPieIcon },
+            { key: 'projections', label: 'Projections', icon: ArrowTrendingUpIcon },
+            { key: 'history', label: 'Run History', icon: ClockIcon },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all ${activeTab === tab.key ? 'bg-white text-[#3D4A44] shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'}`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{tab.label}</span>
+            </button>
+          ))}
         </div>
       )}
 
-      {catalogData.territory_breakdown && catalogData.territory_breakdown.length > 0 ? (
-      <div className="bg-[#FAFBF9] rounded-xl shadow-sm">
-        <div className="p-6 border-b border-[rgba(59,77,67,0.08)]">
-          <h2 className="text-xl font-bold text-[#3D4A44]">Territory Breakdown</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-[#EEF1EC]">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Territory</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Streams</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Publishing</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Master</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Total Revenue</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-[rgba(59,77,67,0.08)]">
-              {catalogData.territory_breakdown.map((territory) => (
-                <tr key={territory.territory_code} className="hover:bg-[#EEF1EC]">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <span className="font-medium text-[#3D4A44]">{territory.territory_code}</span>
-                      <span className="ml-2 text-sm text-[#7A8580]">{territory.territory_name}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-[#3D4A44]">
-                    {territory.total_streams.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-[#3D4A44]">
-                    {formatCurrency(territory.publishing_revenue)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-[#3D4A44]">
-                    {formatCurrency(territory.master_revenue)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right font-semibold text-[#3D4A44]">
-                    {formatCurrency(territory.total_revenue)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-      ) : null}
-
-      {selectedSong && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#FAFBF9] rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-[rgba(59,77,67,0.08)] flex items-center justify-between bg-gradient-to-r from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)]">
-              <div>
-                <h2 className="text-2xl font-bold text-[#3D4A44]">{selectedSong.title}</h2>
-                <p className="text-[#7A8580]">{selectedSong.primary_artist}</p>
+      {(!hasUW || activeTab === 'overview') && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] rounded-xl p-5 border border-[rgba(91,138,114,0.15)]">
+              <div className="flex items-center space-x-2 mb-2">
+                <div className="p-1.5 bg-[#5B8A72] rounded-lg"><CurrencyDollarIcon className="w-4 h-4 text-white" /></div>
+                <span className="text-xs font-medium text-[#7A8580]">Catalog Value</span>
               </div>
-              <button
-                onClick={() => {
-                  setSelectedSong(null)
-                  setSongDetail(null)
-                }}
-                className="text-[#7A8580] hover:text-[#3D4A44] transition-colors"
-              >
-                <XMarkIcon className="w-6 h-6" />
-              </button>
+              {hasUW ? (
+                <>
+                  <div className="text-2xl font-bold text-[#5B8A72]">{fmt(val.blended?.base)}</div>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className="text-[10px] text-[#7A8580]">{fmt(val.blended?.low)}</span>
+                    <span className="text-[10px] text-[#7A8580]">—</span>
+                    <span className="text-[10px] text-[#7A8580]">{fmt(val.blended?.high)}</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-[#5B8A72]">{fmt(catalogData?.total_catalog_value)}</div>
+                  <p className="text-xs text-[#7A8580] mt-1">{catalogData?.total_songs} songs</p>
+                </>
+              )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="bg-[#FAFBF9] rounded-xl p-5 border border-[rgba(59,77,67,0.08)]">
+              <div className="flex items-center space-x-2 mb-2">
+                <div className="p-1.5 bg-[rgba(91,154,110,0.12)] rounded-lg"><ArrowTrendingUpIcon className="w-4 h-4 text-[#5B9A6E]" /></div>
+                <span className="text-xs font-medium text-[#7A8580]">Annual Revenue</span>
+              </div>
+              <div className="text-2xl font-bold text-[#3D4A44]">{fmt(hasUW ? ps.annual_revenue : catalogData?.total_annual_revenue)}</div>
+              {hasUW && (
+                <div className="flex items-center space-x-3 mt-1">
+                  <span className="text-[10px] text-[#5B8A72]">Pub: {fmt(ps.publisher_annual)}</span>
+                  <span className="text-[10px] text-[#7A8580]">Master: {fmt(ps.master_annual)}</span>
+                </div>
+              )}
+              {!hasUW && <p className="text-xs text-[#5B9A6E] mt-1">+{fmtPct(catalogData?.avg_growth_rate)} avg growth</p>}
+            </div>
+
+            <div className="bg-[#FAFBF9] rounded-xl p-5 border border-[rgba(59,77,67,0.08)]">
+              <div className="flex items-center space-x-2 mb-2">
+                <div className="p-1.5 bg-[rgba(90,138,154,0.12)] rounded-lg"><ClockIcon className="w-4 h-4 text-[#5A8A9A]" /></div>
+                <span className="text-xs font-medium text-[#7A8580]">{hasUW ? 'Portfolio Half-Life' : '30-Day Revenue'}</span>
+              </div>
+              {hasUW ? (
+                <>
+                  <div className="text-2xl font-bold text-[#3D4A44]">{decay.portfolio_half_life ? `${decay.portfolio_half_life} periods` : 'N/A'}</div>
+                  <p className="text-xs text-[#7A8580] mt-1">Avg decay rate: {decay.portfolio_k ? decay.portfolio_k.toFixed(3) : 'N/A'}</p>
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-[#3D4A44]">{fmt(catalogData?.total_thirty_day_revenue)}</div>
+                  <p className="text-xs text-[#7A8580] mt-1">Last month projection</p>
+                </>
+              )}
+            </div>
+
+            <div className="bg-[#FAFBF9] rounded-xl p-5 border border-[rgba(59,77,67,0.08)]">
+              <div className="flex items-center space-x-2 mb-2">
+                <div className="p-1.5 bg-[rgba(196,149,107,0.12)] rounded-lg"><ChartPieIcon className="w-4 h-4 text-[#C4956B]" /></div>
+                <span className="text-xs font-medium text-[#7A8580]">{hasUW ? 'HHI Concentration' : 'Songs'}</span>
+              </div>
+              {hasUW && periods.length ? (
+                <>
+                  <div className="text-2xl font-bold text-[#3D4A44]">{((conc[periods[periods.length - 1]]?.hhi || 0) * 100).toFixed(1)}%</div>
+                  <p className="text-xs text-[#7A8580] mt-1">Top-1: {fmtPct(conc[periods[periods.length - 1]]?.top_1)}</p>
+                </>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-[#3D4A44]">{catalogData?.total_songs || 0}</div>
+                  <p className="text-xs text-[#7A8580] mt-1">In catalog</p>
+                </>
+              )}
+            </div>
+          </div>
+
+          {hasUW && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5">
+                <h3 className="text-sm font-bold text-[#3D4A44] mb-4">Multiplier Valuation</h3>
+                <div className="space-y-3">
+                  {[
+                    { label: 'Publishing (NPS)', data: val.multiplier?.publishing },
+                    { label: 'Masters (Net)', data: val.multiplier?.masters },
+                    { label: 'Combined', data: val.multiplier?.combined },
+                  ].map(row => (
+                    <div key={row.label} className="flex items-center justify-between">
+                      <span className="text-xs text-[#7A8580]">{row.label}</span>
+                      <div className="flex items-center space-x-3 text-xs">
+                        <span className="text-[#C47068]">{fmt(row.data?.low)}</span>
+                        <span className="font-semibold text-[#3D4A44]">{fmt(row.data?.base)}</span>
+                        <span className="text-[#5B9A6E]">{fmt(row.data?.high)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="border-t border-[rgba(59,77,67,0.08)] pt-2 mt-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[#7A8580]">Adjustment factor</span>
+                      <span className={`font-medium ${(val.multiplier?.adjustment_factor || 0) < 0 ? 'text-[#C47068]' : 'text-[#5B9A6E]'}`}>
+                        {((val.multiplier?.adjustment_factor || 0) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5">
+                <h3 className="text-sm font-bold text-[#3D4A44] mb-4">DCF Valuation</h3>
+                <div className="space-y-3">
+                  {[
+                    { label: 'Conservative', value: val.dcf?.low },
+                    { label: 'Base Case', value: val.dcf?.base },
+                    { label: 'Optimistic', value: val.dcf?.high },
+                  ].map(row => (
+                    <div key={row.label} className="flex items-center justify-between">
+                      <span className="text-xs text-[#7A8580]">{row.label}</span>
+                      <span className={`text-xs font-semibold ${row.label === 'Base Case' ? 'text-[#3D4A44]' : 'text-[#7A8580]'}`}>{fmt(row.value)}</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-[rgba(59,77,67,0.08)] pt-2 mt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-[#3D4A44]">Blended (Avg)</span>
+                      <span className="text-sm font-bold text-[#5B8A72]">{fmt(val.blended?.base)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {hasUW && ps.stability_signals && (
+            <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5 mb-6">
+              <h3 className="text-sm font-bold text-[#3D4A44] mb-3">Stability Signals</h3>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(ps.stability_signals).map(([key, value]) => (
+                  <div key={key} className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${value ? 'bg-[#C47068]/10 text-[#C47068]' : 'bg-[#5B9A6E]/10 text-[#5B9A6E]'}`}>
+                    {value ? <ExclamationTriangleIcon className="w-3 h-3" /> : <CheckCircleIcon className="w-3 h-3" />}
+                    <span>{key.replace(/_/g, ' ')}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(!hasUW && catalogData?.top_songs?.length > 0) && (
+            <div className="bg-[#FAFBF9] rounded-xl shadow-sm mb-6">
+              <div className="p-5 border-b border-[rgba(59,77,67,0.08)]">
+                <h2 className="text-base font-bold text-[#3D4A44]">Top Valued Songs</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-[#EEF1EC]">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-medium text-[#7A8580] uppercase">Song</th>
+                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-[#7A8580] uppercase">Streams</th>
+                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-[#7A8580] uppercase">Valuation</th>
+                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-[#7A8580] uppercase">Annual Rev</th>
+                      <th className="px-4 py-2.5 text-right text-[10px] font-medium text-[#7A8580] uppercase">Growth</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                    {catalogData.top_songs.map(song => (
+                      <tr key={song.song_id} onClick={() => { setSelectedSong(song); loadSongDetail(song.song_id) }} className="hover:bg-[#EEF1EC] cursor-pointer text-sm">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-[#3D4A44]">{song.title}</div>
+                          <div className="text-[10px] text-[#7A8580]">{song.primary_artist} {song.isrc ? `· ${song.isrc}` : ''}</div>
+                        </td>
+                        <td className="px-4 py-3 text-right text-[#3D4A44]">{fmtNum(song.total_streams)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-[#5B8A72]">{fmt(song.final_valuation)}</td>
+                        <td className="px-4 py-3 text-right text-[#3D4A44]">{fmt(song.annual_revenue)}</td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={song.growth_rate >= 0 ? 'text-[#5B9A6E]' : 'text-[#C47068]'}>
+                            {song.growth_rate >= 0 ? '+' : ''}{fmtPct(song.growth_rate)}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {!hasUW && (
+            <div className="bg-gradient-to-br from-[rgba(91,138,114,0.04)] to-[rgba(123,165,148,0.04)] rounded-xl border border-dashed border-[rgba(91,138,114,0.25)] p-8 text-center mb-6">
+              <SparklesIcon className="w-10 h-10 text-[#5B8A72] mx-auto mb-3" />
+              <h3 className="text-lg font-semibold text-[#3D4A44] mb-2">Institutional Underwriting Engine</h3>
+              <p className="text-sm text-[#7A8580] max-w-xl mx-auto mb-4">
+                Run an underwriting analysis to generate statement-driven valuations with decay analytics, concentration metrics, DCF projections, and multiplier bands powered by your ingested royalty data.
+              </p>
+              <button onClick={() => setRunModalOpen(true)} className="inline-flex items-center space-x-2 px-5 py-2.5 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-all text-sm font-medium">
+                <SparklesIcon className="w-4 h-4" />
+                <span>Run First Analysis</span>
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {hasUW && activeTab === 'spine' && (
+        <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] mb-6">
+          <div className="p-5 border-b border-[rgba(59,77,67,0.08)] flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-[#3D4A44]">Song-by-Period Revenue Spine</h2>
+              <p className="text-xs text-[#7A8580] mt-0.5">{spine.length} entries across {periods.length} periods</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-[#EEF1EC]">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium text-[#7A8580] uppercase text-[10px] sticky left-0 bg-[#EEF1EC] z-10 min-w-[180px]">Song</th>
+                  {periods.map(p => (
+                    <th key={p} className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px] min-w-[90px]">{p}</th>
+                  ))}
+                  <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px] min-w-[100px]">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                {spineByPeriod.map((song, i) => (
+                  <tr key={i} className="hover:bg-[#EEF1EC]">
+                    <td className="px-3 py-2 sticky left-0 bg-[#FAFBF9] z-10">
+                      <div className="font-medium text-[#3D4A44] truncate max-w-[170px]">{song.title}</div>
+                      {song.isrc && <div className="text-[9px] text-[#7A8580]">{song.isrc}</div>}
+                    </td>
+                    {periods.map(p => {
+                      const val = song.periods[p]
+                      return (
+                        <td key={p} className={`px-3 py-2 text-right ${val ? 'text-[#3D4A44]' : 'text-[#D1D5D3]'}`}>
+                          {val ? fmtDec(val) : '—'}
+                        </td>
+                      )
+                    })}
+                    <td className="px-3 py-2 text-right font-semibold text-[#5B8A72]">{fmtDec(song.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {hasUW && activeTab === 'decay' && (
+        <div className="space-y-6 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5">
+              <div className="text-xs text-[#7A8580] mb-1">Portfolio Decay Rate (k)</div>
+              <div className="text-2xl font-bold text-[#3D4A44]">{decay.portfolio_k?.toFixed(4) || 'N/A'}</div>
+            </div>
+            <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5">
+              <div className="text-xs text-[#7A8580] mb-1">Portfolio Half-Life</div>
+              <div className="text-2xl font-bold text-[#3D4A44]">{decay.portfolio_half_life ? `${decay.portfolio_half_life} periods` : 'N/A'}</div>
+            </div>
+            <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5">
+              <div className="text-xs text-[#7A8580] mb-1">Songs with Decay Fit</div>
+              <div className="text-2xl font-bold text-[#3D4A44]">{Object.keys(decay.per_song || {}).length}</div>
+            </div>
+          </div>
+
+          {halfLifeChartData.length > 0 && (
+            <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5">
+              <h3 className="text-sm font-bold text-[#3D4A44] mb-4">Half-Life Distribution</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={halfLifeChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(59,77,67,0.08)" />
+                  <XAxis dataKey="bin" tick={{ fontSize: 11, fill: '#7A8580' }} />
+                  <YAxis tick={{ fontSize: 11, fill: '#7A8580' }} />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid rgba(59,77,67,0.12)' }} />
+                  <Bar dataKey="count" fill="#5B8A72" radius={[4, 4, 0, 0]} name="Songs" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {decay.per_song && Object.keys(decay.per_song).length > 0 && (
+            <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)]">
+              <div className="p-5 border-b border-[rgba(59,77,67,0.08)]">
+                <h3 className="text-sm font-bold text-[#3D4A44]">Per-Song Decay Parameters</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-[#EEF1EC]">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-[#7A8580] uppercase text-[10px]">Song ID</th>
+                      <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">k</th>
+                      <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">Half-Life</th>
+                      <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">R²</th>
+                      <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">Volatility</th>
+                      <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">CAGR</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                    {Object.entries(decay.per_song).slice(0, 30).map(([sid, d]) => (
+                      <tr key={sid} className="hover:bg-[#EEF1EC]">
+                        <td className="px-3 py-2 font-medium text-[#3D4A44]">{sid}</td>
+                        <td className="px-3 py-2 text-right text-[#3D4A44]">{d.k?.toFixed(4)}</td>
+                        <td className="px-3 py-2 text-right text-[#3D4A44]">{d.half_life_periods?.toFixed(1) || '—'}</td>
+                        <td className="px-3 py-2 text-right">
+                          <span className={d.r2 >= 0.7 ? 'text-[#5B9A6E]' : d.r2 >= 0.4 ? 'text-[#C4956B]' : 'text-[#C47068]'}>
+                            {d.r2?.toFixed(3)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right text-[#3D4A44]">{d.volatility?.toFixed(3) || '—'}</td>
+                        <td className="px-3 py-2 text-right">
+                          <span className={(d.cagr || 0) >= 0 ? 'text-[#5B9A6E]' : 'text-[#C47068]'}>
+                            {d.cagr != null ? fmtPct(d.cagr) : '—'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {hasUW && activeTab === 'concentration' && (
+        <div className="space-y-6 mb-6">
+          {concentrationChartData.length > 0 && (
+            <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5">
+              <h3 className="text-sm font-bold text-[#3D4A44] mb-4">Concentration Trends</h3>
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={concentrationChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(59,77,67,0.08)" />
+                  <XAxis dataKey="period" tick={{ fontSize: 11, fill: '#7A8580' }} />
+                  <YAxis tick={{ fontSize: 11, fill: '#7A8580' }} unit="%" />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid rgba(59,77,67,0.12)' }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Line type="monotone" dataKey="Top 1" stroke="#C47068" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="Top 3" stroke="#C4956B" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="Top 5" stroke="#5B8A72" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="HHI" stroke="#5A8A9A" strokeWidth={2} dot={{ r: 3 }} strokeDasharray="5 5" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)]">
+            <div className="p-5 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-sm font-bold text-[#3D4A44]">Concentration by Period</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-[#EEF1EC]">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-[#7A8580] uppercase text-[10px]">Period</th>
+                    <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">Top 1</th>
+                    <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">Top 3</th>
+                    <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">Top 5</th>
+                    <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">Top 10</th>
+                    <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">HHI</th>
+                    <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">Songs</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                  {periods.map(p => {
+                    const c = conc[p] || {}
+                    return (
+                      <tr key={p} className="hover:bg-[#EEF1EC]">
+                        <td className="px-3 py-2 font-medium text-[#3D4A44]">{p}</td>
+                        <td className="px-3 py-2 text-right">{fmtPct(c.top_1)}</td>
+                        <td className="px-3 py-2 text-right">{fmtPct(c.top_3)}</td>
+                        <td className="px-3 py-2 text-right">{fmtPct(c.top_5)}</td>
+                        <td className="px-3 py-2 text-right">{fmtPct(c.top_10)}</td>
+                        <td className="px-3 py-2 text-right">
+                          <span className={(c.hhi || 0) > 0.25 ? 'text-[#C47068] font-semibold' : 'text-[#3D4A44]'}>{(c.hhi || 0).toFixed(4)}</span>
+                        </td>
+                        <td className="px-3 py-2 text-right text-[#7A8580]">{c.song_count || 0}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hasUW && activeTab === 'projections' && (
+        <div className="space-y-6 mb-6">
+          {projectionChartData.length > 0 && (
+            <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5">
+              <h3 className="text-sm font-bold text-[#3D4A44] mb-4">Revenue Projections (Scenario Bands)</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={projectionChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(59,77,67,0.08)" />
+                  <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#7A8580' }} />
+                  <YAxis tick={{ fontSize: 11, fill: '#7A8580' }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid rgba(59,77,67,0.12)' }} formatter={v => fmt(v)} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Area type="monotone" dataKey="Upside" stroke="#5B9A6E" fill="#5B9A6E" fillOpacity={0.1} strokeWidth={1.5} />
+                  <Area type="monotone" dataKey="Base" stroke="#5B8A72" fill="#5B8A72" fillOpacity={0.15} strokeWidth={2} />
+                  <Area type="monotone" dataKey="Downside" stroke="#C47068" fill="#C47068" fillOpacity={0.1} strokeWidth={1.5} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)]">
+            <div className="p-5 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-sm font-bold text-[#3D4A44]">Projected Revenue by Year</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-[#EEF1EC]">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium text-[#7A8580] uppercase text-[10px]">Year</th>
+                    <th className="px-3 py-2 text-right font-medium text-[#C47068] uppercase text-[10px]">Downside</th>
+                    <th className="px-3 py-2 text-right font-medium text-[#3D4A44] uppercase text-[10px]">Base</th>
+                    <th className="px-3 py-2 text-right font-medium text-[#5B9A6E] uppercase text-[10px]">Upside</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                  {projectionChartData.map(row => (
+                    <tr key={row.year} className="hover:bg-[#EEF1EC]">
+                      <td className="px-3 py-2 font-medium text-[#3D4A44]">{row.year}</td>
+                      <td className="px-3 py-2 text-right text-[#C47068]">{fmt(row.Downside)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-[#3D4A44]">{fmt(row.Base)}</td>
+                      <td className="px-3 py-2 text-right text-[#5B9A6E]">{fmt(row.Upside)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {hasUW && activeTab === 'history' && (
+        <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] mb-6">
+          <div className="p-5 border-b border-[rgba(59,77,67,0.08)]">
+            <h2 className="text-base font-bold text-[#3D4A44]">Underwriting Run History</h2>
+          </div>
+          {runs.length === 0 ? (
+            <div className="p-8 text-center text-sm text-[#7A8580]">No runs yet</div>
+          ) : (
+            <div className="divide-y divide-[rgba(59,77,67,0.06)]">
+              {runs.map(run => (
+                <div key={run.id} className="p-4 hover:bg-[#EEF1EC] cursor-pointer" onClick={async () => {
+                  try {
+                    const res = await axios.get(`/api/valuation/underwriting/runs/${run.id}`)
+                    setUwData({ ...res.data, has_data: true })
+                    setActiveTab('overview')
+                  } catch (e) { console.error(e) }
+                }}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div className={`w-2 h-2 rounded-full ${run.status === 'COMPLETED' ? 'bg-[#5B9A6E]' : run.status === 'FAILED' ? 'bg-[#C47068]' : 'bg-[#C4956B]'}`} />
+                      <span className="text-sm font-medium text-[#3D4A44]">Run #{run.id}</span>
+                      <span className="text-xs text-[#7A8580]">{run.status}</span>
+                    </div>
+                    <div className="text-right">
+                      {run.valuation && <span className="text-sm font-semibold text-[#5B8A72] mr-4">{fmt(run.valuation.base)}</span>}
+                      <span className="text-xs text-[#7A8580]">{run.created_at ? new Date(run.created_at).toLocaleString() : ''}</span>
+                    </div>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-[#7A8580]">
+                    <span>KB: {run.kb_version}</span>
+                    {run.inputs?.periodization_mode && <span>Mode: {run.inputs.periodization_mode}</span>}
+                    {run.portfolio_summary?.total_songs_in_spine != null && <span>Songs: {run.portfolio_summary.total_songs_in_spine}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {runModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4">
+            <div className="flex items-center justify-between p-5 border-b border-[rgba(59,77,67,0.08)]">
+              <div className="flex items-center space-x-2">
+                <SparklesIcon className="w-5 h-5 text-[#5B8A72]" />
+                <h3 className="text-base font-semibold text-[#3D4A44]">Run Underwriting Analysis</h3>
+              </div>
+              <button onClick={() => setRunModalOpen(false)} className="text-[#7A8580] hover:text-[#3D4A44]"><XMarkIcon className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[#3D4A44] mb-1">Periodization Mode</label>
+                <select value={runConfig.periodization_mode} onChange={e => setRunConfig(c => ({ ...c, periodization_mode: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent">
+                  <option value="activity">Activity Period (Earned)</option>
+                  <option value="statement">Statement Period (Settlement)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[#3D4A44] mb-1">Granularity</label>
+                <select value={runConfig.granularity} onChange={e => setRunConfig(c => ({ ...c, granularity: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent">
+                  <option value="half">Semi-Annual (H1/H2)</option>
+                  <option value="quarter">Quarterly (Q1-Q4)</option>
+                </select>
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-[#3D4A44]">Include Sync & Print Revenue</label>
+                <button onClick={() => setRunConfig(c => ({ ...c, include_sync: !c.include_sync }))} className={`relative w-10 h-5 rounded-full transition-colors ${runConfig.include_sync ? 'bg-[#5B8A72]' : 'bg-[#D1D5D3]'}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${runConfig.include_sync ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-[#3D4A44]">Use Gross (vs Net)</label>
+                <button onClick={() => setRunConfig(c => ({ ...c, use_gross: !c.use_gross }))} className={`relative w-10 h-5 rounded-full transition-colors ${runConfig.use_gross ? 'bg-[#5B8A72]' : 'bg-[#D1D5D3]'}`}>
+                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${runConfig.use_gross ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3 p-5 border-t border-[rgba(59,77,67,0.08)]">
+              <button onClick={() => setRunModalOpen(false)} className="px-4 py-2 text-sm border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC]">Cancel</button>
+              <button onClick={triggerRun} disabled={running} className="flex items-center space-x-2 px-4 py-2 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] disabled:opacity-50">
+                {running ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <SparklesIcon className="w-4 h-4" />}
+                <span>{running ? 'Running...' : 'Run Analysis'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedSong && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#FAFBF9] rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="p-5 border-b border-[rgba(59,77,67,0.08)] flex items-center justify-between bg-gradient-to-r from-[rgba(91,138,114,0.06)] to-transparent">
+              <div>
+                <h2 className="text-lg font-bold text-[#3D4A44]">{selectedSong.title}</h2>
+                <p className="text-xs text-[#7A8580]">{selectedSong.primary_artist}</p>
+              </div>
+              <button onClick={() => { setSelectedSong(null); setSongDetail(null) }} className="text-[#7A8580] hover:text-[#3D4A44]">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
               {loadingDetail ? (
-                <div className="flex items-center justify-center h-64">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#5B8A72]"></div>
+                <div className="flex items-center justify-center h-48">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#5B8A72]"></div>
                 </div>
               ) : songDetail ? (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-[rgba(91,138,114,0.08)] rounded-lg p-4">
-                      <div className="text-sm text-[#7A8580] mb-1">Final Valuation</div>
-                      <div className="text-xl font-bold text-[#5B8A72]">
-                        {formatCurrency(songDetail.valuation.final_valuation)}
-                      </div>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-[rgba(91,138,114,0.06)] rounded-lg p-3">
+                      <div className="text-[10px] text-[#7A8580] mb-0.5">Valuation</div>
+                      <div className="text-lg font-bold text-[#5B8A72]">{fmt(songDetail.valuation?.final_valuation)}</div>
                     </div>
-                    <div className="bg-[rgba(91,154,110,0.08)] rounded-lg p-4">
-                      <div className="text-sm text-[#7A8580] mb-1">Annual Revenue</div>
-                      <div className="text-xl font-bold text-[#5B9A6E]">
-                        {formatCurrency(songDetail.valuation.annual_revenue)}
-                      </div>
+                    <div className="bg-[rgba(91,154,110,0.06)] rounded-lg p-3">
+                      <div className="text-[10px] text-[#7A8580] mb-0.5">Annual Revenue</div>
+                      <div className="text-lg font-bold text-[#5B9A6E]">{fmt(songDetail.valuation?.annual_revenue)}</div>
                     </div>
-                    <div className="bg-[rgba(90,138,154,0.08)] rounded-lg p-4">
-                      <div className="text-sm text-[#7A8580] mb-1">Total Streams</div>
-                      <div className="text-xl font-bold text-[#5A8A9A]">
-                        {songDetail.streaming_metrics.total_streams?.toLocaleString() || '0'}
-                      </div>
+                    <div className="bg-[rgba(90,138,154,0.06)] rounded-lg p-3">
+                      <div className="text-[10px] text-[#7A8580] mb-0.5">Total Streams</div>
+                      <div className="text-lg font-bold text-[#5A8A9A]">{fmtNum(songDetail.streaming_metrics?.total_streams)}</div>
                     </div>
-                    <div className="bg-[rgba(196,149,107,0.08)] rounded-lg p-4">
-                      <div className="text-sm text-[#7A8580] mb-1">Growth Rate</div>
-                      <div className="text-xl font-bold text-[#C4956B]">
-                        {formatPercentage(songDetail.valuation.growth_rate)}
-                      </div>
+                    <div className="bg-[rgba(196,149,107,0.06)] rounded-lg p-3">
+                      <div className="text-[10px] text-[#7A8580] mb-0.5">Growth Rate</div>
+                      <div className="text-lg font-bold text-[#C4956B]">{fmtPct(songDetail.valuation?.growth_rate)}</div>
                     </div>
                   </div>
-
-                  <div className="bg-[#EEF1EC] rounded-lg p-6">
-                    <h3 className="font-bold text-[#3D4A44] mb-4 flex items-center">
-                      <ChartBarIcon className="w-5 h-5 mr-2 text-[#5B8A72]" />
-                      Valuation Breakdown
-                    </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <div className="text-sm text-[#7A8580]">Streaming Multiple</div>
-                        <div className="font-semibold text-[#3D4A44]">
-                          {formatCurrency(songDetail.valuation.streaming_multiple_value)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-[#7A8580]">Revenue Multiple</div>
-                        <div className="font-semibold text-[#3D4A44]">
-                          {formatCurrency(songDetail.valuation.revenue_multiple_value)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-[#7A8580]">Market Comp</div>
-                        <div className="font-semibold text-[#3D4A44]">
-                          {formatCurrency(songDetail.valuation.market_comp_value)}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-[#7A8580]">Black Box Value</div>
-                        <div className="font-semibold text-[#5B8A72]">
-                          {formatCurrency(songDetail.valuation.black_box_value)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#EEF1EC] rounded-lg p-6">
-                    <h3 className="font-bold text-[#3D4A44] mb-4">Streaming Metrics</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <div className="text-[#7A8580]">Ad-Supported</div>
-                        <div className="font-semibold text-[#3D4A44]">
-                          {songDetail.streaming_metrics.ad_supported_streams?.toLocaleString() || '0'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[#7A8580]">Premium</div>
-                        <div className="font-semibold text-[#3D4A44]">
-                          {songDetail.streaming_metrics.premium_streams?.toLocaleString() || '0'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[#7A8580]">On-Demand</div>
-                        <div className="font-semibold text-[#3D4A44]">
-                          {songDetail.streaming_metrics.on_demand_streams?.toLocaleString() || '0'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[#7A8580]">Audio</div>
-                        <div className="font-semibold text-[#3D4A44]">
-                          {songDetail.streaming_metrics.audio_streams?.toLocaleString() || '0'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[#7A8580]">Video</div>
-                        <div className="font-semibold text-[#3D4A44]">
-                          {songDetail.streaming_metrics.video_streams?.toLocaleString() || '0'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[#7A8580]">Sales</div>
-                        <div className="font-semibold text-[#3D4A44]">
-                          {songDetail.streaming_metrics.song_sales?.toLocaleString() || '0'}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {songDetail.territory_revenues && songDetail.territory_revenues.length > 0 && (
-                    <div className="bg-[#EEF1EC] rounded-lg p-6">
-                      <h3 className="font-bold text-[#3D4A44] mb-4">Top Territories</h3>
-                      <div className="space-y-2">
-                        {songDetail.territory_revenues.slice(0, 5).map((territory) => (
-                          <div key={territory.territory_code} className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-medium text-[#3D4A44]">{territory.territory_code}</span>
-                              <span className="text-sm text-[#7A8580]">{territory.territory_name}</span>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-semibold text-[#3D4A44]">
-                                {formatCurrency(territory.total_revenue)}
-                              </div>
-                              <div className="text-xs text-[#7A8580]">
-                                {territory.total_streams.toLocaleString()} streams
-                              </div>
-                            </div>
-                          </div>
-                        ))}
+                  {songDetail.valuation && (
+                    <div className="bg-[#EEF1EC] rounded-lg p-4">
+                      <h3 className="text-xs font-bold text-[#3D4A44] mb-3">Valuation Breakdown</h3>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div><span className="text-[#7A8580]">Streaming Multiple</span><div className="font-semibold">{fmt(songDetail.valuation.streaming_multiple_value)}</div></div>
+                        <div><span className="text-[#7A8580]">Revenue Multiple</span><div className="font-semibold">{fmt(songDetail.valuation.revenue_multiple_value)}</div></div>
+                        <div><span className="text-[#7A8580]">Market Comp</span><div className="font-semibold">{fmt(songDetail.valuation.market_comp_value)}</div></div>
+                        <div><span className="text-[#7A8580]">Black Box</span><div className="font-semibold text-[#5B8A72]">{fmt(songDetail.valuation.black_box_value)}</div></div>
                       </div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="text-center text-[#7A8580]">No detail available</div>
+                <div className="text-center text-sm text-[#7A8580]">No detail available</div>
               )}
             </div>
           </div>

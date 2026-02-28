@@ -1,0 +1,161 @@
+{
+  "kb_name": "cadence_institutional_underwriting_kb",
+  "kb_version": "2026-02-27",
+  "principles": {
+    "separate_time_axes": ["activity", "statement", "cash"],
+    "earned_vs_cash": "Earned series is activity-based; cash series applies advances/reserves/recoupment and payment postings.",
+    "immutability": "Raw files are immutable; all canonical transforms are reproducible and versioned.",
+    "provenance_required": true
+  },
+  "enums": {
+    "asset_type": ["publishing_work", "master_recording"],
+    "right_type": ["mechanical", "performance", "sync", "print_lyrics", "neighboring_rights", "other"],
+    "channel": ["streaming", "download", "broadcast", "live", "av", "ugc", "social", "physical", "other"],
+    "accounting_flag": ["current", "retro_adjustment", "withholding", "reserve_movement", "recoupment", "chargeback", "hold"],
+    "currency_code": "ISO4217",
+    "territory_code": "ISO3166_1_alpha2"
+  },
+  "normalization": {
+    "territory_dictionary": {
+      "US": ["US", "United States", "UNITED STATES", "USA"],
+      "GB": ["GB", "United Kingdom", "UNITED KINGDOM", "UK"],
+      "FR": ["FR", "France", "FRANCE"],
+      "CA": ["CA", "Canada", "CANADA"],
+      "DE": ["DE", "Germany", "GERMANY"],
+      "AU": ["AU", "Australia", "AUSTRALIA"],
+      "JP": ["JP", "Japan", "JAPAN"],
+      "BR": ["BR", "Brazil", "BRAZIL"],
+      "MX": ["MX", "Mexico", "MEXICO"],
+      "SE": ["SE", "Sweden", "SWEDEN"],
+      "NL": ["NL", "Netherlands", "NETHERLANDS"],
+      "IT": ["IT", "Italy", "ITALY"],
+      "ES": ["ES", "Spain", "SPAIN"],
+      "KR": ["KR", "South Korea", "SOUTH KOREA"],
+      "IN": ["IN", "India", "INDIA"],
+      "NG": ["NG", "Nigeria", "NIGERIA"],
+      "ZA": ["ZA", "South Africa", "SOUTH AFRICA"],
+      "NZ": ["NZ", "New Zealand", "NEW ZEALAND"],
+      "IE": ["IE", "Ireland", "IRELAND"],
+      "NO": ["NO", "Norway", "NORWAY"],
+      "DK": ["DK", "Denmark", "DENMARK"],
+      "FI": ["FI", "Finland", "FINLAND"],
+      "AT": ["AT", "Austria", "AUSTRIA"],
+      "CH": ["CH", "Switzerland", "SWITZERLAND"],
+      "BE": ["BE", "Belgium", "BELGIUM"],
+      "PL": ["PL", "Poland", "POLAND"],
+      "PT": ["PT", "Portugal", "PORTUGAL"],
+      "AR": ["AR", "Argentina", "ARGENTINA"],
+      "CL": ["CL", "Chile", "CHILE"],
+      "CO": ["CO", "Colombia", "COLOMBIA"],
+      "PH": ["PH", "Philippines", "PHILIPPINES"],
+      "ID": ["ID", "Indonesia", "INDONESIA"],
+      "TH": ["TH", "Thailand", "THAILAND"],
+      "MY": ["MY", "Malaysia", "MALAYSIA"],
+      "SG": ["SG", "Singapore", "SINGAPORE"],
+      "HK": ["HK", "Hong Kong", "HONG KONG"],
+      "TW": ["TW", "Taiwan", "TAIWAN"],
+      "IL": ["IL", "Israel", "ISRAEL"],
+      "TR": ["TR", "Turkey", "TURKEY"],
+      "RU": ["RU", "Russia", "RUSSIA"],
+      "CN": ["CN", "China", "CHINA"],
+      "WW": ["WW", "Worldwide", "WORLDWIDE", "Global", "GLOBAL"]
+    },
+    "title_normalization": "upper_trim_strip_punct_collapse_ws",
+    "party_normalization": "upper_trim_strip_punct",
+    "currency_policy": {
+      "base_currency": "configurable_per_organization",
+      "fx_timestamp_rule_default": "average_over_activity_period",
+      "reversal_fx_rule": "reuse_original_fx"
+    }
+  },
+  "fuzzy_matching": {
+    "weights": {"title": 60, "parties": 30, "version": 10},
+    "thresholds": {"auto": 90, "review": 75},
+    "gap_safe_ratio": "per_period_ratio = (y_t / y_prev)^(1/gap_periods)"
+  },
+  "classification": {
+    "right_type_rules": [
+      {"if_income_type_contains": ["Synch", "Synchronisation", "Synchronization", "Sync"], "right_type": "sync"},
+      {"if_income_type_contains": ["Print", "Lyrics", "Lyric"], "right_type": "print_lyrics"},
+      {"if_income_type_contains": ["Mechanical", "Mech"], "right_type": "mechanical"},
+      {"if_income_type_contains": ["Performance", "Perf", "PRO"], "right_type": "performance"},
+      {"if_income_type_contains": ["Neighboring", "Related Rights"], "right_type": "neighboring_rights"}
+    ],
+    "channel_rules": [
+      {"if_source_contains": ["Spotify", "Apple Music", "YouTube", "TikTok", "Amazon Music", "Deezer", "Tidal", "Pandora", "SoundCloud"], "channel": "streaming"},
+      {"if_income_type_contains": ["Download", "iTunes Download", "Digital Download"], "channel": "download"},
+      {"if_income_type_contains": ["Radio", "TV", "Film", "Broadcast", "Television"], "channel": "broadcast"},
+      {"if_income_type_contains": ["Live", "Concert", "Festival"], "channel": "live"},
+      {"if_income_type_contains": ["AV", "Audio Visual", "Audiovisual"], "channel": "av"},
+      {"if_income_type_contains": ["UGC", "User Generated"], "channel": "ugc"},
+      {"if_income_type_contains": ["Social", "Instagram", "Facebook", "Reels"], "channel": "social"},
+      {"if_income_type_contains": ["Physical", "CD", "Vinyl", "Cassette"], "channel": "physical"}
+    ],
+    "flag_rules": [
+      {"if_text_contains": ["ADJUST", "CORRECTION", "RETRO", "RETROACTIVE", "AMENDMENT"], "flag": "retro_adjustment"},
+      {"if_text_contains": ["WITHHOLD", "TAX", "WHT"], "flag": "withholding"},
+      {"if_text_contains": ["RESERVE", "HOLDBACK"], "flag": "reserve_movement"},
+      {"if_text_contains": ["RECOUP", "RECOUPMENT"], "flag": "recoupment"},
+      {"if_text_contains": ["CHARGEBACK", "CHARGE BACK", "REVERSAL"], "flag": "chargeback"}
+    ]
+  },
+  "controls": {
+    "control_totals": [
+      "sum(amount_gross) == Statement.totals.gross_payable",
+      "sum(withholding_tax) == Statement.totals.withholding_tax",
+      "sum(amount_net) == Statement.totals.net_payable"
+    ],
+    "share_integrity": [
+      "sum(work_share_pct by work/right/territory) == 100%"
+    ],
+    "three_way_match": [
+      "statement_totals == line_sums",
+      "line_sums == ledger_entries",
+      "ledger_entries == payment_register"
+    ],
+    "rounding_tolerance_cents": 1
+  },
+  "analytics": {
+    "decay": {
+      "exp_fit": "y_t = y0 * exp(-k*t)",
+      "k_estimator": "k = -sum(t * ln(y/y0)) / sum(t^2)",
+      "half_life": "ln(2)/k",
+      "r2_log": "1 - SSE(log(y),log(yhat))/SST(log(y))",
+      "volatility": "stdev(log(per_period_ratio))",
+      "min_data_points": 3
+    },
+    "concentration": {
+      "top_n": [1, 3, 5, 10],
+      "hhi": "sum(share^2)"
+    },
+    "scenario_matrix": {
+      "exclude_sync_print": true,
+      "maturity_cutoff_quarters_default": 2,
+      "decay_bands": {"downside": 1.25, "base": 1.0, "upside": 0.75}
+    }
+  },
+  "valuation": {
+    "methods": ["multiplier", "dcf"],
+    "dcf": {
+      "horizon_years": 10,
+      "terminal_method": "exit_multiple",
+      "discount_rate_bands": {"low": 0.09, "base": 0.11, "high": 0.14},
+      "terminal_multiple": {"low": 4, "base": 6, "high": 8}
+    },
+    "multipliers": {
+      "publishing_nps": {"low": 10, "base": 13, "high": 16},
+      "masters_net": {"low": 6, "base": 9, "high": 12}
+    },
+    "multiple_adjustments": {
+      "high_concentration_penalty": -0.15,
+      "high_volatility_penalty": -0.10,
+      "low_r2_penalty": -0.10,
+      "dispute_penalty": -0.20,
+      "missing_periods_penalty": -0.05,
+      "strong_growth_bonus": 0.10
+    },
+    "tax_notes": {
+      "us_section_197": "15-year amortization for acquired section 197 intangibles (buyer-side modeling)."
+    }
+  }
+}

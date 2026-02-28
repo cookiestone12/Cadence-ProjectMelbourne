@@ -1163,6 +1163,10 @@ class RoyaltyStatement(Base):
     reported_net = Column(Float, nullable=True)
     reconciliation_result = Column(JSON, nullable=True)
 
+    opening_balance = Column(Float, nullable=True)
+    closing_balance = Column(Float, nullable=True)
+    reconciliation_details = Column(JSON, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -2095,3 +2099,34 @@ class ClientSharedContact(Base):
     creative_contact = relationship("CreativeContact")
     shared_with_user = relationship("User", foreign_keys=[shared_with_user_id])
     shared_by_user = relationship("User", foreign_keys=[shared_by_user_id])
+
+
+class UnderwritingRun(Base):
+    __tablename__ = "underwriting_runs"
+    __table_args__ = (
+        Index('ix_underwriting_runs_org_id', 'organization_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    kb_version = Column(String, nullable=False)
+    status = Column(String, default="RUNNING")
+
+    scope_creator_id = Column(Integer, nullable=True)
+
+    inputs = Column(JSON, nullable=False)
+    outputs = Column(JSON, nullable=True)
+
+    spine_data = Column(JSON, nullable=True)
+    decay_data = Column(JSON, nullable=True)
+    concentration_data = Column(JSON, nullable=True)
+    projection_data = Column(JSON, nullable=True)
+    valuation_data = Column(JSON, nullable=True)
+    exceptions = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    organization = relationship("Organization")
+    created_by = relationship("User")
