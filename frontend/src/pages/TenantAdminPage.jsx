@@ -132,7 +132,7 @@ export default function TenantAdminPage() {
   }
 
   return (
-    <div className="p-4 lg:p-8 max-w-7xl mx-auto overflow-hidden">
+    <div className="p-4 lg:p-8 max-w-7xl mx-auto">
       <div className="mb-8">
         <h1 className="text-[28px] font-bold text-[#3D4A44] truncate">Organization Admin</h1>
         <p className="text-[15px] text-[#7A8580] mt-1">Manage your team, branding, and client assignments</p>
@@ -1059,7 +1059,7 @@ function AuditLogTab() {
 
   return (
     <div>
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
         <select
           value={filterAction}
           onChange={(e) => { setFilterAction(e.target.value); setOffset(0) }}
@@ -1108,8 +1108,8 @@ function AuditLogTab() {
           <p className="text-sm mt-1">Actions like creating, editing, or deleting items will appear here.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <table className="w-full">
+        <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
+          <table className="w-full min-w-[700px]">
             <thead className="bg-[#EEF1EC]">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">When</th>
