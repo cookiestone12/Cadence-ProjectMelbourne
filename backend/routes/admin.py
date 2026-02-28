@@ -365,6 +365,85 @@ def update_organization(
         creator_count=len(org.creators)
     )
 
+@router.delete("/organizations/{org_id}")
+def delete_organization(
+    org_id: int,
+    confirm: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin)
+):
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Pass ?confirm=true to permanently delete this organization and all its data")
+
+    org_name = org.display_name or org.name
+
+    from sqlalchemy import text
+    tables_with_org_id = [
+        "underwriting_runs",
+        "client_shared_contacts",
+        "shared_contact_links",
+        "creative_contacts",
+        "storage_scan_results",
+        "storage_scan_batches",
+        "creator_storage_links",
+        "audio_analysis_results",
+        "brief_builder_queries",
+        "registration_reports",
+        "sync_report_templates",
+        "payout_batch_items",
+        "payout_batches",
+        "royalty_payables",
+        "royalty_ledger_entries",
+        "royalty_allocations",
+        "royalty_transactions",
+        "royalty_statement_lines",
+        "royalty_statements",
+        "royalty_payments",
+        "royalty_fees",
+        "royalty_advances",
+        "expense_records",
+        "placement_contacts",
+        "placements",
+        "audit_logs",
+        "action_items",
+        "notification_preferences",
+        "notifications",
+        "document_attachments",
+        "rights_splits",
+        "contract_assets",
+        "contract_parties",
+        "contracts",
+        "song_credits",
+        "valuation_calculations",
+        "streaming_metrics",
+        "works_folder_items",
+        "works_folders",
+        "release_tracks",
+        "releases",
+        "works",
+        "songs",
+        "creators",
+        "organization_members",
+    ]
+
+    try:
+        for table_name in tables_with_org_id:
+            db.execute(text(f"DELETE FROM {table_name} WHERE organization_id = :org_id"), {"org_id": org_id})
+
+        db.delete(org)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        import logging
+        logging.getLogger("cadence").error(f"Failed to delete organization {org_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete organization: {str(e)}")
+
+    return {"message": f"Organization '{org_name}' and all its data have been permanently deleted"}
+
 @router.post("/organizations/{org_id}/members")
 def add_member_to_org(
     org_id: int,

@@ -35,6 +35,7 @@ export default function AdminDashboard() {
   const [configuringIntegration, setConfiguringIntegration] = useState(null)
   const [platformStats, setPlatformStats] = useState(null)
   const [resetPasswordUser, setResetPasswordUser] = useState(null)
+  const [deletingOrg, setDeletingOrg] = useState(null)
 
   useEffect(() => {
     loadData()
@@ -75,6 +76,16 @@ export default function AdminDashboard() {
       setUsers(users.filter(u => u.id !== userId))
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to delete user')
+    }
+  }
+
+  const handleDeleteOrg = async (orgId) => {
+    try {
+      await axios.delete(`/api/admin/organizations/${orgId}?confirm=true`)
+      setOrganizations(organizations.filter(o => o.id !== orgId))
+      setDeletingOrg(null)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to delete organization')
     }
   }
 
@@ -439,8 +450,16 @@ export default function AdminDashboard() {
                         setShowOrgModal(true)
                       }}
                       className="p-1 text-[#7A8580] hover:text-[#3D4A44]"
+                      title="Edit organization"
                     >
                       <PencilIcon className="w-5 h-5" />
+                    </button>
+                    <button
+                      onClick={() => setDeletingOrg(org)}
+                      className="p-1 text-[#C47068] hover:text-[#A45850]"
+                      title="Delete organization"
+                    >
+                      <TrashIcon className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
@@ -605,6 +624,14 @@ export default function AdminDashboard() {
             setShowOrgModal(false)
             loadData()
           }}
+        />
+      )}
+
+      {deletingOrg && (
+        <DeleteOrgModal
+          org={deletingOrg}
+          onClose={() => setDeletingOrg(null)}
+          onConfirm={() => handleDeleteOrg(deletingOrg.id)}
         />
       )}
 
@@ -916,6 +943,69 @@ function OrgModal({ org, onClose, onSave }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+function DeleteOrgModal({ org, onClose, onConfirm }) {
+  const [confirmText, setConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const orgName = org.display_name || org.name
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    await onConfirm()
+    setDeleting(false)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+      <div className="bg-[#FAFBF9] rounded-xl shadow-2xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+        <div className="p-6 border-b border-[rgba(59,77,67,0.08)]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold text-[#C47068]">Delete Organization</h2>
+            <button onClick={onClose} className="text-[#7A8580] hover:text-[#3D4A44]">
+              <XMarkIcon className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+        <div className="p-6">
+          <div className="bg-[rgba(196,112,104,0.08)] border border-[rgba(196,112,104,0.2)] rounded-lg p-4 mb-4">
+            <p className="text-sm text-[#C47068] font-medium mb-1">This action is permanent and cannot be undone.</p>
+            <p className="text-sm text-[#7A8580]">
+              All data associated with <span className="font-semibold text-[#3D4A44]">{orgName}</span> will be permanently deleted, including members, creators, songs, works, releases, contracts, placements, royalty data, and all other records.
+            </p>
+          </div>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-[#3D4A44] mb-1">
+              Type <span className="font-semibold">{orgName}</span> to confirm
+            </label>
+            <input
+              type="text"
+              value={confirmText}
+              onChange={e => setConfirmText(e.target.value)}
+              className="w-full px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#C47068] focus:border-transparent"
+              placeholder={orgName}
+              autoFocus
+            />
+          </div>
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC]"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={confirmText !== orgName || deleting}
+              className="px-4 py-2 bg-[#C47068] text-white rounded-lg hover:bg-[#A45850] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {deleting ? 'Deleting...' : 'Delete Organization'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
