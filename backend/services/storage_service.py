@@ -39,7 +39,11 @@ def encrypt_token(token: str) -> str:
 
 def decrypt_token(encrypted: str) -> str:
     f = get_fernet()
-    return f.decrypt(encrypted.encode()).decode()
+    try:
+        return f.decrypt(encrypted.encode()).decode()
+    except Exception as e:
+        logger.error(f"Token decryption failed: {e}")
+        raise ValueError("Stored credentials could not be decrypted. Please disconnect and reconnect your account in Settings.")
 
 
 def get_dropbox_auth_url(org_id: int, redirect_uri: str = None) -> dict:
