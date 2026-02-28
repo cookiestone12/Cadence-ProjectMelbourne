@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { ArrowDownTrayIcon, ChevronRightIcon, LockClosedIcon } from '@heroicons/react/24/outline'
 
-const VERSION = '2.5'
+const VERSION = '2.6'
 const LAST_UPDATED = 'February 2026'
 
 const sections = [
@@ -1088,10 +1088,13 @@ export default function UserGuidePage() {
         {/* ===== 21. VALUATION ===== */}
         <SectionHeading id="valuation">21. Catalog Valuation</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          The Catalog Valuation tool estimates your catalog's financial value using industry-standard methodologies. It provides actionable insights for business planning, investment discussions, and catalog transactions.
+          The Catalog Valuation page provides both traditional valuation estimates and an institutional-grade Underwriting Engine powered by your ingested royalty statement data. It offers actionable insights for business planning, investment discussions, and catalog transactions.
         </p>
 
-        <SubHeading>Valuation Methodologies</SubHeading>
+        <SubHeading>Traditional Valuation Methodologies</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Before running an underwriting analysis, the page displays catalog value estimates using four established methodologies:
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
           <FeatureCard title="Streaming Multiple" description="Calculates value based on annual streaming revenue multiplied by an industry-standard factor." />
           <FeatureCard title="Revenue Multiple" description="Applies a multiple to total annual revenue across all sources (streaming, sync, mechanical, etc.)." />
@@ -1099,11 +1102,64 @@ export default function UserGuidePage() {
           <FeatureCard title="Black Box Algorithm" description="Proprietary weighted calculation considering streaming data, revenue, growth rates, territory diversification, and catalog depth." />
         </div>
 
+        <SubHeading>Institutional Underwriting Engine</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Underwriting Engine is a statement-driven analytics layer that sits on top of your ingested royalty data. It produces institutional-grade valuations by building a song-by-period revenue spine, fitting exponential decay curves, computing concentration metrics, and generating forward projections with valuation bands. Click the "Run Underwriting" button to trigger a new analysis.
+        </p>
+
+        <SubHeading>Running an Underwriting Analysis</SubHeading>
+        <StepList steps={[
+          'Navigate to the Catalog Valuation page from the sidebar.',
+          'Click the "Run Underwriting" button in the top-right corner.',
+          'Configure the analysis options in the modal: Periodization Mode (Activity or Statement period), Granularity (Semi-Annual or Quarterly), whether to include Sync & Print revenue, and whether to use Gross or Net amounts.',
+          'Click "Run Analysis" to start. The engine will process all matched royalty statement lines for your organization.',
+          'Once complete, the dashboard will update with the full underwriting results across all tabs.',
+        ]} />
+        <Tip>You need processed royalty statements with matched assets before running an underwriting analysis. Ingest and match your statements in the Royalties section first.</Tip>
+
+        <SubHeading>Dashboard Tabs</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          Once an underwriting analysis has been run, the dashboard displays results across six tabs:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Overview" description="Summary cards showing catalog value (low/base/high bands), annual revenue with publisher/master split, portfolio half-life, and HHI concentration. Includes side-by-side Multiplier and DCF valuation panels plus stability signals." />
+          <FeatureCard title="Revenue Spine" description="A pivoted song-by-period table showing the top 25 songs across all time periods with per-period net revenue and totals. This is the foundational data table that drives all downstream analytics." />
+          <FeatureCard title="Decay Analytics" description="Portfolio-level decay rate and half-life, a half-life distribution chart showing how songs cluster by decay speed, and a per-song table with decay rate (k), half-life, R-squared fit quality, volatility, and CAGR." />
+          <FeatureCard title="Concentration" description="Trend charts showing Top-1, Top-3, Top-5 revenue share and HHI (Herfindahl-Hirschman Index) over time periods. High concentration indicates catalog revenue depends heavily on a few songs." />
+          <FeatureCard title="Projections" description="Forward revenue projections across three scenarios (Downside, Base, Upside) displayed as an area chart and a year-by-year table. Scenarios apply different decay rate multipliers to model optimistic and pessimistic outcomes." />
+          <FeatureCard title="Run History" description="A list of all past underwriting runs with timestamps, status indicators, KB version, and blended valuations. Click any run to load its full results into the dashboard." />
+        </div>
+
+        <SubHeading>Valuation Methods</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The underwriting engine produces valuations using two institutional methods, then blends them:
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 my-4">
+          <FeatureCard title="Multiplier Valuation" description="Applies industry-standard multiplier bands to annual revenue: Publishing at 10x/13x/16x and Masters at 6x/9x/12x. Adjusted for concentration risk, volatility, and catalog stability signals." />
+          <FeatureCard title="DCF Valuation" description="Discounted Cash Flow analysis using a 10-year projection horizon with three discount rates (9%, 11%, 14%). Projects forward using fitted decay parameters from your actual revenue history." />
+        </div>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The final Blended Valuation is the average of the Multiplier and DCF methods, presented as low/base/high bands to reflect the range of reasonable values.
+        </p>
+
+        <SubHeading>Key Metrics Explained</SubHeading>
+        <KeyValue label="Half-Life">The number of periods it takes for a song's revenue to decline to 50% of its peak. Longer half-lives indicate more durable catalog value.</KeyValue>
+        <KeyValue label="Decay Rate (k)">The exponential decay constant. A higher k means faster revenue decline. Fitted using the formula y(t) = y0 * exp(-k*t).</KeyValue>
+        <KeyValue label="R-Squared">How well the exponential decay curve fits the actual data. Values above 0.7 indicate a strong fit; below 0.4 suggests irregular revenue patterns.</KeyValue>
+        <KeyValue label="HHI">Herfindahl-Hirschman Index measuring revenue concentration. Values above 0.25 (25%) indicate high concentration risk where a few songs dominate earnings.</KeyValue>
+        <KeyValue label="CAGR">Compound Annual Growth Rate of a song's revenue. Positive values indicate growing revenue; negative values indicate decline.</KeyValue>
+        <KeyValue label="Volatility">Standard deviation of period-over-period revenue changes. High volatility can indicate inconsistent or sync-driven revenue.</KeyValue>
+
+        <SubHeading>Stability Signals</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Overview tab displays stability signal badges that flag potential risks in your catalog. Green badges indicate healthy signals, while red badges flag issues like high concentration, revenue volatility, or rapid decay that may affect valuation multiples.
+        </p>
+
         <SubHeading>Valuation Report</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          The final valuation is a weighted average of all four methodologies. You can download a branded Excel report containing the full valuation breakdown, methodology details, and supporting data for use in presentations and negotiations.
+          You can download a branded Excel report containing the full valuation breakdown, methodology details, and supporting data for use in presentations and negotiations. Click the "Export" button in the top-right corner.
         </p>
-        <Tip>Run valuations periodically to track how your catalog's estimated value changes over time as you add new content and grow revenue.</Tip>
+        <Tip>Run underwriting analyses periodically to track how your catalog's estimated value and decay characteristics change over time as you add new content and process new royalty statements.</Tip>
 
         {/* ===== 22. SETTINGS ===== */}
         <SectionHeading id="settings">22. Settings & Integrations</SectionHeading>
@@ -1237,16 +1293,21 @@ export default function UserGuidePage() {
           {[
             ['Audio Analysis', 'AI-powered processing of audio files to extract BPM, key, loudness, and mood/texture/sync tags for catalog enrichment.'],
             ['Advance', 'An upfront payment to a creator or rights holder, recouped from future royalty earnings before additional payments are made.'],
+            ['CAGR', 'Compound Annual Growth Rate — the annualized rate of revenue change for a song, accounting for compounding over multiple periods.'],
             ['Brief Builder', 'An AI-powered tool that matches songs in your catalog to sync brief descriptions using natural language and structured filters.'],
             ['Cloud Storage Integration', 'Connections to Dropbox or Google Drive that allow linking audio files to catalog entries without hosting files locally.'],
             ['Creative Directory', 'A contact management system for industry collaborators (producers, engineers, A&R, etc.) separate from the Creator Roster.'],
             ['Cross-Collateralization', 'A contract provision allowing revenue from multiple assets to be combined for the purpose of recouping a single advance.'],
+            ['DCF Valuation', 'Discounted Cash Flow — a valuation method that projects future revenue using decay parameters and discounts it back to present value at rates of 9%, 11%, or 14%.'],
+            ['Decay Rate (k)', 'The exponential decay constant measuring how quickly a song\'s revenue declines over time. Fitted from the formula y(t) = y0 * exp(-k*t).'],
             ['Demo', 'A work type indicating a song with lyrics and melodies, as opposed to a purely instrumental track.'],
             ['Distribution Readiness', 'A validation status indicating whether a release has all required metadata, identifiers, artwork, and legal clearances for distribution.'],
             ['Email Digest', 'An automated, scheduled email summarizing your pending action items, grouped by priority level, sent at your chosen frequency.'],
             ['Fee', 'A charge deducted from earnings for services such as management, administration, distribution, sync licensing, or legal representation.'],
             ['Fuzzy Matching', 'AI-powered comparison of file names against catalog entries, assigning confidence levels (HIGH, MEDIUM, LOW, NONE) based on similarity.'],
+            ['Half-Life', 'The number of periods it takes for a song\'s revenue to decline to 50% of its peak value. Calculated as ln(2)/k from the fitted decay curve.'],
             ['Health Score', 'A percentage score indicating how complete a song\'s metadata and documentation is, calculated from a weighted checklist.'],
+            ['HHI', 'Herfindahl-Hirschman Index — a concentration metric calculated by summing squared revenue shares. Values above 0.25 indicate high concentration risk.'],
             ['IPI', 'Interested Party Information — a unique number identifying a rights holder in royalty collection systems.'],
             ['ISRC', 'International Standard Recording Code — a unique identifier for a specific recording of a song.'],
             ['ISWC', 'International Standard Musical Work Code — a unique identifier for a musical composition (work).'],
@@ -1255,6 +1316,7 @@ export default function UserGuidePage() {
             ['Matching Console', 'The two-pane interface for reviewing and confirming how statement lines connect to catalog assets (songs, works, releases).'],
             ['Mechanical Rights', 'Rights related to the reproduction of a musical composition (e.g., physical copies, downloads, interactive streams).'],
             ['Multi-Tenant', 'An architecture where one instance of the software serves multiple organizations, with complete data isolation between them.'],
+            ['Multiplier Valuation', 'A valuation method that applies industry-standard revenue multiples (publishing: 10/13/16x, masters: 6/9/12x) to annual earnings, adjusted for catalog risk factors.'],
             ['Payable', 'The net amount owed to a payee after earnings have been reduced by fees and advance recoupment.'],
             ['Payout Batch', 'A grouped set of payment items that can be reviewed, approved, and marked as paid together.'],
             ['Performance Rights', 'Rights related to the public performance of a musical composition (radio, live venues, streaming).'],
@@ -1267,6 +1329,7 @@ export default function UserGuidePage() {
             ['Registration Report', 'A branded report listing songs and works for PRO registration, exportable as PDF or CSV and emailable to administrators.'],
             ['Release', 'A package of recordings (single, EP, album, compilation) delivered to streaming platforms and retailers.'],
             ['Reprocessing', 'The act of re-running the processing engine on a previously processed statement, creating reversal entries first to maintain audit integrity.'],
+            ['Revenue Spine', 'The foundational song-by-period revenue table produced by the underwriting engine, showing net revenue for each song across each time period.'],
             ['Reversal Entry', 'A ledger entry that negates a prior entry, created during reprocessing to correct allocations while preserving the full audit trail.'],
             ['Rights Split', 'The percentage allocation of specific rights types (master, publishing, sync, etc.) among rights holders for a given asset.'],
             ['Royalty Statement', 'A financial report from a PRO, DSP, or distributor detailing royalty earnings for a specific period.'],
@@ -1276,7 +1339,11 @@ export default function UserGuidePage() {
             ['Storage Scan', 'Per-creator folder linking and AI-powered recursive file scanning that matches audio files to catalog entries using fuzzy matching.'],
             ['Sync Report', 'A customizable report summarizing sync placement activity, filterable by client, status, and date range, exportable as PDF or CSV.'],
             ['Sync Rights', 'Synchronization rights — the right to use a musical composition in timed relation to visual media (film, TV, ads, games).'],
+            ['Stability Signals', 'Risk indicators flagged by the underwriting engine, such as high concentration, rapid decay, or revenue volatility, which may adjust valuation multiples.'],
+            ['Underwriting Engine', 'An institutional-grade analytics engine that builds a revenue spine from royalty statements, fits decay curves, computes concentration metrics, and produces DCF and multiplier valuations.'],
+            ['Underwriting Run', 'A single execution of the underwriting engine with a specific configuration, producing a snapshot of the catalog\'s valuation and analytics.'],
             ['UPC/EAN', 'Universal Product Code / European Article Number — a barcode identifier for a release (album, EP, single).'],
+            ['Volatility', 'A measure of revenue inconsistency, calculated as the standard deviation of period-over-period log revenue ratios for a song.'],
             ['Work', 'A musical composition — the underlying song as written, separate from any particular recording of it.'],
           ].map(([term, definition]) => (
             <div key={term} className="flex gap-3">
