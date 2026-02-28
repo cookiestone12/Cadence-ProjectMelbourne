@@ -51,7 +51,7 @@ export default function ProcessingInboxPanel({ orgId, onSelectStatement }) {
     .filter(s => s.count > 0)
 
   return (
-    <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-6 border border-[rgba(59,77,67,0.08)]">
+    <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-6 border border-[rgba(59,77,67,0.08)] overflow-hidden">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-lg">

@@ -230,7 +230,7 @@ export default function PayablesTab({ orgId }) {
           <p className="text-sm text-[#7A8580] mt-1">Payees with outstanding balances</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[600px]">
             <thead className="bg-[#EEF1EC]">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Payee Name</th>
@@ -300,14 +300,14 @@ export default function PayablesTab({ orgId }) {
       </div>
 
       <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)]">
-        <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-6 border-b border-[rgba(59,77,67,0.08)]">
           <div>
             <h3 className="text-lg font-semibold text-[#3D4A44]">Payout Batches</h3>
             <p className="text-sm text-[#7A8580] mt-1">Manage payout batches for bulk payments</p>
           </div>
           <button
             onClick={() => setShowCreateBatch(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium shrink-0"
           >
             <PlusIcon className="w-4 h-4" /> Create Batch
           </button>
@@ -318,7 +318,7 @@ export default function PayablesTab({ orgId }) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[600px]">
               <thead className="bg-[#EEF1EC]">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Batch Name</th>

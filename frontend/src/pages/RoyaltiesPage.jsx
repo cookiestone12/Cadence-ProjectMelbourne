@@ -1893,9 +1893,9 @@ function ProcessingTab({ orgId }) {
       </div>
 
       <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)]">
-        <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
-          <h3 className="text-lg font-semibold text-[#3D4A44]">Recent Statements</h3>
-          <div className="flex items-center gap-1 bg-white/60 backdrop-blur-xl rounded-[14px] p-1 border border-[rgba(59,77,67,0.08)]">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-6 border-b border-[rgba(59,77,67,0.08)]">
+          <h3 className="text-lg font-semibold text-[#3D4A44] shrink-0">Recent Statements</h3>
+          <div className="flex items-center gap-1 bg-white/60 backdrop-blur-xl rounded-[14px] p-1 border border-[rgba(59,77,67,0.08)] overflow-x-auto max-w-full">
             {STATUS_OPTIONS.map(opt => (
               <button
                 key={opt.key}
@@ -2008,14 +2008,14 @@ export default function RoyaltiesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F7F4] p-6 lg:p-8">
+    <div className="min-h-screen bg-[#F5F7F4] p-4 sm:p-6 lg:p-8 overflow-x-hidden">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
           <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Royalties</h1>
           <p className="text-[17px] text-[#7A8580] mt-1">Manage statements, earnings, and payments</p>
         </div>
 
-        <div className="flex items-center gap-1 mb-6 bg-white/60 backdrop-blur-xl rounded-[14px] p-1 border border-[rgba(59,77,67,0.08)] w-fit">
+        <div className="flex items-center gap-1 mb-6 bg-white/60 backdrop-blur-xl rounded-[14px] p-1 border border-[rgba(59,77,67,0.08)] overflow-x-auto">
           {TABS.map(tab => {
             const Icon = tab.icon
             return (
