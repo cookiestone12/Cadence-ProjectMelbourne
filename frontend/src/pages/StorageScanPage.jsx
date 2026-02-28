@@ -54,8 +54,7 @@ function ProviderIcon({ provider, className = 'w-5 h-5' }) {
 }
 
 export default function StorageScanPage() {
-  const user = JSON.parse(localStorage.getItem('user') || '{}')
-  const orgId = user.organization_id
+  const [orgId, setOrgId] = useState(null)
 
   const [activeTab, setActiveTab] = useState('links')
   const [toast, setToast] = useState(null)
@@ -86,6 +85,18 @@ export default function StorageScanPage() {
 
   const [analyzeLoading, setAnalyzeLoading] = useState(false)
   const [analyzeStatus, setAnalyzeStatus] = useState(null)
+
+  useEffect(() => {
+    const fetchOrg = async () => {
+      try {
+        const res = await axios.get('/api/organizations/current', getAuthHeaders())
+        setOrgId(res.data?.id)
+      } catch (err) {
+        console.error('Failed to fetch org:', err)
+      }
+    }
+    fetchOrg()
+  }, [])
 
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type })
@@ -146,9 +157,10 @@ export default function StorageScanPage() {
   }, [orgId, selectedBatch])
 
   useEffect(() => {
+    if (!orgId) return
     if (activeTab === 'links') loadLinks()
     if (activeTab === 'results') { loadBatches(); loadResults() }
-  }, [activeTab, loadLinks, loadBatches, loadResults])
+  }, [orgId, activeTab, loadLinks, loadBatches, loadResults])
 
   useEffect(() => {
     if (activeTab === 'results') loadResults()

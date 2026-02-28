@@ -39,7 +39,16 @@ export default function FolderPicker({ isOpen, onClose, onSelect, provider = 'DR
       setCurrentName(folderName || '')
     } catch (err) {
       console.error('Error browsing folders:', err)
-      setError(err.response?.data?.detail || 'Failed to load folders')
+      const detail = err.response?.data?.detail
+      if (detail) {
+        setError(detail)
+      } else if (err.response?.status === 401) {
+        setError('Session expired. Please log in again.')
+      } else if (err.response?.status >= 500) {
+        setError('Server error. Please try again or reconnect your account in Settings.')
+      } else {
+        setError('Failed to load folders. Please check your connection in Settings > Integrations.')
+      }
       setFolderContents([])
     } finally {
       setLoading(false)
