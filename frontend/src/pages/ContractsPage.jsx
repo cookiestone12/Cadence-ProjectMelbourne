@@ -194,6 +194,10 @@ function ContractsPageInner() {
   const [uploadLoading, setUploadLoading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [uploadContractId, setUploadContractId] = useState('')
+  const [uploadMode, setUploadMode] = useState('existing')
+  const [uploadParsing, setUploadParsing] = useState(false)
+  const [uploadParsedForm, setUploadParsedForm] = useState(null)
+  const [uploadParsedParties, setUploadParsedParties] = useState([])
   const [showSplitSheetMenu, setShowSplitSheetMenu] = useState(false)
   const splitSheetRef = useRef(null)
 
@@ -470,36 +474,152 @@ function ContractsPageInner() {
       setUploadError('Please select a file to upload.')
       return
     }
-    if (!uploadContractId) {
-      setUploadError('Please select which contract to attach this document to.')
-      return
-    }
-    setUploadError('')
-    setUploadLoading(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', uploadFile)
-      formData.append('description', uploadDescription || uploadFile.name)
-      if (uploadSongId) formData.append('song_id', uploadSongId)
-      await axios.post(`/api/rights/contracts/${uploadContractId}/documents`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-      setShowUploadModal(false)
-      setUploadFile(null)
-      setUploadCreatorId('')
-      setUploadSongId('')
-      setUploadDescription('')
-      setUploadContractId('')
-      setUploadError('')
-      if (contractDetail && contractDetail.id === parseInt(uploadContractId)) {
-        await refreshDetail()
+    if (uploadMode === 'existing') {
+      if (!uploadContractId) {
+        setUploadError('Please select which contract to attach this document to.')
+        return
       }
-    } catch (error) {
-      console.error('Failed to upload document:', error)
-      const detail = error.response?.data?.detail
-      setUploadError(typeof detail === 'string' ? detail : 'Failed to upload document. Please try again.')
-    } finally {
-      setUploadLoading(false)
+      setUploadError('')
+      setUploadLoading(true)
+      try {
+        const formData = new FormData()
+        formData.append('file', uploadFile)
+        formData.append('description', uploadDescription || uploadFile.name)
+        if (uploadSongId) formData.append('song_id', uploadSongId)
+        await axios.post(`/api/rights/contracts/${uploadContractId}/documents`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        })
+        setShowUploadModal(false)
+        setUploadFile(null)
+        setUploadCreatorId('')
+        setUploadSongId('')
+        setUploadDescription('')
+        setUploadContractId('')
+        setUploadError('')
+        setUploadMode('existing')
+        if (contractDetail && contractDetail.id === parseInt(uploadContractId)) {
+          await refreshDetail()
+        }
+      } catch (error) {
+        console.error('Failed to upload document:', error)
+        const detail = error.response?.data?.detail
+        setUploadError(typeof detail === 'string' ? detail : 'Failed to upload document. Please try again.')
+      } finally {
+        setUploadLoading(false)
+      }
+    } else {
+      if (!uploadParsedForm) {
+        const ext = uploadFile.name.split('.').pop().toLowerCase()
+        if (!['pdf', 'doc', 'docx'].includes(ext)) {
+          setUploadError('AI parsing requires a PDF or Word document. For other file types, use "Attach to existing contract".')
+          return
+        }
+        setUploadError('')
+        setUploadParsing(true)
+        try {
+          const formData = new FormData()
+          formData.append('file', uploadFile)
+          const res = await axios.post('/api/rights/contracts/parse-document', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          })
+          const fields = res.data.parsed_fields
+          const f = fields || {}
+          setUploadParsedForm({
+            title: f.title || '',
+            contract_type: f.contract_type || 'MASTER',
+            payment_direction: f.payment_direction || 'INCOMING',
+            status: 'DRAFT',
+            reference_number: f.reference_number || '',
+            start_date: f.start_date || '',
+            end_date: f.end_date || '',
+            territory: Array.isArray(f.territory) ? f.territory.join(', ') : (f.territory || ''),
+            advance_amount: f.advance_amount != null ? String(f.advance_amount) : '',
+            advance_currency: f.advance_currency || 'USD',
+            notes: f.notes || '',
+            terms_summary: f.terms_summary || '',
+            creator_id: uploadCreatorId || '',
+          })
+          if (f.parties && f.parties.length > 0) {
+            setUploadParsedParties(f.parties.map(p => ({
+              party_name: p.party_name || '',
+              party_role: p.party_role?.toUpperCase() || 'OTHER',
+              creator_id: '',
+              contact_email: p.contact_email || '',
+            })))
+          }
+          if (!f.title) {
+            setUploadError('AI could not extract contract details. You can fill in the fields manually below.')
+          }
+        } catch (error) {
+          const detail = error.response?.data?.detail
+          setUploadError(typeof detail === 'string' ? detail : 'Failed to parse document. Try again or switch to "Attach to existing contract".')
+        } finally {
+          setUploadParsing(false)
+        }
+        return
+      }
+      if (!uploadParsedForm.title.trim()) {
+        setUploadError('Please enter a contract title.')
+        return
+      }
+      setUploadError('')
+      setUploadLoading(true)
+      try {
+        const payload = { ...uploadParsedForm }
+        if (payload.advance_amount) payload.advance_amount = parseFloat(payload.advance_amount)
+        else delete payload.advance_amount
+        if (!payload.start_date) delete payload.start_date
+        if (!payload.end_date) delete payload.end_date
+        if (!payload.reference_number) delete payload.reference_number
+        if (payload.territory && typeof payload.territory === 'string') {
+          payload.territory = payload.territory.split(',').map(t => t.trim()).filter(Boolean)
+        } else if (!payload.territory) {
+          payload.territory = []
+        }
+        if (payload.creator_id) payload.creator_id = parseInt(payload.creator_id)
+        else delete payload.creator_id
+        if (uploadParsedParties.length > 0) {
+          payload.parties = uploadParsedParties.map(p => {
+            const cleaned = { ...p }
+            if (cleaned.creator_id) cleaned.creator_id = parseInt(cleaned.creator_id)
+            else delete cleaned.creator_id
+            if (!cleaned.contact_email) delete cleaned.contact_email
+            return cleaned
+          })
+        }
+        const res = await axios.post(`/api/rights/contracts/org/${organizationId}`, payload)
+        const newContractId = res.data?.id
+        if (uploadFile && newContractId) {
+          try {
+            const docForm = new FormData()
+            docForm.append('file', uploadFile)
+            docForm.append('description', uploadFile.name)
+            await axios.post(`/api/rights/contracts/${newContractId}/documents`, docForm, {
+              headers: { 'Content-Type': 'multipart/form-data' }
+            })
+          } catch (docErr) {
+            console.error('Failed to attach document:', docErr)
+            alert('Contract was created successfully, but the document could not be attached. You can re-upload it from the contract detail view.')
+          }
+        }
+        setShowUploadModal(false)
+        setUploadFile(null)
+        setUploadCreatorId('')
+        setUploadSongId('')
+        setUploadDescription('')
+        setUploadContractId('')
+        setUploadError('')
+        setUploadMode('existing')
+        setUploadParsedForm(null)
+        setUploadParsedParties([])
+        await loadData()
+      } catch (error) {
+        console.error('Failed to create contract:', error)
+        const detail = error.response?.data?.detail
+        setUploadError(typeof detail === 'string' ? detail : 'Failed to create contract. Please try again.')
+      } finally {
+        setUploadLoading(false)
+      }
     }
   }
 
@@ -1139,91 +1259,234 @@ function ContractsPageInner() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
-              <h3 className="text-lg font-semibold text-[#3D4A44]">Upload Contract Document</h3>
-              <button onClick={() => setShowUploadModal(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
+              <h3 className="text-lg font-semibold text-[#3D4A44]">
+                {uploadMode === 'create' && uploadParsedForm ? 'Review & Create Contract' : 'Upload Contract Document'}
+              </h3>
+              <button onClick={() => { setShowUploadModal(false); setUploadMode('existing'); setUploadParsedForm(null); setUploadParsedParties([]); setUploadError('') }} className="text-[#7A8580] hover:text-[#3D4A44]">
                 <XMarkIcon className="w-5 h-5" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              <div className="border-2 border-dashed border-[rgba(59,77,67,0.2)] rounded-lg p-6 text-center hover:border-[#5B8A72] transition-colors">
-                {uploadFile ? (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <PaperClipIcon className="w-5 h-5 text-[#5B8A72]" />
-                      <span className="text-sm text-[#3D4A44] truncate max-w-[250px]">{uploadFile.name}</span>
-                      <span className="text-xs text-[#7A8580]">({(uploadFile.size / 1024 / 1024).toFixed(2)} MB)</span>
-                    </div>
-                    <button onClick={() => setUploadFile(null)} className="text-[#7A8580] hover:text-red-500">
-                      <XMarkIcon className="w-4 h-4" />
+              {!uploadParsedForm && (
+                <>
+                  <div className="flex rounded-lg border border-[rgba(59,77,67,0.12)] overflow-hidden">
+                    <button
+                      onClick={() => { setUploadMode('existing'); setUploadError(''); setUploadParsedForm(null); setUploadParsedParties([]) }}
+                      className={`flex-1 px-3 py-2.5 text-sm font-medium transition-colors ${uploadMode === 'existing' ? 'bg-[#5B8A72] text-white' : 'bg-white text-[#3D4A44] hover:bg-[#EEF1EC]'}`}
+                    >
+                      Attach to Existing
+                    </button>
+                    <button
+                      onClick={() => { setUploadMode('create'); setUploadError(''); setUploadContractId('') }}
+                      className={`flex-1 px-3 py-2.5 text-sm font-medium transition-colors ${uploadMode === 'create' ? 'bg-[#5B8A72] text-white' : 'bg-white text-[#3D4A44] hover:bg-[#EEF1EC]'}`}
+                    >
+                      <span className="flex items-center justify-center space-x-1.5">
+                        <SparklesIcon className="w-4 h-4" />
+                        <span>Create New Contract</span>
+                      </span>
                     </button>
                   </div>
-                ) : (
-                  <label className="cursor-pointer">
-                    <CloudArrowUpIcon className="w-10 h-10 text-[#7A8580] mx-auto mb-2" />
-                    <p className="text-sm text-[#5B8A72] font-medium">Click to select a contract file</p>
-                    <p className="text-xs text-[#7A8580] mt-1">PDF, DOC, DOCX, Excel, or images (max 50MB)</p>
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                      onChange={(e) => { if (e.target.files[0]) setUploadFile(e.target.files[0]) }}
+
+                  {uploadMode === 'create' && (
+                    <div className="p-3 bg-[#5B8A72]/5 border border-[#5B8A72]/15 rounded-lg">
+                      <p className="text-xs text-[#3D4A44]">Upload a PDF or Word contract and AI will automatically extract the title, dates, parties, advance amounts, and other key terms to create a new contract record.</p>
+                    </div>
+                  )}
+
+                  <div className="border-2 border-dashed border-[rgba(59,77,67,0.2)] rounded-lg p-6 text-center hover:border-[#5B8A72] transition-colors">
+                    {uploadFile ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <PaperClipIcon className="w-5 h-5 text-[#5B8A72]" />
+                          <span className="text-sm text-[#3D4A44] truncate max-w-[250px]">{uploadFile.name}</span>
+                          <span className="text-xs text-[#7A8580]">({(uploadFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+                        </div>
+                        <button onClick={() => { setUploadFile(null); setUploadParsedForm(null); setUploadParsedParties([]) }} className="text-[#7A8580] hover:text-red-500">
+                          <XMarkIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer">
+                        <CloudArrowUpIcon className="w-10 h-10 text-[#7A8580] mx-auto mb-2" />
+                        <p className="text-sm text-[#5B8A72] font-medium">Click to select a contract file</p>
+                        <p className="text-xs text-[#7A8580] mt-1">{uploadMode === 'create' ? 'PDF or Word documents (max 20MB)' : 'PDF, DOC, DOCX, Excel, or images (max 50MB)'}</p>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept={uploadMode === 'create' ? '.pdf,.doc,.docx' : '.pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png'}
+                          onChange={(e) => { if (e.target.files[0]) setUploadFile(e.target.files[0]) }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {uploadMode === 'existing' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Attach to Contract *</label>
+                    <select
+                      value={uploadContractId}
+                      onChange={(e) => setUploadContractId(e.target.value)}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    >
+                      <option value="">Select a contract...</option>
+                      {contracts.map(c => (
+                        <option key={c.id} value={c.id}>{c.title}{c.reference_number ? ` (${c.reference_number})` : ''}</option>
+                      ))}
+                    </select>
+                    {contracts.length === 0 && (
+                      <p className="text-xs text-[#7A8580] mt-1">No contracts yet. Switch to "Create New Contract" to create one from your document.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Client (optional)</label>
+                    <select
+                      value={uploadCreatorId}
+                      onChange={(e) => { setUploadCreatorId(e.target.value); setUploadSongId('') }}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    >
+                      <option value="">All clients</option>
+                      {creators.map(c => (
+                        <option key={c.id} value={c.id}>{c.display_name || c.legal_name || c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Song (optional)</label>
+                    <SearchableSelect
+                      options={filteredSongsForUpload.map(s => ({ id: s.id, label: s.title, sublabel: s.artist || s.primary_artist }))}
+                      value={uploadSongId}
+                      onChange={(val) => setUploadSongId(val)}
+                      placeholder="Search songs..."
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
                     />
-                  </label>
-                )}
-              </div>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Attach to Contract *</label>
-                <select
-                  value={uploadContractId}
-                  onChange={(e) => setUploadContractId(e.target.value)}
-                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                >
-                  <option value="">Select a contract...</option>
-                  {contracts.map(c => (
-                    <option key={c.id} value={c.id}>{c.title}{c.reference_number ? ` (${c.reference_number})` : ''}</option>
-                  ))}
-                </select>
-                {contracts.length === 0 && (
-                  <p className="text-xs text-[#7A8580] mt-1">No contracts yet. Create a contract first, then upload documents.</p>
-                )}
-              </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description (optional)</label>
+                    <input
+                      type="text"
+                      value={uploadDescription}
+                      onChange={(e) => setUploadDescription(e.target.value)}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                      placeholder="e.g., Signed master agreement"
+                    />
+                  </div>
+                </>
+              )}
 
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Client (optional)</label>
-                <select
-                  value={uploadCreatorId}
-                  onChange={(e) => { setUploadCreatorId(e.target.value); setUploadSongId('') }}
-                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                >
-                  <option value="">All clients</option>
-                  {creators.map(c => (
-                    <option key={c.id} value={c.id}>{c.display_name || c.legal_name || c.name}</option>
-                  ))}
-                </select>
-              </div>
+              {uploadMode === 'create' && !uploadParsedForm && !uploadParsing && (
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Client (optional)</label>
+                  <select
+                    value={uploadCreatorId}
+                    onChange={(e) => setUploadCreatorId(e.target.value)}
+                    className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  >
+                    <option value="">Select client...</option>
+                    {creators.map(c => (
+                      <option key={c.id} value={c.id}>{c.display_name || c.legal_name || c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Song (optional)</label>
-                <SearchableSelect
-                  options={filteredSongsForUpload.map(s => ({ id: s.id, label: s.title, sublabel: s.artist || s.primary_artist }))}
-                  value={uploadSongId}
-                  onChange={(val) => setUploadSongId(val)}
-                  placeholder="Search songs..."
-                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                />
-              </div>
+              {uploadParsing && (
+                <div className="flex flex-col items-center justify-center py-8 space-y-3">
+                  <div className="w-8 h-8 border-2 border-[#5B8A72] border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm font-medium text-[#3D4A44]">Analyzing contract with AI...</p>
+                  <p className="text-xs text-[#7A8580]">Extracting title, dates, parties, terms, and more</p>
+                </div>
+              )}
 
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description (optional)</label>
-                <input
-                  type="text"
-                  value={uploadDescription}
-                  onChange={(e) => setUploadDescription(e.target.value)}
-                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                  placeholder="e.g., Signed master agreement"
-                />
-              </div>
+              {uploadMode === 'create' && uploadParsedForm && (
+                <>
+                  <div className="flex items-center space-x-2 mb-1">
+                    <PaperClipIcon className="w-4 h-4 text-[#5B8A72]" />
+                    <span className="text-xs text-[#7A8580] truncate">{uploadFile?.name}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Title *</label>
+                      <input type="text" value={uploadParsedForm.title} onChange={(e) => setUploadParsedForm(f => ({ ...f, title: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Type</label>
+                      <select value={uploadParsedForm.contract_type} onChange={(e) => setUploadParsedForm(f => ({ ...f, contract_type: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent">
+                        {['MASTER','PUBLISHING','SYNC_LICENSE','DISTRIBUTION','MECHANICAL','PERFORMANCE','OTHER'].map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Payment Direction</label>
+                      <select value={uploadParsedForm.payment_direction} onChange={(e) => setUploadParsedForm(f => ({ ...f, payment_direction: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent">
+                        <option value="INCOMING">Incoming</option>
+                        <option value="OUTGOING">Outgoing</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Start Date</label>
+                      <input type="date" value={uploadParsedForm.start_date} onChange={(e) => setUploadParsedForm(f => ({ ...f, start_date: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">End Date</label>
+                      <input type="date" value={uploadParsedForm.end_date} onChange={(e) => setUploadParsedForm(f => ({ ...f, end_date: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Territory</label>
+                      <input type="text" value={uploadParsedForm.territory} onChange={(e) => setUploadParsedForm(f => ({ ...f, territory: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" placeholder="e.g., Worldwide" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Advance</label>
+                      <input type="number" value={uploadParsedForm.advance_amount} onChange={(e) => setUploadParsedForm(f => ({ ...f, advance_amount: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Currency</label>
+                      <select value={uploadParsedForm.advance_currency} onChange={(e) => setUploadParsedForm(f => ({ ...f, advance_currency: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent">
+                        {['USD','EUR','GBP','CAD','AUD','JPY'].map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Ref Number</label>
+                      <input type="text" value={uploadParsedForm.reference_number} onChange={(e) => setUploadParsedForm(f => ({ ...f, reference_number: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Client</label>
+                      <select value={uploadParsedForm.creator_id} onChange={(e) => setUploadParsedForm(f => ({ ...f, creator_id: e.target.value }))} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent">
+                        <option value="">None</option>
+                        {creators.map(c => <option key={c.id} value={c.id}>{c.display_name || c.legal_name || c.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Terms Summary</label>
+                      <textarea value={uploadParsedForm.terms_summary} onChange={(e) => setUploadParsedForm(f => ({ ...f, terms_summary: e.target.value }))} rows={2} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent resize-none" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Notes</label>
+                      <textarea value={uploadParsedForm.notes} onChange={(e) => setUploadParsedForm(f => ({ ...f, notes: e.target.value }))} rows={2} className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent resize-none" />
+                    </div>
+                  </div>
+                  {uploadParsedParties.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-2">Parties</label>
+                      <div className="space-y-2">
+                        {uploadParsedParties.map((p, i) => (
+                          <div key={i} className="flex items-center space-x-2 p-2 bg-[#F7F9F7] rounded-lg">
+                            <input type="text" value={p.party_name} onChange={(e) => { const updated = [...uploadParsedParties]; updated[i] = { ...updated[i], party_name: e.target.value }; setUploadParsedParties(updated) }} className="flex-1 border border-[rgba(59,77,67,0.12)] rounded px-2 py-1 text-sm" placeholder="Name" />
+                            <select value={p.party_role} onChange={(e) => { const updated = [...uploadParsedParties]; updated[i] = { ...updated[i], party_role: e.target.value }; setUploadParsedParties(updated) }} className="border border-[rgba(59,77,67,0.12)] rounded px-2 py-1 text-sm">
+                              {['ARTIST','PRODUCER','PUBLISHER','LABEL','WRITER','MANAGER','OTHER'].map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                            <button onClick={() => setUploadParsedParties(uploadParsedParties.filter((_, j) => j !== i))} className="text-[#7A8580] hover:text-red-500"><XMarkIcon className="w-4 h-4" /></button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
             {uploadError && (
               <div className="mx-6 mb-0 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -1231,19 +1494,41 @@ function ContractsPageInner() {
               </div>
             )}
             <div className="flex justify-end space-x-3 p-6 border-t border-[rgba(59,77,67,0.08)]">
+              {uploadMode === 'create' && uploadParsedForm && (
+                <button
+                  onClick={() => { setUploadParsedForm(null); setUploadParsedParties([]); setUploadError('') }}
+                  className="mr-auto px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+                >
+                  Back
+                </button>
+              )}
               <button
-                onClick={() => setShowUploadModal(false)}
+                onClick={() => { setShowUploadModal(false); setUploadMode('existing'); setUploadParsedForm(null); setUploadParsedParties([]); setUploadError('') }}
                 className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleUploadContractDoc}
-                disabled={!uploadFile || !uploadContractId || uploadLoading}
+                disabled={!uploadFile || (uploadMode === 'existing' && !uploadContractId) || uploadLoading || uploadParsing}
                 className="flex items-center space-x-2 px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <CloudArrowUpIcon className="w-5 h-5" />
-                <span>{uploadLoading ? 'Uploading...' : 'Upload Document'}</span>
+                {uploadMode === 'create' ? (
+                  <>
+                    {uploadParsing ? (
+                      <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /><span>Analyzing...</span></>
+                    ) : uploadParsedForm ? (
+                      <><PlusIcon className="w-5 h-5" /><span>{uploadLoading ? 'Creating...' : 'Create Contract'}</span></>
+                    ) : (
+                      <><SparklesIcon className="w-5 h-5" /><span>Analyze & Create</span></>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <CloudArrowUpIcon className="w-5 h-5" />
+                    <span>{uploadLoading ? 'Uploading...' : 'Upload Document'}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
