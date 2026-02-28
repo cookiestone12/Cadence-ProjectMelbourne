@@ -162,7 +162,7 @@ def get_catalog_valuation_summary(
     ]
     
     return {
-        "organization_name": org.name,
+        "organization_name": org.display_name or org.name,
         "total_songs": len(songs),
         "total_catalog_value": total_catalog_value,
         "total_thirty_day_revenue": total_thirty_day_revenue,

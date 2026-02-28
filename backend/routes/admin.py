@@ -465,9 +465,9 @@ def impersonate_organization(
         db.commit()
     
     return {
-        "message": f"Now viewing as {org.name}",
+        "message": f"Now viewing as {org.display_name or org.name}",
         "organization_id": org.id,
-        "organization_name": org.name
+        "organization_name": org.display_name or org.name
     }
 
 @router.post("/run-reminders")
