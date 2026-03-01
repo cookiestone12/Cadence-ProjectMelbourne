@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import {
@@ -8,6 +8,7 @@ import {
   StarIcon,
 } from '@heroicons/react/24/outline'
 import PlatformIcon from '../components/PlatformIcon'
+import SocialCard from '../components/SocialCard'
 
 const ROLE_COLORS = {
   PRODUCER: 'bg-purple-100 text-purple-700 border-purple-200',
@@ -53,6 +54,55 @@ export default function SharedCreditsPage() {
   const [passcode, setPasscode] = useState('')
   const [passcodeError, setPasscodeError] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [generatingSocialCard, setGeneratingSocialCard] = useState(false)
+  const [showSocialCard, setShowSocialCard] = useState(false)
+  const socialCardRef = useRef(null)
+
+  const handleDownloadSocialCard = useCallback(async () => {
+    if (!data) return
+    setGeneratingSocialCard(true)
+    setShowSocialCard(true)
+    try {
+      await new Promise(r => setTimeout(r, 500))
+      const html2canvas = (await import('html2canvas')).default
+      const node = socialCardRef.current
+      if (!node) return
+      const canvas = await html2canvas(node, {
+        scale: 1,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        width: 1080,
+        height: 1350,
+        logging: false,
+      })
+      let url
+      try {
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+        if (blob) {
+          url = URL.createObjectURL(blob)
+        } else {
+          url = canvas.toDataURL('image/png')
+        }
+      } catch {
+        url = canvas.toDataURL('image/png')
+      }
+      const a = document.createElement('a')
+      a.href = url
+      const safeName = (data.creator_name || 'creator').replace(/[^a-zA-Z0-9]/g, '_')
+      a.download = `${safeName}_credits.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Failed to generate social card:', err)
+      alert('Failed to generate social card image')
+    } finally {
+      setGeneratingSocialCard(false)
+      setShowSocialCard(false)
+    }
+  }, [data])
 
   const fetchCredits = async (pc) => {
     try {
@@ -183,7 +233,7 @@ export default function SharedCreditsPage() {
               {data.organization_name && (
                 <p className="text-white/70 text-sm sm:text-base mt-1">{data.organization_name}</p>
               )}
-              <div className="flex flex-wrap gap-3 sm:gap-5 mt-4">
+              <div className="flex flex-wrap items-end gap-3 sm:gap-5 mt-4">
                 <div>
                   <p className="text-white/60 text-xs uppercase tracking-wider">Credits</p>
                   <p className="text-xl sm:text-2xl font-bold">{data.total_credits || 0}</p>
@@ -191,6 +241,18 @@ export default function SharedCreditsPage() {
                 <div>
                   <p className="text-white/60 text-xs uppercase tracking-wider">Est. Streams</p>
                   <p className="text-xl sm:text-2xl font-bold">{formatNumber(data.total_estimated_streams)}</p>
+                </div>
+                <div className="ml-auto">
+                  <button
+                    onClick={handleDownloadSocialCard}
+                    disabled={generatingSocialCard}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 text-white rounded-xl text-sm font-medium hover:bg-white/30 transition-all border border-white/30 disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                    </svg>
+                    {generatingSocialCard ? 'Generating...' : 'Download for Social'}
+                  </button>
                 </div>
               </div>
             </div>
@@ -300,6 +362,18 @@ export default function SharedCreditsPage() {
           Powered by Cadence &mdash; Catalog Intelligence
         </div>
       </div>
+
+      {showSocialCard && data && (
+        <div style={{ position: 'fixed', top: 0, left: 0, opacity: 0, pointerEvents: 'none', zIndex: -1, overflow: 'hidden' }}>
+          <SocialCard
+            ref={socialCardRef}
+            data={data}
+            avatarUrl={data.avatar_url}
+            creatorName={data.creator_name}
+            orgName={data.organization_name}
+          />
+        </div>
+      )}
     </div>
   )
 }

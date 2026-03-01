@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import axios from 'axios'
 import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon, CloudArrowUpIcon, PaperClipIcon, LinkIcon } from '@heroicons/react/24/outline'
@@ -6,6 +6,7 @@ import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/
 import ActionsTab from '../components/ActionsTab'
 import CreatorAccountingEnhanced from '../components/CreatorAccountingEnhanced'
 import PlatformIcon from '../components/PlatformIcon'
+import SocialCard from '../components/SocialCard'
 
 export default function CreatorDetailPage() {
   const { id } = useParams()
@@ -18,6 +19,7 @@ export default function CreatorDetailPage() {
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
   const [organizationId, setOrganizationId] = useState(null)
+  const [organizationName, setOrganizationName] = useState('')
   const [showAddSongModal, setShowAddSongModal] = useState(false)
   const [addingSong, setAddingSong] = useState(false)
   const [uploadingScheduleA, setUploadingScheduleA] = useState(false)
@@ -87,6 +89,9 @@ export default function CreatorDetailPage() {
   const [shareResult, setShareResult] = useState(null)
   const [savingShare, setSavingShare] = useState(false)
   const [refreshingCredits, setRefreshingCredits] = useState(false)
+  const [generatingSocialCard, setGeneratingSocialCard] = useState(false)
+  const [showSocialCard, setShowSocialCard] = useState(false)
+  const socialCardRef = useRef(null)
   const [directoryContacts, setDirectoryContacts] = useState([])
   const [creatorContacts, setCreatorContacts] = useState([])
   const [addingContact, setAddingContact] = useState(false)
@@ -147,6 +152,7 @@ export default function CreatorDetailPage() {
         const orgResponse = await axios.get('/api/organizations/current')
         const orgId = orgResponse.data.id
         setOrganizationId(orgId)
+        setOrganizationName(orgResponse.data.name || '')
         
         await loadSongs(orgId)
 
@@ -348,6 +354,52 @@ export default function CreatorDetailPage() {
       console.error('Failed to revoke share link:', err)
     }
   }
+
+  const handleDownloadSocialCard = useCallback(async () => {
+    if (!creditsData || !creator) return
+    setGeneratingSocialCard(true)
+    setShowSocialCard(true)
+    try {
+      await new Promise(r => setTimeout(r, 500))
+      const html2canvas = (await import('html2canvas')).default
+      const node = socialCardRef.current
+      if (!node) return
+      const canvas = await html2canvas(node, {
+        scale: 1,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        width: 1080,
+        height: 1350,
+        logging: false,
+      })
+      let url
+      try {
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+        if (blob) {
+          url = URL.createObjectURL(blob)
+        } else {
+          url = canvas.toDataURL('image/png')
+        }
+      } catch {
+        url = canvas.toDataURL('image/png')
+      }
+      const a = document.createElement('a')
+      a.href = url
+      const safeName = (creator.display_name || creator.name || 'creator').replace(/[^a-zA-Z0-9]/g, '_')
+      a.download = `${safeName}_credits.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Failed to generate social card:', err)
+      alert('Failed to generate social card image')
+    } finally {
+      setGeneratingSocialCard(false)
+      setShowSocialCard(false)
+    }
+  }, [creditsData, creator])
 
   const formatStreamCount = (num) => {
     if (!num || num === 0) return '0'
@@ -1947,6 +1999,16 @@ export default function CreatorDetailPage() {
                         {refreshingCredits ? 'Refreshing...' : 'Refresh'}
                       </button>
                       <button
+                        onClick={handleDownloadSocialCard}
+                        disabled={generatingSocialCard}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/20 text-white rounded-xl font-medium hover:bg-white/30 transition-all border border-white/30 disabled:opacity-50"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                        </svg>
+                        {generatingSocialCard ? 'Generating...' : 'Download for Social'}
+                      </button>
+                      <button
                         onClick={() => setShowShareModal(true)}
                         className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-[#5B8A72] rounded-xl font-medium hover:bg-white/90 transition-all"
                         style={{ boxShadow: '0px 2px 8px rgba(0,0,0,0.1)' }}
@@ -2093,6 +2155,18 @@ export default function CreatorDetailPage() {
                 </p>
               </>
             )}
+          </div>
+        )}
+
+        {showSocialCard && creditsData && creator && (
+          <div style={{ position: 'fixed', top: 0, left: 0, opacity: 0, pointerEvents: 'none', zIndex: -1, overflow: 'hidden' }}>
+            <SocialCard
+              ref={socialCardRef}
+              data={creditsData}
+              avatarUrl={creator.hero_image_url}
+              creatorName={creator.display_name || creator.name}
+              orgName={organizationName}
+            />
           </div>
         )}
 
