@@ -183,9 +183,18 @@ def start_scheduler():
         id="storage_scan_check",
         replace_existing=True,
     )
+    from .chart_scheduler import run_chart_ingestion
+    _scheduler.add_job(
+        run_chart_ingestion,
+        "interval",
+        hours=4,
+        id="chart_ingestion_check",
+        replace_existing=True,
+    )
     _scheduler.start()
     logger.info("Email digest scheduler started (15-minute interval)")
     logger.info("Storage scan scheduler started (hourly check)")
+    logger.info("Chart ingestion scheduler started (4-hour interval)")
 
 
 def shutdown_scheduler():

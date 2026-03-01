@@ -76,6 +76,15 @@ export default function CreatorDetailPage() {
   const [advanceForm, setAdvanceForm] = useState({ description: '', amount: '', advance_date: '', notes: '' })
   const [savingFee, setSavingFee] = useState(false)
   const [savingAdvance, setSavingAdvance] = useState(false)
+  const [creditsData, setCreditsData] = useState(null)
+  const [creditsLoading, setCreditsLoading] = useState(false)
+  const [creditsSongs, setCreditsSongs] = useState([])
+  const [creditsSongsLoading, setCreditsSongsLoading] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [shareSettings, setShareSettings] = useState({ is_public: true, passcode: '' })
+  const [shareResult, setShareResult] = useState(null)
+  const [savingShare, setSavingShare] = useState(false)
+  const [refreshingCredits, setRefreshingCredits] = useState(false)
   const [directoryContacts, setDirectoryContacts] = useState([])
   const [creatorContacts, setCreatorContacts] = useState([])
   const [addingContact, setAddingContact] = useState(false)
@@ -262,7 +271,99 @@ export default function CreatorDetailPage() {
       loadScheduleAData()
     }
   }, [activeTab, id])
-  
+
+  const loadCreditsData = async () => {
+    if (!organizationId) return
+    setCreditsLoading(true)
+    try {
+      const res = await axios.get(`/api/streaming-credits/org/${organizationId}/creator/${parseInt(id)}`)
+      setCreditsData(res.data)
+    } catch (err) {
+      console.error('Failed to load credits:', err)
+    } finally {
+      setCreditsLoading(false)
+    }
+  }
+
+  const loadCreditsSongs = async () => {
+    if (!organizationId) return
+    setCreditsSongsLoading(true)
+    try {
+      const res = await axios.get(`/api/streaming-credits/org/${organizationId}/creator/${parseInt(id)}/songs?per_page=100`)
+      setCreditsSongs(res.data.songs || [])
+    } catch (err) {
+      console.error('Failed to load credits songs:', err)
+    } finally {
+      setCreditsSongsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'credits' && organizationId) {
+      loadCreditsData()
+      loadCreditsSongs()
+    }
+  }, [activeTab, organizationId, id])
+
+  const handleRefreshCredits = async () => {
+    if (!organizationId) return
+    setRefreshingCredits(true)
+    try {
+      await axios.post(`/api/streaming-credits/org/${organizationId}/creator/${parseInt(id)}/refresh`)
+      await loadCreditsData()
+      await loadCreditsSongs()
+    } catch (err) {
+      console.error('Failed to refresh credits:', err)
+    } finally {
+      setRefreshingCredits(false)
+    }
+  }
+
+  const handleShareCredits = async () => {
+    if (!organizationId) return
+    setSavingShare(true)
+    try {
+      const res = await axios.post(`/api/streaming-credits/org/${organizationId}/creator/${parseInt(id)}/share`, {
+        is_public: shareSettings.is_public,
+        passcode: shareSettings.passcode || ''
+      })
+      setShareResult(res.data)
+    } catch (err) {
+      console.error('Failed to manage share link:', err)
+      alert('Failed to manage share link')
+    } finally {
+      setSavingShare(false)
+    }
+  }
+
+  const handleRevokeShare = async () => {
+    if (!organizationId) return
+    try {
+      await axios.delete(`/api/streaming-credits/org/${organizationId}/creator/${parseInt(id)}/share`)
+      setShareResult(null)
+      setShowShareModal(false)
+    } catch (err) {
+      console.error('Failed to revoke share link:', err)
+    }
+  }
+
+  const formatStreamCount = (num) => {
+    if (!num || num === 0) return '0'
+    if (num >= 1000000000) return (num / 1000000000).toFixed(1) + 'B'
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+    return num.toLocaleString()
+  }
+
+  const PLATFORM_ICONS = {
+    SPOTIFY: { color: '#1DB954', label: 'Spotify' },
+    APPLE_MUSIC: { color: '#FA233B', label: 'Apple Music' },
+    YOUTUBE_MUSIC: { color: '#FF0000', label: 'YouTube Music' },
+    AMAZON_MUSIC: { color: '#FF9900', label: 'Amazon Music' },
+    TIDAL: { color: '#000000', label: 'Tidal' },
+    DEEZER: { color: '#A238FF', label: 'Deezer' },
+  }
+
   const handleScheduleAExportCSV = async () => {
     try {
       const response = await axios.get(`/api/schedule-a/creator/${id}/csv`, {
@@ -957,6 +1058,7 @@ export default function CreatorDetailPage() {
     { id: 'records', label: `Records (${songs.length})` },
     { id: 'releases', label: `Artist Releases (${creatorReleases.length})` },
     { id: 'contracts', label: `Contracts${creatorContracts.length ? ` (${creatorContracts.length})` : ''}` },
+    { id: 'credits', label: 'Credits' },
     { id: 'actions', label: 'Actions' },
     { id: 'accounting', label: 'Accounting' },
     { id: 'schedule-a', label: 'Schedule A' }
@@ -1768,6 +1870,267 @@ export default function CreatorDetailPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'credits' && (
+          <div className="space-y-6">
+            {creditsLoading ? (
+              <div className="bg-white rounded-[18px] p-12 text-center" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                <div className="text-[#7A8580]">Loading credits data...</div>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-[18px] p-8 text-white" style={{ background: 'linear-gradient(135deg, #5B8A72 0%, #3D6B4F 100%)', boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <h2 className="text-2xl font-semibold mb-1">Streaming Credits</h2>
+                      <p className="text-white/70 text-sm">Streaming intelligence & credit profile for {creator.display_name}</p>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleRefreshCredits}
+                        disabled={refreshingCredits}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/20 text-white rounded-xl font-medium hover:bg-white/30 transition-all border border-white/30 disabled:opacity-50"
+                      >
+                        <svg className={`w-4 h-4 ${refreshingCredits ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {refreshingCredits ? 'Refreshing...' : 'Refresh'}
+                      </button>
+                      <button
+                        onClick={() => setShowShareModal(true)}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-[#5B8A72] rounded-xl font-medium hover:bg-white/90 transition-all"
+                        style={{ boxShadow: '0px 2px 8px rgba(0,0,0,0.1)' }}
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        </svg>
+                        Share
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white rounded-[18px] p-5" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                    <p className="text-sm text-[#7A8580] mb-1">Total Credits</p>
+                    <p className="text-3xl font-bold text-[#3D4A44]">{creditsData?.total_credits || 0}</p>
+                  </div>
+                  <div className="bg-white rounded-[18px] p-5" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                    <p className="text-sm text-[#7A8580] mb-1">Total Estimated Streams</p>
+                    <p className="text-3xl font-bold text-[#5B8A72]">{formatStreamCount(creditsData?.total_estimated_streams || 0)}</p>
+                  </div>
+                  <div className="bg-white rounded-[18px] p-5" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                    <p className="text-sm text-[#7A8580] mb-1">Album Units (RIAA)</p>
+                    <p className="text-3xl font-bold text-[#5A8A9A]">{formatStreamCount(creditsData?.riaa_equivalents?.album_units || Math.floor((creditsData?.total_estimated_streams || 0) / 1500))}</p>
+                  </div>
+                  <div className="bg-white rounded-[18px] p-5" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                    <p className="text-sm text-[#7A8580] mb-1">Single Units (RIAA)</p>
+                    <p className="text-3xl font-bold text-[#7BA594]">{formatStreamCount(creditsData?.riaa_equivalents?.single_units || Math.floor((creditsData?.total_estimated_streams || 0) / 150))}</p>
+                  </div>
+                </div>
+
+                {creditsData?.platform_breakdown && Object.keys(creditsData.platform_breakdown).length > 0 && (
+                  <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                    <h3 className="text-lg font-semibold text-[#3D4A44] mb-4">Platform Breakdown</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                      {Object.entries(creditsData.platform_breakdown).map(([platform, streams]) => {
+                        const pInfo = PLATFORM_ICONS[platform] || { color: '#7A8580', label: platform }
+                        return (
+                          <div key={platform} className="flex items-center gap-3 p-3 rounded-xl bg-[#F8F8FB]">
+                            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${pInfo.color}20` }}>
+                              <div className="w-3 h-3 rounded-full" style={{ background: pInfo.color }}></div>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs text-[#7A8580] truncate">{pInfo.label}</p>
+                              <p className="text-sm font-semibold text-[#3D4A44]">{formatStreamCount(streams)}</p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {creditsData?.role_breakdown && Object.keys(creditsData.role_breakdown).length > 0 && (
+                  <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                    <h3 className="text-lg font-semibold text-[#3D4A44] mb-4">Role Breakdown</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {Object.entries(creditsData.role_breakdown).map(([role, count]) => {
+                        const roleColors = {
+                          PRODUCER: { bg: 'rgba(91, 138, 114, 0.12)', text: '#5B8A72', border: 'rgba(91, 138, 114, 0.2)' },
+                          SONGWRITER: { bg: 'rgba(90, 138, 154, 0.12)', text: '#5A8A9A', border: 'rgba(90, 138, 154, 0.2)' },
+                          ARTIST: { bg: 'rgba(196, 149, 107, 0.12)', text: '#C4956B', border: 'rgba(196, 149, 107, 0.2)' },
+                          FEATURED_ARTIST: { bg: 'rgba(160, 32, 240, 0.12)', text: '#8B5CF6', border: 'rgba(160, 32, 240, 0.2)' },
+                          MIX_ENGINEER: { bg: 'rgba(123, 165, 148, 0.12)', text: '#7BA594', border: 'rgba(123, 165, 148, 0.2)' },
+                          OTHER: { bg: 'rgba(122, 133, 128, 0.12)', text: '#7A8580', border: 'rgba(122, 133, 128, 0.2)' },
+                        }
+                        const rc = roleColors[role] || roleColors.OTHER
+                        return (
+                          <div key={role} className="rounded-xl p-5 border" style={{ background: rc.bg, borderColor: rc.border }}>
+                            <p className="text-3xl font-bold mb-1" style={{ color: rc.text }}>{count}</p>
+                            <p className="text-sm font-medium" style={{ color: rc.text }}>{role.replace(/_/g, ' ')}</p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-white rounded-[18px] overflow-hidden" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+                  <div className="p-5 border-b border-[rgba(59,77,67,0.08)]">
+                    <h3 className="text-lg font-semibold text-[#3D4A44]">Credited Songs</h3>
+                    <p className="text-sm text-[#7A8580] mt-1">Songs ranked by estimated total streams</p>
+                  </div>
+                  {creditsSongsLoading ? (
+                    <div className="p-8 text-center text-[#7A8580]">Loading songs...</div>
+                  ) : creditsSongs.length > 0 ? (
+                    <div className="divide-y divide-[rgba(59,77,67,0.06)]">
+                      {creditsSongs.map((song, idx) => (
+                        <div key={song.song_id} className="flex items-center gap-4 px-5 py-4 hover:bg-[#F8F8FB] transition-colors">
+                          <span className="text-lg font-bold text-[#B0BDB4] w-8 text-right flex-shrink-0">{idx + 1}</span>
+                          <div className="w-10 h-10 rounded-lg bg-[#EEF1EC] flex items-center justify-center flex-shrink-0 overflow-hidden">
+                            {song.artwork_url ? (
+                              <img src={song.artwork_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <MusicalNoteIcon className="w-5 h-5 text-[#7A8580]" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-[#3D4A44] truncate">{song.title}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <p className="text-xs text-[#7A8580] truncate">{song.artist}</p>
+                              {song.role && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#EEF1EC] text-[#5B8A72]">
+                                  {song.role.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                              {song.share_percentage && (
+                                <span className="text-[10px] text-[#7A8580]">{song.share_percentage}%</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-sm font-semibold text-[#3D4A44]">{formatStreamCount(song.total_streams)}</p>
+                            <p className="text-xs text-[#7A8580]">streams</p>
+                          </div>
+                          {song.platforms && Object.keys(song.platforms).length > 0 && (
+                            <div className="hidden md:flex items-center gap-1.5 flex-shrink-0 ml-2">
+                              {Object.entries(song.platforms).map(([plat, count]) => {
+                                const pInfo = PLATFORM_ICONS[plat] || { color: '#7A8580', label: plat }
+                                return (
+                                  <div key={plat} className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#F8F8FB]" title={`${pInfo.label}: ${formatStreamCount(count)}`}>
+                                    <div className="w-2 h-2 rounded-full" style={{ background: pInfo.color }}></div>
+                                    <span className="text-[10px] text-[#7A8580]">{formatStreamCount(count)}</span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-12 text-center">
+                      <MusicalNoteIcon className="w-12 h-12 text-[#C7C7CC] mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-[#3D4A44] mb-2">No credits data yet</h3>
+                      <p className="text-[#7A8580] text-sm">Credits are computed from song credits and streaming data. Click "Refresh" to generate.</p>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-xs text-[#B0BDB4] text-center italic">
+                  Stream estimates are derived from chart data, market-share ratios, and available platform data. Actual numbers may vary. Confidence levels are applied to all estimates.
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {showShareModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-[18px] w-full max-w-md">
+              <div className="p-6 border-b border-[rgba(59,77,67,0.12)]">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold text-[#3D4A44]">Share Credits Profile</h2>
+                  <button onClick={() => setShowShareModal(false)} className="p-2 hover:bg-[#EEF1EC] rounded-lg transition-colors">
+                    <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-[#3D4A44]">Public Access</p>
+                    <p className="text-xs text-[#7A8580]">Allow anyone with the link to view</p>
+                  </div>
+                  <button
+                    onClick={() => setShareSettings(prev => ({ ...prev, is_public: !prev.is_public }))}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${shareSettings.is_public ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${shareSettings.is_public ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-2">Passcode (optional)</label>
+                  <input
+                    type="text"
+                    value={shareSettings.passcode}
+                    onChange={(e) => setShareSettings(prev => ({ ...prev, passcode: e.target.value }))}
+                    placeholder="Leave empty for no passcode"
+                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-sm"
+                  />
+                </div>
+                {shareResult && (
+                  <div className="bg-[#F5F7F4] rounded-xl p-4">
+                    <p className="text-xs text-[#7A8580] mb-2">Share Link</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={`${window.location.origin}${shareResult.share_url}`}
+                        className="flex-1 px-3 py-2 bg-white border border-[rgba(59,77,67,0.12)] rounded-lg text-sm text-[#3D4A44]"
+                      />
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}${shareResult.share_url}`)
+                          alert('Link copied!')
+                        }}
+                        className="px-3 py-2 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7862] transition-colors"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    {shareResult.has_passcode && (
+                      <p className="text-xs text-[#7A8580] mt-2">🔒 Passcode protected</p>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="p-6 border-t border-[rgba(59,77,67,0.08)] flex items-center justify-between">
+                {shareResult && (
+                  <button
+                    onClick={handleRevokeShare}
+                    className="text-sm text-[#C47068] hover:text-[#A45850] font-medium"
+                  >
+                    Revoke Link
+                  </button>
+                )}
+                <div className="flex gap-3 ml-auto">
+                  <button onClick={() => setShowShareModal(false)} className="px-4 py-2 text-[#7A8580] hover:bg-[#EEF1EC] rounded-xl transition-colors text-sm font-medium">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleShareCredits}
+                    disabled={savingShare}
+                    className="px-4 py-2 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors text-sm disabled:opacity-50"
+                  >
+                    {savingShare ? 'Saving...' : shareResult ? 'Update' : 'Generate Link'}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

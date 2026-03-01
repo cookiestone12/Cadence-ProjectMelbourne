@@ -57,8 +57,10 @@ import RegistrationReportPage from './pages/RegistrationReportPage'
 import SyncReportsPage from './pages/SyncReportsPage'
 import BriefBuilderPage from './pages/BriefBuilderPage'
 import StorageScanPage from './pages/StorageScanPage'
+import CreditsPage from './pages/CreditsPage'
 import ClientPortalPage from './pages/ClientPortalPage'
 import SharedContactsPage from './pages/SharedContactsPage'
+import SharedCreditsPage from './pages/SharedCreditsPage'
 import Sidebar from './components/Sidebar'
 
 function App() {
@@ -136,6 +138,7 @@ function App() {
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
           <Route path="/guide" element={<UserGuidePage />} />
           <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
+          <Route path="/shared/credits/:token" element={<SharedCreditsPage />} />
           <Route path="*" element={<Navigate to="/login" />} />
         </Routes>
       </Router>
@@ -190,11 +193,13 @@ function App() {
                 <Route path="/registration-reports" element={<RegistrationReportPage />} />
                 <Route path="/sync-reports" element={<SyncReportsPage />} />
                 <Route path="/brief-builder" element={<BriefBuilderPage />} />
+                <Route path="/credits" element={<CreditsPage />} />
                 <Route path="/storage-scan" element={<StorageScanPage />} />
                 <Route path="/client-portal" element={<ClientPortalPage />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/guide" element={<UserGuidePage />} />
                 <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
+                <Route path="/shared/credits/:token" element={<SharedCreditsPage />} />
                 <Route path="/org-admin" element={<TenantAdminPage />} />
                 {user?.is_super_admin && (
                   <Route path="/admin" element={<AdminDashboard />} />
