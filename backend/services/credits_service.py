@@ -30,7 +30,8 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[s
     role_breakdown = {}
     total_credits = 0
     total_streams = 0
-    song_stream_data = []
+    song_stream_map = {}
+    seen_song_ids = set()
 
     for credit in credits:
         song = songs.get(credit.song_id)
@@ -41,6 +42,13 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[s
         role = credit.role or "OTHER"
         role_breakdown[role] = role_breakdown.get(role, 0) + 1
 
+        if credit.song_id in seen_song_ids:
+            if credit.song_id in song_stream_map:
+                song_stream_map[credit.song_id]["roles"].append(role)
+            continue
+
+        seen_song_ids.add(credit.song_id)
+
         try:
             estimate_streams_for_song(song.id, org_id, db)
         except Exception as e:
@@ -50,18 +58,20 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[s
         song_streams = stream_summary.get("total_streams", 0)
         total_streams += song_streams
 
-        song_stream_data.append({
+        song_stream_map[credit.song_id] = {
             "song_id": song.id,
             "title": song.title,
             "artist": song.primary_artist,
+            "roles": [role],
             "role": role,
             "share_percentage": credit.share_percentage,
             "total_streams": song_streams,
             "platforms": stream_summary.get("platforms", {}),
             "isrc": song.isrc,
             "artwork_url": getattr(song, 'media_url', None),
-        })
+        }
 
+    song_stream_data = list(song_stream_map.values())
     song_stream_data.sort(key=lambda x: x["total_streams"], reverse=True)
     top_songs = song_stream_data[:10]
 
