@@ -33,7 +33,8 @@ export default function CreatorDetailPage() {
     publishing_percentage: '',
     master_percentage: '',
     advance_amount: '',
-    notes: ''
+    notes: '',
+    credit_role: 'ARTIST'
   })
   const [selectedSongs, setSelectedSongs] = useState(new Set())
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -506,7 +507,8 @@ export default function CreatorDetailPage() {
       has_contract_executed: song.has_contract_executed || false,
       is_released: song.is_released || false,
       spotify_link: song.spotify_link || '',
-      notes: song.notes || ''
+      notes: song.notes || '',
+      credit_role: song.credit_role || 'ARTIST'
     })
   }
   
@@ -613,7 +615,7 @@ export default function CreatorDetailPage() {
       
       await axios.post(`/api/credits/song/${response.data.id}`, {
         creator_id: parseInt(id),
-        role: 'ARTIST',
+        role: newSong.credit_role || 'ARTIST',
         share_percentage: newSong.publishing_percentage ? parseFloat(newSong.publishing_percentage) : 100
       })
       
@@ -631,7 +633,8 @@ export default function CreatorDetailPage() {
         publishing_percentage: '',
         master_percentage: '',
         advance_amount: '',
-        notes: ''
+        notes: '',
+        credit_role: 'ARTIST'
       })
     } catch (error) {
       console.error('Failed to add song:', error)
@@ -641,7 +644,7 @@ export default function CreatorDetailPage() {
     }
   }
 
-  const ROLE_OPTIONS = ['ARTIST', 'SONGWRITER', 'PRODUCER']
+  const ROLE_OPTIONS = ['ARTIST', 'PRIMARY_ARTIST', 'FEATURED_ARTIST', 'SONGWRITER', 'PRODUCER', 'COMPOSER', 'LYRICIST']
   const PRO_OPTIONS = ['ASCAP', 'BMI', 'PRS', 'SESAC', 'OTHER']
 
   const openEditCreatorModal = () => {
@@ -1474,6 +1477,7 @@ export default function CreatorDetailPage() {
                       />
                     </th>
                     <SortHeader column="title" className="text-left sticky left-0 bg-[#F8F8FB]">Title / Artist</SortHeader>
+                    <SortHeader column="credit_role" className="text-left">Role</SortHeader>
                     <SortHeader column="label" className="text-left">Label</SortHeader>
                     <SortHeader column="publishing_percentage" className="text-center">Pub %</SortHeader>
                     <SortHeader column="advance_amount" className="text-center">Advance</SortHeader>
@@ -1516,6 +1520,27 @@ export default function CreatorDetailPage() {
                               className="w-full px-3 py-1.5 border border-[rgba(0,0,0,0.1)] rounded-xl text-xs bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[rgba(91,138,114,0.15)] text-[#7A8580]"
                               placeholder="Artist name"
                             />
+                          </td>
+                          <td className="px-4 py-2">
+                            <select
+                              value={editForm.credit_role || 'ARTIST'}
+                              onChange={async (e) => {
+                                const newRole = e.target.value
+                                setEditForm({...editForm, credit_role: newRole})
+                                if (song.credit_id) {
+                                  try {
+                                    await axios.patch(`/api/credits/song/${song.id}/credits/${song.credit_id}`, { role: newRole })
+                                  } catch (err) {
+                                    console.error('Failed to update role:', err)
+                                  }
+                                }
+                              }}
+                              className="w-full px-2 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-xs bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[rgba(91,138,114,0.15)]"
+                            >
+                              {ROLE_OPTIONS.map(r => (
+                                <option key={r} value={r}>{r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-4 py-2">
                             <input 
@@ -1642,6 +1667,28 @@ export default function CreatorDetailPage() {
                           <td className={`px-4 py-3 sticky left-0 ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'}`}>
                             <div className="font-medium text-[#3D4A44]">{song.title}</div>
                             <div className="text-xs text-[#7A8580]">{song.primary_artist}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <select
+                              value={song.credit_role || 'ARTIST'}
+                              onChange={async (e) => {
+                                const newRole = e.target.value
+                                if (song.credit_id) {
+                                  try {
+                                    await axios.patch(`/api/credits/song/${song.id}/credits/${song.credit_id}`, { role: newRole })
+                                    setSongs(prev => prev.map(s => s.id === song.id ? {...s, credit_role: newRole} : s))
+                                  } catch (err) {
+                                    console.error('Failed to update role:', err)
+                                    alert('Failed to update role')
+                                  }
+                                }
+                              }}
+                              className="px-2 py-1 border border-[rgba(59,77,67,0.15)] rounded-lg text-xs text-[#3D4A44] bg-transparent hover:bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-1 focus:ring-[rgba(91,138,114,0.2)] cursor-pointer"
+                            >
+                              {ROLE_OPTIONS.map(r => (
+                                <option key={r} value={r}>{r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+                              ))}
+                            </select>
                           </td>
                           <td className="px-4 py-3 text-[#7A8580] max-w-32 truncate" title={song.label}>
                             {song.label || '-'}
@@ -2442,17 +2489,33 @@ export default function CreatorDetailPage() {
                 />
               </div>
 
-              <div>
-                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">
-                  Primary Artist
-                </label>
-                <input
-                  type="text"
-                  value={newSong.primary_artist}
-                  onChange={(e) => setNewSong({...newSong, primary_artist: e.target.value})}
-                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                  placeholder={creator?.display_name || "Artist name"}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">
+                    Primary Artist
+                  </label>
+                  <input
+                    type="text"
+                    value={newSong.primary_artist}
+                    onChange={(e) => setNewSong({...newSong, primary_artist: e.target.value})}
+                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    placeholder={creator?.display_name || "Artist name"}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">
+                    Client Role
+                  </label>
+                  <select
+                    value={newSong.credit_role}
+                    onChange={(e) => setNewSong({...newSong, credit_role: e.target.value})}
+                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
+                  >
+                    {ROLE_OPTIONS.map(r => (
+                      <option key={r} value={r}>{r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\bArtist\b/, 'Artist')}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

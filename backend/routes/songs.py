@@ -73,6 +73,8 @@ class SongResponse(BaseModel):
     media_url: Optional[str]
     audio_file_url: Optional[str] = None
     lyrics: Optional[str] = None
+    credit_role: Optional[str] = None
+    credit_id: Optional[int] = None
     client_name: Optional[str] = None
     client_id: Optional[int] = None
     
@@ -250,44 +252,49 @@ def get_organization_songs(
     
     songs = query.distinct().offset(offset).limit(limit).all()
     
-    # Batch-load client info to avoid N+1 queries
     song_ids = [song.id for song in songs]
     song_client_map = {}
     
     if song_ids:
-        # Step 1: Get the first SongCredit per song using a subquery
-        # Using min(SongCredit.id) to get the first credit
-        subquery = db.query(
-            func.min(SongCredit.id).label("min_id")
-        ).filter(
-            SongCredit.song_id.in_(song_ids)
-        ).group_by(SongCredit.song_id).subquery()
-        
-        first_credits = db.query(SongCredit).filter(
-            SongCredit.id.in_(db.query(subquery.c.min_id))
-        ).all()
-        
-        # Step 2: Collect all creator IDs from first credits
-        creator_ids = [credit.creator_id for credit in first_credits]
-        
-        # Step 3: Fetch all relevant creators in one query
-        creators_map = {}
-        if creator_ids:
-            creators = db.query(Creator).filter(Creator.id.in_(creator_ids)).all()
-            creators_map = {creator.id: creator for creator in creators}
-        
-        # Step 4: Build lookup dictionary: song_id -> (client_name, client_id)
-        for credit in first_credits:
-            creator = creators_map.get(credit.creator_id)
-            if creator:
-                song_client_map[credit.song_id] = (creator.display_name, creator.id)
+        if creator_id:
+            relevant_credits = db.query(SongCredit).filter(
+                SongCredit.song_id.in_(song_ids),
+                SongCredit.creator_id == creator_id,
+            ).all()
+            creator_obj = db.query(Creator).filter(Creator.id == creator_id).first()
+            for credit in relevant_credits:
+                if creator_obj:
+                    song_client_map[credit.song_id] = (creator_obj.display_name, creator_obj.id, credit.role, credit.id)
+        else:
+            subquery = db.query(
+                func.min(SongCredit.id).label("min_id")
+            ).filter(
+                SongCredit.song_id.in_(song_ids)
+            ).group_by(SongCredit.song_id).subquery()
+            
+            first_credits = db.query(SongCredit).filter(
+                SongCredit.id.in_(db.query(subquery.c.min_id))
+            ).all()
+            
+            creator_ids = [credit.creator_id for credit in first_credits]
+            creators_map = {}
+            if creator_ids:
+                creators = db.query(Creator).filter(Creator.id.in_(creator_ids)).all()
+                creators_map = {creator.id: creator for creator in creators}
+            
+            for credit in first_credits:
+                creator_obj = creators_map.get(credit.creator_id)
+                if creator_obj:
+                    song_client_map[credit.song_id] = (creator_obj.display_name, creator_obj.id, credit.role, credit.id)
     
     result = []
     for song in songs:
         client_name = None
         client_id = None
+        credit_role = None
+        credit_id = None
         if song.id in song_client_map:
-            client_name, client_id = song_client_map[song.id]
+            client_name, client_id, credit_role, credit_id = song_client_map[song.id]
         
         result.append({
             "id": song.id,
@@ -319,7 +326,9 @@ def get_organization_songs(
             "notes": song.notes,
             "media_url": song.media_url,
             "client_name": client_name,
-            "client_id": client_id
+            "client_id": client_id,
+            "credit_role": credit_role,
+            "credit_id": credit_id,
         })
     return result
 
