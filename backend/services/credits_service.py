@@ -238,6 +238,7 @@ def get_public_credits(share_token: str, passcode: str = None, db: Session = Non
     return {
         "creator_name": creator.display_name if creator else "Unknown",
         "hero_image_url": creator.hero_image_url if creator else None,
+        "avatar_url": creator.hero_image_url if creator else None,
         "organization_name": (org.display_name or org.name) if org else None,
         "total_credits": profile.total_credits or 0,
         "total_estimated_streams": profile.total_estimated_streams or 0,

@@ -70,6 +70,11 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                             popularity_score = data["popularity"]
                             spotify_streams = _estimate_from_popularity(popularity_score)
                             logger.info(f"Spotify popularity={popularity_score} -> estimated streams={spotify_streams:,} for song {song_id}")
+                            if not song.media_url:
+                                album_images = data.get("album", {}).get("images", [])
+                                if album_images:
+                                    song.media_url = album_images[0].get("url")
+                                    db.flush()
 
                 if spotify_streams == 0:
                     query_parts = []
@@ -90,6 +95,11 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                                 popularity_score = pop
                                 spotify_streams = _estimate_from_popularity(popularity_score)
                                 logger.info(f"Spotify search hit: '{track.get('name')}' by {[a.get('name') for a in track.get('artists', [])]} pop={pop} -> est={spotify_streams:,} for song {song_id}")
+                                if not song.media_url:
+                                    album_images = track.get("album", {}).get("images", [])
+                                    if album_images:
+                                        song.media_url = album_images[0].get("url")
+                                        db.flush()
                         else:
                             logger.info(f"Spotify search returned no results for song {song_id}: '{search_query}'")
             else:
