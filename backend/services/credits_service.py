@@ -9,9 +9,8 @@ logger = logging.getLogger("cadence")
 
 
 def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[str, Any]:
-    from ..models.models import SongCredit, Song, Creator, CreatorCreditsProfile, SongDSPLink
+    from ..models.models import SongCredit, Song, Creator, CreatorCreditsProfile
     from .stream_estimator import get_song_stream_summary, estimate_streams_for_song
-    from sqlalchemy import or_
 
     creator = db.query(Creator).filter(Creator.id == creator_id, Creator.organization_id == org_id).first()
     if not creator:
@@ -22,18 +21,9 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[s
     song_ids = [c.song_id for c in credits]
     songs = {}
     if song_ids:
-        spotify_dsp_subq = db.query(SongDSPLink.song_id).filter(
-            SongDSPLink.song_id.in_(song_ids),
-            SongDSPLink.platform == "SPOTIFY",
-        ).distinct()
-
         song_list = db.query(Song).filter(
             Song.id.in_(song_ids),
             Song.organization_id == org_id,
-            or_(
-                Song.spotify_link.isnot(None),
-                Song.id.in_(spotify_dsp_subq),
-            ),
         ).all()
         songs = {s.id: s for s in song_list}
 

@@ -57,11 +57,11 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
             if dsp:
                 spotify_url = dsp.url
 
-        if spotify_url:
-            try:
-                from .spotify_service import _get_access_token, _spotify_get
-                token = _get_access_token()
-                if token:
+        try:
+            from .spotify_service import _get_access_token, _spotify_get
+            token = _get_access_token()
+            if token:
+                if spotify_url:
                     track_id = _extract_spotify_id(spotify_url)
                     if track_id:
                         logger.info(f"Spotify API lookup for song {song_id}, track_id={track_id}")
@@ -70,16 +70,32 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                             popularity_score = data["popularity"]
                             spotify_streams = _estimate_from_popularity(popularity_score)
                             logger.info(f"Spotify popularity={popularity_score} -> estimated streams={spotify_streams:,} for song {song_id}")
-                        elif data:
-                            logger.info(f"Spotify returned data but no popularity for song {song_id}")
+
+                if spotify_streams == 0:
+                    query_parts = []
+                    if song.title:
+                        clean_title = song.title.split(" - ")[0].split(" (")[0].strip()
+                        query_parts.append(f"track:{clean_title}")
+                    if song.primary_artist:
+                        clean_artist = song.primary_artist.split(" feat.")[0].split(" ft.")[0].split(",")[0].strip()
+                        query_parts.append(f"artist:{clean_artist}")
+                    if query_parts:
+                        search_query = " ".join(query_parts)
+                        logger.info(f"Spotify search fallback for song {song_id}: '{search_query}'")
+                        search_data = _spotify_get("search", token, {"q": search_query, "type": "track", "limit": 1})
+                        if search_data and search_data.get("tracks", {}).get("items"):
+                            track = search_data["tracks"]["items"][0]
+                            pop = track.get("popularity", 0)
+                            if pop > 0:
+                                popularity_score = pop
+                                spotify_streams = _estimate_from_popularity(popularity_score)
+                                logger.info(f"Spotify search hit: '{track.get('name')}' by {[a.get('name') for a in track.get('artists', [])]} pop={pop} -> est={spotify_streams:,} for song {song_id}")
                         else:
-                            logger.info(f"Spotify API returned no data for track_id={track_id} (song {song_id})")
-                    else:
-                        logger.debug(f"Could not extract Spotify ID from URL: {spotify_url} (song {song_id})")
-                else:
-                    logger.debug(f"No Spotify access token available for song {song_id}")
-            except Exception as e:
-                logger.debug(f"Spotify lookup fallback failed for song {song_id}: {e}")
+                            logger.info(f"Spotify search returned no results for song {song_id}: '{search_query}'")
+            else:
+                logger.debug(f"No Spotify access token available for song {song_id}")
+        except Exception as e:
+            logger.debug(f"Spotify lookup/search failed for song {song_id}: {e}")
 
     chart_entries = db.query(ChartEntry).filter(ChartEntry.song_id == song_id).all()
     chart_data = {}
@@ -238,19 +254,10 @@ def compute_riaa_equivalents(total_streams: int) -> Dict[str, float]:
 
 
 def estimate_all_songs(org_id: int, db: Session) -> Dict[str, Any]:
-    from ..models.models import Song, SongDSPLink
-    from sqlalchemy import or_
-
-    spotify_dsp_subq = db.query(SongDSPLink.song_id).filter(
-        SongDSPLink.platform == "SPOTIFY",
-    ).distinct()
+    from ..models.models import Song
 
     songs = db.query(Song).filter(
         Song.organization_id == org_id,
-        or_(
-            Song.spotify_link.isnot(None),
-            Song.id.in_(spotify_dsp_subq),
-        ),
     ).all()
     results = {"total": len(songs), "estimated": 0, "errors": 0}
 
