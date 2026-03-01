@@ -116,7 +116,10 @@ def creator_credited_songs(
             "release_date": song.release_date.isoformat() if song.release_date else None,
             "artwork_url": song.media_url,
             "total_streams": stream_summary.get("total_streams", 0),
-            "platforms": stream_summary.get("platforms", {}),
+            "platforms": {
+                p: (pdata.get("streams", 0) if isinstance(pdata, dict) else (pdata or 0))
+                for p, pdata in stream_summary.get("platforms", {}).items()
+            },
             "confidence": stream_summary.get("confidence", 0),
         })
 

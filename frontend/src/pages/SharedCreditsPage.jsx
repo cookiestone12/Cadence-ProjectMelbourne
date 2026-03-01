@@ -218,12 +218,13 @@ export default function SharedCreditsPage() {
             <h2 className="text-sm font-semibold text-[#7A8580] uppercase tracking-wider mb-3">Platform Breakdown</h2>
             <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] p-4 sm:p-5">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {Object.entries(data.platforms).map(([platform, streams]) => {
+                {Object.entries(data.platforms).map(([platform, streamData]) => {
                   const info = PLATFORM_ICONS[platform] || { label: platform, color: 'text-gray-500' }
+                  const streamCount = typeof streamData === 'object' && streamData !== null ? (streamData.streams || 0) : (streamData || 0)
                   return (
                     <div key={platform} className="flex items-center gap-2">
                       <span className={`text-sm font-medium ${info.color}`}>{info.label}</span>
-                      <span className="text-sm text-[#3D4A44] font-semibold">{formatNumber(streams)}</span>
+                      <span className="text-sm text-[#3D4A44] font-semibold">{formatNumber(streamCount)}</span>
                     </div>
                   )
                 })}

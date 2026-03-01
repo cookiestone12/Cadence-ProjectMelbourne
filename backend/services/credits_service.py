@@ -78,9 +78,10 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[s
     platform_totals = {}
     for ssd in song_stream_data:
         for platform, pdata in ssd.get("platforms", {}).items():
+            stream_val = pdata.get("streams", 0) if isinstance(pdata, dict) else (pdata or 0)
             if platform not in platform_totals:
-                platform_totals[platform] = {"streams": 0, "display": pdata.get("display", {})}
-            platform_totals[platform]["streams"] += pdata.get("streams", 0)
+                platform_totals[platform] = 0
+            platform_totals[platform] += stream_val
 
     profile = db.query(CreatorCreditsProfile).filter(
         CreatorCreditsProfile.creator_id == creator_id,

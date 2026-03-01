@@ -61,9 +61,19 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                 if token:
                     track_id = _extract_spotify_id(spotify_url)
                     if track_id:
+                        logger.info(f"Spotify API lookup for song {song_id}, track_id={track_id}")
                         data = _spotify_get(f"tracks/{track_id}", token)
                         if data and data.get("popularity") is not None:
                             spotify_streams = _estimate_from_popularity(data["popularity"])
+                            logger.info(f"Spotify popularity={data['popularity']} -> estimated streams={spotify_streams} for song {song_id}")
+                        elif data:
+                            logger.info(f"Spotify returned data but no popularity for song {song_id}")
+                        else:
+                            logger.info(f"Spotify API returned no data for track_id={track_id} (song {song_id})")
+                    else:
+                        logger.debug(f"Could not extract Spotify ID from URL: {spotify_url} (song {song_id})")
+                else:
+                    logger.debug(f"No Spotify access token available for song {song_id}")
             except Exception as e:
                 logger.debug(f"Spotify lookup fallback failed for song {song_id}: {e}")
 
@@ -179,26 +189,46 @@ def _extract_spotify_id(spotify_link: str) -> Optional[str]:
 
 
 def _estimate_from_popularity(popularity: int) -> int:
-    if popularity >= 90:
+    if popularity >= 95:
+        return 2_000_000_000
+    elif popularity >= 90:
+        return 1_000_000_000
+    elif popularity >= 85:
         return 500_000_000
     elif popularity >= 80:
+        return 250_000_000
+    elif popularity >= 75:
         return 100_000_000
     elif popularity >= 70:
-        return 30_000_000
+        return 50_000_000
+    elif popularity >= 65:
+        return 25_000_000
     elif popularity >= 60:
-        return 10_000_000
+        return 15_000_000
+    elif popularity >= 55:
+        return 8_000_000
     elif popularity >= 50:
+        return 5_000_000
+    elif popularity >= 45:
         return 3_000_000
     elif popularity >= 40:
-        return 1_000_000
+        return 1_500_000
+    elif popularity >= 35:
+        return 800_000
     elif popularity >= 30:
-        return 300_000
+        return 400_000
+    elif popularity >= 25:
+        return 200_000
     elif popularity >= 20:
         return 100_000
+    elif popularity >= 15:
+        return 50_000
     elif popularity >= 10:
-        return 30_000
-    else:
+        return 25_000
+    elif popularity >= 5:
         return 10_000
+    else:
+        return 5_000
 
 
 def _estimate_from_chart_position(position: int, platform: str) -> int:

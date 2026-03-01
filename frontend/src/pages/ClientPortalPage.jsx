@@ -2294,8 +2294,9 @@ function CreditsTab({ organizationId, creatorId, creatorName }) {
         <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6">
           <h3 className="text-sm font-semibold text-[#3D4A44] mb-3">Platform Breakdown</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {Object.entries(creditsData.platform_breakdown).map(([platform, streams]) => {
+            {Object.entries(creditsData.platform_breakdown).map(([platform, streamData]) => {
               const pInfo = PLATFORM_ICONS[platform] || { color: '#7A8580', label: platform }
+              const streamCount = typeof streamData === 'object' && streamData !== null ? (streamData.streams || 0) : (streamData || 0)
               return (
                 <div key={platform} className="flex items-center gap-2 p-3 rounded-lg bg-[#F5F7F4]">
                   <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${pInfo.color}20` }}>
@@ -2303,7 +2304,7 @@ function CreditsTab({ organizationId, creatorId, creatorName }) {
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] text-[#7A8580] truncate">{pInfo.label}</p>
-                    <p className="text-xs font-semibold text-[#3D4A44]">{formatStreamCount(streams)}</p>
+                    <p className="text-xs font-semibold text-[#3D4A44]">{formatStreamCount(streamCount)}</p>
                   </div>
                 </div>
               )
@@ -2368,12 +2369,13 @@ function CreditsTab({ organizationId, creatorId, creatorName }) {
                 </div>
                 {song.platforms && Object.keys(song.platforms).length > 0 && (
                   <div className="hidden md:flex items-center gap-1 flex-shrink-0 ml-1">
-                    {Object.entries(song.platforms).map(([plat, count]) => {
+                    {Object.entries(song.platforms).map(([plat, platData]) => {
                       const pInfo = PLATFORM_ICONS[plat] || { color: '#7A8580', label: plat }
+                      const platStreams = typeof platData === 'object' && platData !== null ? (platData.streams || 0) : (platData || 0)
                       return (
-                        <div key={plat} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#F5F7F4]" title={`${pInfo.label}: ${formatStreamCount(count)}`}>
+                        <div key={plat} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#F5F7F4]" title={`${pInfo.label}: ${formatStreamCount(platStreams)}`}>
                           <div className="w-2 h-2 rounded-full" style={{ background: pInfo.color }}></div>
-                          <span className="text-[10px] text-[#7A8580]">{formatStreamCount(count)}</span>
+                          <span className="text-[10px] text-[#7A8580]">{formatStreamCount(platStreams)}</span>
                         </div>
                       )
                     })}
