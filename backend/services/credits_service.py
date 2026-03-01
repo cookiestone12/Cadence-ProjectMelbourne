@@ -9,8 +9,9 @@ logger = logging.getLogger("cadence")
 
 
 def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[str, Any]:
-    from ..models.models import SongCredit, Song, Creator, CreatorCreditsProfile
-    from .stream_estimator import get_song_stream_summary
+    from ..models.models import SongCredit, Song, Creator, CreatorCreditsProfile, SongDSPLink
+    from .stream_estimator import get_song_stream_summary, estimate_streams_for_song
+    from sqlalchemy import or_
 
     creator = db.query(Creator).filter(Creator.id == creator_id, Creator.organization_id == org_id).first()
     if not creator:
@@ -21,7 +22,19 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[s
     song_ids = [c.song_id for c in credits]
     songs = {}
     if song_ids:
-        song_list = db.query(Song).filter(Song.id.in_(song_ids), Song.organization_id == org_id).all()
+        spotify_dsp_subq = db.query(SongDSPLink.song_id).filter(
+            SongDSPLink.song_id.in_(song_ids),
+            SongDSPLink.platform == "SPOTIFY",
+        ).distinct()
+
+        song_list = db.query(Song).filter(
+            Song.id.in_(song_ids),
+            Song.organization_id == org_id,
+            or_(
+                Song.spotify_link.isnot(None),
+                Song.id.in_(spotify_dsp_subq),
+            ),
+        ).all()
         songs = {s.id: s for s in song_list}
 
     role_breakdown = {}
@@ -37,6 +50,11 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[s
         total_credits += 1
         role = credit.role or "OTHER"
         role_breakdown[role] = role_breakdown.get(role, 0) + 1
+
+        try:
+            estimate_streams_for_song(song.id, org_id, db)
+        except Exception as e:
+            logger.warning(f"Stream estimation failed for song {song.id}: {e}")
 
         stream_summary = get_song_stream_summary(song.id, org_id, db)
         song_streams = stream_summary.get("total_streams", 0)

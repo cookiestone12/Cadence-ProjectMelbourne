@@ -25,7 +25,7 @@ PLATFORM_DISPLAY = {
 
 
 def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[str, Any]:
-    from ..models.models import Analytics, StreamEstimate, ChartEntry, Song
+    from ..models.models import Analytics, StreamEstimate, ChartEntry, Song, SongStreamingMetrics
 
     song = db.query(Song).filter(Song.id == song_id).first()
     if not song:
@@ -35,6 +35,37 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
     spotify_streams = 0
     if analytics and analytics.spotify_streams:
         spotify_streams = analytics.spotify_streams
+
+    if spotify_streams == 0:
+        latest_metric = db.query(SongStreamingMetrics).filter(
+            SongStreamingMetrics.song_id == song_id,
+        ).order_by(SongStreamingMetrics.period_date.desc()).first()
+        if latest_metric and latest_metric.total_streams:
+            spotify_streams = latest_metric.total_streams
+
+    if spotify_streams == 0:
+        spotify_url = song.spotify_link
+        if not spotify_url:
+            from ..models.models import SongDSPLink
+            dsp = db.query(SongDSPLink).filter(
+                SongDSPLink.song_id == song_id,
+                SongDSPLink.platform == "SPOTIFY",
+            ).first()
+            if dsp:
+                spotify_url = dsp.url
+
+        if spotify_url:
+            try:
+                from .spotify_service import _get_access_token, _spotify_get
+                token = _get_access_token()
+                if token:
+                    track_id = _extract_spotify_id(spotify_url)
+                    if track_id:
+                        data = _spotify_get(f"tracks/{track_id}", token)
+                        if data and data.get("popularity") is not None:
+                            spotify_streams = _estimate_from_popularity(data["popularity"])
+            except Exception as e:
+                logger.debug(f"Spotify lookup fallback failed for song {song_id}: {e}")
 
     chart_entries = db.query(ChartEntry).filter(ChartEntry.song_id == song_id).all()
     chart_data = {}
@@ -136,6 +167,40 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
     }
 
 
+def _extract_spotify_id(spotify_link: str) -> Optional[str]:
+    if not spotify_link:
+        return None
+    if "open.spotify.com/track/" in spotify_link:
+        track_id = spotify_link.split("open.spotify.com/track/")[1].split("?")[0].split("/")[0]
+        return track_id if track_id else None
+    if len(spotify_link) == 22 and spotify_link.isalnum():
+        return spotify_link
+    return None
+
+
+def _estimate_from_popularity(popularity: int) -> int:
+    if popularity >= 90:
+        return 500_000_000
+    elif popularity >= 80:
+        return 100_000_000
+    elif popularity >= 70:
+        return 30_000_000
+    elif popularity >= 60:
+        return 10_000_000
+    elif popularity >= 50:
+        return 3_000_000
+    elif popularity >= 40:
+        return 1_000_000
+    elif popularity >= 30:
+        return 300_000
+    elif popularity >= 20:
+        return 100_000
+    elif popularity >= 10:
+        return 30_000
+    else:
+        return 10_000
+
+
 def _estimate_from_chart_position(position: int, platform: str) -> int:
     if platform == "SPOTIFY":
         if position <= 5:
@@ -159,9 +224,20 @@ def compute_riaa_equivalents(total_streams: int) -> Dict[str, float]:
 
 
 def estimate_all_songs(org_id: int, db: Session) -> Dict[str, Any]:
-    from ..models.models import Song
+    from ..models.models import Song, SongDSPLink
+    from sqlalchemy import or_
 
-    songs = db.query(Song).filter(Song.organization_id == org_id).all()
+    spotify_dsp_subq = db.query(SongDSPLink.song_id).filter(
+        SongDSPLink.platform == "SPOTIFY",
+    ).distinct()
+
+    songs = db.query(Song).filter(
+        Song.organization_id == org_id,
+        or_(
+            Song.spotify_link.isnot(None),
+            Song.id.in_(spotify_dsp_subq),
+        ),
+    ).all()
     results = {"total": len(songs), "estimated": 0, "errors": 0}
 
     for song in songs:

@@ -34,13 +34,22 @@ def credits_overview(
     org_id: int,
     search: str = Query(None),
     sort_by: str = Query("streams"),
+    force_refresh: bool = Query(False),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     _verify_org_access(user, org_id, db)
 
-    from ..services.credits_service import get_credits_overview
+    from ..services.credits_service import get_credits_overview, compute_all_creators
+    from ..services.stream_estimator import estimate_all_songs
+
     results = get_credits_overview(org_id, db, search=search, sort_by=sort_by)
+
+    if force_refresh or not results or all(r.get("total_estimated_streams", 0) == 0 for r in results):
+        estimate_all_songs(org_id, db)
+        compute_all_creators(org_id, db)
+        results = get_credits_overview(org_id, db, search=search, sort_by=sort_by)
+
     return {"creators": results, "total": len(results)}
 
 
@@ -71,14 +80,23 @@ def creator_credited_songs(
 ):
     _verify_org_access(user, org_id, db)
 
-    from ..models.models import SongCredit, Song
+    from ..models.models import SongCredit, Song, SongDSPLink
     from ..services.stream_estimator import get_song_stream_summary
+    from sqlalchemy import or_
+
+    spotify_dsp_subq = db.query(SongDSPLink.song_id).filter(
+        SongDSPLink.platform == "SPOTIFY",
+    ).distinct()
 
     credits_q = db.query(SongCredit, Song).join(
         Song, SongCredit.song_id == Song.id
     ).filter(
         SongCredit.creator_id == creator_id,
         Song.organization_id == org_id,
+        or_(
+            Song.spotify_link.isnot(None),
+            Song.id.in_(spotify_dsp_subq),
+        ),
     )
 
     total = credits_q.count()
