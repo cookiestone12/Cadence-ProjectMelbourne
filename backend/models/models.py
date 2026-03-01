@@ -2133,6 +2133,130 @@ class AccountMergeRequest(Base):
     resolved_by = relationship("User", foreign_keys=[resolved_by_user_id])
 
 
+class ChartPlatform(str, enum.Enum):
+    SPOTIFY = "SPOTIFY"
+    YOUTUBE = "YOUTUBE"
+    APPLE = "APPLE"
+    DEEZER = "DEEZER"
+    LASTFM = "LASTFM"
+
+class ChartType(str, enum.Enum):
+    TOP_SONGS = "TOP_SONGS"
+    TRENDING = "TRENDING"
+    PLAYLIST = "PLAYLIST"
+
+class FetchFrequency(str, enum.Enum):
+    HOURLY = "HOURLY"
+    DAILY = "DAILY"
+    WEEKLY = "WEEKLY"
+
+class EstimationMethod(str, enum.Enum):
+    CHART_POSITION = "CHART_POSITION"
+    MARKET_SHARE = "MARKET_SHARE"
+    DIRECT_API = "DIRECT_API"
+    MANUAL = "MANUAL"
+
+
+class ChartSource(Base):
+    __tablename__ = "chart_sources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    platform = Column(String, nullable=False)
+    chart_type = Column(String, default="TOP_SONGS")
+    country_code = Column(String, nullable=True)
+    url = Column(String, nullable=True)
+    external_playlist_id = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    fetch_frequency = Column(String, default="DAILY")
+    last_fetched_at = Column(DateTime, nullable=True)
+    last_error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    entries = relationship("ChartEntry", back_populates="chart_source", cascade="all, delete-orphan")
+
+
+class ChartEntry(Base):
+    __tablename__ = "chart_entries"
+    __table_args__ = (
+        Index('ix_chart_entries_source_date_pos', 'chart_source_id', 'chart_date', 'position'),
+        Index('ix_chart_entries_isrc', 'isrc'),
+        Index('ix_chart_entries_song_id', 'song_id'),
+        Index('ix_chart_entries_chart_date', 'chart_date'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    chart_source_id = Column(Integer, ForeignKey("chart_sources.id", ondelete="CASCADE"), nullable=False)
+    song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    chart_date = Column(Date, nullable=False)
+    position = Column(Integer, nullable=False)
+    external_track_id = Column(String, nullable=True)
+    isrc = Column(String, nullable=True)
+    title = Column(String, nullable=False)
+    artist_name = Column(String, nullable=False)
+    album_name = Column(String, nullable=True)
+    stream_count = Column(Integer, nullable=True)
+    view_count = Column(Integer, nullable=True)
+    play_count = Column(Integer, nullable=True)
+    shazam_count = Column(Integer, nullable=True)
+    extra_data = Column(JSON, nullable=True)
+    matched_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    chart_source = relationship("ChartSource", back_populates="entries")
+    song = relationship("Song")
+
+
+class StreamEstimate(Base):
+    __tablename__ = "stream_estimates"
+    __table_args__ = (
+        Index('ix_stream_estimates_song_org', 'song_id', 'organization_id'),
+        Index('ix_stream_estimates_song_platform_date', 'song_id', 'platform', 'period_date'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    song_id = Column(Integer, ForeignKey("songs.id", ondelete="CASCADE"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    period_date = Column(Date, nullable=False)
+    platform = Column(String, nullable=False)
+    estimated_streams = Column(Float, default=0)
+    actual_streams = Column(Float, nullable=True)
+    estimation_method = Column(String, default="MARKET_SHARE")
+    confidence_score = Column(Float, default=0.3)
+    source_data = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    song = relationship("Song")
+    organization = relationship("Organization")
+
+
+class CreatorCreditsProfile(Base):
+    __tablename__ = "creator_credits_profiles"
+    __table_args__ = (
+        UniqueConstraint('creator_id', 'organization_id', name='uq_credits_profile_creator_org'),
+        Index('ix_credits_profile_share_token', 'share_token'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    creator_id = Column(Integer, ForeignKey("creators.id", ondelete="CASCADE"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    share_token = Column(String(32), unique=True, nullable=True)
+    share_passcode = Column(String, nullable=True)
+    is_public = Column(Boolean, default=False)
+    total_credits = Column(Integer, default=0)
+    total_estimated_streams = Column(Float, default=0)
+    role_breakdown = Column(JSON, nullable=True)
+    top_songs = Column(JSON, nullable=True)
+    platform_breakdown = Column(JSON, nullable=True)
+    last_computed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    creator = relationship("Creator")
+    organization = relationship("Organization")
+
+
 class UnderwritingRun(Base):
     __tablename__ = "underwriting_runs"
     __table_args__ = (
