@@ -7,6 +7,7 @@ import {
   UserCircleIcon,
   StarIcon,
 } from '@heroicons/react/24/outline'
+import PlatformIcon from '../components/PlatformIcon'
 
 const ROLE_COLORS = {
   PRODUCER: 'bg-purple-100 text-purple-700 border-purple-200',
@@ -222,9 +223,12 @@ export default function SharedCreditsPage() {
                   const info = PLATFORM_ICONS[platform] || { label: platform, color: 'text-gray-500' }
                   const streamCount = typeof streamData === 'object' && streamData !== null ? (streamData.streams || 0) : (streamData || 0)
                   return (
-                    <div key={platform} className="flex items-center gap-2">
-                      <span className={`text-sm font-medium ${info.color}`}>{info.label}</span>
-                      <span className="text-sm text-[#3D4A44] font-semibold">{formatNumber(streamCount)}</span>
+                    <div key={platform} className="flex items-center gap-2.5">
+                      <PlatformIcon platform={platform} size={22} />
+                      <div>
+                        <p className="text-xs text-[#7A8580]">{info.label}</p>
+                        <p className="text-sm text-[#3D4A44] font-semibold">{formatNumber(streamCount)}</p>
+                      </div>
                     </div>
                   )
                 })}

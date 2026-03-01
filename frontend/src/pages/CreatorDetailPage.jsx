@@ -5,6 +5,7 @@ import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon
 import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/24/solid'
 import ActionsTab from '../components/ActionsTab'
 import CreatorAccountingEnhanced from '../components/CreatorAccountingEnhanced'
+import PlatformIcon from '../components/PlatformIcon'
 
 export default function CreatorDetailPage() {
   const { id } = useParams()
@@ -1940,9 +1941,7 @@ export default function CreatorDetailPage() {
                         const streamCount = typeof streamData === 'object' && streamData !== null ? (streamData.streams || 0) : (streamData || 0)
                         return (
                           <div key={platform} className="flex items-center gap-3 p-3 rounded-xl bg-[#F8F8FB]">
-                            <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${pInfo.color}20` }}>
-                              <div className="w-3 h-3 rounded-full" style={{ background: pInfo.color }}></div>
-                            </div>
+                            <PlatformIcon platform={platform} size={28} />
                             <div className="min-w-0">
                               <p className="text-xs text-[#7A8580] truncate">{pInfo.label}</p>
                               <p className="text-sm font-semibold text-[#3D4A44]">{formatStreamCount(streamCount)}</p>
@@ -2023,7 +2022,7 @@ export default function CreatorDetailPage() {
                                 const platStreams = typeof platData === 'object' && platData !== null ? (platData.streams || 0) : (platData || 0)
                                 return (
                                   <div key={plat} className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#F8F8FB]" title={`${pInfo.label}: ${formatStreamCount(platStreams)}`}>
-                                    <div className="w-2 h-2 rounded-full" style={{ background: pInfo.color }}></div>
+                                    <PlatformIcon platform={plat} size={14} />
                                     <span className="text-[10px] text-[#7A8580]">{formatStreamCount(platStreams)}</span>
                                   </div>
                                 )

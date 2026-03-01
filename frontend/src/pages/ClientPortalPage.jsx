@@ -28,6 +28,7 @@ import {
   StarIcon,
   LinkIcon,
 } from '@heroicons/react/24/outline'
+import PlatformIcon from '../components/PlatformIcon'
 import AddSongModal from '../components/AddSongModal'
 import ScheduleAUploadModal from '../components/ScheduleAUploadModal'
 import SongDetailModal from '../components/SongDetailModal'
@@ -2299,9 +2300,7 @@ function CreditsTab({ organizationId, creatorId, creatorName }) {
               const streamCount = typeof streamData === 'object' && streamData !== null ? (streamData.streams || 0) : (streamData || 0)
               return (
                 <div key={platform} className="flex items-center gap-2 p-3 rounded-lg bg-[#F5F7F4]">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${pInfo.color}20` }}>
-                    <div className="w-2.5 h-2.5 rounded-full" style={{ background: pInfo.color }}></div>
-                  </div>
+                  <PlatformIcon platform={platform} size={24} />
                   <div className="min-w-0">
                     <p className="text-[10px] text-[#7A8580] truncate">{pInfo.label}</p>
                     <p className="text-xs font-semibold text-[#3D4A44]">{formatStreamCount(streamCount)}</p>
@@ -2374,7 +2373,7 @@ function CreditsTab({ organizationId, creatorId, creatorName }) {
                       const platStreams = typeof platData === 'object' && platData !== null ? (platData.streams || 0) : (platData || 0)
                       return (
                         <div key={plat} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#F5F7F4]" title={`${pInfo.label}: ${formatStreamCount(platStreams)}`}>
-                          <div className="w-2 h-2 rounded-full" style={{ background: pInfo.color }}></div>
+                          <PlatformIcon platform={plat} size={14} />
                           <span className="text-[10px] text-[#7A8580]">{formatStreamCount(platStreams)}</span>
                         </div>
                       )
