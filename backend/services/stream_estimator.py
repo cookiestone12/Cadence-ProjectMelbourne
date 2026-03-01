@@ -1,4 +1,5 @@
 import logging
+import math
 from typing import Dict, Any, List, Optional
 from datetime import date, datetime
 from sqlalchemy.orm import Session
@@ -43,6 +44,8 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
         if latest_metric and latest_metric.total_streams:
             spotify_streams = latest_metric.total_streams
 
+    popularity_score = None
+
     if spotify_streams == 0:
         spotify_url = song.spotify_link
         if not spotify_url:
@@ -64,8 +67,9 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                         logger.info(f"Spotify API lookup for song {song_id}, track_id={track_id}")
                         data = _spotify_get(f"tracks/{track_id}", token)
                         if data and data.get("popularity") is not None:
-                            spotify_streams = _estimate_from_popularity(data["popularity"])
-                            logger.info(f"Spotify popularity={data['popularity']} -> estimated streams={spotify_streams} for song {song_id}")
+                            popularity_score = data["popularity"]
+                            spotify_streams = _estimate_from_popularity(popularity_score)
+                            logger.info(f"Spotify popularity={popularity_score} -> estimated streams={spotify_streams:,} for song {song_id}")
                         elif data:
                             logger.info(f"Spotify returned data but no popularity for song {song_id}")
                         else:
@@ -94,11 +98,17 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
     today = date.today()
 
     if spotify_streams > 0:
+        if popularity_score is not None:
+            method = "POPULARITY_ESTIMATE"
+            confidence = 0.7
+        else:
+            method = "DIRECT_DATA"
+            confidence = 0.9
         estimates["SPOTIFY"] = {
             "estimated_streams": spotify_streams,
-            "actual_streams": spotify_streams,
-            "method": "DIRECT_API",
-            "confidence": 0.9,
+            "actual_streams": spotify_streams if method == "DIRECT_DATA" else None,
+            "method": method,
+            "confidence": confidence,
         }
     elif "SPOTIFY" in chart_data:
         position = chart_data["SPOTIFY"]["position"]
@@ -133,6 +143,12 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                 "confidence": 0.3,
             }
 
+    db.query(StreamEstimate).filter(
+        StreamEstimate.song_id == song_id,
+        StreamEstimate.organization_id == org_id,
+    ).delete()
+    db.flush()
+
     for platform, est in estimates.items():
         existing = db.query(StreamEstimate).filter(
             StreamEstimate.song_id == song_id,
@@ -146,9 +162,15 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
             existing.actual_streams = est.get("actual_streams")
             existing.estimation_method = est["method"]
             existing.confidence_score = est["confidence"]
-            existing.source_data = {"base_spotify": base_spotify, "chart_data": {k: {"position": v["position"]} for k, v in chart_data.items()}}
+            source = {"base_spotify": base_spotify, "chart_data": {k: {"position": v["position"]} for k, v in chart_data.items()}}
+            if popularity_score is not None:
+                source["spotify_popularity"] = popularity_score
+            existing.source_data = source
             existing.updated_at = datetime.utcnow()
         else:
+            source = {"base_spotify": base_spotify, "chart_data": {k: {"position": v["position"]} for k, v in chart_data.items()}}
+            if popularity_score is not None:
+                source["spotify_popularity"] = popularity_score
             db.add(StreamEstimate(
                 song_id=song_id,
                 organization_id=org_id,
@@ -158,7 +180,7 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                 actual_streams=est.get("actual_streams"),
                 estimation_method=est["method"],
                 confidence_score=est["confidence"],
-                source_data={"base_spotify": base_spotify, "chart_data": {k: {"position": v["position"]} for k, v in chart_data.items()}},
+                source_data=source,
             ))
 
     db.commit()
@@ -189,46 +211,8 @@ def _extract_spotify_id(spotify_link: str) -> Optional[str]:
 
 
 def _estimate_from_popularity(popularity: int) -> int:
-    if popularity >= 95:
-        return 2_000_000_000
-    elif popularity >= 90:
-        return 1_000_000_000
-    elif popularity >= 85:
-        return 500_000_000
-    elif popularity >= 80:
-        return 250_000_000
-    elif popularity >= 75:
-        return 100_000_000
-    elif popularity >= 70:
-        return 50_000_000
-    elif popularity >= 65:
-        return 25_000_000
-    elif popularity >= 60:
-        return 15_000_000
-    elif popularity >= 55:
-        return 8_000_000
-    elif popularity >= 50:
-        return 5_000_000
-    elif popularity >= 45:
-        return 3_000_000
-    elif popularity >= 40:
-        return 1_500_000
-    elif popularity >= 35:
-        return 800_000
-    elif popularity >= 30:
-        return 400_000
-    elif popularity >= 25:
-        return 200_000
-    elif popularity >= 20:
-        return 100_000
-    elif popularity >= 15:
-        return 50_000
-    elif popularity >= 10:
-        return 25_000
-    elif popularity >= 5:
-        return 10_000
-    else:
-        return 5_000
+    pop = max(0, min(100, popularity))
+    return max(1000, int(48000 * math.exp(0.1288 * pop)))
 
 
 def _estimate_from_chart_position(position: int, platform: str) -> int:
