@@ -29,6 +29,7 @@ from .models import (
     RegistrationReport,
     SharedContactLink,
     ClientSharedContact,
+    AccountMergeRequest,
 )
 
 __all__ = [
@@ -61,4 +62,5 @@ __all__ = [
     "PushSubscription",
     "RegistrationReport",
     "ClientSharedContact",
+    "AccountMergeRequest",
 ]

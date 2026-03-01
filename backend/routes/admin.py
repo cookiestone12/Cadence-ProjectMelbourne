@@ -383,6 +383,7 @@ def delete_organization(
 
     from sqlalchemy import text
     tables_with_org_id = [
+        "account_merge_requests",
         "underwriting_runs",
         "client_shared_contacts",
         "shared_contact_links",

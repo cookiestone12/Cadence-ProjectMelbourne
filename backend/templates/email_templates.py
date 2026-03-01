@@ -326,3 +326,37 @@ def app_invite(
     content += muted_text("If you didn&#39;t expect this invitation, you can safely ignore this email.")
 
     return wrap_email(content, subject=f"Invitation to join {org_name} on Cadence", preheader=f"You've been invited to {org_name}", platform_url=platform_url)
+
+
+def merge_verification(
+    recipient_email: str,
+    client_username: str,
+    org_name: str,
+    code: str,
+) -> str:
+    content = heading("Account Merge Verification")
+    content += paragraph(
+        f"A client account (<strong>{client_username}</strong>) from <strong>{org_name}</strong> "
+        f"has requested to merge with your Cadence account."
+    )
+    content += paragraph(
+        "If you initiated this request, enter the verification code below in the merge request form:"
+    )
+    content += f"""
+    <div style="text-align:center;margin:24px 0;">
+      <div style="display:inline-block;background:{SAGE_GREEN_BG};border:2px solid {SAGE_GREEN};
+        border-radius:12px;padding:16px 32px;font-size:32px;font-weight:bold;
+        letter-spacing:8px;color:{SAGE_GREEN};font-family:monospace;">
+        {code}
+      </div>
+    </div>
+    """
+    content += muted_text("This code expires in 15 minutes.")
+    content += divider()
+    content += paragraph(
+        "Once verified, your merge request will be reviewed by an administrator. "
+        "After approval, your client access will be transferred to this account."
+    )
+    content += muted_text("If you did not request this, you can safely ignore this email. No changes will be made to your account.")
+
+    return wrap_email(content, subject="Account Merge Verification Code — Cadence", preheader=f"Your verification code is {code}")

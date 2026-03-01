@@ -2101,6 +2101,38 @@ class ClientSharedContact(Base):
     shared_by_user = relationship("User", foreign_keys=[shared_by_user_id])
 
 
+class AccountMergeRequest(Base):
+    __tablename__ = "account_merge_requests"
+    __table_args__ = (
+        Index('ix_merge_requests_status', 'status'),
+        Index('ix_merge_requests_requesting_user', 'requesting_user_id'),
+        Index('ix_merge_requests_target_user', 'target_user_id'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    requesting_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    target_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    linked_creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
+
+    status = Column(String, default="PENDING_VERIFICATION")
+    verification_code = Column(String, nullable=True)
+    verification_expires_at = Column(DateTime, nullable=True)
+    verified_at = Column(DateTime, nullable=True)
+    admin_notes = Column(String, nullable=True)
+    resolved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    requesting_user = relationship("User", foreign_keys=[requesting_user_id])
+    target_user = relationship("User", foreign_keys=[target_user_id])
+    organization = relationship("Organization")
+    linked_creator = relationship("Creator")
+    resolved_by = relationship("User", foreign_keys=[resolved_by_user_id])
+
+
 class UnderwritingRun(Base):
     __tablename__ = "underwriting_runs"
     __table_args__ = (

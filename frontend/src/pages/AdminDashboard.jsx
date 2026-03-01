@@ -36,6 +36,12 @@ export default function AdminDashboard() {
   const [platformStats, setPlatformStats] = useState(null)
   const [resetPasswordUser, setResetPasswordUser] = useState(null)
   const [deletingOrg, setDeletingOrg] = useState(null)
+  const [mergeRequests, setMergeRequests] = useState([])
+  const [mergeFilter, setMergeFilter] = useState('all')
+  const [approvingMerge, setApprovingMerge] = useState(null)
+  const [rejectingMerge, setRejectingMerge] = useState(null)
+  const [rejectNotes, setRejectNotes] = useState('')
+  const [mergeActionLoading, setMergeActionLoading] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -45,18 +51,20 @@ export default function AdminDashboard() {
     try {
       setLoading(true)
       setError(null)
-      const [statsRes, usersRes, orgsRes, integrationsRes, platformRes] = await Promise.all([
+      const [statsRes, usersRes, orgsRes, integrationsRes, platformRes, mergeRes] = await Promise.all([
         axios.get('/api/admin/stats'),
         axios.get('/api/admin/users'),
         axios.get('/api/admin/organizations'),
         axios.get('/api/admin/integrations'),
-        axios.get('/api/analytics/admin/platform-stats').catch(() => ({ data: null }))
+        axios.get('/api/analytics/admin/platform-stats').catch(() => ({ data: null })),
+        axios.get('/api/admin/merge-requests').catch(() => ({ data: [] }))
       ])
       setStats(statsRes.data)
       setUsers(usersRes.data)
       setOrganizations(orgsRes.data)
       setIntegrations(integrationsRes.data)
       if (platformRes.data) setPlatformStats(platformRes.data)
+      setMergeRequests(mergeRes.data || [])
     } catch (err) {
       console.error('Failed to load admin data:', err)
       if (err.response?.status === 403) {
@@ -112,6 +120,62 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleApproveMerge = async (requestId) => {
+    setMergeActionLoading(true)
+    try {
+      await axios.put(`/api/admin/merge-requests/${requestId}/approve`, { notes: '' })
+      setApprovingMerge(null)
+      loadData()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to approve merge request')
+    } finally {
+      setMergeActionLoading(false)
+    }
+  }
+
+  const handleRejectMerge = async (requestId) => {
+    setMergeActionLoading(true)
+    try {
+      await axios.put(`/api/admin/merge-requests/${requestId}/reject`, { notes: rejectNotes })
+      setRejectingMerge(null)
+      setRejectNotes('')
+      loadData()
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to reject merge request')
+    } finally {
+      setMergeActionLoading(false)
+    }
+  }
+
+  const filteredMergeRequests = mergeRequests.filter(r => {
+    if (mergeFilter === 'all') return true
+    return r.status === mergeFilter.toUpperCase()
+  })
+
+  const getMergeStatusBadge = (status) => {
+    const styles = {
+      PENDING_VERIFICATION: 'bg-[rgba(196,149,107,0.12)] text-[#C4956B]',
+      VERIFIED: 'bg-[rgba(90,138,154,0.12)] text-[#5A8A9A]',
+      COMPLETED: 'bg-[rgba(91,154,110,0.12)] text-[#5B9A6E]',
+      REJECTED: 'bg-[rgba(196,112,104,0.12)] text-[#C47068]',
+      CANCELLED: 'bg-[rgba(59,77,67,0.08)] text-[#7A8580]',
+      EXPIRED: 'bg-[rgba(59,77,67,0.08)] text-[#7A8580]',
+    }
+    const labels = {
+      PENDING_VERIFICATION: 'Pending Verification',
+      VERIFIED: 'Awaiting Approval',
+      COMPLETED: 'Approved',
+      REJECTED: 'Rejected',
+      CANCELLED: 'Cancelled',
+      EXPIRED: 'Expired',
+    }
+    return (
+      <span className={`px-2 py-1 rounded text-xs font-medium ${styles[status] || styles.CANCELLED}`}>
+        {labels[status] || status}
+      </span>
+    )
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full p-8">
@@ -145,7 +209,7 @@ export default function AdminDashboard() {
 
       <div className="mb-6 border-b border-[rgba(59,77,67,0.08)] overflow-x-auto">
         <div className="flex space-x-4 sm:space-x-8 min-w-max">
-          {['overview', 'users', 'organizations', 'api-config'].map((tab) => (
+          {['overview', 'users', 'organizations', 'merge-requests', 'api-config'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -480,6 +544,220 @@ export default function AdminDashboard() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'merge-requests' && (
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <h2 className="text-xl font-bold text-[#3D4A44]">
+              Merge Requests ({mergeRequests.length})
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {['all', 'verified', 'pending_verification', 'completed', 'rejected'].map(f => (
+                <button
+                  key={f}
+                  onClick={() => setMergeFilter(f)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    mergeFilter === f
+                      ? 'bg-[#5B8A72] text-white'
+                      : 'bg-[#EEF1EC] text-[#7A8580] hover:text-[#3D4A44]'
+                  }`}
+                >
+                  {f === 'all' ? 'All' : f === 'verified' ? 'Awaiting Approval' : f === 'pending_verification' ? 'Pending Verification' : f === 'completed' ? 'Approved' : 'Rejected'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filteredMergeRequests.length === 0 ? (
+            <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-12 text-center">
+              <p className="text-[#7A8580]">No merge requests found.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredMergeRequests.map(req => (
+                <div key={req.id} className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+                  <div className="flex flex-col sm:flex-row justify-between gap-4">
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-sm font-medium text-[#7A8580]">#{req.id}</span>
+                        {getMergeStatusBadge(req.status)}
+                        {req.target_already_member && (
+                          <span className="px-2 py-1 rounded text-xs font-medium bg-[rgba(196,112,104,0.12)] text-[#C47068]">
+                            Target already member
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-[#7A8580] uppercase tracking-wider mb-1">Requesting Client</p>
+                          <p className="text-sm font-medium text-[#3D4A44]">
+                            {req.requesting_user?.username || 'Unknown'}
+                          </p>
+                          <p className="text-xs text-[#7A8580]">{req.requesting_user?.email}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[#7A8580] uppercase tracking-wider mb-1">Target Account</p>
+                          <p className="text-sm font-medium text-[#3D4A44]">
+                            {req.target_user?.username || 'Unknown'}
+                          </p>
+                          <p className="text-xs text-[#7A8580]">{req.target_user?.email}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[#7A8580] uppercase tracking-wider mb-1">Organization</p>
+                          <p className="text-sm font-medium text-[#3D4A44]">
+                            {req.organization?.name || 'Unknown'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-[#7A8580] uppercase tracking-wider mb-1">Linked Creator</p>
+                          <p className="text-sm font-medium text-[#3D4A44]">
+                            {req.creator?.name || 'None'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-4 text-xs text-[#7A8580]">
+                        <span>Created: {req.created_at ? new Date(req.created_at).toLocaleString() : '—'}</span>
+                        {req.verified_at && (
+                          <span>Verified: {new Date(req.verified_at).toLocaleString()}</span>
+                        )}
+                        {req.resolved_at && (
+                          <span>Resolved: {new Date(req.resolved_at).toLocaleString()}</span>
+                        )}
+                      </div>
+
+                      {req.admin_notes && (
+                        <div className="bg-[#EEF1EC] rounded-lg p-3">
+                          <p className="text-xs text-[#7A8580] uppercase tracking-wider mb-1">Admin Notes</p>
+                          <p className="text-sm text-[#3D4A44]">{req.admin_notes}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {req.status === 'VERIFIED' && (
+                      <div className="flex sm:flex-col gap-2 sm:min-w-[120px]">
+                        <button
+                          onClick={() => setApprovingMerge(req)}
+                          className="flex-1 sm:flex-none px-4 py-2 bg-[#5B8A72] text-white text-sm font-medium rounded-lg hover:bg-[#4A7A62] transition-colors"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => {
+                            setRejectingMerge(req)
+                            setRejectNotes('')
+                          }}
+                          className="flex-1 sm:flex-none px-4 py-2 border border-[#C47068] text-[#C47068] text-sm font-medium rounded-lg hover:bg-[rgba(196,112,104,0.08)] transition-colors"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {approvingMerge && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setApprovingMerge(null)}>
+          <div className="bg-[#FAFBF9] rounded-xl shadow-2xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-[#3D4A44]">Approve Merge Request</h2>
+                <button onClick={() => setApprovingMerge(null)} className="text-[#7A8580] hover:text-[#3D4A44]">
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-[rgba(91,138,114,0.08)] border border-[rgba(91,138,114,0.2)] rounded-lg p-4">
+                <p className="text-sm text-[#3D4A44] font-medium mb-2">This will:</p>
+                <ul className="text-sm text-[#7A8580] space-y-1 list-disc list-inside">
+                  <li>Transfer the CLIENT membership from <span className="font-medium text-[#3D4A44]">{approvingMerge.requesting_user?.username}</span> to <span className="font-medium text-[#3D4A44]">{approvingMerge.target_user?.username}</span></li>
+                  <li>Update the linked creator to point to the target account</li>
+                  <li>Deactivate the original client account if no other memberships remain</li>
+                </ul>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="bg-[#EEF1EC] rounded-lg p-3">
+                  <p className="text-xs text-[#7A8580] mb-1">From (Client)</p>
+                  <p className="font-medium text-[#3D4A44]">{approvingMerge.requesting_user?.username}</p>
+                  <p className="text-xs text-[#7A8580]">{approvingMerge.requesting_user?.email}</p>
+                </div>
+                <div className="bg-[#EEF1EC] rounded-lg p-3">
+                  <p className="text-xs text-[#7A8580] mb-1">To (Target)</p>
+                  <p className="font-medium text-[#3D4A44]">{approvingMerge.target_user?.username}</p>
+                  <p className="text-xs text-[#7A8580]">{approvingMerge.target_user?.email}</p>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  onClick={() => setApprovingMerge(null)}
+                  className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC]"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleApproveMerge(approvingMerge.id)}
+                  disabled={mergeActionLoading}
+                  className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] disabled:opacity-50"
+                >
+                  {mergeActionLoading ? 'Approving...' : 'Confirm Approval'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rejectingMerge && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setRejectingMerge(null)}>
+          <div className="bg-[#FAFBF9] rounded-xl shadow-2xl max-w-md w-full" onClick={e => e.stopPropagation()}>
+            <div className="p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-[#C47068]">Reject Merge Request</h2>
+                <button onClick={() => setRejectingMerge(null)} className="text-[#7A8580] hover:text-[#3D4A44]">
+                  <XMarkIcon className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="text-sm text-[#7A8580]">
+                Rejecting merge request from <span className="font-medium text-[#3D4A44]">{rejectingMerge.requesting_user?.username}</span> to <span className="font-medium text-[#3D4A44]">{rejectingMerge.target_user?.username}</span>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Admin Notes (optional)</label>
+                <textarea
+                  value={rejectNotes}
+                  onChange={e => setRejectNotes(e.target.value)}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#C47068] focus:border-transparent resize-none"
+                  placeholder="Reason for rejection..."
+                />
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button
+                  onClick={() => setRejectingMerge(null)}
+                  className="px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg text-[#3D4A44] hover:bg-[#EEF1EC]"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => handleRejectMerge(rejectingMerge.id)}
+                  disabled={mergeActionLoading}
+                  className="px-4 py-2 bg-[#C47068] text-white rounded-lg hover:bg-[#A45850] disabled:opacity-50"
+                >
+                  {mergeActionLoading ? 'Rejecting...' : 'Reject Request'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -213,74 +213,308 @@ function ProfileTab({ creator, onUpdate }) {
   )
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-[#3D4A44]">Creator Profile</h2>
-        <div className="flex items-center gap-2">
-          {msg && <span className="text-sm text-[#5B8A72] font-medium">{msg}</span>}
-          {editing ? (
-            <>
-              <button onClick={() => { setEditing(false); setForm({ ...creator }) }} className="px-3 py-1.5 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] disabled:opacity-50">
-                <CheckIcon className="w-4 h-4" />
-                {saving ? 'Saving...' : 'Save'}
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-[#3D4A44]">Creator Profile</h2>
+          <div className="flex items-center gap-2">
+            {msg && <span className="text-sm text-[#5B8A72] font-medium">{msg}</span>}
+            {editing ? (
+              <>
+                <button onClick={() => { setEditing(false); setForm({ ...creator }) }} className="px-3 py-1.5 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg">Cancel</button>
+                <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] disabled:opacity-50">
+                  <CheckIcon className="w-4 h-4" />
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#5B8A72] hover:bg-[#EEF1EC] rounded-lg border border-[#5B8A72]/30">
+                <PencilIcon className="w-4 h-4" />
+                Edit
               </button>
-            </>
-          ) : (
-            <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#5B8A72] hover:bg-[#EEF1EC] rounded-lg border border-[#5B8A72]/30">
-              <PencilIcon className="w-4 h-4" />
-              Edit
-            </button>
-          )}
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Display Name" field="display_name" />
-        <Field label="Legal Name" field="legal_name" />
-        <Field label="Email" field="email" type="email" />
-        <Field label="Phone" field="phone" />
-        <Field label="Territory" field="primary_territory" />
-        <Field label="PRO" field="primary_pro" />
-        <Field label="IPI Number" field="primary_ipi" />
-        <div>
-          <label className="block text-xs font-medium text-[#7A8580] mb-1">Publisher</label>
-          <p className="text-sm text-[#3D4A44]">
-            {creator.publisher_contact
-              ? <>{creator.publisher_contact.display_name}{creator.publisher_contact.company ? <span className="text-[#7A8580]"> ({creator.publisher_contact.company})</span> : ''}</>
-              : creator.publisher_name
-                ? creator.publisher_name
-                : <span className="text-[#A0A8A3] italic">Not set</span>
-            }
-          </p>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-[#7A8580] mb-1">Administrator</label>
-          <p className="text-sm text-[#3D4A44]">
-            {creator.admin_contact
-              ? <>{creator.admin_contact.display_name}{creator.admin_contact.company ? <span className="text-[#7A8580]"> ({creator.admin_contact.company})</span> : ''}</>
-              : <span className="text-[#A0A8A3] italic">Not set</span>
-            }
-          </p>
-        </div>
-        <Field label="Label Affiliation" field="label_affiliation" />
-        <Field label="Website" field="website_url" type="url" />
-      </div>
-
-      <div>
-        <Field label="Bio" field="bio" type="textarea" />
-      </div>
-
-      <div>
-        <h3 className="text-sm font-semibold text-[#3D4A44] mb-3">Social Links</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Field label="Spotify" field="spotify_url" type="url" />
-          <Field label="Apple Music" field="apple_music_url" type="url" />
-          <Field label="YouTube" field="youtube_url" type="url" />
-          <Field label="Instagram" field="instagram_url" type="url" />
-          <Field label="Twitter / X" field="twitter_url" type="url" />
+          <Field label="Display Name" field="display_name" />
+          <Field label="Legal Name" field="legal_name" />
+          <Field label="Email" field="email" type="email" />
+          <Field label="Phone" field="phone" />
+          <Field label="Territory" field="primary_territory" />
+          <Field label="PRO" field="primary_pro" />
+          <Field label="IPI Number" field="primary_ipi" />
+          <div>
+            <label className="block text-xs font-medium text-[#7A8580] mb-1">Publisher</label>
+            <p className="text-sm text-[#3D4A44]">
+              {creator.publisher_contact
+                ? <>{creator.publisher_contact.display_name}{creator.publisher_contact.company ? <span className="text-[#7A8580]"> ({creator.publisher_contact.company})</span> : ''}</>
+                : creator.publisher_name
+                  ? creator.publisher_name
+                  : <span className="text-[#A0A8A3] italic">Not set</span>
+              }
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-[#7A8580] mb-1">Administrator</label>
+            <p className="text-sm text-[#3D4A44]">
+              {creator.admin_contact
+                ? <>{creator.admin_contact.display_name}{creator.admin_contact.company ? <span className="text-[#7A8580]"> ({creator.admin_contact.company})</span> : ''}</>
+                : <span className="text-[#A0A8A3] italic">Not set</span>
+              }
+            </p>
+          </div>
+          <Field label="Label Affiliation" field="label_affiliation" />
+          <Field label="Website" field="website_url" type="url" />
+        </div>
+
+        <div>
+          <Field label="Bio" field="bio" type="textarea" />
+        </div>
+
+        <div>
+          <h3 className="text-sm font-semibold text-[#3D4A44] mb-3">Social Links</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Spotify" field="spotify_url" type="url" />
+            <Field label="Apple Music" field="apple_music_url" type="url" />
+            <Field label="YouTube" field="youtube_url" type="url" />
+            <Field label="Instagram" field="instagram_url" type="url" />
+            <Field label="Twitter / X" field="twitter_url" type="url" />
+          </div>
         </div>
       </div>
+
+      <MergeAccountSection />
+    </div>
+  )
+}
+
+function MergeAccountSection() {
+  const [step, setStep] = useState('idle')
+  const [targetEmail, setTargetEmail] = useState('')
+  const [verificationCode, setVerificationCode] = useState('')
+  const [requestId, setRequestId] = useState(null)
+  const [maskedEmail, setMaskedEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+  const [mergeRequests, setMergeRequests] = useState([])
+  const [requestsLoading, setRequestsLoading] = useState(true)
+
+  const loadRequests = () => {
+    setRequestsLoading(true)
+    axios.get('/api/account-merge/my-requests')
+      .then(res => setMergeRequests(res.data))
+      .catch(() => {})
+      .finally(() => setRequestsLoading(false))
+  }
+
+  useEffect(() => { loadRequests() }, [])
+
+  const handleSubmitRequest = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    setSuccessMsg('')
+    try {
+      const res = await axios.post('/api/account-merge/request', { target_email: targetEmail })
+      setRequestId(res.data.id)
+      setMaskedEmail(res.data.target_email_masked || targetEmail)
+      setStep('verify')
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to create merge request')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleVerify = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      await axios.post('/api/account-merge/verify', {
+        request_id: requestId,
+        code: verificationCode,
+      })
+      setSuccessMsg('Identity verified! Your merge request has been submitted for admin review.')
+      setStep('idle')
+      setTargetEmail('')
+      setVerificationCode('')
+      setRequestId(null)
+      loadRequests()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Verification failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleCancel = async (reqId) => {
+    try {
+      await axios.delete(`/api/account-merge/${reqId}`)
+      loadRequests()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to cancel request')
+    }
+  }
+
+  const statusColors = {
+    PENDING_VERIFICATION: 'bg-amber-100 text-amber-700',
+    VERIFIED: 'bg-blue-100 text-blue-700',
+    COMPLETED: 'bg-green-100 text-green-700',
+    REJECTED: 'bg-red-100 text-red-600',
+    CANCELLED: 'bg-gray-100 text-gray-600',
+    EXPIRED: 'bg-gray-100 text-gray-500',
+  }
+
+  const statusLabels = {
+    PENDING_VERIFICATION: 'Pending Verification',
+    VERIFIED: 'Awaiting Admin Approval',
+    COMPLETED: 'Completed',
+    REJECTED: 'Rejected',
+    CANCELLED: 'Cancelled',
+    EXPIRED: 'Expired',
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-[rgba(59,77,67,0.08)] p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-[#3D4A44]">Merge Account</h2>
+          <p className="text-sm text-[#7A8580] mt-0.5">Link this client profile to your own independent user account.</p>
+        </div>
+        {step === 'idle' && (
+          <button
+            onClick={() => setStep('enter_email')}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors"
+          >
+            <ShareIcon className="w-4 h-4" />
+            Merge Account
+          </button>
+        )}
+      </div>
+
+      {successMsg && (
+        <div className="flex items-center gap-2 p-3 bg-green-50 text-green-700 rounded-lg text-sm">
+          <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+          {successMsg}
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+          <ExclamationCircleIcon className="w-5 h-5 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {step === 'enter_email' && (
+        <form onSubmit={handleSubmitRequest} className="space-y-3 border border-[#E5E8E3] rounded-xl p-4">
+          <div>
+            <label className="block text-sm font-medium text-[#3D4A44] mb-1">Target Account Email</label>
+            <p className="text-xs text-[#7A8580] mb-2">Enter the email address of the independent account you want to merge into. A verification code will be sent to that email.</p>
+            <input
+              type="email"
+              required
+              value={targetEmail}
+              onChange={(e) => setTargetEmail(e.target.value)}
+              placeholder="your-account@example.com"
+              className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+            />
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => { setStep('idle'); setTargetEmail(''); setError('') }}
+              className="px-3 py-1.5 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] disabled:opacity-50"
+            >
+              {loading ? 'Sending...' : 'Send Verification Code'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {step === 'verify' && (
+        <form onSubmit={handleVerify} className="space-y-3 border border-[#E5E8E3] rounded-xl p-4">
+          <div className="bg-[#F5F7F4] rounded-lg p-3 text-sm text-[#3D4A44]">
+            A 6-digit verification code has been sent to <strong>{maskedEmail}</strong>. Enter it below to verify your identity.
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[#3D4A44] mb-1">Verification Code</label>
+            <input
+              type="text"
+              required
+              value={verificationCode}
+              onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="000000"
+              maxLength={6}
+              className="w-full px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent font-mono tracking-widest text-center text-lg"
+            />
+          </div>
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => { setStep('idle'); setVerificationCode(''); setError('') }}
+              className="px-3 py-1.5 text-sm text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading || verificationCode.length < 6}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] disabled:opacity-50"
+            >
+              {loading ? 'Verifying...' : 'Verify & Submit'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {requestsLoading ? (
+        <LoadingSpinner />
+      ) : mergeRequests.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-[#3D4A44]">Merge Requests</h3>
+          {mergeRequests.map(req => (
+            <div key={req.id} className="flex items-center justify-between p-3 border border-[#E5E8E3] rounded-xl">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-[#3D4A44]">
+                    {req.target_username ? `@${req.target_username}` : req.target_email_masked}
+                  </span>
+                  <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${statusColors[req.status] || 'bg-gray-100 text-gray-600'}`}>
+                    {statusLabels[req.status] || req.status}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-[#7A8580]">
+                  {req.organization_name && <span>{req.organization_name}</span>}
+                  {req.creator_name && <span>{req.creator_name}</span>}
+                  {req.created_at && <span>{new Date(req.created_at).toLocaleDateString()}</span>}
+                </div>
+                {req.admin_notes && (
+                  <p className="text-xs text-[#7A8580] italic mt-1">Admin: {req.admin_notes}</p>
+                )}
+              </div>
+              {(req.status === 'PENDING_VERIFICATION' || req.status === 'VERIFIED') && (
+                <button
+                  onClick={() => handleCancel(req.id)}
+                  className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg border border-red-200 transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
