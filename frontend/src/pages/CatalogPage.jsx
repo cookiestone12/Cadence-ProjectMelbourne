@@ -42,7 +42,15 @@ export default function CatalogPage() {
       ])
       
       const ownSongs = songsResponse.data
-      const sharedSongs = sharedSongsRes.data || []
+      let sharedSongs = sharedSongsRes.data || []
+      if (filters.creator_id) {
+        const selectedCreator = [...(creatorsResponse.data || [])].find(c => String(c.id) === String(filters.creator_id))
+        if (selectedCreator) {
+          sharedSongs = sharedSongs.filter(s =>
+            (s.shared_from_creators || []).some(name => name.trim().toLowerCase() === selectedCreator.display_name.trim().toLowerCase())
+          )
+        }
+      }
       const ownSongIds = new Set(ownSongs.map(s => s.id))
       const uniqueSharedSongs = sharedSongs.filter(s => !ownSongIds.has(s.id))
       setSongs([...ownSongs, ...uniqueSharedSongs])

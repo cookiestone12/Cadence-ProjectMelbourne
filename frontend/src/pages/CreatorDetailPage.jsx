@@ -159,8 +159,9 @@ export default function CreatorDetailPage() {
         const myOrgId = orgResponse.data.id
         setOrganizationName(orgResponse.data.name || '')
         
-        const isShared = creatorData.is_shared || locationState.is_shared
-        const sharedOrgId = creatorData.organization_id || locationState.organization_id
+        const creatorOrgId = creatorData.organization_id
+        const isShared = creatorData.is_shared || locationState.is_shared || (creatorOrgId && creatorOrgId !== myOrgId)
+        const sharedOrgId = creatorOrgId || locationState.organization_id
         const effectiveOrgId = (isShared && sharedOrgId && sharedOrgId !== myOrgId) ? sharedOrgId : myOrgId
         if (isShared && !creatorData.is_shared) {
           creatorData.is_shared = true

@@ -154,10 +154,31 @@ def get_organization_creators(
     
     creator_ids = [creator.id for creator in all_creators]
     
-    counts = db.query(SongCredit.creator_id, func.count(SongCredit.id)).filter(
-        SongCredit.creator_id.in_(creator_ids)
-    ).group_by(SongCredit.creator_id).all()
-    count_map = {cid: cnt for cid, cnt in counts}
+    creator_org_map = {c.id: c.organization_id for c in all_creators}
+
+    local_creator_ids = [c.id for c in creators]
+    shared_creator_ids_in_list = [c.id for c in shared_creators]
+
+    count_map = {}
+    if local_creator_ids:
+        local_counts = db.query(SongCredit.creator_id, func.count(SongCredit.id)).join(
+            Song, Song.id == SongCredit.song_id
+        ).filter(
+            SongCredit.creator_id.in_(local_creator_ids),
+            Song.organization_id == org_id
+        ).group_by(SongCredit.creator_id).all()
+        for cid, cnt in local_counts:
+            count_map[cid] = cnt
+
+    if shared_creator_ids_in_list:
+        for sc in shared_creators:
+            sc_count = db.query(func.count(SongCredit.id)).join(
+                Song, Song.id == SongCredit.song_id
+            ).filter(
+                SongCredit.creator_id == sc.id,
+                Song.organization_id == sc.organization_id
+            ).scalar() or 0
+            count_map[sc.id] = sc_count
     
     avgs = db.query(SongCredit.creator_id, func.avg(Song.status_health_score)).join(
         Song, Song.id == SongCredit.song_id
@@ -311,20 +332,25 @@ def get_creator(
             raise HTTPException(status_code=403, detail="Not authorized to access this creator")
         is_shared = True
     
-    song_count = db.query(func.count(SongCredit.id)).filter(
-        SongCredit.creator_id == creator.id
+    song_count = db.query(func.count(SongCredit.id)).join(
+        Song, Song.id == SongCredit.song_id
+    ).filter(
+        SongCredit.creator_id == creator.id,
+        Song.organization_id == creator.organization_id
     ).scalar() or 0
     
     avg_health = db.query(func.avg(Song.status_health_score)).join(
         SongCredit, Song.id == SongCredit.song_id
     ).filter(
-        SongCredit.creator_id == creator.id
+        SongCredit.creator_id == creator.id,
+        Song.organization_id == creator.organization_id
     ).scalar() or 0.0
     
     placement_count = db.query(func.count(Song.id)).join(
         SongCredit, Song.id == SongCredit.song_id
     ).filter(
         SongCredit.creator_id == creator.id,
+        Song.organization_id == creator.organization_id,
         Song.is_paid == "Yes"
     ).scalar() or 0
     
