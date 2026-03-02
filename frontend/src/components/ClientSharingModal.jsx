@@ -36,6 +36,7 @@ const STATUS_COLORS = {
   ACCEPTED: 'bg-green-100 text-green-700',
   REJECTED: 'bg-red-100 text-red-700',
   REVOKED: 'bg-gray-100 text-gray-500',
+  CANCELLED: 'bg-gray-100 text-gray-500',
 }
 
 function generatePasscode() {
@@ -431,6 +432,19 @@ function ActiveShares({ shares, onAction, onError }) {
     }
   }
 
+  const handleCancel = async (shareId) => {
+    if (!confirm('Cancel this share invitation?')) return
+    setProcessing(true)
+    try {
+      await axios.post(`/api/client-sharing/revoke/${shareId}`)
+      onAction()
+    } catch (err) {
+      onError(err.response?.data?.detail || 'Failed to cancel share')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   const handleRoleChange = async (shareId, newRole) => {
     setProcessing(true)
     try {
@@ -520,6 +534,7 @@ function ActiveShares({ shares, onAction, onError }) {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Passcode</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Status</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider hidden md:table-cell">Date</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E5E8E3]">
@@ -548,7 +563,7 @@ function ActiveShares({ shares, onAction, onError }) {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[share.status]}`}>
+                      <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[share.status] || 'bg-gray-100 text-gray-500'}`}>
                         {share.status}
                       </span>
                     </td>
@@ -556,6 +571,17 @@ function ActiveShares({ shares, onAction, onError }) {
                       <span className="text-xs text-[#7A8580]">
                         {share.created_at ? new Date(share.created_at).toLocaleDateString() : '—'}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {share.status === 'PENDING' && (
+                        <button
+                          onClick={() => handleCancel(share.id)}
+                          disabled={processing}
+                          className="px-3 py-1.5 border border-red-300 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 disabled:opacity-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

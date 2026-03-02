@@ -206,16 +206,17 @@ def revoke_share(
     share = db.query(ClientShare).filter(
         ClientShare.id == share_id,
         ClientShare.primary_org_id == membership.organization_id,
-        ClientShare.status == "ACCEPTED"
+        ClientShare.status.in_(["ACCEPTED", "PENDING"])
     ).first()
     if not share:
         raise HTTPException(status_code=404, detail="Share not found or not authorized")
 
-    share.status = "REVOKED"
+    was_pending = share.status == "PENDING"
+    share.status = "CANCELLED" if was_pending else "REVOKED"
     share.revoked_at = datetime.utcnow()
     db.commit()
 
-    return {"message": "Share access revoked"}
+    return {"message": "Share invitation cancelled" if was_pending else "Share access revoked"}
 
 
 @router.put("/{share_id}/role")
