@@ -9,8 +9,11 @@ from ..utils.auth import get_current_user
 from .client_sharing import has_shared_access
 import os
 import uuid
+import logging
 from datetime import datetime
 from pathlib import Path
+
+logger = logging.getLogger("cadence")
 
 router = APIRouter(prefix="/api/creators", tags=["creators"])
 
@@ -640,9 +643,6 @@ def export_roster_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    import logging
-    logger = logging.getLogger("cadence")
-    
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == current_user.id,
         OrganizationMember.organization_id == org_id

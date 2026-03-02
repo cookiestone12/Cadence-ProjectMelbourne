@@ -16,12 +16,16 @@ from ..services.contract_parser import parse_contract_document
 router = APIRouter(prefix="/api/rights", tags=["rights-management"])
 
 
-def verify_org_access(user: User, org_id: int, db: Session):
+def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = None):
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id,
         OrganizationMember.organization_id == org_id
     ).first()
     if not membership and not user.is_super_admin:
+        if creator_id:
+            from .client_sharing import has_shared_access
+            if has_shared_access(db, user.id, creator_id):
+                return None
         raise HTTPException(status_code=403, detail="Access denied")
     return membership
 
@@ -223,7 +227,7 @@ def list_contracts_by_creator(
     creator = db.query(Creator).filter(Creator.id == creator_id).first()
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
-    verify_org_access(current_user, creator.organization_id, db)
+    verify_org_access(current_user, creator.organization_id, db, creator_id=creator_id)
 
     direct_ids = db.query(Contract.id).filter(
         Contract.organization_id == creator.organization_id,
