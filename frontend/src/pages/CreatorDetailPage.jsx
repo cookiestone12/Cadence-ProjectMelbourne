@@ -50,6 +50,7 @@ export default function CreatorDetailPage() {
   const [releaseArtworkUrls, setReleaseArtworkUrls] = useState({})
   const [sortColumn, setSortColumn] = useState(null)
   const [sortDirection, setSortDirection] = useState('asc')
+  const [sharedVersion, setSharedVersion] = useState(null)
   const [showEditCreatorModal, setShowEditCreatorModal] = useState(false)
   const [editingCreator, setEditingCreator] = useState(false)
   const [showSpotifyModal, setShowSpotifyModal] = useState(false)
@@ -190,6 +191,17 @@ export default function CreatorDetailPage() {
         }
 
         if (!creatorData.is_shared) {
+          try {
+            const rosterRes = await axios.get(`/api/creators/org/${myOrgId}`)
+            const rosterData = Array.isArray(rosterRes.data) ? rosterRes.data : []
+            const match = rosterData.find(c =>
+              c.shared && c.display_name.trim().toLowerCase() === creatorData.display_name.trim().toLowerCase() && c.id !== creatorData.id
+            )
+            if (match) {
+              setSharedVersion(match)
+            }
+          } catch (e) {}
+
           try {
             const contactsRes = await axios.get(`/api/creative-directory/org/${myOrgId}`)
             const contactsData = contactsRes.data
@@ -1220,6 +1232,24 @@ export default function CreatorDetailPage() {
         </div>
       </div>
       
+      {sharedVersion && songs.length === 0 && (
+        <div className="mx-4 sm:mx-8 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-blue-800">
+              A shared version of this creator is available with {sharedVersion.song_count} song{sharedVersion.song_count !== 1 ? 's' : ''}
+            </p>
+            <p className="text-xs text-blue-600 mt-0.5">Shared from {sharedVersion.shared_from}</p>
+          </div>
+          <Link
+            to={`/roster/${sharedVersion.id}`}
+            state={{ is_shared: true, organization_id: sharedVersion.organization_id }}
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap ml-4"
+          >
+            View Shared Profile
+          </Link>
+        </div>
+      )}
+
       <div className="p-4 sm:p-8">
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

@@ -166,11 +166,16 @@ def get_organization_creators(
     ).group_by(SongCredit.creator_id).all()
     avg_map = {cid: float(avg) if avg else 0.0 for cid, avg in avgs}
     
+    shared_names = {c.display_name.strip().lower() for c in shared_creators} if shared_creators else set()
+
     result = []
     for creator in all_creators:
         song_count = count_map.get(creator.id, 0)
         avg_health = avg_map.get(creator.id, 0.0)
         is_shared = creator.id in shared_id_set
+
+        if not is_shared and song_count == 0 and creator.display_name.strip().lower() in shared_names:
+            continue
         
         entry = {
             "id": creator.id,
