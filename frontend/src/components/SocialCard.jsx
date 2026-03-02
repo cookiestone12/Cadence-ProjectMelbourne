@@ -39,8 +39,11 @@ function formatNum(num) {
   return num.toLocaleString()
 }
 
-const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) => {
-  const topSongs = (data.top_songs || []).slice(0, 5)
+const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName, format = 'story' }, ref) => {
+  const isSquare = format === 'square'
+  const cardWidth = 1080
+  const cardHeight = isSquare ? 1080 : 1350
+  const topSongs = (data.top_songs || []).slice(0, isSquare ? 4 : 5)
   const platformBreakdown = data.platform_breakdown || {}
   const totalStreams = data.total_estimated_streams || 0
   const totalCredits = data.total_credits || 0
@@ -50,12 +53,15 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4)
 
+  const pad = isSquare ? 44 : 56
+  const avatarSize = isSquare ? 88 : 110
+
   return (
     <div
       ref={ref}
       style={{
-        width: 1080,
-        height: 1350,
+        width: cardWidth,
+        height: cardHeight,
         background: 'linear-gradient(165deg, #2D5A43 0%, #3D6B54 25%, #4A7A62 50%, #3D6B54 75%, #2D5A43 100%)',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         color: '#FFFFFF',
@@ -85,20 +91,20 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
       }} />
 
       <div style={{
-        padding: '48px 56px 0',
+        padding: `${isSquare ? 36 : 48}px ${pad}px 0`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-        <CadenceLogoLight height={48} />
-        <span style={{ fontSize: 14, opacity: 0.5, letterSpacing: 1 }}>CATALOG INTELLIGENCE</span>
+        <CadenceLogoLight height={isSquare ? 38 : 48} />
+        <span style={{ fontSize: isSquare ? 12 : 14, opacity: 0.5, letterSpacing: 1 }}>CATALOG INTELLIGENCE</span>
       </div>
 
       <div style={{
-        padding: '44px 56px 0',
+        padding: `${isSquare ? 28 : 44}px ${pad}px 0`,
         display: 'flex',
         alignItems: 'center',
-        gap: 28,
+        gap: isSquare ? 22 : 28,
       }}>
         {avatarUrl ? (
           <img
@@ -106,48 +112,48 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
             alt=""
             crossOrigin="anonymous"
             style={{
-              width: 110,
-              height: 110,
+              width: avatarSize,
+              height: avatarSize,
               borderRadius: '50%',
               objectFit: 'cover',
-              border: '4px solid rgba(255,255,255,0.3)',
+              border: `${isSquare ? 3 : 4}px solid rgba(255,255,255,0.3)`,
               flexShrink: 0,
             }}
           />
         ) : (
           <div style={{
-            width: 110,
-            height: 110,
+            width: avatarSize,
+            height: avatarSize,
             borderRadius: '50%',
             background: 'rgba(255,255,255,0.15)',
-            border: '4px solid rgba(255,255,255,0.3)',
+            border: `${isSquare ? 3 : 4}px solid rgba(255,255,255,0.3)`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
           }}>
-            <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5">
+            <svg width={isSquare ? 40 : 52} height={isSquare ? 40 : 52} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5">
               <path d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
             </svg>
           </div>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontSize: 44,
+            fontSize: isSquare ? 36 : 44,
             fontWeight: 800,
             lineHeight: 1.15,
             wordBreak: 'break-word',
           }}>{creatorName}</div>
           {orgName && (
-            <div style={{ fontSize: 18, opacity: 0.6, marginTop: 6 }}>{orgName}</div>
+            <div style={{ fontSize: isSquare ? 16 : 18, opacity: 0.6, marginTop: isSquare ? 4 : 6 }}>{orgName}</div>
           )}
         </div>
       </div>
 
       <div style={{
-        margin: '36px 56px 0',
+        margin: `${isSquare ? 24 : 36}px ${pad}px 0`,
         display: 'flex',
-        gap: 16,
+        gap: isSquare ? 12 : 16,
       }}>
         {[
           { label: 'CREDITS', value: totalCredits },
@@ -157,45 +163,45 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
           <div key={i} style={{
             flex: 1,
             background: 'rgba(255,255,255,0.1)',
-            borderRadius: 16,
-            padding: '20px 20px',
+            borderRadius: isSquare ? 12 : 16,
+            padding: isSquare ? '14px 16px' : '20px 20px',
             backdropFilter: 'blur(10px)',
             border: '1px solid rgba(255,255,255,0.12)',
           }}>
-            <div style={{ fontSize: 12, opacity: 0.5, letterSpacing: 1.5, fontWeight: 600, marginBottom: 6 }}>{stat.label}</div>
-            <div style={{ fontSize: 32, fontWeight: 800 }}>{stat.value}</div>
+            <div style={{ fontSize: isSquare ? 10 : 12, opacity: 0.5, letterSpacing: 1.5, fontWeight: 600, marginBottom: isSquare ? 4 : 6 }}>{stat.label}</div>
+            <div style={{ fontSize: isSquare ? 26 : 32, fontWeight: 800 }}>{stat.value}</div>
           </div>
         ))}
       </div>
 
       {platforms.length > 0 && (
         <div style={{
-          margin: '24px 56px 0',
+          margin: `${isSquare ? 16 : 24}px ${pad}px 0`,
           display: 'flex',
-          gap: 12,
+          gap: isSquare ? 8 : 12,
           flexWrap: 'wrap',
         }}>
           {platforms.map(([platform, streams]) => (
             <div key={platform} style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 10,
+              gap: isSquare ? 8 : 10,
               background: 'rgba(255,255,255,0.08)',
-              borderRadius: 12,
-              padding: '10px 16px',
+              borderRadius: isSquare ? 10 : 12,
+              padding: isSquare ? '8px 12px' : '10px 16px',
               border: '1px solid rgba(255,255,255,0.08)',
             }}>
               <div style={{
-                width: 10,
-                height: 10,
+                width: isSquare ? 8 : 10,
+                height: isSquare ? 8 : 10,
                 borderRadius: '50%',
                 background: PLATFORM_COLORS[platform] || '#888',
                 flexShrink: 0,
               }} />
-              <span style={{ fontSize: 14, fontWeight: 600, opacity: 0.9 }}>
+              <span style={{ fontSize: isSquare ? 12 : 14, fontWeight: 600, opacity: 0.9 }}>
                 {PLATFORM_LABELS[platform] || platform}
               </span>
-              <span style={{ fontSize: 14, fontWeight: 700 }}>
+              <span style={{ fontSize: isSquare ? 12 : 14, fontWeight: 700 }}>
                 {formatNum(streams)}
               </span>
             </div>
@@ -204,21 +210,21 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
       )}
 
       <div style={{
-        margin: '32px 56px 0',
+        margin: `${isSquare ? 20 : 32}px ${pad}px 0`,
         flex: 1,
         minHeight: 0,
       }}>
         <div style={{
-          fontSize: 13,
+          fontSize: isSquare ? 11 : 13,
           fontWeight: 700,
           letterSpacing: 2,
           opacity: 0.45,
-          marginBottom: 16,
+          marginBottom: isSquare ? 10 : 16,
         }}>TOP SONGS</div>
 
         <div style={{
           background: 'rgba(255,255,255,0.07)',
-          borderRadius: 20,
+          borderRadius: isSquare ? 16 : 20,
           overflow: 'hidden',
           border: '1px solid rgba(255,255,255,0.08)',
         }}>
@@ -226,15 +232,15 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
             <div key={song.song_id || idx} style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 16,
-              padding: '16px 24px',
+              gap: isSquare ? 12 : 16,
+              padding: isSquare ? '12px 20px' : '16px 24px',
               borderBottom: idx < topSongs.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
             }}>
               <span style={{
-                fontSize: 16,
+                fontSize: isSquare ? 14 : 16,
                 fontWeight: 800,
                 opacity: 0.35,
-                width: 28,
+                width: isSquare ? 22 : 28,
                 textAlign: 'right',
                 flexShrink: 0,
               }}>{idx + 1}</span>
@@ -245,25 +251,25 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
                   alt=""
                   crossOrigin="anonymous"
                   style={{
-                    width: 52,
-                    height: 52,
-                    borderRadius: 10,
+                    width: isSquare ? 44 : 52,
+                    height: isSquare ? 44 : 52,
+                    borderRadius: isSquare ? 8 : 10,
                     objectFit: 'cover',
                     flexShrink: 0,
                   }}
                 />
               ) : (
                 <div style={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: 10,
+                  width: isSquare ? 44 : 52,
+                  height: isSquare ? 44 : 52,
+                  borderRadius: isSquare ? 8 : 10,
                   background: 'rgba(255,255,255,0.08)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0,
                 }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5">
+                  <svg width={isSquare ? 18 : 22} height={isSquare ? 18 : 22} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5">
                     <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                   </svg>
                 </div>
@@ -271,13 +277,13 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{
-                  fontSize: 17,
+                  fontSize: isSquare ? 15 : 17,
                   fontWeight: 700,
                   lineHeight: 1.2,
                   wordBreak: 'break-word',
                 }}>{song.title}</div>
                 <div style={{
-                  fontSize: 13,
+                  fontSize: isSquare ? 11 : 13,
                   opacity: 0.5,
                   lineHeight: 1.2,
                   wordBreak: 'break-word',
@@ -286,8 +292,8 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
               </div>
 
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 17, fontWeight: 800 }}>{formatNum(song.total_streams)}</div>
-                <div style={{ fontSize: 11, opacity: 0.4, marginTop: 1 }}>streams</div>
+                <div style={{ fontSize: isSquare ? 15 : 17, fontWeight: 800 }}>{formatNum(song.total_streams)}</div>
+                <div style={{ fontSize: isSquare ? 10 : 11, opacity: 0.4, marginTop: 1 }}>streams</div>
               </div>
             </div>
           ))}
@@ -295,15 +301,15 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
       </div>
 
       <div style={{
-        padding: '24px 56px 40px',
+        padding: `${isSquare ? 16 : 24}px ${pad}px ${isSquare ? 28 : 40}px`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-        <span style={{ fontSize: 13, opacity: 0.3, fontWeight: 500 }}>
+        <span style={{ fontSize: isSquare ? 11 : 13, opacity: 0.3, fontWeight: 500 }}>
           Powered by Cadence — Catalog Intelligence
         </span>
-        <span style={{ fontSize: 11, opacity: 0.2 }}>
+        <span style={{ fontSize: isSquare ? 10 : 11, opacity: 0.2 }}>
           Estimates may vary from actual figures
         </span>
       </div>

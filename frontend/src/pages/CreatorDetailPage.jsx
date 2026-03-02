@@ -91,6 +91,8 @@ export default function CreatorDetailPage() {
   const [refreshingCredits, setRefreshingCredits] = useState(false)
   const [generatingSocialCard, setGeneratingSocialCard] = useState(false)
   const [showSocialCard, setShowSocialCard] = useState(false)
+  const [socialCardFormat, setSocialCardFormat] = useState('story')
+  const [showFormatMenu, setShowFormatMenu] = useState(false)
   const socialCardRef = useRef(null)
   const [directoryContacts, setDirectoryContacts] = useState([])
   const [creatorContacts, setCreatorContacts] = useState([])
@@ -355,22 +357,26 @@ export default function CreatorDetailPage() {
     }
   }
 
-  const handleDownloadSocialCard = useCallback(async () => {
+  const handleDownloadSocialCard = useCallback(async (fmt) => {
     if (!creditsData || !creator) return
+    const chosenFormat = fmt || socialCardFormat
+    setSocialCardFormat(chosenFormat)
     setGeneratingSocialCard(true)
     setShowSocialCard(true)
+    setShowFormatMenu(false)
     try {
       await new Promise(r => setTimeout(r, 500))
       const html2canvas = (await import('html2canvas')).default
       const node = socialCardRef.current
       if (!node) return
+      const h = chosenFormat === 'square' ? 1080 : 1350
       const canvas = await html2canvas(node, {
         scale: 1,
         useCORS: true,
         allowTaint: true,
         backgroundColor: null,
         width: 1080,
-        height: 1350,
+        height: h,
         logging: false,
       })
       let url
@@ -387,7 +393,8 @@ export default function CreatorDetailPage() {
       const a = document.createElement('a')
       a.href = url
       const safeName = (creator.display_name || creator.name || 'creator').replace(/[^a-zA-Z0-9]/g, '_')
-      a.download = `${safeName}_credits.png`
+      const suffix = chosenFormat === 'square' ? '_credits_square' : '_credits'
+      a.download = `${safeName}${suffix}.png`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -399,7 +406,7 @@ export default function CreatorDetailPage() {
       setGeneratingSocialCard(false)
       setShowSocialCard(false)
     }
-  }, [creditsData, creator])
+  }, [creditsData, creator, socialCardFormat])
 
   const formatStreamCount = (num) => {
     if (!num || num === 0) return '0'
@@ -1998,17 +2005,46 @@ export default function CreatorDetailPage() {
                         </svg>
                         {refreshingCredits ? 'Refreshing...' : 'Refresh'}
                       </button>
-                      <button
-                        onClick={handleDownloadSocialCard}
-                        disabled={generatingSocialCard}
-                        className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-white/20 text-white rounded-xl text-sm font-medium hover:bg-white/30 transition-all border border-white/30 disabled:opacity-50"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                        </svg>
-                        <span className="hidden sm:inline">{generatingSocialCard ? 'Generating...' : 'Download for Social'}</span>
-                        <span className="sm:hidden">{generatingSocialCard ? '...' : 'Social'}</span>
-                      </button>
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowFormatMenu(!showFormatMenu)}
+                          disabled={generatingSocialCard}
+                          className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-white/20 text-white rounded-xl text-sm font-medium hover:bg-white/30 transition-all border border-white/30 disabled:opacity-50"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                          </svg>
+                          <span className="hidden sm:inline">{generatingSocialCard ? 'Generating...' : 'Download for Social'}</span>
+                          <span className="sm:hidden">{generatingSocialCard ? '...' : 'Social'}</span>
+                          <svg className="w-3 h-3 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                          </svg>
+                        </button>
+                        {showFormatMenu && !generatingSocialCard && (
+                          <div className="absolute top-full mt-2 right-0 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden z-50 min-w-[180px]">
+                            <button
+                              onClick={() => handleDownloadSocialCard('story')}
+                              className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                            >
+                              <div className="w-5 h-7 rounded border-2 border-gray-400 flex-shrink-0" />
+                              <div>
+                                <div className="font-medium">Story</div>
+                                <div className="text-xs text-gray-400">1080 x 1350</div>
+                              </div>
+                            </button>
+                            <button
+                              onClick={() => handleDownloadSocialCard('square')}
+                              className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 border-t border-gray-100"
+                            >
+                              <div className="w-5 h-5 rounded border-2 border-gray-400 flex-shrink-0" />
+                              <div>
+                                <div className="font-medium">Square</div>
+                                <div className="text-xs text-gray-400">1080 x 1080</div>
+                              </div>
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       <button
                         onClick={() => setShowShareModal(true)}
                         className="inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-white text-[#5B8A72] rounded-xl text-sm font-medium hover:bg-white/90 transition-all"
@@ -2167,6 +2203,7 @@ export default function CreatorDetailPage() {
               avatarUrl={creator.hero_image_url}
               creatorName={creator.display_name || creator.name}
               orgName={organizationName}
+              format={socialCardFormat}
             />
           </div>
         )}
