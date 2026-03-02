@@ -35,7 +35,7 @@ class RoleUpdateRequest(BaseModel):
     role: str
 
 
-def share_to_dict(share, db):
+def share_to_dict(share, db, include_passcode=False):
     creator = db.query(Creator).filter(Creator.id == share.creator_id).first()
     primary_org = db.query(Organization).filter(Organization.id == share.primary_org_id).first()
     shared_by = db.query(User).filter(User.id == share.shared_by_user_id).first()
@@ -46,7 +46,7 @@ def share_to_dict(share, db):
     if share.accepted_by_user_id:
         accepted_by = db.query(User).filter(User.id == share.accepted_by_user_id).first()
 
-    return {
+    result = {
         "id": share.id,
         "creator_id": share.creator_id,
         "creator_name": creator.display_name if creator else None,
@@ -66,6 +66,9 @@ def share_to_dict(share, db):
         "accepted_at": share.accepted_at.isoformat() if share.accepted_at else None,
         "revoked_at": share.revoked_at.isoformat() if share.revoked_at else None,
     }
+    if include_passcode:
+        result["passcode"] = share.passcode
+    return result
 
 
 @router.post("/share")
@@ -124,7 +127,7 @@ def get_sent_shares(
     shares = db.query(ClientShare).filter(
         ClientShare.primary_org_id == membership.organization_id
     ).order_by(ClientShare.created_at.desc()).all()
-    return [share_to_dict(s, db) for s in shares]
+    return [share_to_dict(s, db, include_passcode=True) for s in shares]
 
 
 @router.get("/received")

@@ -517,6 +517,7 @@ function ActiveShares({ shares, onAction, onError }) {
                 <tr>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Creator</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Recipient</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Passcode</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Status</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider hidden md:table-cell">Date</th>
                 </tr>
@@ -529,6 +530,22 @@ function ActiveShares({ shares, onAction, onError }) {
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-sm text-[#3D4A44]">{share.recipient_user_email}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      {share.passcode && share.status === 'PENDING' ? (
+                        <button
+                          onClick={() => navigator.clipboard.writeText(share.passcode)}
+                          className="inline-flex items-center gap-1.5 font-mono text-sm font-bold text-[#3D4A44] tracking-wider hover:text-[#5B8A72] transition-colors"
+                          title="Click to copy passcode"
+                        >
+                          {share.passcode}
+                          <svg className="w-3.5 h-3.5 text-[#7A8580]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9.75a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <span className="text-xs text-[#7A8580]">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[share.status]}`}>
