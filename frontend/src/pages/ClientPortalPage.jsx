@@ -1522,11 +1522,11 @@ function AccountingTab({ orgId }) {
                     <label className="block text-sm font-medium text-[#3D4A44] mb-1">Statement File</label>
                     <input
                       type="file"
-                      accept=".csv,.xlsx,.xls"
+                      accept=".csv,.xlsx,.xls,.pdf"
                       onChange={e => setUploadFile(e.target.files?.[0] || null)}
                       className="w-full text-sm border border-[#D1D5CE] rounded-lg px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-[#5B8A72] file:text-white hover:file:bg-[#4A7A62]"
                     />
-                    <p className="text-xs text-[#7A8580] mt-1">CSV or Excel (.xlsx) files supported</p>
+                    <p className="text-xs text-[#7A8580] mt-1">CSV, Excel (.xlsx), or PDF files supported</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Type</label>

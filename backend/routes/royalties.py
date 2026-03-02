@@ -23,6 +23,12 @@ try:
 except ImportError:
     EXCEL_SUPPORT = False
 
+try:
+    import pdfplumber
+    PDF_SUPPORT = True
+except ImportError:
+    PDF_SUPPORT = False
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/royalties", tags=["royalties"])
@@ -250,9 +256,114 @@ def format_excel_cell(cell_value, number_format=None) -> str:
     return str(cell_value).strip()
 
 
+def _parse_pdf_with_tables(content: bytes) -> tuple:
+    import pdfplumber
+    all_table_rows = []
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        for page in pdf.pages:
+            tables = page.extract_tables()
+            for table in tables:
+                for row in table:
+                    if row and any(cell and str(cell).strip() for cell in row):
+                        cleaned = [str(cell).strip() if cell else "" for cell in row]
+                        all_table_rows.append(cleaned)
+
+    if not all_table_rows:
+        return None, None
+
+    headers = all_table_rows[0]
+    headers = [h if h else f"Column_{i}" for i, h in enumerate(headers)]
+    rows = []
+    for row_data in all_table_rows[1:]:
+        row_dict = {}
+        for i, val in enumerate(row_data):
+            if i < len(headers):
+                row_dict[headers[i]] = val
+        if any(v.strip() for v in row_dict.values()):
+            rows.append(row_dict)
+
+    return headers, rows
+
+
+def _parse_pdf_with_ai(content: bytes) -> tuple:
+    import pdfplumber
+    import os
+    import json
+
+    full_text = ""
+    with pdfplumber.open(io.BytesIO(content)) as pdf:
+        for page in pdf.pages:
+            page_text = page.extract_text()
+            if page_text:
+                full_text += page_text + "\n"
+
+    if not full_text.strip():
+        raise HTTPException(status_code=400, detail="Could not extract any text from the PDF")
+
+    text_excerpt = full_text[:12000]
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"))
+
+        prompt = f"""You are a royalty statement parser. Extract the tabular data from this royalty statement text into structured JSON.
+
+The text below is from a music royalty statement (e.g., from a PRO like BMI/ASCAP, a distributor like DistroKid/TuneCore, or a DSP). Extract ALL line items into rows.
+
+Look for columns like: Track Title, Artist, ISRC, UPC, Revenue/Earnings/Amount, Territory/Country, Platform/Store, Streams/Quantity, Revenue Type/Income Type, etc.
+
+Return JSON with:
+- "headers": list of column name strings
+- "rows": list of lists (each inner list = one data row, matching headers order)
+
+Include as many columns as you can identify. If a value is missing for a row, use empty string.
+
+TEXT:
+{text_excerpt}
+
+Respond ONLY with valid JSON."""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        )
+
+        result = json.loads(response.choices[0].message.content)
+        headers = result.get("headers", [])
+        raw_rows = result.get("rows", [])
+
+        if not headers or not raw_rows:
+            raise HTTPException(status_code=400, detail="AI could not extract tabular data from the PDF")
+
+        rows = []
+        for row_data in raw_rows:
+            row_dict = {}
+            for i, val in enumerate(row_data):
+                if i < len(headers):
+                    row_dict[headers[i]] = str(val) if val is not None else ""
+            rows.append(row_dict)
+
+        return headers, rows
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"AI PDF parsing failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {str(e)}")
+
+
 def parse_uploaded_file(content: bytes, filename: str) -> tuple:
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
-    if ext in ("xlsx", "xls"):
+    if ext == "pdf":
+        if not PDF_SUPPORT:
+            raise HTTPException(status_code=400, detail="PDF support not available")
+        headers, rows = _parse_pdf_with_tables(content)
+        if headers and rows:
+            return headers, rows
+        return _parse_pdf_with_ai(content)
+    elif ext in ("xlsx", "xls"):
         if not EXCEL_SUPPORT:
             raise HTTPException(status_code=400, detail="Excel support not available")
         wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
