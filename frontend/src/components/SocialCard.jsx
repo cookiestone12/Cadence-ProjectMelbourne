@@ -77,20 +77,15 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 18,
-            fontWeight: 700,
-          }}>C</div>
-          <span style={{ fontSize: 22, fontWeight: 600, letterSpacing: 1.5, opacity: 0.9 }}>CADENCE</span>
-        </div>
+        <img
+          src="/cadence-logo.png"
+          alt="Cadence"
+          crossOrigin="anonymous"
+          style={{
+            height: 48,
+            objectFit: 'contain',
+          }}
+        />
         <span style={{ fontSize: 14, opacity: 0.5, letterSpacing: 1 }}>CATALOG INTELLIGENCE</span>
       </div>
 
@@ -135,10 +130,8 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
           <div style={{
             fontSize: 44,
             fontWeight: 800,
-            lineHeight: 1.1,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
+            lineHeight: 1.15,
+            wordBreak: 'break-word',
           }}>{creatorName}</div>
           {orgName && (
             <div style={{ fontSize: 18, opacity: 0.6, marginTop: 6 }}>{orgName}</div>
