@@ -408,7 +408,7 @@ export default function RosterPage() {
                       {selectedIds.has(creator.id) && <CheckIcon className="w-4 h-4 text-white" />}
                     </div>
                   )}
-                  <Link to={selectMode ? '#' : `/roster/${creator.id}`} onClick={selectMode ? (e) => e.preventDefault() : undefined} className="block w-full h-full">
+                  <Link to={selectMode ? '#' : `/roster/${creator.id}`} state={creator.shared ? { is_shared: true, organization_id: creator.organization_id } : undefined} onClick={selectMode ? (e) => e.preventDefault() : undefined} className="block w-full h-full">
                     {creator.hero_image_url ? (
                       <img 
                         src={`/api/creators/${creator.id}/image`} 
@@ -465,7 +465,7 @@ export default function RosterPage() {
                   </button>
                 </div>
                 
-                <Link to={`/roster/${creator.id}`} className="block p-3">
+                <Link to={`/roster/${creator.id}`} state={creator.shared ? { is_shared: true, organization_id: creator.organization_id } : undefined} className="block p-3">
                   <h3 className="font-semibold text-[14px] text-[#3D4A44] mb-0.5 truncate">
                     {creator.display_name}
                   </h3>

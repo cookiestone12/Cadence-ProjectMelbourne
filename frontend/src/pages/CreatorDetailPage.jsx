@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useLocation } from 'react-router-dom'
 import axios from 'axios'
 import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon, CloudArrowUpIcon, PaperClipIcon, LinkIcon } from '@heroicons/react/24/outline'
 import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/24/solid'
@@ -10,6 +10,8 @@ import SocialCard from '../components/SocialCard'
 
 export default function CreatorDetailPage() {
   const { id } = useParams()
+  const location = useLocation()
+  const locationState = location.state || {}
   const [creator, setCreator] = useState(null)
   const [songs, setSongs] = useState([])
   const [scheduleAData, setScheduleAData] = useState(null)
@@ -156,7 +158,14 @@ export default function CreatorDetailPage() {
         const myOrgId = orgResponse.data.id
         setOrganizationName(orgResponse.data.name || '')
         
-        const effectiveOrgId = creatorData.is_shared ? creatorData.organization_id : myOrgId
+        const isShared = creatorData.is_shared || locationState.is_shared
+        const sharedOrgId = creatorData.organization_id || locationState.organization_id
+        const effectiveOrgId = (isShared && sharedOrgId && sharedOrgId !== myOrgId) ? sharedOrgId : myOrgId
+        if (isShared && !creatorData.is_shared) {
+          creatorData.is_shared = true
+          creatorData.organization_id = sharedOrgId
+          setCreator({ ...creatorData })
+        }
         setOrganizationId(effectiveOrgId)
         
         await loadSongs(effectiveOrgId)

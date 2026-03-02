@@ -16,6 +16,7 @@ router = APIRouter(prefix="/api/creators", tags=["creators"])
 
 class CreatorResponse(BaseModel):
     id: int
+    organization_id: Optional[int] = None
     display_name: str
     legal_name: Optional[str]
     email: Optional[str]
@@ -173,6 +174,7 @@ def get_organization_creators(
         
         entry = {
             "id": creator.id,
+            "organization_id": creator.organization_id,
             "display_name": creator.display_name,
             "legal_name": creator.legal_name,
             "email": creator.email,

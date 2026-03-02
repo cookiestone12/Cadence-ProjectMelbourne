@@ -208,6 +208,24 @@ def ensure_schema_updates():
         except Exception as e:
             logger.warning(f"Client share constraint migration note: {e}")
 
+        if 'royalty_statements' in inspector.get_table_names():
+            rs_cols = [c['name'] for c in inspector.get_columns('royalty_statements')]
+            rs_new_fields = {
+                'opening_balance': 'FLOAT',
+                'closing_balance': 'FLOAT',
+                'reconciliation_details': 'JSONB',
+                'reported_gross': 'FLOAT',
+                'reported_withholding': 'FLOAT',
+                'reported_net': 'FLOAT',
+                'reconciliation_result': 'JSONB',
+            }
+            for field, col_type in rs_new_fields.items():
+                if field not in rs_cols:
+                    safe_field = _validate_sql_identifier(field)
+                    conn.execute(text(f"ALTER TABLE royalty_statements ADD COLUMN {safe_field} {col_type}"))
+                    conn.commit()
+                    logger.info(f"Added {field} column to royalty_statements")
+
         if 'registration_reports' not in inspector.get_table_names():
             try:
                 from backend.models.models import RegistrationReport
