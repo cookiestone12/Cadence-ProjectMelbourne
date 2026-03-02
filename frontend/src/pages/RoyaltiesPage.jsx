@@ -611,7 +611,7 @@ function StatementsTab({ orgId, songs }) {
                     <label className="block text-sm font-medium text-[#3D4A44] mb-1">File (CSV/Excel/PDF)</label>
                     <input
                       type="file"
-                      accept=".csv,.xlsx,.xls,.pdf"
+                      accept=".csv,.xlsx,.xls,.pdf,application/pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                       onChange={e => setUploadFile(e.target.files?.[0] || null)}
                       className="w-full text-sm text-[#3D4A44] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-[rgba(91,138,114,0.1)] file:text-[#5B8A72] hover:file:bg-[rgba(91,138,114,0.2)]"
                     />
@@ -1876,7 +1876,7 @@ function ProcessingTab({ orgId }) {
             </div>
             <div>
               <label className="block text-sm font-medium text-[#3D4A44] mb-1">File *</label>
-              <input type="file" accept=".csv,.xlsx,.xls,.tsv,.pdf" onChange={e => setUploadFile(e.target.files?.[0] || null)} className="text-sm text-[#3D4A44]" />
+              <input type="file" accept=".csv,.xlsx,.xls,.tsv,.pdf,application/pdf,text/csv,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={e => setUploadFile(e.target.files?.[0] || null)} className="text-sm text-[#3D4A44]" />
             </div>
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowUpload(false)} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
