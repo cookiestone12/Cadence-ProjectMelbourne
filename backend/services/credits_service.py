@@ -1,16 +1,112 @@
 import logging
 import secrets
-from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+from typing import Dict, Any, Optional, Set
+from datetime import datetime, timedelta, date
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 logger = logging.getLogger("cadence")
 
 
+def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> Dict[int, dict]:
+    from ..models.models import SongDSPLink
+    from .stream_estimator import _extract_spotify_id
+    results = {}
+    track_id_to_song_ids: Dict[str, list] = {}
+    songs_for_search = {}
+
+    for song_id, song in songs_needing_lookup.items():
+        spotify_url = song.spotify_link
+        if not spotify_url:
+            dsp = db.query(SongDSPLink).filter(
+                SongDSPLink.song_id == song_id,
+                SongDSPLink.platform == "SPOTIFY",
+            ).first()
+            if dsp:
+                spotify_url = dsp.url
+
+        if spotify_url:
+            track_id = _extract_spotify_id(spotify_url)
+            if track_id:
+                if track_id not in track_id_to_song_ids:
+                    track_id_to_song_ids[track_id] = []
+                track_id_to_song_ids[track_id].append(song_id)
+                continue
+
+        songs_for_search[song_id] = song
+
+    if track_id_to_song_ids:
+        try:
+            from .spotify_service import _get_access_token, _spotify_get
+            token = _get_access_token()
+            if token:
+                unique_track_ids = list(track_id_to_song_ids.keys())
+                for batch_start in range(0, len(unique_track_ids), 50):
+                    batch_tids = unique_track_ids[batch_start:batch_start + 50]
+                    ids_param = ",".join(batch_tids)
+                    logger.info(f"Spotify batch lookup: {len(batch_tids)} tracks")
+                    data = _spotify_get("tracks", token, {"ids": ids_param})
+                    if data and data.get("tracks"):
+                        for i, track in enumerate(data["tracks"]):
+                            if not track or track.get("popularity") is None:
+                                continue
+                            tid = batch_tids[i]
+                            album_art = None
+                            album_images = track.get("album", {}).get("images", [])
+                            if album_images:
+                                album_art = album_images[0].get("url")
+                            pop_data = {
+                                "popularity": track["popularity"],
+                                "album_art": album_art,
+                            }
+                            for sid in track_id_to_song_ids[tid]:
+                                results[sid] = pop_data
+        except Exception as e:
+            logger.warning(f"Spotify batch lookup failed: {e}")
+
+    if songs_for_search:
+        try:
+            from .spotify_service import _get_access_token, _spotify_get
+            token = _get_access_token()
+            if token:
+                for song_id, song in songs_for_search.items():
+                    if song_id in results:
+                        continue
+                    query_parts = []
+                    if song.title:
+                        clean_title = song.title.split(" - ")[0].split(" (")[0].strip()
+                        query_parts.append(f"track:{clean_title}")
+                    if song.primary_artist:
+                        clean_artist = song.primary_artist.split(" feat.")[0].split(" ft.")[0].split(",")[0].strip()
+                        query_parts.append(f"artist:{clean_artist}")
+                    if not query_parts:
+                        continue
+                    search_query = " ".join(query_parts)
+                    try:
+                        search_data = _spotify_get("search", token, {"q": search_query, "type": "track", "limit": 1})
+                        if search_data and search_data.get("tracks", {}).get("items"):
+                            track = search_data["tracks"]["items"][0]
+                            pop = track.get("popularity", 0)
+                            if pop > 0:
+                                album_art = None
+                                album_images = track.get("album", {}).get("images", [])
+                                if album_images:
+                                    album_art = album_images[0].get("url")
+                                results[song_id] = {
+                                    "popularity": pop,
+                                    "album_art": album_art,
+                                }
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.warning(f"Spotify search batch failed: {e}")
+
+    return results
+
+
 def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[str, Any]:
-    from ..models.models import SongCredit, Song, Creator, CreatorCreditsProfile
-    from .stream_estimator import get_song_stream_summary, estimate_streams_for_song
+    from ..models.models import SongCredit, Song, Creator, CreatorCreditsProfile, StreamEstimate, Analytics, SongStreamingMetrics
+    from .stream_estimator import get_song_stream_summary, estimate_streams_for_song, _estimate_from_popularity, MARKET_SHARE_RATIOS
 
     creator = db.query(Creator).filter(Creator.id == creator_id, Creator.organization_id == org_id).first()
     if not creator:
@@ -26,6 +122,96 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[s
             Song.organization_id == org_id,
         ).all()
         songs = {s.id: s for s in song_list}
+
+    unique_song_ids = list({c.song_id for c in credits if c.song_id in songs})
+
+    today = date.today()
+    recently_estimated = set()
+    if unique_song_ids:
+        recent = db.query(StreamEstimate.song_id).filter(
+            StreamEstimate.song_id.in_(unique_song_ids),
+            StreamEstimate.organization_id == org_id,
+            StreamEstimate.period_date == today,
+        ).distinct().all()
+        recently_estimated = {r[0] for r in recent}
+
+    songs_needing_spotify = {}
+    songs_with_local_data = set()
+    for sid in unique_song_ids:
+        if sid in recently_estimated:
+            continue
+        song = songs[sid]
+        analytics = db.query(Analytics).filter(Analytics.song_id == sid).first()
+        if analytics and analytics.spotify_streams:
+            songs_with_local_data.add(sid)
+            continue
+        latest_metric = db.query(SongStreamingMetrics).filter(
+            SongStreamingMetrics.song_id == sid,
+        ).order_by(SongStreamingMetrics.period_date.desc()).first()
+        if latest_metric and latest_metric.total_streams:
+            songs_with_local_data.add(sid)
+            continue
+        songs_needing_spotify[sid] = song
+
+    logger.info(f"Credits refresh for creator {creator_id}: {len(unique_song_ids)} unique songs, {len(recently_estimated)} cached, {len(songs_with_local_data)} have local data, {len(songs_needing_spotify)} need Spotify lookup")
+
+    prefetched = {}
+    if songs_needing_spotify:
+        prefetched = _batch_fetch_spotify_popularity(songs_needing_spotify, db)
+        logger.info(f"Batch Spotify fetch returned data for {len(prefetched)}/{len(songs_needing_spotify)} songs")
+
+    for sid in songs_with_local_data:
+        try:
+            estimate_streams_for_song(sid, org_id, db)
+        except Exception as e:
+            logger.warning(f"Stream estimation failed for song {sid}: {e}")
+
+    for sid in songs_needing_spotify:
+        if sid in prefetched:
+            song = songs[sid]
+            pop_data = prefetched[sid]
+            popularity = pop_data["popularity"]
+            spotify_streams = _estimate_from_popularity(popularity)
+
+            if pop_data.get("album_art") and not song.media_url:
+                song.media_url = pop_data["album_art"]
+                db.flush()
+
+            db.query(StreamEstimate).filter(
+                StreamEstimate.song_id == sid,
+                StreamEstimate.organization_id == org_id,
+                StreamEstimate.period_date == today,
+            ).delete()
+            db.flush()
+
+            base_spotify = spotify_streams
+            estimates_to_save = {
+                "SPOTIFY": {"estimated_streams": spotify_streams, "actual_streams": None, "method": "POPULARITY_ESTIMATE", "confidence": 0.7},
+            }
+            for platform, ratio in MARKET_SHARE_RATIOS.items():
+                estimates_to_save[platform] = {"estimated_streams": int(base_spotify * ratio), "actual_streams": None, "method": "MARKET_SHARE", "confidence": 0.3}
+
+            source = {"base_spotify": base_spotify, "spotify_popularity": popularity}
+            for platform, est in estimates_to_save.items():
+                db.add(StreamEstimate(
+                    song_id=sid,
+                    organization_id=org_id,
+                    period_date=today,
+                    platform=platform,
+                    estimated_streams=est["estimated_streams"],
+                    actual_streams=est.get("actual_streams"),
+                    estimation_method=est["method"],
+                    confidence_score=est["confidence"],
+                    source_data=source,
+                ))
+            db.flush()
+        else:
+            try:
+                estimate_streams_for_song(sid, org_id, db)
+            except Exception as e:
+                logger.warning(f"Stream estimation failed for song {sid}: {e}")
+
+    db.commit()
 
     role_breakdown = {}
     total_credits = 0
@@ -48,11 +234,6 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[s
             continue
 
         seen_song_ids.add(credit.song_id)
-
-        try:
-            estimate_streams_for_song(song.id, org_id, db)
-        except Exception as e:
-            logger.warning(f"Stream estimation failed for song {song.id}: {e}")
 
         stream_summary = get_song_stream_summary(song.id, org_id, db)
         song_streams = stream_summary.get("total_streams", 0)
