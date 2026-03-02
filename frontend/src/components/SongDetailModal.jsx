@@ -136,11 +136,11 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       const orgId = song?.organization_id
       if (orgId) {
         const response = await axios.get(`/api/creators/org/${orgId}`)
-        setSplitCreators(response.data || [])
+        setSplitCreators((response.data || []).filter(c => !c.shared))
       } else {
         const orgResponse = await axios.get('/api/organizations/current')
         const response = await axios.get(`/api/creators/org/${orgResponse.data.id}`)
-        setSplitCreators(response.data || [])
+        setSplitCreators((response.data || []).filter(c => !c.shared))
       }
     } catch (error) {
       console.error('Failed to load creators:', error)
