@@ -186,6 +186,28 @@ def ensure_schema_updates():
 
         _generate_missing_access_codes()
 
+        try:
+            existing_constraints = inspector.get_unique_constraints('client_shares')
+            has_old_constraint = any(c['name'] == 'uq_client_share_creator_email' for c in existing_constraints)
+            if has_old_constraint:
+                conn.execute(text("ALTER TABLE client_shares DROP CONSTRAINT uq_client_share_creator_email"))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_client_share_active_unique "
+                    "ON client_shares (creator_id, recipient_user_email) "
+                    "WHERE status IN ('PENDING', 'ACCEPTED')"
+                ))
+                conn.commit()
+                logger.info("Replaced uq_client_share_creator_email with partial unique index ix_client_share_active_unique")
+            else:
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_client_share_active_unique "
+                    "ON client_shares (creator_id, recipient_user_email) "
+                    "WHERE status IN ('PENDING', 'ACCEPTED')"
+                ))
+                conn.commit()
+        except Exception as e:
+            logger.warning(f"Client share constraint migration note: {e}")
+
         if 'registration_reports' not in inspector.get_table_names():
             try:
                 from backend.models.models import RegistrationReport

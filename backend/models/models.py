@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, JSON, Enum as SQLEnum, Date, UniqueConstraint, Index, LargeBinary
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, JSON, Enum as SQLEnum, Date, UniqueConstraint, Index, LargeBinary, text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
@@ -1481,7 +1481,12 @@ class ClientShare(Base):
     __table_args__ = (
         Index('ix_client_shares_org', 'primary_org_id'),
         Index('ix_client_shares_recipient', 'recipient_org_id'),
-        UniqueConstraint('creator_id', 'recipient_user_email', name='uq_client_share_creator_email'),
+        Index(
+            'ix_client_share_active_unique',
+            'creator_id', 'recipient_user_email',
+            unique=True,
+            postgresql_where=text("status IN ('PENDING', 'ACCEPTED')")
+        ),
     )
     
     id = Column(Integer, primary_key=True, index=True)
