@@ -34,12 +34,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/royalties", tags=["royalties"])
 
 
-def verify_org_access(user: User, org_id: int, db: Session):
+def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = None):
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id,
         OrganizationMember.organization_id == org_id
     ).first()
     if not membership and not user.is_super_admin:
+        if creator_id:
+            from .client_sharing import has_shared_access
+            if has_shared_access(db, user.id, creator_id):
+                return None
         raise HTTPException(status_code=403, detail="Access denied")
     return membership
 
@@ -1656,7 +1660,7 @@ def get_creator_accounting(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    verify_org_access(current_user, org_id, db)
+    verify_org_access(current_user, org_id, db, creator_id=creator_id)
 
     creator = db.query(Creator).filter(Creator.id == creator_id, Creator.organization_id == org_id).first()
     if not creator:

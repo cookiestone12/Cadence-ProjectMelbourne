@@ -149,17 +149,20 @@ export default function CreatorDetailPage() {
     async function loadCreatorData() {
       try {
         const creatorResponse = await axios.get(`/api/creators/${id}`)
-        setCreator(creatorResponse.data)
+        const creatorData = creatorResponse.data
+        setCreator(creatorData)
         
         const orgResponse = await axios.get('/api/organizations/current')
-        const orgId = orgResponse.data.id
-        setOrganizationId(orgId)
+        const myOrgId = orgResponse.data.id
         setOrganizationName(orgResponse.data.name || '')
         
-        await loadSongs(orgId)
+        const effectiveOrgId = creatorData.is_shared ? creatorData.organization_id : myOrgId
+        setOrganizationId(effectiveOrgId)
+        
+        await loadSongs(effectiveOrgId)
 
         try {
-          const relRes = await axios.get(`/api/releases/org/${orgId}?creator_id=${id}`)
+          const relRes = await axios.get(`/api/releases/org/${effectiveOrgId}?creator_id=${id}`)
           const releases = relRes.data.releases || relRes.data || []
           setCreatorReleases(releases)
           const withArt = releases.filter(r => r.cover_art_url)
@@ -177,19 +180,21 @@ export default function CreatorDetailPage() {
           console.error('Failed to load creator releases:', e)
         }
 
-        try {
-          const contactsRes = await axios.get(`/api/creative-directory/org/${orgId}`)
-          const contactsData = contactsRes.data
-          setDirectoryContacts(Array.isArray(contactsData) ? contactsData : contactsData.contacts || [])
-        } catch (e) {
-          console.error('Failed to load directory contacts:', e)
-        }
+        if (!creatorData.is_shared) {
+          try {
+            const contactsRes = await axios.get(`/api/creative-directory/org/${myOrgId}`)
+            const contactsData = contactsRes.data
+            setDirectoryContacts(Array.isArray(contactsData) ? contactsData : contactsData.contacts || [])
+          } catch (e) {
+            console.error('Failed to load directory contacts:', e)
+          }
 
-        try {
-          const ccRes = await axios.get(`/api/creators/${id}/contacts`)
-          setCreatorContacts(Array.isArray(ccRes.data) ? ccRes.data : ccRes.data.contacts || [])
-        } catch (e) {
-          console.error('Failed to load creator contacts:', e)
+          try {
+            const ccRes = await axios.get(`/api/creators/${id}/contacts`)
+            setCreatorContacts(Array.isArray(ccRes.data) ? ccRes.data : ccRes.data.contacts || [])
+          } catch (e) {
+            console.error('Failed to load creator contacts:', e)
+          }
         }
       } catch (error) {
         console.error('Failed to load creator:', error)

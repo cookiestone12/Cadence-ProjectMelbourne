@@ -11,6 +11,7 @@ from ..models.models import (
     ChartSource, ChartEntry, StreamEstimate,
 )
 from .auth import get_current_user
+from .client_sharing import has_shared_access
 
 logger = logging.getLogger("cadence")
 
@@ -19,12 +20,14 @@ public_router = APIRouter(prefix="/api/public", tags=["streaming-credits-public"
 admin_chart_router = APIRouter(prefix="/api/admin/charts", tags=["admin-charts"])
 
 
-def _verify_org_access(user: User, org_id: int, db: Session):
+def _verify_org_access(user: User, org_id: int, db: Session, creator_id: int = None):
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id,
         OrganizationMember.organization_id == org_id,
     ).first()
     if not membership and not user.is_super_admin:
+        if creator_id and has_shared_access(db, user.id, creator_id):
+            return None
         raise HTTPException(status_code=403, detail="Not a member of this organization")
     return membership
 
@@ -60,7 +63,7 @@ def creator_credits_detail(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _verify_org_access(user, org_id, db)
+    _verify_org_access(user, org_id, db, creator_id=creator_id)
 
     from ..services.credits_service import get_credits_summary
     result = get_credits_summary(creator_id, org_id, db)
@@ -78,7 +81,7 @@ def creator_credited_songs(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _verify_org_access(user, org_id, db)
+    _verify_org_access(user, org_id, db, creator_id=creator_id)
 
     from ..models.models import SongCredit, Song, SongDSPLink
     from ..services.stream_estimator import get_song_stream_summary
@@ -134,7 +137,7 @@ def refresh_creator_credits(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _verify_org_access(user, org_id, db)
+    _verify_org_access(user, org_id, db, creator_id=creator_id)
 
     from ..services.credits_service import compute_creator_credits
     result = compute_creator_credits(creator_id, org_id, db)

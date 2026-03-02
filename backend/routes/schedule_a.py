@@ -11,6 +11,7 @@ from ..models import (
     get_db, Song, Creator, SongCredit, OrganizationMember, User, Organization
 )
 from ..utils.auth import get_current_user
+from .client_sharing import has_shared_access
 
 router = APIRouter(prefix="/api/schedule-a", tags=["schedule-a"])
 
@@ -194,7 +195,8 @@ def get_schedule_a_data(
     ).first()
     
     if not membership:
-        raise HTTPException(status_code=403, detail="Not authorized")
+        if not has_shared_access(db, current_user.id, creator_id):
+            raise HTTPException(status_code=403, detail="Not authorized")
     
     org = db.query(Organization).filter(Organization.id == creator.organization_id).first()
     

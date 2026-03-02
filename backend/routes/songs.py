@@ -10,6 +10,7 @@ from ..models import (
     Placement, ContractAsset, AudioAsset, RoyaltyTransaction,
 )
 from ..utils.auth import get_current_user
+from .client_sharing import has_shared_access
 
 
 def _cleanup_song_dependencies(db: Session, song_ids: list):
@@ -221,7 +222,10 @@ def get_organization_songs(
     ).first()
     
     if not membership:
-        raise HTTPException(status_code=403, detail="Not authorized to access this organization")
+        if creator_id and has_shared_access(db, current_user.id, creator_id):
+            pass
+        else:
+            raise HTTPException(status_code=403, detail="Not authorized to access this organization")
     
     query = db.query(Song).filter(Song.organization_id == org_id)
     

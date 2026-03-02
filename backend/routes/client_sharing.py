@@ -13,6 +13,20 @@ logger = logging.getLogger("cadence")
 router = APIRouter(prefix="/api/client-sharing", tags=["client-sharing"])
 
 
+def has_shared_access(db: Session, user_id: int, creator_id: int):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == user_id
+    ).first()
+    if not membership:
+        return None
+    share = db.query(ClientShare).filter(
+        ClientShare.creator_id == creator_id,
+        ClientShare.recipient_org_id == membership.organization_id,
+        ClientShare.status == "ACCEPTED"
+    ).first()
+    return share
+
+
 def get_user_org(db: Session, user: User):
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id

@@ -10,6 +10,7 @@ import io
 import json
 from ..models import get_db, Release, ReleaseTrack, Song, SongCredit, Creator, OrganizationMember, User
 from ..utils.auth import get_current_user
+from .client_sharing import has_shared_access
 from ..services.spotify_service import lookup_release_metadata, SpotifyAuthError, SpotifyNotFoundError
 
 router = APIRouter(prefix="/api/releases", tags=["releases"])
@@ -68,12 +69,14 @@ class ReleaseTrackReorder(BaseModel):
     disc_number: Optional[int] = 1
 
 
-def verify_org_access(user: User, org_id: int, db: Session):
+def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = None):
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id,
         OrganizationMember.organization_id == org_id
     ).first()
     if not membership and not user.is_super_admin:
+        if creator_id and has_shared_access(db, user.id, creator_id):
+            return None
         raise HTTPException(status_code=403, detail="Access denied")
     return membership
 
@@ -268,7 +271,7 @@ def list_releases(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    verify_org_access(current_user, org_id, db)
+    verify_org_access(current_user, org_id, db, creator_id=creator_id)
     query = db.query(Release).filter(Release.organization_id == org_id)
 
     if search:

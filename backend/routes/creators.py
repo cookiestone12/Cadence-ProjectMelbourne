@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from ..models import get_db, Creator, CreativeContact, CreatorContact, Organization, OrganizationMember, User, Song, SongCredit, WorkCredit
 from ..utils.auth import get_current_user
+from .client_sharing import has_shared_access
 import os
 import uuid
 from datetime import datetime
@@ -78,6 +79,7 @@ class CreatorUpdateRequest(BaseModel):
 
 class CreatorDetailResponse(BaseModel):
     id: int
+    organization_id: Optional[int] = None
     display_name: str
     legal_name: Optional[str]
     email: Optional[str]
@@ -102,6 +104,7 @@ class CreatorDetailResponse(BaseModel):
     twitter_url: Optional[str] = None
     custom_links: Optional[List[dict]] = None
     roster_export_fields: Optional[List[str]] = None
+    is_shared: Optional[bool] = False
     
     class Config:
         from_attributes = True
@@ -266,8 +269,12 @@ def get_creator(
         OrganizationMember.organization_id == creator.organization_id
     ).first()
     
+    is_shared = False
     if not membership:
-        raise HTTPException(status_code=403, detail="Not authorized to access this creator")
+        share = has_shared_access(db, current_user.id, creator_id)
+        if not share:
+            raise HTTPException(status_code=403, detail="Not authorized to access this creator")
+        is_shared = True
     
     song_count = db.query(func.count(SongCredit.id)).filter(
         SongCredit.creator_id == creator.id
@@ -300,6 +307,7 @@ def get_creator(
     
     return {
         "id": creator.id,
+        "organization_id": creator.organization_id,
         "display_name": creator.display_name,
         "legal_name": creator.legal_name,
         "email": creator.email,
@@ -324,6 +332,7 @@ def get_creator(
         "twitter_url": creator.twitter_url,
         "custom_links": creator.custom_links or [],
         "roster_export_fields": creator.roster_export_fields or [],
+        "is_shared": is_shared,
     }
 
 @router.put("/{creator_id}", response_model=CreatorResponse)
