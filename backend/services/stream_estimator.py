@@ -238,7 +238,7 @@ def _extract_spotify_id(spotify_link: str) -> Optional[str]:
 
 def _estimate_from_popularity(popularity: int) -> int:
     pop = max(0, min(100, popularity))
-    return max(1000, int(48000 * math.exp(0.1288 * pop)))
+    return max(1000, int(53405 * math.exp(0.1185 * pop)))
 
 
 def _estimate_from_chart_position(position: int, platform: str) -> int:
