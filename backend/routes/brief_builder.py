@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 import logging
 import json
+import os
 
 from ..models import (
     get_db, User, OrganizationMember, Song, AudioAsset, AudioAnalysis,
@@ -49,7 +50,7 @@ def search_brief(
     if request.query:
         try:
             from openai import OpenAI
-            client = OpenAI()
+            client = OpenAI(api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"))
 
             prompt = f"""Parse this music brief search query into structured criteria. Return JSON with any of these fields that apply:
 - bpm_min (number)

@@ -555,7 +555,7 @@ def _run_analysis_worker(analysis_id: int, asset_id: int, org_id: int):
 
         try:
             from openai import OpenAI
-            client = OpenAI()
+            client = OpenAI(api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"))
 
             prompt = f"""You are a music analysis AI. Based on the following metadata, generate a realistic analysis of this audio file.
 
