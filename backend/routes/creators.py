@@ -128,11 +128,16 @@ def get_organization_creators(
     
     creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
     
-    shared_shares = db.query(ClientShare).filter(
-        ClientShare.recipient_org_id == org_id,
-        ClientShare.status == "ACCEPTED"
+    all_shares_for_org = db.query(ClientShare).filter(
+        ClientShare.recipient_org_id == org_id
     ).all()
+    logger.info(f"[ROSTER DEBUG] org_id={org_id}, local_creators={len(creators)}, all_shares_for_org={len(all_shares_for_org)}")
+    for s in all_shares_for_org:
+        logger.info(f"[ROSTER DEBUG]   share id={s.id} creator_id={s.creator_id} primary_org={s.primary_org_id} recipient_org={s.recipient_org_id} status={s.status}")
+
+    shared_shares = [s for s in all_shares_for_org if s.status == "ACCEPTED"]
     shared_creator_ids = [s.creator_id for s in shared_shares]
+    logger.info(f"[ROSTER DEBUG] accepted_shares={len(shared_shares)}, shared_creator_ids={shared_creator_ids}")
     shared_creators = []
     if shared_creator_ids:
         own_ids = {c.id for c in creators}
@@ -140,6 +145,7 @@ def get_organization_creators(
             Creator.id.in_(shared_creator_ids),
             ~Creator.id.in_(own_ids) if own_ids else True
         ).all()
+        logger.info(f"[ROSTER DEBUG] shared_creators_loaded={len(shared_creators)}, names={[c.display_name for c in shared_creators]}")
     
     all_creators = creators + shared_creators
     shared_id_set = set(shared_creator_ids)
@@ -328,9 +334,12 @@ def get_creator(
     is_shared = False
     if not membership:
         share = has_shared_access(db, current_user.id, creator_id)
+        logger.info(f"[CREATOR DEBUG] creator_id={creator_id}, org={creator.organization_id}, user_org=?, shared_access={share is not None}")
         if not share:
             raise HTTPException(status_code=403, detail="Not authorized to access this creator")
         is_shared = True
+    else:
+        logger.info(f"[CREATOR DEBUG] creator_id={creator_id}, org={creator.organization_id}, user_org={membership.organization_id}, is_own=True")
     
     song_count = db.query(func.count(SongCredit.id)).join(
         Song, Song.id == SongCredit.song_id

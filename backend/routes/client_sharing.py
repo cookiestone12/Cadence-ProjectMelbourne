@@ -436,6 +436,7 @@ def get_shared_songs(
         credit_creator_ids = [c.creator_id for c in credits]
         shared_creator_names = [creator_map[cid] for cid in credit_creator_ids if cid in creator_map]
 
+        shared_credit_creator_ids = [cid for cid in credit_creator_ids if cid in creator_map]
         results.append({
             "id": song.id,
             "title": song.title,
@@ -445,6 +446,8 @@ def get_shared_songs(
             "status_health_score": song.status_health_score,
             "is_released": song.is_released,
             "shared_from_creators": shared_creator_names,
+            "shared_creator_ids": shared_credit_creator_ids,
+            "organization_id": song.organization_id,
             "shared": True,
         })
 

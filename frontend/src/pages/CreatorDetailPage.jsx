@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, Link, useLocation } from 'react-router-dom'
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon, CloudArrowUpIcon, PaperClipIcon, LinkIcon } from '@heroicons/react/24/outline'
 import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/24/solid'
@@ -11,6 +11,7 @@ import SocialCard from '../components/SocialCard'
 export default function CreatorDetailPage() {
   const { id } = useParams()
   const location = useLocation()
+  const navigate = useNavigate()
   const locationState = location.state || {}
   const [creator, setCreator] = useState(null)
   const [songs, setSongs] = useState([])
@@ -198,7 +199,13 @@ export default function CreatorDetailPage() {
             const match = rosterData.find(c =>
               c.shared && c.display_name.trim().toLowerCase() === creatorData.display_name.trim().toLowerCase() && c.id !== creatorData.id
             )
-            if (match) {
+            if (match && match.song_count > 0) {
+              navigate(`/roster/${match.id}`, {
+                state: { is_shared: true, organization_id: match.organization_id },
+                replace: true
+              })
+              return
+            } else if (match) {
               setSharedVersion(match)
             }
           } catch (e) {}
