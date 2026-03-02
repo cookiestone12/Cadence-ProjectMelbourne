@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from typing import List, Optional
-from ..models import get_db, Creator, CreativeContact, CreatorContact, Organization, OrganizationMember, User, Song, SongCredit, WorkCredit
+from ..models import get_db, Creator, CreativeContact, CreatorContact, Organization, OrganizationMember, User, Song, SongCredit, WorkCredit, ClientShare
 from ..utils.auth import get_current_user
 from .client_sharing import has_shared_access
 import os
@@ -35,6 +35,8 @@ class CreatorResponse(BaseModel):
     twitter_url: Optional[str] = None
     custom_links: Optional[List[dict]] = None
     roster_export_fields: Optional[List[str]] = None
+    shared: Optional[bool] = None
+    shared_from: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -125,16 +127,37 @@ def get_organization_creators(
     
     creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
     
-    # Collect all creator IDs
-    creator_ids = [creator.id for creator in creators]
+    shared_shares = db.query(ClientShare).filter(
+        ClientShare.recipient_org_id == org_id,
+        ClientShare.status == "ACCEPTED"
+    ).all()
+    shared_creator_ids = [s.creator_id for s in shared_shares]
+    shared_creators = []
+    if shared_creator_ids:
+        own_ids = {c.id for c in creators}
+        shared_creators = db.query(Creator).filter(
+            Creator.id.in_(shared_creator_ids),
+            ~Creator.id.in_(own_ids) if own_ids else True
+        ).all()
     
-    # Run ONE query to get song counts grouped by creator_id
+    all_creators = creators + shared_creators
+    shared_id_set = set(shared_creator_ids)
+    
+    shared_org_names = {}
+    if shared_shares:
+        primary_org_ids = {s.primary_org_id for s in shared_shares}
+        orgs = db.query(Organization).filter(Organization.id.in_(primary_org_ids)).all()
+        org_name_map = {o.id: o.name for o in orgs}
+        for s in shared_shares:
+            shared_org_names[s.creator_id] = org_name_map.get(s.primary_org_id)
+    
+    creator_ids = [creator.id for creator in all_creators]
+    
     counts = db.query(SongCredit.creator_id, func.count(SongCredit.id)).filter(
         SongCredit.creator_id.in_(creator_ids)
     ).group_by(SongCredit.creator_id).all()
     count_map = {cid: cnt for cid, cnt in counts}
     
-    # Run ONE query to get average health scores grouped by creator_id
     avgs = db.query(SongCredit.creator_id, func.avg(Song.status_health_score)).join(
         Song, Song.id == SongCredit.song_id
     ).filter(
@@ -143,11 +166,12 @@ def get_organization_creators(
     avg_map = {cid: float(avg) if avg else 0.0 for cid, avg in avgs}
     
     result = []
-    for creator in creators:
+    for creator in all_creators:
         song_count = count_map.get(creator.id, 0)
         avg_health = avg_map.get(creator.id, 0.0)
+        is_shared = creator.id in shared_id_set
         
-        result.append({
+        entry = {
             "id": creator.id,
             "display_name": creator.display_name,
             "legal_name": creator.legal_name,
@@ -168,7 +192,11 @@ def get_organization_creators(
             "twitter_url": creator.twitter_url,
             "custom_links": creator.custom_links or [],
             "roster_export_fields": creator.roster_export_fields or [],
-        })
+        }
+        if is_shared:
+            entry["shared"] = True
+            entry["shared_from"] = shared_org_names.get(creator.id)
+        result.append(entry)
     
     return result
 
