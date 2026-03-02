@@ -133,10 +133,15 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
 
   async function loadSplitCreators() {
     try {
-      const orgResponse = await axios.get('/api/organizations/current')
-      const orgId = orgResponse.data.id
-      const response = await axios.get(`/api/creators/org/${orgId}`)
-      setSplitCreators(response.data || [])
+      const orgId = song?.organization_id
+      if (orgId) {
+        const response = await axios.get(`/api/creators/org/${orgId}`)
+        setSplitCreators(response.data || [])
+      } else {
+        const orgResponse = await axios.get('/api/organizations/current')
+        const response = await axios.get(`/api/creators/org/${orgResponse.data.id}`)
+        setSplitCreators(response.data || [])
+      }
     } catch (error) {
       console.error('Failed to load creators:', error)
     }

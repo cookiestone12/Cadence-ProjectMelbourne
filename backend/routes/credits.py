@@ -52,6 +52,8 @@ def create_credit(
 ):
     from ..models import Creator
     
+    from ..models import ClientShare
+    
     song = db.query(Song).filter(Song.id == song_id).first()
     
     if not song:
@@ -63,7 +65,18 @@ def create_credit(
     ).first()
     
     if not membership:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this song")
+        user_membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id
+        ).first()
+        has_share = False
+        if user_membership:
+            has_share = db.query(ClientShare).filter(
+                ClientShare.recipient_org_id == user_membership.organization_id,
+                ClientShare.primary_org_id == song.organization_id,
+                ClientShare.status == "ACCEPTED"
+            ).first() is not None
+        if not has_share:
+            raise HTTPException(status_code=403, detail="Not authorized to modify this song")
     
     creator = db.query(Creator).filter(Creator.id == request.creator_id).first()
     
