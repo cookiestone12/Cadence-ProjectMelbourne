@@ -34,13 +34,27 @@ export default function CatalogPage() {
       if (filters.status) params.append('status', filters.status)
       params.append('limit', '1000')
       
-      const [songsResponse, creatorsResponse] = await Promise.all([
+      const [songsResponse, creatorsResponse, sharedSongsRes, sharedClientsRes] = await Promise.all([
         axios.get(`/api/songs/org/${orgId}?${params}`),
-        axios.get(`/api/creators/org/${orgId}`)
+        axios.get(`/api/creators/org/${orgId}`),
+        axios.get('/api/client-sharing/shared-songs').catch(() => ({ data: [] })),
+        axios.get('/api/client-sharing/shared-clients').catch(() => ({ data: [] })),
       ])
       
-      setSongs(songsResponse.data)
-      setCreators(creatorsResponse.data)
+      const ownSongs = songsResponse.data
+      const sharedSongs = sharedSongsRes.data || []
+      const ownSongIds = new Set(ownSongs.map(s => s.id))
+      const uniqueSharedSongs = sharedSongs.filter(s => !ownSongIds.has(s.id))
+      setSongs([...ownSongs, ...uniqueSharedSongs])
+
+      const ownCreators = creatorsResponse.data
+      const sharedCreators = (sharedClientsRes.data || []).map(sc => ({
+        id: sc.creator_id,
+        display_name: sc.creator_name,
+      }))
+      const ownCreatorIds = new Set(ownCreators.map(c => c.id))
+      const uniqueSharedCreators = sharedCreators.filter(sc => !ownCreatorIds.has(sc.id))
+      setCreators([...ownCreators, ...uniqueSharedCreators])
     } catch (error) {
       console.error('Failed to load catalog:', error)
     } finally {
@@ -216,8 +230,13 @@ export default function CatalogPage() {
               {filteredSongs.map((song) => (
                 <tr key={song.id} className="hover:bg-[#EEF1EC] transition-colors cursor-pointer">
                   <td className="px-6 py-4">
-                    <div className="font-medium text-[#3D4A44]">{song.title}</div>
-                    <div className="text-sm text-[#7A8580]">{song.iswc || 'No ISWC'}</div>
+                    <div className="font-medium text-[#3D4A44] flex items-center gap-1.5">
+                      {song.title}
+                      {song.shared && (
+                        <span className="inline-flex px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-semibold rounded-full">Shared</span>
+                      )}
+                    </div>
+                    <div className="text-sm text-[#7A8580]">{song.shared ? song.shared_from_creators?.join(', ') : (song.iswc || 'No ISWC')}</div>
                   </td>
                   <td className="px-6 py-4 text-sm text-[#7A8580]">
                     {song.primary_artist}

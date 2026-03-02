@@ -48,6 +48,7 @@ export default function ClientSharingTab() {
   const [creators, setCreators] = useState([])
   const [sentShares, setSentShares] = useState([])
   const [receivedShares, setReceivedShares] = useState([])
+  const [receivedActiveShares, setReceivedActiveShares] = useState([])
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
@@ -61,14 +62,16 @@ export default function ClientSharingTab() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const [creatorsRes, sentRes, receivedRes] = await Promise.all([
+      const [creatorsRes, sentRes, receivedRes, receivedActiveRes] = await Promise.all([
         axios.get('/api/tenant-admin/creators').catch(() => ({ data: [] })),
         axios.get('/api/client-sharing/sent').catch(() => ({ data: [] })),
         axios.get('/api/client-sharing/received').catch(() => ({ data: [] })),
+        axios.get('/api/client-sharing/received-active').catch(() => ({ data: [] })),
       ])
       setCreators(creatorsRes.data)
       setSentShares(sentRes.data)
       setReceivedShares(receivedRes.data)
+      setReceivedActiveShares(receivedActiveRes.data)
     } catch (err) {
       showMsg('Failed to load sharing data', true)
     } finally {
@@ -130,7 +133,7 @@ export default function ClientSharingTab() {
       )}
 
       {activeSubTab === 'active' && (
-        <ActiveShares shares={sentShares} onAction={() => { fetchData(); showMsg('Updated successfully') }} onError={(e) => showMsg(e, true)} />
+        <ActiveShares shares={sentShares} receivedActiveShares={receivedActiveShares} onAction={() => { fetchData(); showMsg('Updated successfully') }} onError={(e) => showMsg(e, true)} />
       )}
     </div>
   )
@@ -413,7 +416,7 @@ function ReceivedShares({ shares, onAction, onError }) {
   )
 }
 
-function ActiveShares({ shares, onAction, onError }) {
+function ActiveShares({ shares, receivedActiveShares = [], onAction, onError }) {
   const [processing, setProcessing] = useState(false)
 
   const acceptedShares = shares.filter(s => s.status === 'ACCEPTED')
@@ -582,6 +585,47 @@ function ActiveShares({ shares, onAction, onError }) {
                           Cancel
                         </button>
                       )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {receivedActiveShares.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-[#3D4A44] mb-3">Shared With You ({receivedActiveShares.length})</h3>
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-[#F5F7F4]">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Creator</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Shared By</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Role</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider hidden md:table-cell">Accepted</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E5E8E3]">
+                {receivedActiveShares.map(share => (
+                  <tr key={share.id} className="hover:bg-[#FAFBF9] transition-colors">
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-[#3D4A44]">{share.creator_name}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-sm text-[#3D4A44]">{share.primary_org_name}</p>
+                      <p className="text-xs text-[#7A8580]">{share.shared_by_username}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${ROLE_COLORS[share.role] || 'bg-gray-100 text-gray-600'}`}>
+                        {ROLE_LABELS[share.role] || share.role}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      <span className="text-xs text-[#7A8580]">
+                        {share.accepted_at ? new Date(share.accepted_at).toLocaleDateString() : '—'}
+                      </span>
                     </td>
                   </tr>
                 ))}

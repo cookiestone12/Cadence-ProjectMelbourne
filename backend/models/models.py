@@ -1468,6 +1468,7 @@ class ClientShareStatus(str, enum.Enum):
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
     REVOKED = "REVOKED"
+    CANCELLED = "CANCELLED"
 
 class ClientShareRole(str, enum.Enum):
     COPRIMARY = "COPRIMARY"

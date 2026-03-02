@@ -119,10 +119,23 @@ export default function RosterPage() {
       if (!currentOrgId) { setLoading(false); return }
       setOrgId(currentOrgId)
       
-      axios.get(`/api/creators/org/${currentOrgId}`)
-        .then(res => setCreators(res.data || []))
-        .catch(err => console.error('Failed to load creators:', err))
-        .finally(() => setLoading(false))
+      const [creatorsRes, sharedRes] = await Promise.all([
+        axios.get(`/api/creators/org/${currentOrgId}`).catch(() => ({ data: [] })),
+        axios.get('/api/client-sharing/shared-clients').catch(() => ({ data: [] })),
+      ])
+      const ownCreators = creatorsRes.data || []
+      const sharedClients = (sharedRes.data || []).map(sc => ({
+        id: sc.creator_id,
+        display_name: sc.creator_name,
+        email: sc.creator_email,
+        shared: true,
+        shared_from: sc.primary_org_name,
+        share_role: sc.role,
+      }))
+      const ownIds = new Set(ownCreators.map(c => c.id))
+      const uniqueShared = sharedClients.filter(sc => !ownIds.has(sc.id))
+      setCreators([...ownCreators, ...uniqueShared])
+      setLoading(false)
     } catch (error) {
       console.error('Failed to load roster:', error)
       setLoading(false)
@@ -385,6 +398,11 @@ export default function RosterPage() {
             {creators.map((creator) => (
               <div key={creator.id} onClick={selectMode ? () => toggleSelect(creator.id) : undefined} className={`bg-white rounded-xl shadow-[0px_2px_8px_rgba(0,0,0,0.07)] hover:shadow-[0px_6px_16px_rgba(0,0,0,0.1)] transition-all duration-200 overflow-hidden group ${selectMode ? 'cursor-pointer' : ''} ${selectMode && selectedIds.has(creator.id) ? 'ring-2 ring-[#5B8A72] ring-offset-2' : ''}`}>
                 <div className="aspect-square bg-gradient-to-br from-[#5B8A72] to-[#7BA594] relative overflow-hidden">
+                  {creator.shared && (
+                    <div className="absolute top-2 right-2 z-20 px-2 py-0.5 bg-blue-500/90 backdrop-blur-sm text-white text-[10px] font-semibold rounded-full">
+                      Shared
+                    </div>
+                  )}
                   {selectMode && (
                     <div className={`absolute top-2 left-2 z-20 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${selectedIds.has(creator.id) ? 'bg-[#5B8A72] border-[#5B8A72]' : 'bg-white/80 border-white/80'}`}>
                       {selectedIds.has(creator.id) && <CheckIcon className="w-4 h-4 text-white" />}
@@ -452,7 +470,7 @@ export default function RosterPage() {
                     {creator.display_name}
                   </h3>
                   <p className="text-[11px] text-[#7A8580] mb-2 truncate">
-                    {Array.isArray(creator.roles) ? creator.roles.join(', ') : creator.roles}
+                    {creator.shared ? `via ${creator.shared_from}` : (Array.isArray(creator.roles) ? creator.roles.join(', ') : creator.roles)}
                   </p>
                   
                   <div className="flex justify-between items-center">

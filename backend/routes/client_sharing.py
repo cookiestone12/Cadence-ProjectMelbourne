@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
-from ..models import get_db, User, Organization, OrganizationMember, Creator, ClientShare
+from ..models import get_db, User, Organization, OrganizationMember, Creator, ClientShare, Song, SongCredit
 from ..utils.auth import get_current_user
 
 router = APIRouter(prefix="/api/client-sharing", tags=["client-sharing"])
@@ -138,6 +138,19 @@ def get_received_shares(
     shares = db.query(ClientShare).filter(
         ClientShare.recipient_user_email == current_user.email.lower(),
         ClientShare.status == "PENDING"
+    ).order_by(ClientShare.created_at.desc()).all()
+    return [share_to_dict(s, db) for s in shares]
+
+
+@router.get("/received-active")
+def get_received_active_shares(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = get_user_org(db, current_user)
+    shares = db.query(ClientShare).filter(
+        ClientShare.recipient_org_id == membership.organization_id,
+        ClientShare.status == "ACCEPTED"
     ).order_by(ClientShare.created_at.desc()).all()
     return [share_to_dict(s, db) for s in shares]
 
@@ -281,5 +294,52 @@ def get_shared_clients(
                 "role": share.role,
                 "accepted_at": share.accepted_at.isoformat() if share.accepted_at else None,
             })
+
+    return results
+
+
+@router.get("/shared-songs")
+def get_shared_songs(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = get_user_org(db, current_user)
+
+    shares = db.query(ClientShare).filter(
+        ClientShare.recipient_org_id == membership.organization_id,
+        ClientShare.status == "ACCEPTED"
+    ).all()
+
+    creator_ids = [s.creator_id for s in shares]
+    if not creator_ids:
+        return []
+
+    songs = db.query(Song).join(SongCredit).filter(
+        SongCredit.creator_id.in_(creator_ids)
+    ).distinct().all()
+
+    creator_map = {}
+    for s in shares:
+        creator = db.query(Creator).filter(Creator.id == s.creator_id).first()
+        if creator:
+            creator_map[s.creator_id] = creator.display_name
+
+    results = []
+    for song in songs:
+        credits = db.query(SongCredit).filter(SongCredit.song_id == song.id).all()
+        credit_creator_ids = [c.creator_id for c in credits]
+        shared_creator_names = [creator_map[cid] for cid in credit_creator_ids if cid in creator_map]
+
+        results.append({
+            "id": song.id,
+            "title": song.title,
+            "primary_artist": song.primary_artist,
+            "isrc": song.isrc,
+            "iswc": song.iswc,
+            "status_health_score": song.status_health_score,
+            "is_released": song.is_released,
+            "shared_from_creators": shared_creator_names,
+            "shared": True,
+        })
 
     return results

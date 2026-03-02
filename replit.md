@@ -29,7 +29,7 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Action Items System**: Manages proactive action items with deadlines and priorities, with auto-generation based on catalog gaps and cross-module tracking.
 - **Placement Management**: Comprehensive sync licensing/placement tracking with a status pipeline from PITCHED to PAID, financial tracking, and automatic accounting integration upon PAID transition.
 - **Sync Reports**: Customizable sync placement reports with PDF/CSV export and branded templates.
-- **Cross-Organization Client Sharing**: Secure sharing workflow with email-based invitations, passcode verification, and role-based catalog synchronization.
+- **Cross-Organization Client Sharing**: Secure sharing workflow with email-based invitations, passcode verification, and role-based catalog synchronization. Accepted shares surface shared creators in the recipient's Roster (with "Shared" badge) and their songs in the Catalog page. The Active Shares tab shows both sent and received active shares. Senders can cancel pending invitations. Statuses: PENDING, ACCEPTED, REJECTED, REVOKED, CANCELLED.
 - **Expense Tracking**: An Expense model with categories and a status flow, integrated into the Royalties page.
 - **Works Folder Organization**: Supports hierarchical folder organization for Works with nesting, renaming, deletion, and move functionality.
 - **Core Catalog & Creator Management**: Expanded data models for `Works` (compositions) and `Releases` (albums/EPs) with `work_type` and `IPAssetType` for broader IP management.
