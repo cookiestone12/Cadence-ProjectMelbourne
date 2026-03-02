@@ -3,8 +3,12 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+import logging
 from ..models import get_db, User, Organization, OrganizationMember, Creator, ClientShare, Song, SongCredit
 from ..utils.auth import get_current_user
+from .notifications import create_notification
+
+logger = logging.getLogger("cadence")
 
 router = APIRouter(prefix="/api/client-sharing", tags=["client-sharing"])
 
@@ -115,6 +119,26 @@ def create_share(
     db.commit()
     db.refresh(share)
 
+    try:
+        recipient_user = db.query(User).filter(
+            User.email == req.recipient_email.lower()
+        ).first()
+        if recipient_user:
+            creator_name = creator.display_name or f"Creator #{creator.id}"
+            sender_org = db.query(Organization).filter(Organization.id == membership.organization_id).first()
+            org_label = sender_org.name if sender_org else "an organization"
+            create_notification(
+                db=db,
+                user_id=recipient_user.id,
+                notification_type="CLIENT_SHARE",
+                title="Catalog Share Invitation",
+                message=f"{org_label} has shared {creator_name} with you. Check your pending invitations to accept.",
+                link="/roster",
+                organization_id=None,
+            )
+    except Exception as e:
+        logger.warning(f"Failed to send share notification to recipient: {e}")
+
     return {"id": share.id, "passcode": share.passcode, "message": "Share invitation created successfully"}
 
 
@@ -185,6 +209,23 @@ def accept_share(
     share.accepted_at = datetime.utcnow()
     db.commit()
 
+    try:
+        creator = db.query(Creator).filter(Creator.id == share.creator_id).first()
+        creator_name = creator.display_name if creator else f"Creator #{share.creator_id}"
+        recipient_org = db.query(Organization).filter(Organization.id == membership.organization_id).first()
+        org_label = recipient_org.name if recipient_org else "the recipient"
+        create_notification(
+            db=db,
+            user_id=share.shared_by_user_id,
+            notification_type="CLIENT_SHARE",
+            title="Share Accepted",
+            message=f"{org_label} has accepted your share of {creator_name}.",
+            link="/roster",
+            organization_id=share.primary_org_id,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send share accepted notification: {e}")
+
     return {"message": "Share accepted successfully"}
 
 
@@ -204,6 +245,21 @@ def reject_share(
 
     share.status = "REJECTED"
     db.commit()
+
+    try:
+        creator = db.query(Creator).filter(Creator.id == share.creator_id).first()
+        creator_name = creator.display_name if creator else f"Creator #{share.creator_id}"
+        create_notification(
+            db=db,
+            user_id=share.shared_by_user_id,
+            notification_type="CLIENT_SHARE",
+            title="Share Rejected",
+            message=f"Your share invitation for {creator_name} was declined.",
+            link="/roster",
+            organization_id=share.primary_org_id,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to send share rejected notification: {e}")
 
     return {"message": "Share rejected"}
 
@@ -228,6 +284,42 @@ def revoke_share(
     share.status = "CANCELLED" if was_pending else "REVOKED"
     share.revoked_at = datetime.utcnow()
     db.commit()
+
+    try:
+        creator = db.query(Creator).filter(Creator.id == share.creator_id).first()
+        creator_name = creator.display_name if creator else f"Creator #{share.creator_id}"
+        if not was_pending and share.recipient_org_id:
+            recipient_members = db.query(OrganizationMember).filter(
+                OrganizationMember.organization_id == share.recipient_org_id
+            ).all()
+            sender_org = db.query(Organization).filter(Organization.id == share.primary_org_id).first()
+            org_label = sender_org.name if sender_org else "The sharing organization"
+            for member in recipient_members:
+                create_notification(
+                    db=db,
+                    user_id=member.user_id,
+                    notification_type="CLIENT_SHARE",
+                    title="Share Access Revoked",
+                    message=f"{org_label} has revoked your access to {creator_name}.",
+                    link="/roster",
+                    organization_id=member.organization_id,
+                )
+        elif was_pending:
+            recipient_user = db.query(User).filter(
+                User.email == share.recipient_user_email
+            ).first()
+            if recipient_user:
+                create_notification(
+                    db=db,
+                    user_id=recipient_user.id,
+                    notification_type="CLIENT_SHARE",
+                    title="Share Invitation Cancelled",
+                    message=f"A share invitation for {creator_name} has been cancelled.",
+                    link="/roster",
+                    organization_id=None,
+                )
+    except Exception as e:
+        logger.warning(f"Failed to send revoke/cancel notification: {e}")
 
     return {"message": "Share invitation cancelled" if was_pending else "Share access revoked"}
 

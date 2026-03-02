@@ -757,6 +757,7 @@ class NotificationType(str, enum.Enum):
     SYSTEM_ANNOUNCEMENT = "SYSTEM_ANNOUNCEMENT"
     CATALOG_UPDATE = "CATALOG_UPDATE"
     PLACEMENT_UPDATE = "PLACEMENT_UPDATE"
+    CLIENT_SHARE = "CLIENT_SHARE"
 
 
 class NotificationPreference(Base):
