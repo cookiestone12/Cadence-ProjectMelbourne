@@ -1,5 +1,18 @@
 import React, { forwardRef } from 'react'
 
+const CadenceLogoLight = ({ height = 48 }) => {
+  const scale = height / 50
+  return (
+    <svg width={200 * scale} height={height} viewBox="0 0 200 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="14" width="4.5" height="22" rx="2.25" fill="#8BC4A4" />
+      <rect x="16" y="8" width="4.5" height="34" rx="2.25" fill="#7BBF9A" />
+      <path d="M36 10C28.5 10 23 16 23 25C23 34 28.5 40 36 40" stroke="#B8E0CC" strokeWidth="5.5" strokeLinecap="round" fill="none" />
+      <path d="M36 16C31.5 16 28 20 28 25C28 30 31.5 34 36 34" stroke="rgba(255,255,255,0.95)" strokeWidth="4.5" strokeLinecap="round" fill="none" />
+      <text x="48" y="35" fontFamily="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" fontSize="30" fontWeight="700" fill="rgba(255,255,255,0.95)" letterSpacing="0.5">cadence</text>
+    </svg>
+  )
+}
+
 const PLATFORM_COLORS = {
   SPOTIFY: '#1DB954',
   APPLE_MUSIC: '#FA233B',
@@ -77,15 +90,7 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-        <img
-          src="/cadence-logo.png"
-          alt="Cadence"
-          crossOrigin="anonymous"
-          style={{
-            height: 48,
-            objectFit: 'contain',
-          }}
-        />
+        <CadenceLogoLight height={48} />
         <span style={{ fontSize: 14, opacity: 0.5, letterSpacing: 1 }}>CATALOG INTELLIGENCE</span>
       </div>
 
@@ -268,16 +273,14 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName }, ref) =
                 <div style={{
                   fontSize: 17,
                   fontWeight: 700,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
+                  lineHeight: 1.2,
+                  wordBreak: 'break-word',
                 }}>{song.title}</div>
                 <div style={{
                   fontSize: 13,
                   opacity: 0.5,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
+                  lineHeight: 1.2,
+                  wordBreak: 'break-word',
                   marginTop: 2,
                 }}>{song.artist}</div>
               </div>
