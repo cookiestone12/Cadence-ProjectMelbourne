@@ -464,6 +464,7 @@ async def preview_statement(
     preview = rows[:10]
     return {
         "headers": headers,
+        "columns": headers,
         "mapping": mapping,
         "preview_rows": preview,
         "row_count": len(rows),
