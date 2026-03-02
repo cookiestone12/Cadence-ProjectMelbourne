@@ -967,7 +967,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       )}
                       {showAddClient ? (
                         <div className="p-3 bg-[#F5F7F4] rounded-[10px] space-y-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2">
                             <select
                               value={addClientCreatorId}
                               onChange={(e) => setAddClientCreatorId(e.target.value)}
@@ -984,7 +984,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                             <select
                               value={addClientRole}
                               onChange={(e) => setAddClientRole(e.target.value)}
-                              className="px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                              className="w-full sm:w-auto px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                             >
                               <option value="PRIMARY_ARTIST">Primary Artist</option>
                               <option value="FEATURED_ARTIST">Featured Artist</option>
