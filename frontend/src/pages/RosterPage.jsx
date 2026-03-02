@@ -120,8 +120,8 @@ export default function RosterPage() {
       setOrgId(currentOrgId)
       
       const [creatorsRes, sharedRes] = await Promise.all([
-        axios.get(`/api/creators/org/${currentOrgId}`).catch(() => ({ data: [] })),
-        axios.get('/api/client-sharing/shared-clients').catch(() => ({ data: [] })),
+        axios.get(`/api/creators/org/${currentOrgId}`).catch(e => { console.error('Creators load failed:', e); return { data: [] } }),
+        axios.get('/api/client-sharing/shared-clients').catch(e => { console.error('Shared clients load failed:', e); return { data: [] } }),
       ])
       const ownCreators = creatorsRes.data || []
       const sharedClients = (sharedRes.data || []).map(sc => ({

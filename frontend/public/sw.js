@@ -1,6 +1,5 @@
-const CACHE_VERSION = 'cadence-v1';
+const CACHE_VERSION = 'cadence-v3';
 const STATIC_ASSETS = [
-  '/',
   '/favicon.ico',
   '/favicon-32.png',
   '/favicon-192.png',
@@ -56,18 +55,17 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).then((response) => {
-        if (response.ok && event.request.method === 'GET') {
-          const clone = response.clone();
-          caches.open(CACHE_VERSION).then((cache) => {
-            cache.put(event.request, clone);
-          });
-        }
-        return response;
-      }).catch(() => {
-        return new Response('', { status: 503 });
+    fetch(event.request).then((response) => {
+      if (response.ok && event.request.method === 'GET') {
+        const clone = response.clone();
+        caches.open(CACHE_VERSION).then((cache) => {
+          cache.put(event.request, clone);
+        });
+      }
+      return response;
+    }).catch(() => {
+      return caches.match(event.request).then((cached) => {
+        return cached || new Response('', { status: 503 });
       });
     })
   );
