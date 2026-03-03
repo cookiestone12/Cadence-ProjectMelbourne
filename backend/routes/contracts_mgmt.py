@@ -260,7 +260,9 @@ def get_contracts_for_song(
     song = db.query(Song).filter(Song.id == song_id).first()
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
-    verify_org_access(current_user, song.organization_id, db)
+    from ..models import SongCredit
+    song_credit = db.query(SongCredit).filter(SongCredit.song_id == song_id).first()
+    verify_org_access(current_user, song.organization_id, db, creator_id=song_credit.creator_id if song_credit else None)
 
     asset_links = db.query(ContractAsset).filter(
         ContractAsset.asset_type == "SONG",
@@ -296,7 +298,9 @@ def get_song_splits(
     song = db.query(Song).filter(Song.id == song_id).first()
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
-    verify_org_access(current_user, song.organization_id, db)
+    from ..models import SongCredit
+    song_credit = db.query(SongCredit).filter(SongCredit.song_id == song_id).first()
+    verify_org_access(current_user, song.organization_id, db, creator_id=song_credit.creator_id if song_credit else None)
 
     asset_links = db.query(ContractAsset).filter(
         ContractAsset.asset_type == "SONG",

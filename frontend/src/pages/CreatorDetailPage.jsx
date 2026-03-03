@@ -706,7 +706,7 @@ export default function CreatorDetailPage() {
       
       const response = await axios.post(`/api/songs/org/${organizationId}`, payload)
       
-      await axios.post(`/api/credits/song/${response.data.id}`, {
+      await axios.post(`/api/songs/${response.data.id}/credits`, {
         creator_id: parseInt(id),
         role: newSong.credit_role || 'ARTIST',
         share_percentage: newSong.publishing_percentage ? parseFloat(newSong.publishing_percentage) : 100
@@ -1640,7 +1640,7 @@ export default function CreatorDetailPage() {
                                 setEditForm({...editForm, credit_role: newRole})
                                 if (song.credit_id) {
                                   try {
-                                    await axios.patch(`/api/credits/song/${song.id}/credits/${song.credit_id}`, { role: newRole })
+                                    await axios.patch(`/api/songs/${song.id}/credits/${song.credit_id}`, { role: newRole })
                                   } catch (err) {
                                     console.error('Failed to update role:', err)
                                   }
@@ -1786,7 +1786,7 @@ export default function CreatorDetailPage() {
                                 const newRole = e.target.value
                                 if (song.credit_id) {
                                   try {
-                                    await axios.patch(`/api/credits/song/${song.id}/credits/${song.credit_id}`, { role: newRole })
+                                    await axios.patch(`/api/songs/${song.id}/credits/${song.credit_id}`, { role: newRole })
                                     setSongs(prev => prev.map(s => s.id === song.id ? {...s, credit_role: newRole} : s))
                                   } catch (err) {
                                     console.error('Failed to update role:', err)

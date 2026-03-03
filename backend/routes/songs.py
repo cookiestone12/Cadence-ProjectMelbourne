@@ -691,7 +691,10 @@ def update_song(
     ).first()
     
     if not membership:
-        raise HTTPException(status_code=403, detail="Not authorized to access this song")
+        song_credits = db.query(SongCredit).filter(SongCredit.song_id == song_id).all()
+        has_access = any(has_shared_access(db, current_user.id, c.creator_id) for c in song_credits)
+        if not has_access:
+            raise HTTPException(status_code=403, detail="Not authorized to access this song")
     
     update_data = request.dict(exclude_unset=True)
     for key, value in update_data.items():

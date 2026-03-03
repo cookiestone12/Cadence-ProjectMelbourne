@@ -437,9 +437,10 @@ def update_creator(
     ).first()
     
     if not membership:
-        raise HTTPException(status_code=403, detail="Not authorized to update this creator")
+        if not has_shared_access(db, current_user.id, creator_id):
+            raise HTTPException(status_code=403, detail="Not authorized to update this creator")
 
-    if not check_roster_permission(membership):
+    if membership and not check_roster_permission(membership):
         raise HTTPException(status_code=403, detail="You do not have permission to manage the roster")
     
     if request.display_name is not None:

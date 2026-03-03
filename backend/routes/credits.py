@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
-from ..models import get_db, SongCredit, SongDSPLink, Song, OrganizationMember, User
+from ..models import get_db, SongCredit, SongDSPLink, Song, OrganizationMember, User, ClientShare
 from ..utils.auth import get_current_user
+from .client_sharing import has_shared_access
 
 router = APIRouter(prefix="/api/songs", tags=["credits"])
 
@@ -122,7 +123,12 @@ def update_credit(
     ).first()
     
     if not membership:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this song")
+        credit_check = db.query(SongCredit).filter(
+            SongCredit.id == credit_id,
+            SongCredit.song_id == song_id
+        ).first()
+        if not credit_check or not has_shared_access(db, current_user.id, credit_check.creator_id):
+            raise HTTPException(status_code=403, detail="Not authorized to modify this song")
     
     credit = db.query(SongCredit).filter(
         SongCredit.id == credit_id,
@@ -167,7 +173,12 @@ def delete_credit(
     ).first()
     
     if not membership:
-        raise HTTPException(status_code=403, detail="Not authorized to modify this song")
+        credit_check = db.query(SongCredit).filter(
+            SongCredit.id == credit_id,
+            SongCredit.song_id == song_id
+        ).first()
+        if not credit_check or not has_shared_access(db, current_user.id, credit_check.creator_id):
+            raise HTTPException(status_code=403, detail="Not authorized to modify this song")
     
     credit = db.query(SongCredit).filter(
         SongCredit.id == credit_id,
