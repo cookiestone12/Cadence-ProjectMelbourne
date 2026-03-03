@@ -967,33 +967,31 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       )}
                       {showAddClient ? (
                         <div className="p-3 bg-[#F5F7F4] rounded-[10px] space-y-2">
-                          <div className="flex flex-col sm:flex-row gap-2">
-                            <select
-                              value={addClientCreatorId}
-                              onChange={(e) => setAddClientCreatorId(e.target.value)}
-                              className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                            >
-                              <option value="">Select a client...</option>
-                              {splitCreators
-                                .filter(c => !songDetails.credits?.some(cr => cr.creator_id === c.id))
-                                .map(c => (
-                                  <option key={c.id} value={c.id}>{c.display_name}</option>
-                                ))
-                              }
-                            </select>
-                            <select
-                              value={addClientRole}
-                              onChange={(e) => setAddClientRole(e.target.value)}
-                              className="w-full sm:w-auto px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                            >
-                              <option value="PRIMARY_ARTIST">Primary Artist</option>
-                              <option value="FEATURED_ARTIST">Featured Artist</option>
-                              <option value="SONGWRITER">Songwriter</option>
-                              <option value="PRODUCER">Producer</option>
-                              <option value="COMPOSER">Composer</option>
-                              <option value="LYRICIST">Lyricist</option>
-                            </select>
-                          </div>
+                          <select
+                            value={addClientCreatorId}
+                            onChange={(e) => setAddClientCreatorId(e.target.value)}
+                            className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                          >
+                            <option value="">Select a client...</option>
+                            {splitCreators
+                              .filter(c => !songDetails.credits?.some(cr => cr.creator_id === c.id))
+                              .map(c => (
+                                <option key={c.id} value={c.id}>{c.display_name}</option>
+                              ))
+                            }
+                          </select>
+                          <select
+                            value={addClientRole}
+                            onChange={(e) => setAddClientRole(e.target.value)}
+                            className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                          >
+                            <option value="PRIMARY_ARTIST">Primary Artist</option>
+                            <option value="FEATURED_ARTIST">Featured Artist</option>
+                            <option value="SONGWRITER">Songwriter</option>
+                            <option value="PRODUCER">Producer</option>
+                            <option value="COMPOSER">Composer</option>
+                            <option value="LYRICIST">Lyricist</option>
+                          </select>
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <label className="text-[11px] text-[#7A8580]">Pub Split %</label>
@@ -1022,7 +1020,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                               />
                             </div>
                           </div>
-                          <div className="flex justify-end gap-2">
+                          <div className="flex items-center justify-between pt-1">
                             <button
                               onClick={() => { setShowAddClient(false); setAddClientCreatorId(''); setAddClientPubShare(''); setAddClientMasterShare('') }}
                               className="px-3 py-1.5 text-xs text-[#7A8580] hover:text-[#3D4A44] rounded-[8px] hover:bg-white transition-colors"
@@ -1052,7 +1050,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 }
                               }}
                               disabled={!addClientCreatorId}
-                              className="px-3 py-1.5 text-xs bg-[#5B8A72] text-white rounded-[8px] font-medium hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                              className="px-4 py-1.5 text-xs bg-[#5B8A72] text-white rounded-[8px] font-medium hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
                             >
                               Add Client
                             </button>
