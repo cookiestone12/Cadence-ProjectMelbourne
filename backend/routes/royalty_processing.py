@@ -86,9 +86,9 @@ class PayeeCreateRequest(BaseModel):
 
 class AdvanceCreateRequest(BaseModel):
     contract_id: Optional[int] = None
-    payee_id: int
+    payee_id: Optional[int] = None
     advance_name: str
-    advance_date: date
+    advance_date: Optional[date] = None
     currency: str = "USD"
     principal_amount_cents: int
     recoupable: bool = True

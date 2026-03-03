@@ -1920,7 +1920,7 @@ function ContractsPageInner() {
                       >
                         <option value="">Link to creator (optional)</option>
                         {creators.map(c => (
-                          <option key={c.id} value={c.id}>{c.name || c.artist_name || `Creator ${c.id}`}</option>
+                          <option key={c.id} value={c.id}>{c.display_name || c.name || c.artist_name || `Creator ${c.id}`}</option>
                         ))}
                       </select>
                       <input
@@ -2168,7 +2168,7 @@ function ContractsPageInner() {
                                 >
                                   <option value="">Select from roster</option>
                                   {creators.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name || c.artist_name || `Creator ${c.id}`}</option>
+                                    <option key={c.id} value={c.id}>{c.display_name || c.name || c.artist_name || `Creator ${c.id}`}</option>
                                   ))}
                                 </select>
                                 {!splitForms[asset.id]?.rights_holder_id && (
