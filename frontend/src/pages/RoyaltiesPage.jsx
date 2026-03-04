@@ -295,6 +295,18 @@ function StatementsTab({ orgId, songs }) {
   const [matchingSongId, setMatchingSongId] = useState({})
   const [calculating, setCalculating] = useState({})
 
+  const [showBulkUpload, setShowBulkUpload] = useState(false)
+  const [bulkFiles, setBulkFiles] = useState([])
+  const [bulkSource, setBulkSource] = useState('')
+  const [bulkSourceType, setBulkSourceType] = useState('')
+  const [bulkPeriodStart, setBulkPeriodStart] = useState('')
+  const [bulkPeriodEnd, setBulkPeriodEnd] = useState('')
+  const [bulkCurrency, setBulkCurrency] = useState('USD')
+  const [bulkStep, setBulkStep] = useState(1)
+  const [bulkProcessing, setBulkProcessing] = useState(false)
+  const [bulkCurrentIndex, setBulkCurrentIndex] = useState(-1)
+  const [bulkResults, setBulkResults] = useState([])
+
   const loadStatements = useCallback(async () => {
     if (!orgId) return
     try {
@@ -439,6 +451,75 @@ function StatementsTab({ orgId, songs }) {
     setUploadResult(null)
   }
 
+  const resetBulkUpload = () => {
+    setShowBulkUpload(false)
+    setBulkStep(1)
+    setBulkFiles([])
+    setBulkSource('')
+    setBulkSourceType('')
+    setBulkPeriodStart('')
+    setBulkPeriodEnd('')
+    setBulkCurrency('USD')
+    setBulkProcessing(false)
+    setBulkCurrentIndex(-1)
+    setBulkResults([])
+  }
+
+  const handleBulkProcess = async () => {
+    const sourceName = bulkSource || bulkSourceType
+    if (!sourceName) {
+      alert('Please enter a source name.')
+      return
+    }
+    setBulkStep(2)
+    setBulkProcessing(true)
+    const results = []
+    for (let i = 0; i < bulkFiles.length; i++) {
+      setBulkCurrentIndex(i)
+      const file = bulkFiles[i]
+      const result = { fileName: file.name, status: 'uploading', transactions: 0, matched: 0, unmatched: 0, error: null }
+      results.push(result)
+      setBulkResults([...results])
+      try {
+        const previewForm = new FormData()
+        previewForm.append('file', file)
+        previewForm.append('source_name', sourceName)
+        const previewRes = await axios.post(`/api/royalties/statements/${orgId}/preview`, previewForm, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        })
+        const rawMapping = previewRes.data.mapping || previewRes.data.suggested_mappings || previewRes.data.mappings || {}
+        const detected = previewRes.data.detected_source_type || null
+        const backendMapping = {}
+        Object.entries(rawMapping).forEach(([field, header]) => {
+          if (header) backendMapping[field] = header
+        })
+        const uploadForm = new FormData()
+        uploadForm.append('file', file)
+        uploadForm.append('source_name', sourceName)
+        uploadForm.append('source_type', detected || bulkSourceType || '')
+        uploadForm.append('period_start', bulkPeriodStart)
+        uploadForm.append('period_end', bulkPeriodEnd)
+        uploadForm.append('currency', bulkCurrency)
+        uploadForm.append('column_mapping', JSON.stringify(backendMapping))
+        const uploadRes = await axios.post(`/api/royalties/statements/${orgId}/upload`, uploadForm, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        })
+        result.status = 'done'
+        result.transactions = uploadRes.data?.transactions_count || uploadRes.data?.rows_imported || 0
+        result.matched = uploadRes.data?.matched_count || 0
+        result.unmatched = uploadRes.data?.unmatched_count || 0
+      } catch (err) {
+        result.status = 'error'
+        result.error = err.response?.data?.detail || err.message || 'Upload failed'
+      }
+      setBulkResults([...results])
+    }
+    setBulkProcessing(false)
+    setBulkCurrentIndex(-1)
+    setBulkStep(3)
+    loadStatements()
+  }
+
   if (loading) return <LoadingSpinner message="Loading statements..." />
 
   if (selectedStatement) {
@@ -539,9 +620,14 @@ function StatementsTab({ orgId, songs }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-[#3D4A44]">Royalty Statements</h3>
-        <button onClick={() => setShowUpload(true)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
-          <ArrowUpTrayIcon className="w-4 h-4" /> Upload Statement
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowBulkUpload(true)} className="flex items-center gap-2 px-4 py-2 border border-[#5B8A72] text-[#5B8A72] rounded-xl hover:bg-[rgba(91,138,114,0.06)] transition-all text-sm font-medium">
+            <DocumentDuplicateIcon className="w-4 h-4" /> Bulk Upload
+          </button>
+          <button onClick={() => setShowUpload(true)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
+            <ArrowUpTrayIcon className="w-4 h-4" /> Upload Statement
+          </button>
+        </div>
       </div>
 
       <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)]">
@@ -743,6 +829,189 @@ function StatementsTab({ orgId, songs }) {
                     </p>
                   )}
                   <button onClick={resetUpload} className="mt-6 px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
+                    Done
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkUpload && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-lg font-semibold text-[#3D4A44]">
+                {bulkStep === 1 && 'Bulk Upload Statements'}
+                {bulkStep === 2 && 'Processing Files'}
+                {bulkStep === 3 && 'Bulk Upload Complete'}
+              </h3>
+              <button onClick={resetBulkUpload} disabled={bulkProcessing} className="p-2 hover:bg-[rgba(59,77,67,0.06)] rounded-full transition-colors disabled:opacity-40">
+                <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {bulkStep === 1 && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Select Files (CSV/Excel/PDF)</label>
+                    <input
+                      type="file"
+                      multiple
+                      accept=".csv,.xlsx,.xls,.pdf,application/pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                      onChange={e => setBulkFiles(Array.from(e.target.files || []))}
+                      className="w-full text-sm text-[#3D4A44] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-[rgba(91,138,114,0.1)] file:text-[#5B8A72] hover:file:bg-[rgba(91,138,114,0.2)]"
+                    />
+                    {bulkFiles.length > 0 && (
+                      <p className="text-xs text-[#7A8580] mt-1">{bulkFiles.length} file{bulkFiles.length !== 1 ? 's' : ''} selected</p>
+                    )}
+                  </div>
+                  {bulkFiles.length > 0 && (
+                    <div className="bg-[#F5F7F4] rounded-xl p-3 space-y-1 max-h-32 overflow-y-auto">
+                      {bulkFiles.map((f, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm text-[#3D4A44]">
+                          <DocumentTextIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                          <span className="truncate">{f.name}</span>
+                          <span className="text-xs text-[#7A8580] flex-shrink-0">({(f.size / 1024).toFixed(0)} KB)</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Statement Source</label>
+                    <select
+                      value={bulkSourceType}
+                      onChange={e => {
+                        setBulkSourceType(e.target.value)
+                        if (e.target.value && e.target.value !== 'DSP') setBulkSource(e.target.value)
+                      }}
+                      className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
+                    >
+                      {SOURCE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Name</label>
+                    <input
+                      type="text"
+                      value={bulkSource}
+                      onChange={e => setBulkSource(e.target.value)}
+                      placeholder={bulkSourceType === 'DSP' ? 'e.g. Spotify, Apple Music' : bulkSourceType ? `e.g. ${bulkSourceType} Q4 2025` : 'e.g. Spotify, BMI, ASCAP'}
+                      className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period Start</label>
+                      <input type="date" value={bulkPeriodStart} onChange={e => setBulkPeriodStart(e.target.value)} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period End</label>
+                      <input type="date" value={bulkPeriodEnd} onChange={e => setBulkPeriodEnd(e.target.value)} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Currency</label>
+                    <select value={bulkCurrency} onChange={e => setBulkCurrency(e.target.value)} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none">
+                      {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex justify-end pt-2">
+                    <button
+                      onClick={handleBulkProcess}
+                      disabled={bulkFiles.length === 0 || (!bulkSource && !bulkSourceType)}
+                      className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium disabled:opacity-50"
+                    >
+                      Upload {bulkFiles.length} File{bulkFiles.length !== 1 ? 's' : ''}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {bulkStep === 2 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-full bg-[#EEF1EC] rounded-full h-2">
+                      <div
+                        className="bg-gradient-to-r from-[#5B8A72] to-[#7BA594] h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${bulkResults.length > 0 ? (bulkResults.filter(r => r.status !== 'uploading').length / bulkFiles.length) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <span className="text-sm text-[#7A8580] flex-shrink-0 min-w-[60px] text-right">
+                      {bulkResults.filter(r => r.status !== 'uploading').length}/{bulkFiles.length}
+                    </span>
+                  </div>
+                  {bulkFiles.map((file, i) => {
+                    const result = bulkResults[i]
+                    return (
+                      <div key={i} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+                        !result ? 'border-[rgba(59,77,67,0.08)] bg-[#F5F7F4]' :
+                        result.status === 'uploading' ? 'border-blue-200 bg-blue-50' :
+                        result.status === 'done' ? 'border-green-200 bg-green-50' :
+                        'border-red-200 bg-red-50'
+                      }`}>
+                        <div className="flex-shrink-0">
+                          {!result ? (
+                            <ClockIcon className="w-5 h-5 text-[#7A8580]" />
+                          ) : result.status === 'uploading' ? (
+                            <ArrowPathIcon className="w-5 h-5 text-blue-500 animate-spin" />
+                          ) : result.status === 'done' ? (
+                            <CheckCircleSolid className="w-5 h-5 text-green-600" />
+                          ) : (
+                            <ExclamationCircleIcon className="w-5 h-5 text-red-500" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-[#3D4A44] truncate">{file.name}</p>
+                          {result?.status === 'done' && (
+                            <p className="text-xs text-[#7A8580]">{result.transactions} transactions, {result.matched} matched</p>
+                          )}
+                          {result?.status === 'error' && (
+                            <p className="text-xs text-red-600 truncate">{result.error}</p>
+                          )}
+                          {result?.status === 'uploading' && (
+                            <p className="text-xs text-blue-600">Processing...</p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {bulkStep === 3 && (
+                <div className="text-center py-6">
+                  <CheckCircleSolid className="w-16 h-16 text-[#5B8A72] mx-auto mb-4" />
+                  <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Bulk Upload Complete</h4>
+                  <div className="flex items-center justify-center gap-6 mb-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-[#5B8A72]">{bulkResults.filter(r => r.status === 'done').length}</p>
+                      <p className="text-xs text-[#7A8580]">Succeeded</p>
+                    </div>
+                    {bulkResults.some(r => r.status === 'error') && (
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-red-500">{bulkResults.filter(r => r.status === 'error').length}</p>
+                        <p className="text-xs text-[#7A8580]">Failed</p>
+                      </div>
+                    )}
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-[#3D4A44]">{bulkResults.reduce((sum, r) => sum + (r.transactions || 0), 0)}</p>
+                      <p className="text-xs text-[#7A8580]">Total Transactions</p>
+                    </div>
+                  </div>
+                  {bulkResults.some(r => r.status === 'error') && (
+                    <div className="mb-4 max-h-32 overflow-y-auto text-left">
+                      {bulkResults.filter(r => r.status === 'error').map((r, i) => (
+                        <div key={i} className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-lg mb-1">
+                          <ExclamationCircleIcon className="w-4 h-4 text-red-500 flex-shrink-0" />
+                          <span className="text-xs text-red-700 truncate">{r.fileName}: {r.error}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button onClick={resetBulkUpload} className="mt-2 px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
                     Done
                   </button>
                 </div>
