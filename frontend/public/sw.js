@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'cadence-v6';
+const CACHE_VERSION = 'cadence-v7';
 const STATIC_ASSETS = [
   '/favicon.ico',
   '/favicon-32.png',

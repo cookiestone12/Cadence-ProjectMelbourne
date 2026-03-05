@@ -357,7 +357,7 @@ function StatementsTab({ orgId, songs }) {
       setUploadStep(2)
     } catch (err) {
       console.error('Preview failed:', err)
-      alert('Failed to preview file. Please check the format.')
+      alert(err.response?.data?.detail || 'Failed to preview file. Please check the format.')
     } finally {
       setUploading(false)
     }

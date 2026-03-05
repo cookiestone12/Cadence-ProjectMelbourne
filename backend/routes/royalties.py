@@ -260,49 +260,68 @@ def format_excel_cell(cell_value, number_format=None) -> str:
     return str(cell_value).strip()
 
 
+MAX_PDF_SIZE_BYTES = 50 * 1024 * 1024
+MAX_PDF_PAGES = 50
+
+
 def _parse_pdf_with_tables(content: bytes) -> tuple:
     import pdfplumber
-    all_table_rows = []
-    with pdfplumber.open(io.BytesIO(content)) as pdf:
-        for page in pdf.pages:
-            tables = page.extract_tables()
-            for table in tables:
-                for row in table:
-                    if row and any(cell and str(cell).strip() for cell in row):
-                        cleaned = [str(cell).strip() if cell else "" for cell in row]
-                        all_table_rows.append(cleaned)
+    try:
+        all_table_rows = []
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            pages = pdf.pages[:MAX_PDF_PAGES]
+            for page in pages:
+                tables = page.extract_tables()
+                for table in tables:
+                    for row in table:
+                        if row and any(cell and str(cell).strip() for cell in row):
+                            cleaned = [str(cell).strip() if cell else "" for cell in row]
+                            all_table_rows.append(cleaned)
 
-    if not all_table_rows:
+        if not all_table_rows:
+            return None, None
+
+        headers = all_table_rows[0]
+        headers = [h if h else f"Column_{i}" for i, h in enumerate(headers)]
+        rows = []
+        for row_data in all_table_rows[1:]:
+            row_dict = {}
+            for i, val in enumerate(row_data):
+                if i < len(headers):
+                    row_dict[headers[i]] = val
+            if any(v.strip() for v in row_dict.values()):
+                rows.append(row_dict)
+
+        return headers, rows
+    except Exception as e:
+        logger.warning(f"pdfplumber table extraction failed: {e}")
         return None, None
 
-    headers = all_table_rows[0]
-    headers = [h if h else f"Column_{i}" for i, h in enumerate(headers)]
-    rows = []
-    for row_data in all_table_rows[1:]:
-        row_dict = {}
-        for i, val in enumerate(row_data):
-            if i < len(headers):
-                row_dict[headers[i]] = val
-        if any(v.strip() for v in row_dict.values()):
-            rows.append(row_dict)
 
-    return headers, rows
-
-
-def _parse_pdf_with_ai(content: bytes) -> tuple:
+def _extract_pdf_text(content: bytes) -> str:
     import pdfplumber
-    import os
-    import json
-
     full_text = ""
     with pdfplumber.open(io.BytesIO(content)) as pdf:
-        for page in pdf.pages:
+        pages = pdf.pages[:MAX_PDF_PAGES]
+        for page in pages:
             page_text = page.extract_text()
             if page_text:
                 full_text += page_text + "\n"
+    return full_text
+
+
+def _parse_pdf_with_ai(content: bytes) -> tuple:
+    import os
+    import json
+
+    try:
+        full_text = _extract_pdf_text(content)
+    except Exception as e:
+        logger.error(f"pdfplumber text extraction failed: {e}")
+        raise HTTPException(status_code=400, detail="Could not read text from the PDF. The file may be corrupted or image-only.")
 
     if not full_text.strip():
-        raise HTTPException(status_code=400, detail="Could not extract any text from the PDF")
+        raise HTTPException(status_code=400, detail="Could not extract any text from the PDF. It may be a scanned/image-only document.")
 
     text_excerpt = full_text[:12000]
 
@@ -355,7 +374,7 @@ Respond ONLY with valid JSON."""
         raise
     except Exception as e:
         logger.error(f"AI PDF parsing failed: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse PDF with AI: {str(e)}")
 
 
 def parse_uploaded_file(content: bytes, filename: str) -> tuple:
@@ -363,6 +382,8 @@ def parse_uploaded_file(content: bytes, filename: str) -> tuple:
     if ext == "pdf":
         if not PDF_SUPPORT:
             raise HTTPException(status_code=400, detail="PDF support not available")
+        if len(content) > MAX_PDF_SIZE_BYTES:
+            raise HTTPException(status_code=400, detail=f"PDF file is too large (max {MAX_PDF_SIZE_BYTES // (1024*1024)}MB)")
         headers, rows = _parse_pdf_with_tables(content)
         if headers and rows:
             return headers, rows

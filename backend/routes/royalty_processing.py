@@ -1189,7 +1189,13 @@ async def upload_and_parse_statement(
 ):
     verify_org_access(current_user, org_id, db)
     content = await file.read()
-    headers, rows = parse_uploaded_file(content, file.filename or "data.csv")
+    try:
+        headers, rows = parse_uploaded_file(content, file.filename or "data.csv")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"File parsing crashed: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
 
     if column_mapping:
         try:
