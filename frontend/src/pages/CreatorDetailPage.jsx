@@ -631,17 +631,24 @@ export default function CreatorDetailPage() {
         spotify_link: editForm.spotify_link || null,
         notes: editForm.notes || null
       }
+
+      setSongs(prev => prev.map(s => s.id === songId ? {
+        ...s,
+        ...payload,
+        advance_amount: payload.advance_amount,
+      } : s))
+      setEditingSong(null)
+      setEditForm({})
       
       await axios.patch(`/api/songs/${songId}`, payload)
       
       const orgResponse = await axios.get('/api/organizations/current')
       await loadSongs(orgResponse.data.id)
-      
-      setEditingSong(null)
-      setEditForm({})
     } catch (error) {
       console.error('Failed to update song:', error)
       alert('Failed to save changes')
+      const orgResponse = await axios.get('/api/organizations/current')
+      await loadSongs(orgResponse.data.id)
     } finally {
       setSaving(false)
     }
@@ -1575,9 +1582,9 @@ export default function CreatorDetailPage() {
                 </button>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-auto" style={{ maxHeight: '70vh' }}>
               <table className="w-full text-sm">
-                <thead className="bg-[#F8F8FB] border-b border-[rgba(59,77,67,0.08)]">
+                <thead className="bg-[#F8F8FB] border-b border-[rgba(59,77,67,0.08)] sticky top-0 z-10">
                   <tr>
                     <th className="px-3 py-3 text-center w-10">
                       <input
