@@ -384,6 +384,15 @@ def parse_uploaded_file(content: bytes, filename: str) -> tuple:
             raise HTTPException(status_code=400, detail="PDF support not available")
         if len(content) > MAX_PDF_SIZE_BYTES:
             raise HTTPException(status_code=400, detail=f"PDF file is too large (max {MAX_PDF_SIZE_BYTES // (1024*1024)}MB)")
+        try:
+            from ..utils.pdf_statement_parser import is_publishing_statement, parse_publishing_statement
+            if is_publishing_statement(content):
+                result = parse_publishing_statement(content)
+                if result and result.get("rows"):
+                    logger.info(f"Publishing statement parser: {len(result['rows'])} rows extracted")
+                    return result["headers"], result["rows"]
+        except Exception as e:
+            logger.warning(f"Publishing statement parser failed, falling back: {e}")
         headers, rows = _parse_pdf_with_tables(content)
         if headers and rows:
             return headers, rows
