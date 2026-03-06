@@ -31,20 +31,21 @@ HEADER_LINE_PATTERNS = [
 CLIENT_PATTERN = re.compile(r"^Client:\s*\((\d+)\)\s*(.+?)(?:\s+Page\s+\d+)?$", re.IGNORECASE)
 PERIOD_PATTERN = re.compile(r"^For the Period:\s*(.+)$", re.IGNORECASE)
 TOTAL_PATTERN = re.compile(r"^Total:\s*([\d,]+\.\d+)\s+([\d,]+\.\d+)$")
+GRAND_TOTAL_PATTERN = re.compile(r"^Grand\s+Total:?\s*([\d,]+\.\d+)\s+([\d,]+\.\d+)$", re.IGNORECASE)
 
 DATA_LINE_RE = re.compile(
     r"^(.+?)\s+"
     r"(\d[\d,]*)\s+"
-    r"(-?[\d,]*\.?\d+)\s+"
+    r"(\(?-?[\d,]*\.?\d+\)?)\s+"
     r"(\d+\.\d+%)\s+"
-    r"(-?[\d,]*\.?\d+)$"
+    r"(\(?-?[\d,]*\.?\d+\)?)$"
 )
 
 DATA_LINE_NO_UNITS_RE = re.compile(
     r"^(.+?)\s+"
-    r"(-?[\d,]*\.?\d+)\s+"
+    r"(\(?-?[\d,]*\.?\d+\)?)\s+"
     r"(\d+\.\d+%)\s+"
-    r"(-?[\d,]*\.?\d+)$"
+    r"(\(?-?[\d,]*\.?\d+\)?)$"
 )
 
 DATA_LINE_MINIMAL_RE = re.compile(
@@ -212,6 +213,14 @@ def parse_publishing_statement(content: bytes) -> Optional[dict]:
         if m:
             if not metadata["period"]:
                 metadata["period"] = m.group(1).strip()
+            i += 1
+            continue
+
+        m = GRAND_TOTAL_PATTERN.match(line)
+        if m:
+            metadata["grand_total_gross"] = _parse_amount(m.group(1))
+            metadata["grand_total_net"] = _parse_amount(m.group(2))
+            logger.info(f"Found Grand Total: gross={m.group(1)}, net={m.group(2)}")
             i += 1
             continue
 

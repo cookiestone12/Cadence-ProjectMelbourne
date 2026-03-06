@@ -1191,7 +1191,7 @@ async def upload_and_parse_statement(
     verify_org_access(current_user, org_id, db)
     content = await file.read()
     try:
-        headers, rows = parse_uploaded_file(content, file.filename or "data.csv")
+        headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv")
     except HTTPException:
         raise
     except Exception as e:
@@ -1236,7 +1236,7 @@ async def upload_and_parse_statement(
     db.add(statement)
     db.flush()
 
-    line_count = parse_statement_to_lines(db, statement.id, org_id, mapping, rows)
+    line_count = parse_statement_to_lines(db, statement.id, org_id, mapping, rows, pdf_metadata=pdf_metadata)
 
     statement.status = "UPLOADED"
     db.flush()

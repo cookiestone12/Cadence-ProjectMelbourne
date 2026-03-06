@@ -66,6 +66,7 @@ def parse_statement_to_lines(
     org_id: int,
     column_mapping: dict,
     rows: list,
+    pdf_metadata: dict = None,
 ) -> int:
     try:
         statement = db.query(RoyaltyStatement).filter(
@@ -108,6 +109,8 @@ def parse_statement_to_lines(
                 s = str(val).strip().replace(",", "").replace("$", "").replace("£", "").replace("€", "")
                 if not s or s == "-":
                     return None
+                if s.startswith("(") and s.endswith(")"):
+                    s = "-" + s[1:-1]
                 return float(s)
             except (ValueError, TypeError):
                 return None
@@ -193,9 +196,14 @@ def parse_statement_to_lines(
             count += 1
 
         statement.total_transactions = count
-        statement.total_revenue_cents = int(round(total_revenue * 100))
+        grand_total_net = (pdf_metadata or {}).get("grand_total_net")
+        if grand_total_net is not None:
+            statement.total_revenue_cents = int(round(grand_total_net * 100))
+            logger.info(f"Using PDF Grand Total: ${grand_total_net:.2f} (parsed sum: ${total_revenue:.2f})")
+        else:
+            statement.total_revenue_cents = int(round(total_revenue * 100))
         db.flush()
-        logger.info(f"Parsed {count} lines for statement {statement_id}, total_revenue=${total_revenue:.2f}")
+        logger.info(f"Parsed {count} lines for statement {statement_id}, total_revenue=${statement.total_revenue_cents / 100:.2f}")
         return count
 
     except Exception as e:

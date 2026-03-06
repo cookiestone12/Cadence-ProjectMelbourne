@@ -226,6 +226,8 @@ def parse_revenue_to_cents(value: Any) -> int:
         s = str(value).strip().replace(",", "").replace("$", "").replace("£", "").replace("€", "")
         if not s or s == "-":
             return 0
+        if s.startswith("(") and s.endswith(")"):
+            s = "-" + s[1:-1]
         return int(round(float(s) * 100))
     except (ValueError, TypeError):
         return 0
@@ -390,13 +392,17 @@ def parse_uploaded_file(content: bytes, filename: str) -> tuple:
                 result = parse_publishing_statement(content)
                 if result and result.get("rows"):
                     logger.info(f"Publishing statement parser: {len(result['rows'])} rows extracted")
-                    return result["headers"], result["rows"]
+                    metadata = result.get("metadata", {})
+                    return result["headers"], result["rows"], metadata
         except Exception as e:
             logger.warning(f"Publishing statement parser failed, falling back: {e}")
         headers, rows = _parse_pdf_with_tables(content)
         if headers and rows:
-            return headers, rows
-        return _parse_pdf_with_ai(content)
+            return headers, rows, {}
+        result = _parse_pdf_with_ai(content)
+        if isinstance(result, tuple) and len(result) == 2:
+            return result[0], result[1], {}
+        return result
     elif ext in ("xlsx", "xls"):
         if not EXCEL_SUPPORT:
             raise HTTPException(status_code=400, detail="Excel support not available")
@@ -425,7 +431,7 @@ def parse_uploaded_file(content: bytes, filename: str) -> tuple:
                         row_dict[headers[i]] = format_excel_cell(cell.value, cell.number_format)
                 rows.append(row_dict)
         wb.close()
-        return headers, rows
+        return headers, rows, {}
     else:
         try:
             text = content.decode('utf-8')
@@ -439,7 +445,7 @@ def parse_uploaded_file(content: bytes, filename: str) -> tuple:
         if not headers:
             raise HTTPException(status_code=400, detail="File has no headers")
         rows = list(reader)
-        return headers, rows
+        return headers, rows, {}
 
 
 def match_transaction_to_song(tx: RoyaltyTransaction, songs: List[Song]) -> tuple:
@@ -488,7 +494,7 @@ async def preview_statement(
 ):
     verify_org_access(current_user, org_id, db)
     content = await file.read()
-    headers, rows = parse_uploaded_file(content, file.filename or "data.csv")
+    headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv")
     detected_source = detect_pro_source(headers, source_name or "")
     mapping = suggest_column_mapping(headers, source_name or "")
     preview = rows[:10]
@@ -684,7 +690,7 @@ async def upload_statement(
 ):
     verify_org_access(current_user, org_id, db)
     content = await file.read()
-    headers, rows = parse_uploaded_file(content, file.filename or "data.csv")
+    headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv")
 
     if column_mapping:
         import json
@@ -776,7 +782,12 @@ async def upload_statement(
 
     db.add_all(transactions)
 
-    statement.total_revenue_cents = total_rev
+    grand_total_net = pdf_metadata.get("grand_total_net") if pdf_metadata else None
+    if grand_total_net is not None:
+        statement.total_revenue_cents = int(round(grand_total_net * 100))
+        logger.info(f"Using PDF Grand Total for revenue: ${grand_total_net:.2f} (parsed sum: ${total_rev / 100:.2f})")
+    else:
+        statement.total_revenue_cents = total_rev
     statement.total_transactions = len(transactions)
     statement.matched_transactions = matched_count
     statement.unmatched_transactions = unmatched_count
