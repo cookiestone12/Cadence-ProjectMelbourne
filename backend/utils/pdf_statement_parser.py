@@ -179,6 +179,7 @@ def parse_publishing_statement(content: bytes) -> Optional[dict]:
         "Rate", "Gross Amount"
     ]
     rows = []
+    skipped_data_lines = []
     current_song_title = ""
     current_writers = ""
     current_source = ""
@@ -362,10 +363,18 @@ def parse_publishing_statement(content: bytes) -> Optional[dict]:
             i += 1
             continue
 
+        if any(c.isdigit() for c in line) and "." in line:
+            skipped_data_lines.append(line)
+
         i += 1
 
     if not rows:
         return None
+
+    if skipped_data_lines:
+        logger.warning(f"Publishing parser skipped {len(skipped_data_lines)} potential data lines")
+        for sl in skipped_data_lines[:20]:
+            logger.warning(f"  SKIPPED: {sl!r}")
 
     logger.info(f"Publishing statement parser extracted {len(rows)} line items")
 
