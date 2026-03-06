@@ -1198,7 +1198,10 @@ async def upload_and_parse_statement(
         logger.error(f"File parsing crashed: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
 
-    if column_mapping:
+    suggested = pdf_metadata.get("suggested_mapping") if pdf_metadata else None
+    if suggested:
+        mapping = suggested
+    elif column_mapping:
         try:
             mapping = json.loads(column_mapping)
         except Exception:

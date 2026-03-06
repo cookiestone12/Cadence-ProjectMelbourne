@@ -393,6 +393,16 @@ def parse_uploaded_file(content: bytes, filename: str) -> tuple:
                 if result and result.get("rows"):
                     logger.info(f"Publishing statement parser: {len(result['rows'])} rows extracted")
                     metadata = result.get("metadata", {})
+                    metadata["suggested_mapping"] = {
+                        "track_title": "Track Title",
+                        "artist": "Writer/Artist",
+                        "revenue": "Net Amount",
+                        "quantity": "Units",
+                        "territory": "Territory",
+                        "platform": "Source/Collector",
+                        "revenue_type": "Income Type",
+                        "gross_amount": "Gross Amount",
+                    }
                     return result["headers"], result["rows"], metadata
         except Exception as e:
             logger.warning(f"Publishing statement parser failed, falling back: {e}")
@@ -496,7 +506,8 @@ async def preview_statement(
     content = await file.read()
     headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv")
     detected_source = detect_pro_source(headers, source_name or "")
-    mapping = suggest_column_mapping(headers, source_name or "")
+    suggested = pdf_metadata.get("suggested_mapping") if pdf_metadata else None
+    mapping = suggested if suggested else suggest_column_mapping(headers, source_name or "")
     preview = rows[:10]
     return {
         "headers": headers,
@@ -692,7 +703,10 @@ async def upload_statement(
     content = await file.read()
     headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv")
 
-    if column_mapping:
+    suggested = pdf_metadata.get("suggested_mapping") if pdf_metadata else None
+    if suggested:
+        mapping = suggested
+    elif column_mapping:
         import json
         try:
             mapping = json.loads(column_mapping)
