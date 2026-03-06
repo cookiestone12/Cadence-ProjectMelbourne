@@ -35,16 +35,22 @@ TOTAL_PATTERN = re.compile(r"^Total:\s*([\d,]+\.\d+)\s+([\d,]+\.\d+)$")
 DATA_LINE_RE = re.compile(
     r"^(.+?)\s+"
     r"(\d[\d,]*)\s+"
-    r"([\d,]*\.?\d+)\s+"
+    r"(-?[\d,]*\.?\d+)\s+"
     r"(\d+\.\d+%)\s+"
-    r"([\d,]*\.?\d+)$"
+    r"(-?[\d,]*\.?\d+)$"
 )
 
 DATA_LINE_NO_UNITS_RE = re.compile(
     r"^(.+?)\s+"
-    r"([\d,]*\.?\d+)\s+"
+    r"(-?[\d,]*\.?\d+)\s+"
     r"(\d+\.\d+%)\s+"
-    r"([\d,]*\.?\d+)$"
+    r"(-?[\d,]*\.?\d+)$"
+)
+
+DATA_LINE_MINIMAL_RE = re.compile(
+    r"^(.+?)\s+"
+    r"(-?[\d,]+\.\d{2})\s+"
+    r"(-?[\d,]+\.\d{2})$"
 )
 
 SUBTOTAL_RE = re.compile(
@@ -267,6 +273,33 @@ def parse_publishing_statement(content: bytes) -> Optional[dict]:
                 "Units": "",
                 "Gross Amount": gross,
                 "Rate": rate,
+                "Net Amount": net,
+            })
+            i += 1
+            continue
+
+        m = DATA_LINE_MINIMAL_RE.match(line)
+        if m and current_song_title:
+            building_title = False
+            prefix = m.group(1)
+            gross = m.group(2)
+            net = m.group(3)
+
+            source_detail, income_type, territory = _split_income_type(prefix)
+            if not income_type:
+                source_detail = prefix
+                territory = ""
+
+            rows.append({
+                "Track Title": current_song_title,
+                "Writer/Artist": current_writers,
+                "Source/Collector": current_source,
+                "Source Detail": source_detail,
+                "Income Type": income_type,
+                "Territory": territory,
+                "Units": "",
+                "Gross Amount": gross,
+                "Rate": "",
                 "Net Amount": net,
             })
             i += 1
