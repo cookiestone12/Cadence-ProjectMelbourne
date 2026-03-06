@@ -118,6 +118,14 @@ def ensure_schema_updates():
             conn.commit()
             logger.info("Added linked_creator_id column to organization_members")
 
+        if 'royalty_statements' in inspector.get_table_names():
+            rs_cols = [c['name'] for c in inspector.get_columns('royalty_statements')]
+            if 'creator_id' not in rs_cols:
+                conn.execute(text("ALTER TABLE royalty_statements ADD COLUMN creator_id INTEGER REFERENCES creators(id)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_royalty_statements_creator_id ON royalty_statements(creator_id)"))
+                conn.commit()
+                logger.info("Added creator_id column to royalty_statements")
+
         bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
         for field in bool_to_string_fields:
             safe_field = _validate_sql_identifier(field)

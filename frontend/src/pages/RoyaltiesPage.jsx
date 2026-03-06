@@ -2033,20 +2033,26 @@ function FeesAdvancesTab({ orgId, creators }) {
   )
 }
 
-function ProcessingTab({ orgId }) {
+function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
   const [selectedStatementId, setSelectedStatementId] = useState(null)
   const [statements, setStatements] = useState([])
   const [statementsLoading, setStatementsLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
   const [uploading, setUploading] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
-  const [uploadForm, setUploadForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD' })
+  const [uploadForm, setUploadForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD', creator_id: selectedCreatorId || '' })
   const [uploadFile, setUploadFile] = useState(null)
+
+  useEffect(() => {
+    if (selectedCreatorId) setUploadForm(prev => ({ ...prev, creator_id: selectedCreatorId }))
+  }, [selectedCreatorId])
 
   const loadStatements = useCallback(async () => {
     if (!orgId) return
     try {
-      const res = await axios.get(`/api/royalties/statements/${orgId}`)
+      let url = `/api/royalties/statements/${orgId}`
+      if (selectedCreatorId) url += `?creator_id=${selectedCreatorId}`
+      const res = await axios.get(url)
       const data = Array.isArray(res.data) ? res.data : res.data.statements || []
       setStatements(data)
     } catch (err) {
@@ -2054,12 +2060,12 @@ function ProcessingTab({ orgId }) {
     } finally {
       setStatementsLoading(false)
     }
-  }, [orgId])
+  }, [orgId, selectedCreatorId])
 
   useEffect(() => { loadStatements() }, [loadStatements])
 
   const handleEnhancedUpload = async () => {
-    if (!uploadFile || !uploadForm.source_name) return
+    if (!uploadFile || !uploadForm.source_name || !uploadForm.creator_id) return
     setUploading(true)
     try {
       const formData = new FormData()
@@ -2069,10 +2075,11 @@ function ProcessingTab({ orgId }) {
       if (uploadForm.period_start) formData.append('period_start', uploadForm.period_start)
       if (uploadForm.period_end) formData.append('period_end', uploadForm.period_end)
       formData.append('currency', uploadForm.currency)
+      formData.append('creator_id', uploadForm.creator_id)
       await axios.post(`/api/royalty-processing/${orgId}/statements/upload`, formData)
       setShowUpload(false)
       setUploadFile(null)
-      setUploadForm({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD' })
+      setUploadForm({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD', creator_id: selectedCreatorId || '' })
       loadStatements()
     } catch (err) {
       console.error('Enhanced upload failed:', err)
@@ -2127,6 +2134,15 @@ function ProcessingTab({ orgId }) {
           <div className="mt-4 space-y-4 border-t border-[rgba(59,77,67,0.08)] pt-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Client / Creator *</label>
+                <select value={uploadForm.creator_id} onChange={e => setUploadForm(prev => ({ ...prev, creator_id: e.target.value }))} className={inputClass} disabled={!!selectedCreatorId}>
+                  <option value="">Select a client...</option>
+                  {creators.map(c => (
+                    <option key={c.id} value={c.id}>{c.display_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Name *</label>
                 <input type="text" value={uploadForm.source_name} onChange={e => setUploadForm(prev => ({ ...prev, source_name: e.target.value }))} placeholder="e.g., Spotify, Apple Music" className={inputClass} />
               </div>
@@ -2151,7 +2167,7 @@ function ProcessingTab({ orgId }) {
               <button onClick={() => setShowUpload(false)} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
               <button
                 onClick={handleEnhancedUpload}
-                disabled={!uploadFile || !uploadForm.source_name || uploading}
+                disabled={!uploadFile || !uploadForm.source_name || !uploadForm.creator_id || uploading}
                 className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium disabled:opacity-50"
               >
                 {uploading ? 'Uploading & Matching...' : 'Upload & Auto-Match'}
@@ -2223,6 +2239,112 @@ function ProcessingTab({ orgId }) {
   )
 }
 
+function CreatorRoyaltyLanding({ orgId, creators, onSelectCreator }) {
+  const [summaryData, setSummaryData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!orgId) return
+    axios.get(`/api/royalties/creators-summary/${orgId}`)
+      .then(res => setSummaryData(res.data))
+      .catch(err => console.error('Failed to load creator royalty summary:', err))
+      .finally(() => setLoading(false))
+  }, [orgId])
+
+  if (loading) return <LoadingSpinner message="Loading clients..." />
+
+  const creatorCards = summaryData?.creators || []
+  const unassignedCount = summaryData?.unassigned_count || 0
+  const unassignedRevenue = summaryData?.unassigned_revenue_dollars || 0
+
+  const totalRevenue = creatorCards.reduce((sum, c) => sum + (c.total_revenue_dollars || 0), 0) + unassignedRevenue
+  const totalStatements = creatorCards.reduce((sum, c) => sum + (c.statement_count || 0), 0) + unassignedCount
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(59,77,67,0.08)]">
+          <p className="text-xs font-medium text-[#7A8580] uppercase tracking-wider">Total Revenue</p>
+          <p className="text-2xl font-bold text-[#3D4A44] mt-1">{formatDollars(totalRevenue)}</p>
+        </div>
+        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(59,77,67,0.08)]">
+          <p className="text-xs font-medium text-[#7A8580] uppercase tracking-wider">Total Statements</p>
+          <p className="text-2xl font-bold text-[#3D4A44] mt-1">{totalStatements}</p>
+        </div>
+        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(59,77,67,0.08)]">
+          <p className="text-xs font-medium text-[#7A8580] uppercase tracking-wider">Clients</p>
+          <p className="text-2xl font-bold text-[#3D4A44] mt-1">{creatorCards.length}</p>
+        </div>
+      </div>
+
+      {creatorCards.length === 0 ? (
+        <EmptyState icon={UserGroupIcon} title="No Clients Yet" message="Add creators to your roster to start managing their royalties." />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {creatorCards.map(c => {
+            const matchPct = c.total_lines > 0 ? Math.round((c.matched_lines / c.total_lines) * 100) : 0
+            return (
+              <button
+                key={c.creator_id}
+                onClick={() => onSelectCreator(c.creator_id, c.display_name)}
+                className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)] p-5 text-left hover:shadow-[0px_8px_24px_rgba(91,138,114,0.15)] hover:border-[rgba(91,138,114,0.2)] transition-all group"
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#5B8A72] to-[#7BA594] flex items-center justify-center overflow-hidden flex-shrink-0">
+                    <img
+                      src={`/api/creators/${c.creator_id}/image`}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={e => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = `<span class="text-white font-semibold text-lg">${(c.display_name || '?')[0].toUpperCase()}</span>` }}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-semibold text-[#3D4A44] truncate group-hover:text-[#5B8A72] transition-colors">{c.display_name}</p>
+                    <p className="text-xs text-[#7A8580]">{c.statement_count} statement{c.statement_count !== 1 ? 's' : ''}</p>
+                  </div>
+                  <ChevronRightIcon className="w-5 h-5 text-[#7A8580] group-hover:text-[#5B8A72] transition-colors flex-shrink-0" />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-[#7A8580]">Total Revenue</span>
+                    <span className="text-sm font-semibold text-[#3D4A44]">{formatDollars(c.total_revenue_dollars)}</span>
+                  </div>
+                  {c.statement_count > 0 && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-[#7A8580]">Match Rate</span>
+                        <span className="text-sm font-medium text-[#3D4A44]">{matchPct}%</span>
+                      </div>
+                      <div className="w-full bg-[#E8EDE9] rounded-full h-1.5">
+                        <div className="bg-gradient-to-r from-[#5B8A72] to-[#7BA594] h-1.5 rounded-full transition-all" style={{ width: `${matchPct}%` }} />
+                      </div>
+                    </>
+                  )}
+                  {c.latest_statement && (
+                    <p className="text-xs text-[#7A8580] pt-1">Latest: {formatDate(c.latest_statement)}</p>
+                  )}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {unassignedCount > 0 && (
+        <div className="bg-amber-50/80 backdrop-blur-xl rounded-[18px] shadow-am border border-amber-200/50 p-5">
+          <div className="flex items-center gap-3">
+            <ExclamationCircleIcon className="w-5 h-5 text-amber-600" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">{unassignedCount} unassigned statement{unassignedCount !== 1 ? 's' : ''}</p>
+              <p className="text-xs text-amber-600">{formatDollars(unassignedRevenue)} in revenue not attributed to any client</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function RoyaltiesPage() {
   const [orgId, setOrgId] = useState(null)
   const [activeTab, setActiveTab] = useState('dashboard')
@@ -2230,6 +2352,8 @@ export default function RoyaltiesPage() {
   const [songs, setSongs] = useState([])
   const [creators, setCreators] = useState([])
   const [contracts, setContracts] = useState([])
+  const [selectedCreatorId, setSelectedCreatorId] = useState(null)
+  const [selectedCreatorName, setSelectedCreatorName] = useState('')
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -2265,6 +2389,18 @@ export default function RoyaltiesPage() {
     loadInitialData()
   }, [])
 
+  const handleSelectCreator = (creatorId, creatorName) => {
+    setSelectedCreatorId(creatorId)
+    setSelectedCreatorName(creatorName)
+    setActiveTab('processing')
+  }
+
+  const handleBackToClients = () => {
+    setSelectedCreatorId(null)
+    setSelectedCreatorName('')
+    setActiveTab('dashboard')
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F5F7F4] flex items-center justify-center">
@@ -2276,12 +2412,45 @@ export default function RoyaltiesPage() {
     )
   }
 
+  if (!selectedCreatorId) {
+    return (
+      <div className="min-h-screen bg-[#F5F7F4] p-4 sm:p-6 lg:p-8 overflow-x-hidden">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-6">
+            <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Royalties</h1>
+            <p className="text-[17px] text-[#7A8580] mt-1">Select a client to manage their statements, earnings, and payments</p>
+          </div>
+          <CreatorRoyaltyLanding orgId={orgId} creators={creators} onSelectCreator={handleSelectCreator} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F7F4] p-4 sm:p-6 lg:p-8 overflow-x-hidden">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
-          <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Royalties</h1>
-          <p className="text-[17px] text-[#7A8580] mt-1">Manage statements, earnings, and payments</p>
+          <button
+            onClick={handleBackToClients}
+            className="flex items-center gap-2 text-sm text-[#7A8580] hover:text-[#5B8A72] transition-colors mb-3"
+          >
+            <ArrowLeftIcon className="w-4 h-4" />
+            All Clients
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5B8A72] to-[#7BA594] flex items-center justify-center overflow-hidden flex-shrink-0">
+              <img
+                src={`/api/creators/${selectedCreatorId}/image`}
+                alt=""
+                className="w-full h-full object-cover"
+                onError={e => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = `<span class="text-white font-semibold text-base">${(selectedCreatorName || '?')[0].toUpperCase()}</span>` }}
+              />
+            </div>
+            <div>
+              <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">{selectedCreatorName}</h1>
+              <p className="text-[17px] text-[#7A8580] mt-0">Royalties & Accounting</p>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-1 mb-6 bg-white/60 backdrop-blur-xl rounded-[14px] p-1 border border-[rgba(59,77,67,0.08)] overflow-x-auto">
@@ -2305,7 +2474,7 @@ export default function RoyaltiesPage() {
         </div>
 
         {activeTab === 'dashboard' && <DashboardTab orgId={orgId} />}
-        {activeTab === 'processing' && <ProcessingTab orgId={orgId} />}
+        {activeTab === 'processing' && <ProcessingTab orgId={orgId} creators={creators} selectedCreatorId={selectedCreatorId} />}
         {activeTab === 'statements' && <StatementsTab orgId={orgId} songs={songs} />}
         {activeTab === 'earnings' && <EarningsTab orgId={orgId} />}
         {activeTab === 'analytics' && <RoyaltyAnalyticsDashboard orgId={orgId} />}

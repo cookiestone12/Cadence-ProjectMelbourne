@@ -1184,6 +1184,7 @@ async def upload_and_parse_statement(
     period_end: Optional[str] = Form(None),
     currency: str = Form("USD"),
     column_mapping: Optional[str] = Form(None),
+    creator_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1230,6 +1231,7 @@ async def upload_and_parse_statement(
         status="PROCESSING",
         column_mapping=mapping,
         uploaded_by_user_id=current_user.id,
+        creator_id=creator_id,
     )
     db.add(statement)
     db.flush()

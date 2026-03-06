@@ -503,11 +503,74 @@ async def preview_statement(
     }
 
 
+@router.get("/creators-summary/{org_id}")
+def get_creators_royalty_summary(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+
+    creators = db.query(Creator).filter(Creator.organization_id == org_id).order_by(Creator.display_name).all()
+
+    from sqlalchemy import func
+    stmt_stats = db.query(
+        RoyaltyStatement.creator_id,
+        func.count(RoyaltyStatement.id).label("statement_count"),
+        func.sum(RoyaltyStatement.total_revenue_cents).label("total_revenue_cents"),
+        func.max(RoyaltyStatement.created_at).label("latest_statement"),
+        func.sum(RoyaltyStatement.matched_transactions).label("matched"),
+        func.sum(RoyaltyStatement.total_transactions).label("total_lines"),
+    ).filter(
+        RoyaltyStatement.organization_id == org_id,
+        RoyaltyStatement.creator_id.isnot(None),
+    ).group_by(RoyaltyStatement.creator_id).all()
+
+    stats_map = {}
+    for row in stmt_stats:
+        stats_map[row.creator_id] = {
+            "statement_count": row.statement_count or 0,
+            "total_revenue_cents": row.total_revenue_cents or 0,
+            "latest_statement": row.latest_statement.isoformat() if row.latest_statement else None,
+            "matched_lines": row.matched or 0,
+            "total_lines": row.total_lines or 0,
+        }
+
+    unassigned = db.query(
+        func.count(RoyaltyStatement.id).label("count"),
+        func.sum(RoyaltyStatement.total_revenue_cents).label("rev"),
+    ).filter(
+        RoyaltyStatement.organization_id == org_id,
+        RoyaltyStatement.creator_id.is_(None),
+    ).first()
+
+    result = []
+    for c in creators:
+        s = stats_map.get(c.id, {})
+        result.append({
+            "creator_id": c.id,
+            "display_name": c.display_name,
+            "roles": c.roles if hasattr(c, 'roles') else None,
+            "statement_count": s.get("statement_count", 0),
+            "total_revenue_dollars": (s.get("total_revenue_cents", 0) or 0) / 100.0,
+            "latest_statement": s.get("latest_statement"),
+            "matched_lines": s.get("matched_lines", 0),
+            "total_lines": s.get("total_lines", 0),
+        })
+
+    return {
+        "creators": result,
+        "unassigned_count": unassigned.count if unassigned else 0,
+        "unassigned_revenue_dollars": ((unassigned.rev or 0) / 100.0) if unassigned else 0,
+    }
+
+
 @router.get("/statements/{org_id}")
 def list_statements(
     org_id: int,
     status: Optional[str] = None,
     source: Optional[str] = None,
+    creator_id: Optional[int] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -519,8 +582,17 @@ def list_statements(
         query = query.filter(RoyaltyStatement.status == status)
     if source:
         query = query.filter(RoyaltyStatement.source_name.ilike(f"%{source}%"))
+    if creator_id is not None:
+        query = query.filter(RoyaltyStatement.creator_id == creator_id)
     total = query.count()
     statements = query.order_by(desc(RoyaltyStatement.created_at)).offset(skip).limit(limit).all()
+
+    creator_ids = set(s.creator_id for s in statements if s.creator_id)
+    creator_map = {}
+    if creator_ids:
+        creators = db.query(Creator).filter(Creator.id.in_(creator_ids)).all()
+        creator_map = {c.id: c.display_name for c in creators}
+
     return {
         "total": total,
         "skip": skip,
@@ -534,12 +606,14 @@ def list_statements(
                 "period_end": s.period_end.isoformat() if s.period_end else None,
                 "currency": s.currency,
                 "total_revenue_cents": s.total_revenue_cents,
-                "total_revenue_dollars": s.total_revenue_cents / 100.0,
+                "total_revenue_dollars": (s.total_revenue_cents or 0) / 100.0,
                 "total_transactions": s.total_transactions,
                 "matched_transactions": s.matched_transactions,
                 "unmatched_transactions": s.unmatched_transactions,
                 "status": s.status,
                 "file_name": s.file_name,
+                "creator_id": s.creator_id,
+                "creator_name": creator_map.get(s.creator_id) if s.creator_id else None,
                 "created_at": s.created_at.isoformat() if s.created_at else None,
                 "updated_at": s.updated_at.isoformat() if s.updated_at else None,
             }
@@ -604,6 +678,7 @@ async def upload_statement(
     period_end: Optional[str] = Form(None),
     currency: str = Form("USD"),
     column_mapping: Optional[str] = Form(None),
+    creator_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -644,6 +719,7 @@ async def upload_statement(
         status="PROCESSING",
         column_mapping=mapping,
         uploaded_by_user_id=current_user.id,
+        creator_id=creator_id,
     )
     db.add(statement)
     db.flush()

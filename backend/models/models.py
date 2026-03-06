@@ -1158,6 +1158,7 @@ class RoyaltyStatement(Base):
     column_mapping = Column(JSON, nullable=True)
 
     uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True)
 
     reported_gross = Column(Float, nullable=True)
     reported_withholding = Column(Float, nullable=True)
