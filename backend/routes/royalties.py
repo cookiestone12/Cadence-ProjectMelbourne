@@ -734,6 +734,33 @@ def delete_statement(
     ).first()
     if not stmt:
         raise HTTPException(status_code=404, detail="Statement not found")
+
+    from ..models.models import RoyaltyLedgerEntry, RoyaltyProcessingRun, RoyaltyStatementLine
+
+    db.query(RoyaltyLedgerEntry).filter(
+        RoyaltyLedgerEntry.statement_id == statement_id
+    ).delete(synchronize_session=False)
+
+    db.query(RoyaltyProcessingRun).filter(
+        RoyaltyProcessingRun.statement_id == statement_id
+    ).delete(synchronize_session=False)
+
+    db.query(RoyaltyStatementLine).filter(
+        RoyaltyStatementLine.statement_id == statement_id
+    ).delete(synchronize_session=False)
+
+    tx_ids = [t.id for t in db.query(RoyaltyTransaction.id).filter(
+        RoyaltyTransaction.statement_id == statement_id
+    ).all()]
+    if tx_ids:
+        db.query(RoyaltyAllocation).filter(
+            RoyaltyAllocation.transaction_id.in_(tx_ids)
+        ).delete(synchronize_session=False)
+
+    db.query(RoyaltyTransaction).filter(
+        RoyaltyTransaction.statement_id == statement_id
+    ).delete(synchronize_session=False)
+
     db.delete(stmt)
     db.commit()
     return {"detail": "Statement deleted"}
