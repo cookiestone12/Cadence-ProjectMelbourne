@@ -50,7 +50,7 @@ def search_brief(
     if request.query:
         try:
             from openai import OpenAI
-            client = OpenAI(api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"))
+            client = OpenAI(api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"), base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL"))
 
             prompt = f"""Parse this music brief search query into structured criteria. Return JSON with any of these fields that apply:
 - bpm_min (number)

@@ -327,7 +327,7 @@ def _parse_pdf_with_ai(content: bytes) -> tuple:
 
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"))
+        client = OpenAI(api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"), base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL"))
 
         prompt = f"""You are a royalty statement parser. Extract the tabular data from this royalty statement text into structured JSON.
 
