@@ -50,6 +50,11 @@ def compute_line_hash(line_data: dict) -> str:
         str(line_data.get("revenue") or "").strip(),
         str(line_data.get("territory") or "").strip().lower(),
         str(line_data.get("store") or "").strip().lower(),
+        str(line_data.get("revenue_type") or "").strip().lower(),
+        str(line_data.get("source_detail") or "").strip().lower(),
+        str(line_data.get("quantity") or "").strip(),
+        str(line_data.get("gross_amount") or "").strip(),
+        str(line_data.get("row_index") or "").strip(),
     ]
     raw = "|".join(parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -116,7 +121,8 @@ def parse_statement_to_lines(
             ).all()
         )
 
-        for row in rows:
+        total_revenue = 0.0
+        for row_idx, row in enumerate(rows):
             hash_data = {
                 "isrc": safe_get(row, isrc_col),
                 "track_title": safe_get(row, title_col),
@@ -124,6 +130,11 @@ def parse_statement_to_lines(
                 "revenue": safe_get(row, rev_col),
                 "territory": safe_get(row, territory_col),
                 "store": safe_get(row, platform_col),
+                "revenue_type": safe_get(row, rev_type_col),
+                "source_detail": safe_get(row, release_title_col) or safe_get(row, label_col),
+                "quantity": safe_get(row, qty_col),
+                "gross_amount": safe_get(row, gross_col),
+                "row_index": str(row_idx),
             }
             line_hash = compute_line_hash(hash_data)
 
@@ -178,11 +189,13 @@ def parse_statement_to_lines(
             )
             db.add(line)
             existing_hashes.add(line_hash)
+            total_revenue += net_amount
             count += 1
 
         statement.total_transactions = count
+        statement.total_revenue_cents = int(round(total_revenue * 100))
         db.flush()
-        logger.info(f"Parsed {count} lines for statement {statement_id}")
+        logger.info(f"Parsed {count} lines for statement {statement_id}, total_revenue=${total_revenue:.2f}")
         return count
 
     except Exception as e:
