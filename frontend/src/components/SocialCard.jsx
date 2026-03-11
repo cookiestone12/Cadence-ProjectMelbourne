@@ -1,7 +1,7 @@
 import React, { forwardRef } from 'react'
 
 const CadenceLogoLight = ({ height = 48 }) => {
-  const aspectRatio = 1638 / 446
+  const aspectRatio = 1804 / 476
   const width = Math.round(height * aspectRatio)
   return (
     <img
