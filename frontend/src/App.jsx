@@ -62,6 +62,7 @@ import ClientPortalPage from './pages/ClientPortalPage'
 import SharedContactsPage from './pages/SharedContactsPage'
 import SharedCreditsPage from './pages/SharedCreditsPage'
 import Sidebar from './components/Sidebar'
+import PullToRefresh from './components/PullToRefresh'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -155,6 +156,7 @@ function App() {
           onClose={() => setSidebarOpen(false)}
         />
         <main className="flex-1 overflow-auto bg-[#F5F7F4]">
+          <PullToRefresh>
           <div className="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -213,6 +215,7 @@ function App() {
             <img src="/cadence-logo.png" alt="Powered by Cadence" className="h-6 w-auto object-contain" />
             <span className="text-[9px] font-semibold tracking-wide uppercase text-[#5B8A72] bg-[#5B8A72]/10 px-1.5 py-0.5 rounded-md">Beta</span>
           </div>
+          </PullToRefresh>
         </main>
       </div>
     </Router>
