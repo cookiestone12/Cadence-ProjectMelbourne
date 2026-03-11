@@ -96,8 +96,7 @@ const SocialCard = forwardRef(({ data, avatarUrl, creatorName, orgName, format =
         alignItems: 'center',
         justifyContent: 'space-between',
       }}>
-        <CadenceLogoLight height={isSquare ? 38 : 48} />
-        <span style={{ fontSize: isSquare ? 12 : 14, opacity: 0.5, letterSpacing: 1 }}>CATALOG INTELLIGENCE</span>
+        <CadenceLogoLight height={isSquare ? 56 : 68} />
       </div>
 
       <div style={{
