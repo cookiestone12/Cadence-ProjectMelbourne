@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import {
   MusicalNoteIcon, MagnifyingGlassIcon, ArrowPathIcon,
-  ChevronUpDownIcon, UserGroupIcon
+  ChevronUpDownIcon, UserGroupIcon, ArrowDownTrayIcon, ChevronDownIcon
 } from '@heroicons/react/24/outline'
+import RosterSocialCard from '../components/RosterSocialCard'
 
 const ROLE_COLORS = {
   ARTIST: 'bg-green-100 text-green-700',
@@ -28,9 +29,17 @@ export default function CreditsPage() {
   const [creators, setCreators] = useState([])
   const [loading, setLoading] = useState(true)
   const [orgId, setOrgId] = useState(null)
+  const [orgName, setOrgName] = useState('')
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('streams')
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [allCreators, setAllCreators] = useState([])
+  const [showFormatMenu, setShowFormatMenu] = useState(false)
+  const [socialCardFormat, setSocialCardFormat] = useState('story')
+  const [showSocialCard, setShowSocialCard] = useState(false)
+  const [generatingSocialCard, setGeneratingSocialCard] = useState(false)
+  const socialCardRef = useRef(null)
+  const formatMenuRef = useRef(null)
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300)
@@ -45,12 +54,28 @@ export default function CreditsPage() {
     if (orgId) fetchCredits()
   }, [orgId, debouncedSearch, sortBy])
 
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (formatMenuRef.current && !formatMenuRef.current.contains(e.target)) {
+        setShowFormatMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   async function loadData() {
     try {
       const orgRes = await axios.get('/api/organizations/current')
       const currentOrgId = orgRes.data?.id
+      const currentOrgName = orgRes.data?.name || ''
       if (!currentOrgId) { setLoading(false); return }
       setOrgId(currentOrgId)
+      setOrgName(currentOrgName)
+      try {
+        const allRes = await axios.get(`/api/streaming-credits/org/${currentOrgId}/overview`, { params: { sort_by: 'streams' } })
+        setAllCreators(allRes.data?.creators || [])
+      } catch {}
     } catch (error) {
       console.error('Failed to load org:', error)
       setLoading(false)
@@ -71,10 +96,65 @@ export default function CreditsPage() {
     }
   }
 
+  const handleDownloadSocialCard = useCallback(async (fmt) => {
+    const chosenFormat = fmt || socialCardFormat
+    setSocialCardFormat(chosenFormat)
+    setGeneratingSocialCard(true)
+    setShowSocialCard(true)
+    setShowFormatMenu(false)
+    try {
+      await new Promise(r => setTimeout(r, 500))
+      const html2canvas = (await import('html2canvas')).default
+      const node = socialCardRef.current
+      if (!node) return
+      const h = chosenFormat === 'square' ? 1080 : 1350
+      const canvas = await html2canvas(node, {
+        scale: 1,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        width: 1080,
+        height: h,
+        logging: false,
+      })
+      let url
+      try {
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+        if (blob) {
+          url = URL.createObjectURL(blob)
+        } else {
+          url = canvas.toDataURL('image/png')
+        }
+      } catch {
+        url = canvas.toDataURL('image/png')
+      }
+      const a = document.createElement('a')
+      a.href = url
+      const safeName = (orgName || 'roster').replace(/[^a-zA-Z0-9]/g, '_')
+      const suffix = chosenFormat === 'square' ? '_roster_credits_square' : '_roster_credits'
+      a.download = `${safeName}${suffix}.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Social card generation failed:', err)
+    } finally {
+      setGeneratingSocialCard(false)
+      setShowSocialCard(false)
+    }
+  }, [socialCardFormat, orgName])
+
   const totalCredits = creators.reduce((sum, c) => sum + (c.total_credits || 0), 0)
   const totalStreams = creators.reduce((sum, c) => sum + (c.total_estimated_streams || 0), 0)
   const activeCreators = creators.filter(c => c.total_credits > 0).length
   const avgStreams = activeCreators > 0 ? Math.round(totalStreams / totalCredits || 0) : 0
+
+  const cardCreators = allCreators.length > 0 ? allCreators : creators
+  const cardTotalCredits = cardCreators.reduce((sum, c) => sum + (c.total_credits || 0), 0)
+  const cardTotalStreams = cardCreators.reduce((sum, c) => sum + (c.total_estimated_streams || 0), 0)
+  const cardActiveCreators = cardCreators.filter(c => c.total_credits > 0).length
+  const sortedForCard = [...cardCreators].sort((a, b) => (b.total_estimated_streams || 0) - (a.total_estimated_streams || 0))
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -83,13 +163,46 @@ export default function CreditsPage() {
           <h1 className="text-2xl font-bold text-[#3D4A44]">Credits</h1>
           <p className="text-sm text-[#7A8580] mt-1">Streaming intelligence & creator credits overview</p>
         </div>
-        <button
-          onClick={() => orgId && fetchCredits()}
-          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#5B8A72] bg-[#5B8A72]/10 hover:bg-[#5B8A72]/20 rounded-xl transition-colors"
-        >
-          <ArrowPathIcon className="w-4 h-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="relative" ref={formatMenuRef}>
+            <button
+              onClick={() => setShowFormatMenu(!showFormatMenu)}
+              disabled={generatingSocialCard || (creators.length === 0 && allCreators.length === 0)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-[#5B8A72] hover:bg-[#4A7A62] rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {generatingSocialCard ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <ArrowDownTrayIcon className="w-4 h-4" />
+              )}
+              Download for Social
+              <ChevronDownIcon className="w-3 h-3" />
+            </button>
+            {showFormatMenu && (
+              <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-lg border border-[rgba(59,77,67,0.12)] py-1 z-50">
+                <button
+                  onClick={() => handleDownloadSocialCard('story')}
+                  className="w-full text-left px-4 py-2.5 text-sm text-[#3D4A44] hover:bg-[#5B8A72]/10 transition-colors"
+                >
+                  Story (1080 x 1350)
+                </button>
+                <button
+                  onClick={() => handleDownloadSocialCard('square')}
+                  className="w-full text-left px-4 py-2.5 text-sm text-[#3D4A44] hover:bg-[#5B8A72]/10 transition-colors"
+                >
+                  Square (1080 x 1080)
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => orgId && fetchCredits()}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#5B8A72] bg-[#5B8A72]/10 hover:bg-[#5B8A72]/20 rounded-xl transition-colors"
+          >
+            <ArrowPathIcon className="w-4 h-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -203,6 +316,20 @@ export default function CreditsPage() {
               )}
             </button>
           ))}
+        </div>
+      )}
+
+      {showSocialCard && (
+        <div style={{ position: 'fixed', top: 0, left: '-9999px', opacity: 0, pointerEvents: 'none' }}>
+          <RosterSocialCard
+            ref={socialCardRef}
+            orgName={orgName}
+            totalCredits={cardTotalCredits}
+            totalStreams={cardTotalStreams}
+            activeCreators={cardActiveCreators}
+            topCreators={sortedForCard}
+            format={socialCardFormat}
+          />
         </div>
       )}
     </div>
