@@ -72,7 +72,7 @@ def _get_resend_credentials() -> dict:
 
 
 DEFAULT_FROM_NAME = "Cadence"
-DEFAULT_FROM_EMAIL = "onboarding@resend.dev"
+DEFAULT_FROM_EMAIL = "communication@cadence-ci.com"
 
 
 class ResendProvider(EmailProvider):
@@ -91,8 +91,7 @@ class ResendProvider(EmailProvider):
         try:
             credentials = _get_resend_credentials()
             resend.api_key = credentials["api_key"]
-            connector_from = credentials.get("from_email")
-            sender_email = from_email or connector_from or DEFAULT_FROM_EMAIL
+            sender_email = from_email or DEFAULT_FROM_EMAIL
             sender_name = from_name or DEFAULT_FROM_NAME
             sender = f"{sender_name} <{sender_email}>"
 
