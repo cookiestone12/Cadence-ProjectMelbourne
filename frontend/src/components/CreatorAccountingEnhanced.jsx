@@ -3,7 +3,8 @@ import axios from 'axios'
 import {
   ArrowUpTrayIcon, DocumentTextIcon, CurrencyDollarIcon,
   ArrowPathIcon, BanknotesIcon, ChartBarIcon, TrashIcon,
-  EyeIcon, XMarkIcon
+  EyeIcon, XMarkIcon, UserGroupIcon, DocumentDuplicateIcon,
+  MusicalNoteIcon, CalculatorIcon, CheckCircleIcon
 } from '@heroicons/react/24/outline'
 import StatementDetailView from './StatementDetailView'
 import ProcessingInboxPanel from './ProcessingInboxPanel'
@@ -469,6 +470,17 @@ function StatementsSubTab({ orgId, creatorId }) {
   const [uploadPeriodEnd, setUploadPeriodEnd] = useState('')
   const [uploadCurrency, setUploadCurrency] = useState('USD')
   const [uploading, setUploading] = useState(false)
+  const [uploadStep, setUploadStep] = useState(1)
+  const [previewData, setPreviewData] = useState(null)
+  const [columnMappings, setColumnMappings] = useState({})
+  const [detectedSourceType, setDetectedSourceType] = useState(null)
+  const [uploadResult, setUploadResult] = useState(null)
+  const [calculating, setCalculating] = useState({})
+  const [selectedStatement, setSelectedStatement] = useState(null)
+  const [transactions, setTransactions] = useState([])
+  const [txLoading, setTxLoading] = useState(false)
+  const [matchingSongId, setMatchingSongId] = useState({})
+  const [songs, setSongs] = useState([])
 
   const loadStatements = useCallback(async () => {
     if (!orgId) return
@@ -486,26 +498,61 @@ function StatementsSubTab({ orgId, creatorId }) {
 
   useEffect(() => { loadStatements() }, [loadStatements])
 
-  const handleUpload = async () => {
-    if (!uploadFile || !uploadSource) return
+  useEffect(() => {
+    if (!orgId) return
+    axios.get(`/api/songs/org/${orgId}`).then(res => {
+      setSongs(Array.isArray(res.data) ? res.data : res.data.songs || [])
+    }).catch(() => {})
+  }, [orgId])
+
+  const handlePreview = async () => {
+    if (!uploadFile) return
     setUploading(true)
     try {
       const formData = new FormData()
       formData.append('file', uploadFile)
-      formData.append('source_name', uploadSource)
-      if (uploadSourceType) formData.append('source_type', uploadSourceType)
-      if (uploadPeriodStart) formData.append('period_start', uploadPeriodStart)
-      if (uploadPeriodEnd) formData.append('period_end', uploadPeriodEnd)
+      formData.append('source_name', uploadSourceType || uploadSource)
+      const res = await axios.post(`/api/royalties/statements/${orgId}/preview`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setPreviewData(res.data)
+      if (res.data.detected_source_type) setDetectedSourceType(res.data.detected_source_type)
+      const rawMapping = res.data.mapping || res.data.suggested_mappings || res.data.mappings || {}
+      const inverted = {}
+      Object.entries(rawMapping).forEach(([field, header]) => {
+        if (header) inverted[header] = field
+      })
+      setColumnMappings(inverted)
+      setUploadStep(2)
+    } catch (err) {
+      console.error('Preview failed:', err)
+      alert(err.response?.data?.detail || 'Failed to preview file.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleUpload = async () => {
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+      formData.append('source_name', uploadSource || uploadSourceType)
+      formData.append('source_type', detectedSourceType || uploadSourceType || '')
+      formData.append('period_start', uploadPeriodStart)
+      formData.append('period_end', uploadPeriodEnd)
       formData.append('currency', uploadCurrency)
       if (creatorId) formData.append('creator_id', creatorId)
-      await axios.post(`/api/royalty-processing/${orgId}/statements/upload`, formData)
-      setShowUpload(false)
-      setUploadFile(null)
-      setUploadSource('')
-      setUploadSourceType('')
-      setUploadPeriodStart('')
-      setUploadPeriodEnd('')
-      setUploadCurrency('USD')
+      const backendMapping = {}
+      Object.entries(columnMappings).forEach(([header, field]) => {
+        if (field) backendMapping[field] = header
+      })
+      formData.append('column_mapping', JSON.stringify(backendMapping))
+      const res = await axios.post(`/api/royalties/statements/${orgId}/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      setUploadResult(res.data)
+      setUploadStep(3)
       loadStatements()
     } catch (err) {
       console.error('Upload failed:', err)
@@ -520,9 +567,71 @@ function StatementsSubTab({ orgId, creatorId }) {
     try {
       await axios.delete(`/api/royalties/statements/${orgId}/${stmtId}`)
       loadStatements()
+      if (selectedStatement?.id === stmtId) setSelectedStatement(null)
     } catch (err) {
       console.error('Delete failed:', err)
     }
+  }
+
+  const handleRematch = async (stmtId) => {
+    try {
+      await axios.post(`/api/royalties/statements/${orgId}/${stmtId}/rematch`)
+      if (selectedStatement?.id === stmtId) loadTransactions(selectedStatement)
+      loadStatements()
+    } catch (err) {
+      console.error('Rematch failed:', err)
+    }
+  }
+
+  const handleCalculate = async (stmtId) => {
+    setCalculating(prev => ({ ...prev, [stmtId]: true }))
+    try {
+      await axios.post(`/api/royalties/calculate/${orgId}/${stmtId}`)
+      loadStatements()
+    } catch (err) {
+      console.error('Calculate failed:', err)
+    } finally {
+      setCalculating(prev => ({ ...prev, [stmtId]: false }))
+    }
+  }
+
+  const loadTransactions = async (stmt) => {
+    setSelectedStatement(stmt)
+    setTxLoading(true)
+    try {
+      const res = await axios.get(`/api/royalties/statements/${orgId}/${stmt.id}/transactions`)
+      setTransactions(Array.isArray(res.data) ? res.data : res.data.transactions || [])
+    } catch (err) {
+      console.error('Failed to load transactions:', err)
+    } finally {
+      setTxLoading(false)
+    }
+  }
+
+  const handleManualMatch = async (txId) => {
+    const songId = matchingSongId[txId]
+    if (!songId || !selectedStatement) return
+    try {
+      await axios.post(`/api/royalties/statements/${orgId}/${selectedStatement.id}/match/${txId}`, { song_id: parseInt(songId) })
+      loadTransactions(selectedStatement)
+    } catch (err) {
+      console.error('Match failed:', err)
+    }
+  }
+
+  const resetUpload = () => {
+    setShowUpload(false)
+    setUploadStep(1)
+    setUploadFile(null)
+    setUploadSource('')
+    setUploadSourceType('')
+    setDetectedSourceType(null)
+    setUploadPeriodStart('')
+    setUploadPeriodEnd('')
+    setUploadCurrency('USD')
+    setPreviewData(null)
+    setColumnMappings({})
+    setUploadResult(null)
   }
 
   if (selectedStatementId) {
@@ -535,6 +644,117 @@ function StatementsSubTab({ orgId, creatorId }) {
     )
   }
 
+  if (selectedStatement) {
+    return (
+      <div className="space-y-4">
+        <button onClick={() => setSelectedStatement(null)} className="flex items-center gap-2 text-[#5B8A72] hover:text-[#4a7a62] text-sm font-medium transition-colors">
+          ← Back to Statements
+        </button>
+        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-6 border border-[rgba(59,77,67,0.08)]">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-[#3D4A44]">{selectedStatement.source_name || 'Statement'}</h3>
+              <p className="text-sm text-[#7A8580]">
+                {formatDate(selectedStatement.period_start)} — {formatDate(selectedStatement.period_end)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => handleRematch(selectedStatement.id)} className="px-3 py-1.5 text-sm bg-[rgba(91,138,114,0.1)] text-[#5B8A72] rounded-xl hover:bg-[rgba(91,138,114,0.2)] transition-colors font-medium">
+                <ArrowPathIcon className="w-4 h-4 inline mr-1" /> Re-match
+              </button>
+              <button
+                onClick={() => handleCalculate(selectedStatement.id)}
+                disabled={calculating[selectedStatement.id]}
+                className="px-3 py-1.5 text-sm bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-md transition-all font-medium disabled:opacity-50"
+              >
+                <CalculatorIcon className="w-4 h-4 inline mr-1" /> {calculating[selectedStatement.id] ? 'Calculating...' : 'Calculate Royalties'}
+              </button>
+            </div>
+          </div>
+          {txLoading ? (
+            <div className="text-center py-12 text-[#7A8580]">Loading transactions...</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-[#EEF1EC]">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Track</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Artist</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">ISRC</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Revenue</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Qty</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                  {transactions.map(tx => (
+                    <tr key={tx.id} className="hover:bg-[rgba(91,138,114,0.04)]">
+                      <td className="px-4 py-3 text-sm text-[#3D4A44]">{tx.original_track_title || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580]">{tx.original_artist || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580] font-mono text-xs">{tx.original_isrc || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatCents(tx.revenue)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-[#7A8580]">{(tx.quantity || 0).toLocaleString()}</td>
+                      <td className="px-4 py-3">
+                        {tx.matched_song_id || tx.match_status === 'MATCHED' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Matched</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Unmatched</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {!(tx.matched_song_id || tx.match_status === 'MATCHED') && (
+                          <div className="flex items-center gap-1">
+                            <select
+                              value={matchingSongId[tx.id] || ''}
+                              onChange={e => setMatchingSongId(prev => ({ ...prev, [tx.id]: e.target.value }))}
+                              className="text-xs border border-[rgba(59,77,67,0.15)] rounded-lg px-2 py-1 bg-white text-[#3D4A44] max-w-[160px]"
+                            >
+                              <option value="">Select song...</option>
+                              {songs.map(s => (
+                                <option key={s.id} value={s.id}>{s.title}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => handleManualMatch(tx.id)}
+                              disabled={!matchingSongId[tx.id]}
+                              className="px-2 py-1 text-xs bg-[#5B8A72] text-white rounded-lg disabled:opacity-40 hover:bg-[#4a7a62] transition-colors"
+                            >
+                              Match
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {transactions.length === 0 && (
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#7A8580]">No transactions found.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  const TARGET_FIELDS = [
+    { value: '', label: '— Skip —' },
+    { value: 'track_title', label: 'Track / Work Title' },
+    { value: 'artist', label: 'Artist / Writer' },
+    { value: 'isrc', label: 'ISRC' },
+    { value: 'upc', label: 'UPC' },
+    { value: 'iswc', label: 'ISWC' },
+    { value: 'revenue', label: 'Revenue / Amount' },
+    { value: 'quantity', label: 'Quantity / Performances' },
+    { value: 'territory', label: 'Territory' },
+    { value: 'platform', label: 'Platform / Licensee' },
+    { value: 'revenue_type', label: 'Revenue / Rights Type' },
+    { value: 'publisher', label: 'Publisher' },
+    { value: 'work_id', label: 'Work ID / Song Code' },
+    { value: 'share_percentage', label: 'Share %' },
+  ]
   const inputClass = "w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30"
 
   return (
@@ -542,7 +762,7 @@ function StatementsSubTab({ orgId, creatorId }) {
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-[#3D4A44]">Royalty Statements</h3>
         <button
-          onClick={() => setShowUpload(!showUpload)}
+          onClick={() => setShowUpload(true)}
           className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium"
         >
           <ArrowUpTrayIcon className="w-4 h-4" /> Upload Statement
@@ -550,43 +770,154 @@ function StatementsSubTab({ orgId, creatorId }) {
       </div>
 
       {showUpload && (
-        <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-[#7A8580] mb-1">Source Name *</label>
-              <input type="text" value={uploadSource} onChange={(e) => setUploadSource(e.target.value)} className={inputClass} placeholder="e.g., DistroKid, BMI" />
-            </div>
-            <div>
-              <label className="block text-xs text-[#7A8580] mb-1">Source Type</label>
-              <select value={uploadSourceType} onChange={(e) => setUploadSourceType(e.target.value)} className={inputClass}>
-                {SOURCE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-[#7A8580] mb-1">Period Start</label>
-              <input type="date" value={uploadPeriodStart} onChange={(e) => setUploadPeriodStart(e.target.value)} className={inputClass} />
-            </div>
-            <div>
-              <label className="block text-xs text-[#7A8580] mb-1">Period End</label>
-              <input type="date" value={uploadPeriodEnd} onChange={(e) => setUploadPeriodEnd(e.target.value)} className={inputClass} />
-            </div>
-            <div>
-              <label className="block text-xs text-[#7A8580] mb-1">Currency</label>
-              <select value={uploadCurrency} onChange={(e) => setUploadCurrency(e.target.value)} className={inputClass}>
-                {['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY'].map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-[#7A8580] mb-1">File *</label>
-              <input type="file" accept=".csv,.xlsx,.xls,.pdf" onChange={(e) => setUploadFile(e.target.files[0])} className={inputClass} />
-            </div>
-          </div>
-          <div className="flex items-center gap-3 pt-2">
-            <button onClick={handleUpload} disabled={!uploadFile || !uploadSource || uploading} className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7A62] disabled:opacity-50 transition-colors">
-              {uploading ? 'Uploading...' : 'Upload & Auto-Match'}
+        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-6 border border-[rgba(59,77,67,0.08)]">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="font-semibold text-[#3D4A44]">
+              {uploadStep === 1 && 'Step 1: Select File & Details'}
+              {uploadStep === 2 && 'Step 2: Review Column Mapping'}
+              {uploadStep === 3 && 'Step 3: Upload Complete'}
+            </h4>
+            <button onClick={resetUpload} className="p-1 text-[#7A8580] hover:text-[#3D4A44]">
+              <XMarkIcon className="w-5 h-5" />
             </button>
-            <button onClick={() => setShowUpload(false)} className="px-4 py-2 text-[#7A8580] hover:text-[#3D4A44] text-sm transition-colors">Cancel</button>
           </div>
+
+          <div className="flex items-center gap-3 mb-6">
+            {[1, 2, 3].map(step => (
+              <div key={step} className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
+                  uploadStep >= step
+                    ? 'bg-[#5B8A72] text-white'
+                    : 'bg-[#EEF1EC] text-[#7A8580]'
+                }`}>
+                  {uploadStep > step ? <CheckCircleIcon className="w-5 h-5" /> : step}
+                </div>
+                {step < 3 && <div className={`w-16 h-0.5 ${uploadStep > step ? 'bg-[#5B8A72]' : 'bg-[#EEF1EC]'}`} />}
+              </div>
+            ))}
+          </div>
+
+          {uploadStep === 1 && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-[#7A8580] mb-1">Source Name *</label>
+                  <input type="text" value={uploadSource} onChange={(e) => setUploadSource(e.target.value)} className={inputClass} placeholder="e.g., DistroKid, BMI" />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#7A8580] mb-1">Source Type</label>
+                  <select value={uploadSourceType} onChange={(e) => setUploadSourceType(e.target.value)} className={inputClass}>
+                    {SOURCE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-[#7A8580] mb-1">Period Start</label>
+                  <input type="date" value={uploadPeriodStart} onChange={(e) => setUploadPeriodStart(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#7A8580] mb-1">Period End</label>
+                  <input type="date" value={uploadPeriodEnd} onChange={(e) => setUploadPeriodEnd(e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#7A8580] mb-1">Currency</label>
+                  <select value={uploadCurrency} onChange={(e) => setUploadCurrency(e.target.value)} className={inputClass}>
+                    {['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY'].map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-[#7A8580] mb-1">File *</label>
+                  <input type="file" accept=".csv,.xlsx,.xls,.pdf" onChange={(e) => setUploadFile(e.target.files[0])} className={inputClass} />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 pt-2">
+                <button onClick={handlePreview} disabled={!uploadFile || !uploadSource || uploading} className="px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg text-sm font-medium hover:shadow-md disabled:opacity-50 transition-all">
+                  {uploading ? 'Analyzing...' : 'Preview & Map Columns'}
+                </button>
+                <button onClick={resetUpload} className="px-4 py-2 text-[#7A8580] hover:text-[#3D4A44] text-sm transition-colors">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {uploadStep === 2 && previewData && (
+            <div className="space-y-4">
+              {detectedSourceType && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-[rgba(91,138,114,0.08)] rounded-lg">
+                  <CheckCircleIcon className="w-4 h-4 text-[#5B8A72]" />
+                  <span className="text-sm text-[#5B8A72]">Detected source type: <strong>{detectedSourceType}</strong></span>
+                </div>
+              )}
+
+              <div>
+                <h5 className="text-sm font-medium text-[#3D4A44] mb-2">Column Mapping</h5>
+                <p className="text-xs text-[#7A8580] mb-3">Map your file columns to the expected fields. AI-suggested mappings are pre-filled.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {(previewData.headers || []).map(header => (
+                    <div key={header} className="flex items-center gap-2">
+                      <span className="text-xs text-[#3D4A44] font-medium truncate w-28" title={header}>{header}</span>
+                      <span className="text-xs text-[#7A8580]">→</span>
+                      <select
+                        value={columnMappings[header] || ''}
+                        onChange={(e) => setColumnMappings(prev => ({ ...prev, [header]: e.target.value }))}
+                        className="flex-1 text-xs border border-[rgba(59,77,67,0.15)] rounded-lg px-2 py-1.5 bg-white text-[#3D4A44]"
+                      >
+                        {TARGET_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {previewData.preview_rows && previewData.preview_rows.length > 0 && (
+                <div>
+                  <h5 className="text-sm font-medium text-[#3D4A44] mb-2">Data Preview ({previewData.total_rows || previewData.preview_rows.length} rows)</h5>
+                  <div className="overflow-x-auto max-h-[200px] border border-[rgba(59,77,67,0.08)] rounded-lg">
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-[#EEF1EC] sticky top-0">
+                        <tr>
+                          {(previewData.headers || []).map(h => (
+                            <th key={h} className="px-3 py-2 text-left font-medium text-[#7A8580]">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                        {previewData.preview_rows.slice(0, 5).map((row, i) => (
+                          <tr key={i}>
+                            {(previewData.headers || []).map((h, j) => (
+                              <td key={j} className="px-3 py-1.5 text-[#3D4A44] max-w-[150px] truncate">{row[h] ?? row[j] ?? ''}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-2">
+                <button onClick={() => setUploadStep(1)} className="px-4 py-2 text-[#7A8580] hover:text-[#3D4A44] text-sm transition-colors">← Back</button>
+                <button onClick={handleUpload} disabled={uploading} className="px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg text-sm font-medium hover:shadow-md disabled:opacity-50 transition-all">
+                  {uploading ? 'Uploading...' : 'Confirm & Upload'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {uploadStep === 3 && (
+            <div className="text-center py-6">
+              <CheckCircleIcon className="w-12 h-12 text-[#5B8A72] mx-auto mb-3" />
+              <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Statement Uploaded Successfully</h4>
+              {uploadResult && (
+                <div className="text-sm text-[#7A8580] space-y-1">
+                  <p>Transactions imported: {uploadResult.transactions_count || uploadResult.rows_imported || 0}</p>
+                  <p>Matched: {uploadResult.matched_count || 0}</p>
+                  <p>Unmatched: {uploadResult.unmatched_count || 0}</p>
+                </div>
+              )}
+              <button onClick={resetUpload} className="mt-4 px-4 py-2 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7A62] transition-colors">
+                Done
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -602,15 +933,15 @@ function StatementsSubTab({ orgId, creatorId }) {
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full">
-              <thead>
-                <tr className="border-b border-[rgba(59,77,67,0.08)]">
+              <thead className="bg-[#EEF1EC]">
+                <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Source</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Period</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Currency</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Revenue</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Lines</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Matched</th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Status</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Actions</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Matched</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
@@ -622,22 +953,25 @@ function StatementsSubTab({ orgId, creatorId }) {
                       <td className="px-6 py-3 text-sm text-[#7A8580]">
                         {stmt.period_start ? `${formatDate(stmt.period_start)} – ${formatDate(stmt.period_end)}` : formatDate(stmt.created_at)}
                       </td>
+                      <td className="px-6 py-3 text-sm text-[#7A8580]">{stmt.currency || 'USD'}</td>
                       <td className="px-6 py-3 text-sm text-right font-medium text-[#3D4A44]">
-                        {formatCents(stmt.total_revenue_cents)}
+                        {formatCents(stmt.total_revenue_cents || stmt.total_revenue)}
                       </td>
-                      <td className="px-6 py-3 text-sm text-center text-[#7A8580]">{stmt.total_lines || stmt.transaction_count || 0}</td>
-                      <td className="px-6 py-3 text-sm text-center text-[#7A8580]">{stmt.matched_lines || stmt.matched_count || 0}</td>
                       <td className="px-6 py-3 text-center">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
                           {(stmt.status || '').replace(/_/g, ' ')}
                         </span>
                       </td>
-                      <td className="px-6 py-3 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button onClick={() => setSelectedStatementId(stmt.id)} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors" title="View Details">
+                      <td className="px-6 py-3 text-sm text-right text-[#7A8580]">{stmt.matched_percentage != null ? `${stmt.matched_percentage}%` : `${stmt.matched_lines || stmt.matched_count || 0}/${stmt.total_lines || stmt.transaction_count || 0}`}</td>
+                      <td className="px-6 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button onClick={() => loadTransactions(stmt)} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors" title="View Transactions">
                             <EyeIcon className="w-4 h-4" />
                           </button>
-                          <button onClick={() => handleDelete(stmt.id)} className="p-1.5 text-[#C47068] hover:bg-[rgba(196,112,104,0.1)] rounded-lg transition-colors" title="Delete">
+                          <button onClick={() => handleCalculate(stmt.id)} disabled={calculating[stmt.id]} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors disabled:opacity-40" title="Calculate">
+                            <CalculatorIcon className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleDelete(stmt.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
                             <TrashIcon className="w-4 h-4" />
                           </button>
                         </div>
@@ -655,36 +989,49 @@ function StatementsSubTab({ orgId, creatorId }) {
 }
 
 function EarningsSubTab({ orgId, creatorId }) {
-  const [earnings, setEarnings] = useState([])
+  const [view, setView] = useState('track')
+  const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState(null)
 
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     if (!orgId) return
-    loadEarnings()
-  }, [orgId, creatorId])
-
-  const loadEarnings = async () => {
+    setLoading(true)
+    const endpoints = {
+      holder: `/api/royalties/earnings/${orgId}/by-holder`,
+      contract: `/api/royalties/earnings/${orgId}/by-contract`,
+      track: `/api/royalties/earnings/${orgId}/by-track`,
+    }
     try {
-      const params = {}
-      if (creatorId) params.creator_id = creatorId
-      const res = await axios.get(`/api/royalties/earnings/${orgId}`, { params })
-      const data = res.data
-      if (Array.isArray(data)) {
-        setEarnings(data)
-      } else {
-        setEarnings(data.earnings || data.items || [])
-        if (data.summary) setSummary(data.summary)
-      }
+      const res = await axios.get(endpoints[view])
+      const result = res.data
+      setData(Array.isArray(result) ? result : result.earnings || result.data || [])
+      if (result.summary) setSummary(result.summary)
     } catch (err) {
       console.error('Failed to load earnings:', err)
-      setEarnings([])
-    } finally {
-      setLoading(false)
+      setData([])
     }
-  }
 
-  if (loading) return <div className="text-center py-12 text-[#7A8580]">Loading earnings...</div>
+    if (view === 'track' && !summary) {
+      try {
+        const params = {}
+        if (creatorId) params.creator_id = creatorId
+        const sumRes = await axios.get(`/api/royalties/earnings/${orgId}`, { params })
+        const sumData = sumRes.data
+        if (!Array.isArray(sumData) && sumData.summary) setSummary(sumData.summary)
+      } catch {}
+    }
+
+    setLoading(false)
+  }, [orgId, view, creatorId])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  const viewButtons = [
+    { key: 'track', label: 'By Track', icon: MusicalNoteIcon },
+    { key: 'holder', label: 'By Rights Holder', icon: UserGroupIcon },
+    { key: 'contract', label: 'By Contract', icon: DocumentDuplicateIcon },
+  ]
 
   return (
     <div className="space-y-4">
@@ -705,37 +1052,108 @@ function EarningsSubTab({ orgId, creatorId }) {
         </div>
       )}
 
+      <div className="flex items-center gap-2 flex-wrap">
+        {viewButtons.map(btn => (
+          <button
+            key={btn.key}
+            onClick={() => setView(btn.key)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+              view === btn.key
+                ? 'bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white shadow-sm'
+                : 'bg-white/80 text-[#7A8580] hover:bg-[rgba(91,138,114,0.08)] border border-[rgba(59,77,67,0.08)]'
+            }`}
+          >
+            <btn.icon className="w-4 h-4" /> {btn.label}
+          </button>
+        ))}
+      </div>
+
       <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)]">
-        {earnings.length === 0 ? (
-          <div className="text-center py-12">
-            <CurrencyDollarIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
-            <p className="text-[#7A8580]">No earnings data found for this client</p>
-            <p className="text-xs text-[#7A8580] mt-1">Earnings appear after statements are processed</p>
-          </div>
+        {loading ? (
+          <div className="text-center py-12 text-[#7A8580]">Loading earnings...</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead>
-                <tr className="border-b border-[rgba(59,77,67,0.08)]">
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Song</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Source</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Period</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Revenue</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Quantity</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
-                {earnings.slice(0, 100).map((e, i) => (
-                  <tr key={e.id || i} className="hover:bg-[rgba(91,138,114,0.04)]">
-                    <td className="px-6 py-3 text-sm font-medium text-[#3D4A44]">{e.track_title || e.song_title || '—'}</td>
-                    <td className="px-6 py-3 text-sm text-[#7A8580]">{e.source_name || e.platform || '—'}</td>
-                    <td className="px-6 py-3 text-sm text-[#7A8580]">{e.period || formatDate(e.period_start)}</td>
-                    <td className="px-6 py-3 text-sm text-right font-medium text-[#5B8A72]">{e.revenue_cents != null ? formatCents(e.revenue_cents) : formatDollars(e.revenue)}</td>
-                    <td className="px-6 py-3 text-sm text-right text-[#7A8580]">{(e.quantity || 0).toLocaleString()}</td>
+            {view === 'track' && (
+              <table className="w-full">
+                <thead className="bg-[#EEF1EC]">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Track</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Artist</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Total Revenue</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Streams</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                  {data.map((row, i) => (
+                    <tr key={i} className="hover:bg-[rgba(91,138,114,0.04)]">
+                      <td className="px-6 py-4 text-sm font-medium text-[#3D4A44]">{row.title || row.track_title || row.song_title || '—'}</td>
+                      <td className="px-6 py-4 text-sm text-[#7A8580]">{row.artist || '—'}</td>
+                      <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(row.total_revenue_cents || row.revenue_cents)}</td>
+                      <td className="px-6 py-4 text-sm text-right text-[#7A8580]">{(row.total_quantity || row.quantity || 0).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                  {data.length === 0 && (
+                    <tr><td colSpan={4} className="px-6 py-12 text-center text-sm text-[#7A8580]">No track earnings data available.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+
+            {view === 'holder' && (
+              <table className="w-full">
+                <thead className="bg-[#EEF1EC]">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Rights Holder</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Total Allocated</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Net Earned</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Total Recouped</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                  {data.map((row, i) => (
+                    <tr key={i} className="hover:bg-[rgba(91,138,114,0.04)]">
+                      <td className="px-6 py-4 text-sm font-medium text-[#3D4A44]">{row.rights_holder_name || '—'}</td>
+                      <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(row.total_allocated_cents)}</td>
+                      <td className="px-6 py-4 text-sm text-right text-[#7A8580]">{formatCents(row.net_earned_cents)}</td>
+                      <td className="px-6 py-4 text-sm text-right text-[#7A8580]">{formatCents(row.total_recouped_cents)}</td>
+                    </tr>
+                  ))}
+                  {data.length === 0 && (
+                    <tr><td colSpan={4} className="px-6 py-12 text-center text-sm text-[#7A8580]">No rights holder earnings data available.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+
+            {view === 'contract' && (
+              <table className="w-full">
+                <thead className="bg-[#EEF1EC]">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Contract</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Recoupment %</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Total Allocated</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Advance</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Recouped</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Balance</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                  {data.map((row, i) => (
+                    <tr key={i} className="hover:bg-[rgba(91,138,114,0.04)]">
+                      <td className="px-6 py-4 text-sm font-medium text-[#3D4A44]">{row.contract_title || '—'}</td>
+                      <td className="px-6 py-4 text-sm text-[#7A8580]">{row.recoupment_percentage ? `${row.recoupment_percentage}%` : '—'}</td>
+                      <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(row.total_allocated_cents)}</td>
+                      <td className="px-6 py-4 text-sm text-right text-[#7A8580]">{formatDollars(row.advance_amount)}</td>
+                      <td className="px-6 py-4 text-sm text-right text-[#7A8580]">{formatDollars(row.advance_recouped)}</td>
+                      <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatDollars(row.remaining_advance)}</td>
+                    </tr>
+                  ))}
+                  {data.length === 0 && (
+                    <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-[#7A8580]">No contract earnings data available.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
       </div>
