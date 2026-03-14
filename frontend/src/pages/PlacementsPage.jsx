@@ -148,39 +148,51 @@ export default function PlacementsPage() {
   const [createReleaseTitle, setCreateReleaseTitle] = useState('')
   const [editReleaseTitle, setEditReleaseTitle] = useState('')
 
+  const [placementsLoaded, setPlacementsLoaded] = useState(false)
+
   useEffect(() => {
-    loadInitialData()
+    loadOrgId()
   }, [])
 
   useEffect(() => {
     if (orgId && activeTab === 'placements') {
-      loadPlacements()
+      loadPlacementsTabData(orgId)
     }
   }, [filterStatus, filterType, filterClient, filterCreator, orgId, activeTab])
 
-  const loadInitialData = async () => {
+  const loadOrgId = async () => {
     try {
       const orgResponse = await axios.get('/api/organizations/current')
       const id = orgResponse.data?.id
       if (!id) { setLoading(false); return }
       setOrgId(id)
-
-      if (activeTab === 'placements') {
-        loadPlacements(id)
-          .catch(err => console.error('Failed to load placements:', err))
-          .finally(() => setLoading(false))
-
-        loadSummary(id)
-          .catch(err => console.error('Failed to load summary:', err))
-
-        axios.get(`/api/placements/org/${id}/creators`)
-          .then(res => setCreators(res.data || []))
-          .catch(() => {})
-      } else {
+      if (activeTab !== 'placements') {
         setLoading(false)
       }
     } catch (err) {
-      console.error('Failed to load data:', err)
+      console.error('Failed to load org:', err)
+      setLoading(false)
+    }
+  }
+
+  const loadPlacementsTabData = async (id) => {
+    const oid = id || orgId
+    if (!oid) return
+    try {
+      if (!placementsLoaded) {
+        setLoading(true)
+      }
+      await Promise.all([
+        loadPlacements(oid),
+        loadSummary(oid),
+        !placementsLoaded ? axios.get(`/api/placements/org/${oid}/creators`)
+          .then(res => setCreators(res.data || []))
+          .catch(() => {}) : Promise.resolve()
+      ])
+      setPlacementsLoaded(true)
+    } catch (err) {
+      console.error('Failed to load placements data:', err)
+    } finally {
       setLoading(false)
     }
   }
