@@ -1276,7 +1276,7 @@ export default function UserGuidePage() {
         <SubHeading>Sync & Placements</SubHeading>
         <div className="space-y-3 my-4">
           <Tip>Use the Brief Builder to quickly find songs matching sync briefs. The more analyzed songs in your catalog, the better the AI matching results.</Tip>
-          <Tip>Generate Sync Reports monthly for each client to showcase your pitching activity and placement wins.</Tip>
+          <Tip>Generate reports from the Sync HQ Reports tab monthly for each client to showcase your pitching activity and placement wins.</Tip>
           <Tip>Keep placement statuses up to date as they progress through the pipeline — this powers accurate dashboard metrics and automated action items.</Tip>
         </div>
 
