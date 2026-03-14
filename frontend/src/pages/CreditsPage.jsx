@@ -6,6 +6,7 @@ import {
   ChevronUpDownIcon, UserGroupIcon, ArrowDownTrayIcon, ChevronDownIcon
 } from '@heroicons/react/24/outline'
 import RosterSocialCard from '../components/RosterSocialCard'
+import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
 
 const ROLE_COLORS = {
   ARTIST: 'bg-green-100 text-green-700',
@@ -38,6 +39,12 @@ export default function CreditsPage() {
   const [socialCardFormat, setSocialCardFormat] = useState('story')
   const [showSocialCard, setShowSocialCard] = useState(false)
   const [generatingSocialCard, setGeneratingSocialCard] = useState(false)
+  const [viewMode, setViewMode] = useState(() => getStoredViewMode('credits'))
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode)
+    setStoredViewMode('credits', mode)
+  }
   const socialCardRef = useRef(null)
   const formatMenuRef = useRef(null)
 
@@ -247,6 +254,7 @@ export default function CreditsPage() {
           </select>
           <ChevronUpDownIcon className="w-4 h-4 absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7A8580] pointer-events-none" />
         </div>
+        <ViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
       </div>
 
       {loading ? (
@@ -259,7 +267,7 @@ export default function CreditsPage() {
           <h3 className="text-lg font-semibold text-[#3D4A44] mb-1">No credits data yet</h3>
           <p className="text-sm text-[#7A8580]">Credits will appear here once creators have song credits and streaming data.</p>
         </div>
-      ) : (
+      ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {creators.map(creator => (
             <button
@@ -316,6 +324,60 @@ export default function CreditsPage() {
               )}
             </button>
           ))}
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.08)] overflow-hidden shadow-sm">
+          <table className="w-full">
+            <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
+              <tr>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-[#3D4A44]">Creator</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-[#3D4A44]">Role</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-[#3D4A44]">Est. Streams</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-[#3D4A44]">Credits</th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-[#3D4A44] hidden lg:table-cell">Breakdown</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+              {creators.map(creator => (
+                <tr
+                  key={creator.creator_id}
+                  onClick={() => navigate(`/roster/${creator.creator_id}?tab=credits`)}
+                  className="hover:bg-[#FAFBF9] transition-colors cursor-pointer"
+                >
+                  <td className="px-6 py-3">
+                    <div className="flex items-center gap-3">
+                      {creator.hero_image_url ? (
+                        <img src={creator.hero_image_url} alt={creator.display_name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5B8A72] to-[#4A7A62] flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+                          {(creator.display_name || '?').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <p className="font-semibold text-[#3D4A44] truncate">{creator.display_name}</p>
+                    </div>
+                  </td>
+                  <td className="px-6 py-3">
+                    {creator.top_role && (
+                      <span className={`px-2 py-0.5 text-[11px] font-medium rounded-full ${ROLE_COLORS[creator.top_role] || ROLE_COLORS.OTHER}`}>
+                        {creator.top_role.replace('_', ' ')}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-3 text-sm font-bold text-[#3D4A44]">{formatNumber(creator.total_estimated_streams)}</td>
+                  <td className="px-6 py-3 text-sm font-bold text-[#3D4A44]">{creator.total_credits}</td>
+                  <td className="px-6 py-3 hidden lg:table-cell">
+                    <div className="flex flex-wrap gap-1">
+                      {Object.entries(creator.role_breakdown || {}).map(([role, count]) => (
+                        <span key={role} className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${ROLE_COLORS[role] || ROLE_COLORS.OTHER}`}>
+                          {role.replace('_', ' ')} ({count})
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

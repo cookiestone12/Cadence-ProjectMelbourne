@@ -53,6 +53,8 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Editable Credit Roles**: Song credits on Creator Detail pages support inline role editing (Artist, Primary Artist, Featured Artist, Songwriter, Producer, Composer, Lyricist). The Add Song modal includes a Client Role selector. API returns `credit_role` and `credit_id` when listing songs filtered by `creator_id`.
 - **Streaming Credits & Intelligence**: Muso.ai-inspired streaming intelligence system with chart data ingestion from 5 platforms (Spotify, YouTube, Apple RSS, Deezer, Last.fm), ISRC-based track matching to catalog songs, and cross-platform stream estimation using market-share ratios. Features a Credits overview page (sidebar), Credits tab on Creator Profiles with role breakdowns and RIAA equivalents, shareable public Credits profiles with optional passcode protection, Client Portal Credits tab, and "Download for Social" PNG export (1080×1350 Instagram-ready branded card via html2canvas, component: `SocialCard.jsx`). Chart ingestion runs on a 4-hour APScheduler interval (runs immediately on startup). Credits only count songs with Spotify import (via `SongDSPLink` platform='SPOTIFY' or `Song.spotify_link`). Stream estimation fallback chain: Analytics.spotify_streams → SongStreamingMetrics.total_streams → Spotify API popularity lookup → chart position data. Models: `ChartSource`, `ChartEntry` (org-agnostic), `StreamEstimate`, `CreatorCreditsProfile` (per-org). Routes: `backend/routes/streaming_credits.py` (3 routers: `router`, `public_router`, `admin_chart_router`). Services: `chart_fetcher.py`, `track_matcher.py`, `stream_estimator.py`, `credits_service.py`, `chart_scheduler.py`. Platform keys: SPOTIFY, APPLE_MUSIC, YOUTUBE_MUSIC, AMAZON_MUSIC, TIDAL, DEEZER.
 - **Progressive Web App (PWA)**: Includes a web manifest, service worker for offline caching and push notifications, and an install prompt.
+- **Modular Widget Dashboard**: Home page uses a widget-based architecture with 7 independent widgets (Stats, Placement Pipeline, Tasks by Module, Urgent Actions, Needs Attention, Notifications, Top Creators). Users can customize via a "Customize Dashboard" sidebar panel with drag-and-drop reordering (@dnd-kit) and show/hide toggles. Layout preferences persist in localStorage. Widget components in `frontend/src/components/widgets/`.
+- **Grid/List View Toggle**: Roster, Creative Directory, and Credits pages support toggling between card grid and table list views via a shared `ViewToggle` component. View preference persists per page in localStorage.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.
@@ -63,6 +65,7 @@ The frontend employs an Apple Music-style aesthetic, featuring a collapsible sid
 - **Vite**: Frontend build tool.
 - **Recharts**: React charting library.
 - **Heroicons**: Icon library.
+- **@dnd-kit**: Drag-and-drop toolkit for React (core, sortable, utilities).
 - **html2canvas**: DOM-to-canvas rendering for image export.
 - **PyJWT**: JSON Web Token implementation for Python.
 - **Bcrypt**: Password hashing library.

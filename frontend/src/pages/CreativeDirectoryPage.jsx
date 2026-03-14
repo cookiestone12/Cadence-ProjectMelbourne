@@ -7,6 +7,7 @@ import {
   CheckIcon, ClipboardDocumentIcon, UsersIcon
 } from '@heroicons/react/24/outline'
 import EmailSendModal from '../components/EmailSendModal'
+import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
 
 const PRO_OPTIONS = ['BMI', 'ASCAP', 'SESAC', 'SOCAN', 'PRS', 'GEMA', 'SACEM', 'SIAE', 'JASRAC', 'Other']
 const ROLE_OPTIONS = ['Songwriter', 'Producer', 'Artist', 'Musician', 'Engineer', 'Featured Artist', 'Composer', 'Lyricist', 'Arranger']
@@ -285,6 +286,12 @@ export default function CreativeDirectoryPage() {
   const [shareToClientLoading, setShareToClientLoading] = useState(false)
   const [clientUsers, setClientUsers] = useState([])
   const [clientShares, setClientShares] = useState([])
+  const [viewMode, setViewMode] = useState(() => getStoredViewMode('creative-directory'))
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode)
+    setStoredViewMode('creative-directory', mode)
+  }
 
   useEffect(() => {
     loadData()
@@ -560,6 +567,7 @@ export default function CreativeDirectoryPage() {
           <ArrowPathIcon className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} />
           {syncing ? 'Syncing...' : 'Sync from Roster'}
         </button>
+        <ViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
       </div>
 
       {selectedIds.size > 0 && (
@@ -618,6 +626,7 @@ export default function CreativeDirectoryPage() {
             Select All
           </button>
         </div>
+        {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredContacts.map(contact => (
             <div key={contact.id} className={`bg-white rounded-2xl border p-5 hover:shadow-md transition-shadow flex flex-col ${selectedIds.has(contact.id) ? 'border-[#5B8A72] ring-1 ring-[#5B8A72]/30' : 'border-[rgba(59,77,67,0.12)]'}`}>
@@ -738,6 +747,107 @@ export default function CreativeDirectoryPage() {
             </div>
           ))}
         </div>
+        ) : (
+        <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
+              <tr>
+                <th className="px-4 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={filteredContacts.length > 0 && selectedIds.size === filteredContacts.length}
+                    onChange={toggleSelectAll}
+                    className="rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
+                  />
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44]">Name</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44]">Roles</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] hidden lg:table-cell">PRO / IPI</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] hidden md:table-cell">Email</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] hidden xl:table-cell">Publisher</th>
+                <th className="px-4 py-3 text-right text-sm font-semibold text-[#3D4A44]">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+              {filteredContacts.map(contact => (
+                <tr key={contact.id} className={`hover:bg-[#FAFBF9] transition-colors ${selectedIds.has(contact.id) ? 'bg-[rgba(91,138,114,0.06)]' : ''}`}>
+                  <td className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(contact.id)}
+                      onChange={() => toggleSelect(contact.id)}
+                      className="rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-[#3D4A44] truncate">{contact.display_name}</p>
+                      {contact.legal_name && <p className="text-xs text-[#7A8580] truncate">{contact.legal_name}</p>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {(contact.roles || []).map(role => (
+                        <span key={role} className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${ROLE_COLORS[role] || 'bg-gray-100 text-gray-700'}`}>
+                          {role}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-[#7A8580] hidden lg:table-cell">
+                    {contact.pro && <span className="font-medium text-[#3D4A44]">{contact.pro}</span>}
+                    {contact.pro && contact.ipi && <span className="mx-1">·</span>}
+                    {contact.ipi && <span>{contact.ipi}</span>}
+                  </td>
+                  <td className="px-4 py-3 text-sm hidden md:table-cell">
+                    {contact.email ? (
+                      <a href={`mailto:${contact.email}`} className="text-[#7A8580] hover:text-[#5B8A72] transition-colors truncate block max-w-[200px]">{contact.email}</a>
+                    ) : <span className="text-[#B0BDB4]">-</span>}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-[#7A8580] hidden xl:table-cell truncate max-w-[160px]">
+                    {contact.publisher_name || '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => openEdit(contact)} className="p-1.5 rounded-lg hover:bg-[#5B8A72]/10 text-[#7A8580] hover:text-[#5B8A72] transition-colors" title="Edit">
+                        <PencilIcon className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleDelete(contact)} className="p-1.5 rounded-lg hover:bg-red-50 text-[#7A8580] hover:text-red-500 transition-colors" title="Delete">
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => { setShareModalContact(contact); setShareResult(null) }} className="p-1.5 rounded-lg hover:bg-[#5B8A72]/10 text-[#7A8580] hover:text-[#5B8A72] transition-colors" title="Share Card">
+                        <EnvelopeIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await axios.get(`/api/creative-directory/${contact.id}/pdf`, { responseType: 'blob' })
+                            const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+                            const link = document.createElement('a')
+                            link.href = url
+                            link.setAttribute('download', `Creative_Card_${contact.display_name.replace(/\s+/g, '_')}.pdf`)
+                            document.body.appendChild(link)
+                            link.click()
+                            link.remove()
+                            window.URL.revokeObjectURL(url)
+                          } catch (err) {
+                            console.error('Failed to download PDF:', err)
+                            alert('Failed to download creative card PDF')
+                          }
+                        }}
+                        className="p-1.5 rounded-lg hover:bg-[#EEF1EC] text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+                        title="Download PDF"
+                      >
+                        <ArrowDownTrayIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        )}
         </>
       )}
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
 import { PlusIcon, XMarkIcon, ArrowUpTrayIcon, UserPlusIcon, CameraIcon, TrashIcon, DocumentArrowDownIcon, CheckIcon } from '@heroicons/react/24/outline'
+import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
 
 const ROLE_OPTIONS = ['ARTIST', 'SONGWRITER', 'PRODUCER']
 const PRO_OPTIONS = ['ASCAP', 'BMI', 'PRS', 'SESAC', 'OTHER']
@@ -28,6 +29,12 @@ export default function RosterPage() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [selectMode, setSelectMode] = useState(false)
   const [exportingPDF, setExportingPDF] = useState(false)
+  const [viewMode, setViewMode] = useState(() => getStoredViewMode('roster'))
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode)
+    setStoredViewMode('roster', mode)
+  }
 
   const toggleSelect = (id) => {
     setSelectedIds(prev => {
@@ -316,7 +323,8 @@ export default function RosterPage() {
             <h1 className="text-[34px] font-semibold text-[#3D4A44] leading-tight">Roster</h1>
             <p className="text-[17px] text-[#7A8580] mt-1">Manage your creators and view their catalog performance</p>
           </div>
-          <div className="flex gap-3 flex-wrap">
+          <div className="flex gap-3 flex-wrap items-center">
+            <ViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
             {selectMode ? (
               <>
                 <button
@@ -393,7 +401,7 @@ export default function RosterPage() {
               </button>
             </div>
           </div>
-        ) : (
+        ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {creators.map((creator) => (
               <div key={creator.id} onClick={selectMode ? () => toggleSelect(creator.id) : undefined} className={`bg-white rounded-xl shadow-[0px_2px_8px_rgba(0,0,0,0.07)] hover:shadow-[0px_6px_16px_rgba(0,0,0,0.1)] transition-all duration-200 overflow-hidden group ${selectMode ? 'cursor-pointer' : ''} ${selectMode && selectedIds.has(creator.id) ? 'ring-2 ring-[#5B8A72] ring-offset-2' : ''}`}>
@@ -492,6 +500,102 @@ export default function RosterPage() {
                 </Link>
               </div>
             ))}
+          </div>
+          ) : (
+          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
+                <tr>
+                  {selectMode && <th className="px-4 py-3 w-10"></th>}
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-[#3D4A44]">Creator</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-[#3D4A44]">Roles</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-[#3D4A44]">Songs</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-[#3D4A44]">Health</th>
+                  <th className="px-6 py-3 text-right text-sm font-semibold text-[#3D4A44]">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+                {creators.map((creator) => (
+                  <tr
+                    key={creator.id}
+                    onClick={selectMode ? () => toggleSelect(creator.id) : undefined}
+                    className={`hover:bg-[#FAFBF9] transition-colors ${selectMode ? 'cursor-pointer' : ''} ${selectMode && selectedIds.has(creator.id) ? 'bg-[rgba(91,138,114,0.06)]' : ''}`}
+                  >
+                    {selectMode && (
+                      <td className="px-4 py-3">
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedIds.has(creator.id) ? 'bg-[#5B8A72] border-[#5B8A72]' : 'border-[#7A8580]'}`}>
+                          {selectedIds.has(creator.id) && <CheckIcon className="w-3 h-3 text-white" />}
+                        </div>
+                      </td>
+                    )}
+                    <td className="px-6 py-3">
+                      <Link to={`/roster/${creator.id}`} state={creator.shared ? { is_shared: true, organization_id: creator.organization_id } : undefined} onClick={selectMode ? (e) => e.preventDefault() : undefined} className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5B8A72] to-[#7BA594] flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 overflow-hidden">
+                          {creator.hero_image_url ? (
+                            <img src={`/api/creators/${creator.id}/image`} alt={creator.display_name} className="w-full h-full object-cover" />
+                          ) : (
+                            creator.display_name.charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-[14px] text-[#3D4A44] truncate">{creator.display_name}</p>
+                          {creator.shared && <span className="text-[10px] text-blue-600 font-medium">via {creator.shared_from}</span>}
+                        </div>
+                      </Link>
+                    </td>
+                    <td className="px-6 py-3 text-sm text-[#7A8580]">
+                      {Array.isArray(creator.roles) ? creator.roles.join(', ') : creator.roles}
+                    </td>
+                    <td className="px-6 py-3 text-sm font-medium text-[#3D4A44]">{creator.song_count}</td>
+                    <td className="px-6 py-3">
+                      <span className={`font-semibold text-sm ${
+                        creator.avg_health_score >= 80 ? 'text-[#5B9A6E]' :
+                        creator.avg_health_score >= 60 ? 'text-[#C4956B]' :
+                        'text-[#C47068]'
+                      }`}>
+                        {creator.avg_health_score?.toFixed(0) || 0}%
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          className="hidden"
+                          id={`creator-image-list-${creator.id}`}
+                          onChange={(e) => {
+                            handleImageUpload(creator.id, e.target.files[0])
+                            e.target.value = ''
+                          }}
+                        />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            document.getElementById(`creator-image-list-${creator.id}`).click()
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-[#EEF1EC] transition-colors text-[#7A8580] hover:text-[#3D4A44]"
+                          title="Upload photo"
+                        >
+                          <CameraIcon className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            handleDeleteCreator(creator.id, creator.display_name)
+                          }}
+                          disabled={deletingId === creator.id}
+                          className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-[#7A8580] hover:text-[#C47068]"
+                          title="Remove from roster"
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
