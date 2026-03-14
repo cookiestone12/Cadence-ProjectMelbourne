@@ -6,6 +6,8 @@ import {
   EyeIcon, XMarkIcon
 } from '@heroicons/react/24/outline'
 import StatementDetailView from './StatementDetailView'
+import ProcessingInboxPanel from './ProcessingInboxPanel'
+import RoyaltyAnalyticsDashboard from './RoyaltyAnalyticsDashboard'
 
 const formatCents = (cents) => {
   if (cents == null) return '$0.00'
@@ -150,10 +152,14 @@ export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAc
 
   const subTabs = [
     { key: 'summary', label: 'Summary' },
+    { key: 'processing', label: 'Processing' },
     { key: 'statements', label: 'Statements' },
     { key: 'earnings', label: 'Earnings' },
     { key: 'ledger', label: 'Ledger' },
+    { key: 'money_out', label: 'Money Out' },
     { key: 'payables', label: 'Payables' },
+    { key: 'fees', label: 'Fees & Advances' },
+    { key: 'analytics', label: 'Analytics' },
     { key: 'recoupment', label: 'Recoupment' },
   ]
 
@@ -177,6 +183,10 @@ export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAc
 
       {activeSubTab === 'summary' && (
         <SummarySubTab data={existingAccountingData} loading={accountingLoading} orgId={orgId} onRefresh={onRefresh} />
+      )}
+
+      {activeSubTab === 'processing' && (
+        <CreatorProcessingSubTab orgId={orgId} creatorId={creatorId} />
       )}
 
       {activeSubTab === 'statements' && (
@@ -212,6 +222,10 @@ export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAc
         )
       )}
 
+      {activeSubTab === 'money_out' && (
+        <MoneyOutSubTab orgId={orgId} creatorId={creatorId} />
+      )}
+
       {activeSubTab === 'payables' && (
         !payeeResolved ? (
           <div className="text-center py-12 text-[#7A8580]">Resolving payee...</div>
@@ -222,6 +236,20 @@ export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAc
         ) : (
           <CreatorPayablesSubTab orgId={orgId} payeeId={payeeId} />
         )
+      )}
+
+      {activeSubTab === 'fees' && (
+        <FeesAdvancesSubTab orgId={orgId} creatorId={creatorId} />
+      )}
+
+      {activeSubTab === 'analytics' && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 px-4 py-2 bg-[rgba(91,138,114,0.06)] rounded-xl border border-[rgba(91,138,114,0.1)]">
+            <ChartBarIcon className="w-4 h-4 text-[#5B8A72]" />
+            <span className="text-xs text-[#7A8580]">Showing organization-wide royalty analytics</span>
+          </div>
+          <RoyaltyAnalyticsDashboard orgId={orgId} />
+        </div>
       )}
 
       {activeSubTab === 'recoupment' && (
@@ -971,6 +999,660 @@ function CreatorPayablesSubTab({ orgId, payeeId }) {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function CreatorProcessingSubTab({ orgId, creatorId }) {
+  const [statements, setStatements] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selectedStatementId, setSelectedStatementId] = useState(null)
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploadFile, setUploadFile] = useState(null)
+  const [uploadForm, setUploadForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD' })
+  const [uploading, setUploading] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('')
+
+  const loadStatements = useCallback(async () => {
+    if (!orgId) return
+    try {
+      let url = `/api/royalties/statements/${orgId}`
+      if (creatorId) url += `?creator_id=${creatorId}`
+      const res = await axios.get(url)
+      setStatements(Array.isArray(res.data) ? res.data : res.data.statements || [])
+    } catch (err) {
+      console.error('Failed to load statements:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [orgId, creatorId])
+
+  useEffect(() => { loadStatements() }, [loadStatements])
+
+  const handleUpload = async () => {
+    if (!uploadFile || !uploadForm.source_name) return
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+      formData.append('source_name', uploadForm.source_name)
+      if (uploadForm.source_type) formData.append('source_type', uploadForm.source_type)
+      if (uploadForm.period_start) formData.append('period_start', uploadForm.period_start)
+      if (uploadForm.period_end) formData.append('period_end', uploadForm.period_end)
+      formData.append('currency', uploadForm.currency)
+      if (creatorId) formData.append('creator_id', creatorId)
+      await axios.post(`/api/royalty-processing/${orgId}/statements/upload`, formData)
+      setShowUpload(false)
+      setUploadFile(null)
+      setUploadForm({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD' })
+      loadStatements()
+    } catch (err) {
+      console.error('Upload failed:', err)
+      alert('Upload failed: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleRematch = async (stmtId) => {
+    try {
+      await axios.post(`/api/royalties/statements/${orgId}/${stmtId}/rematch`)
+      loadStatements()
+    } catch (err) {
+      console.error('Rematch failed:', err)
+    }
+  }
+
+  const handleCalculate = async (stmtId) => {
+    try {
+      await axios.post(`/api/royalties/calculate/${orgId}/${stmtId}`)
+      loadStatements()
+    } catch (err) {
+      console.error('Calculate failed:', err)
+    }
+  }
+
+  if (selectedStatementId) {
+    return (
+      <StatementDetailView
+        orgId={orgId}
+        statementId={selectedStatementId}
+        onBack={() => { setSelectedStatementId(null); loadStatements() }}
+      />
+    )
+  }
+
+  const STATUS_OPTIONS = [
+    { key: '', label: 'All' },
+    { key: 'UPLOADED', label: 'Uploaded' },
+    { key: 'PARTIALLY_MATCHED', label: 'Partially Matched' },
+    { key: 'REVIEW_REQUIRED', label: 'Review Required' },
+    { key: 'FULLY_MATCHED', label: 'Fully Matched' },
+    { key: 'PROCESSED', label: 'Processed' },
+  ]
+
+  const filteredStatements = statusFilter
+    ? statements.filter(s => s.status === statusFilter)
+    : statements
+
+  const inputClass = "w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30"
+
+  return (
+    <div className="space-y-6">
+      <ProcessingInboxPanel orgId={orgId} onSelectStatement={(status) => setStatusFilter(status)} />
+
+      <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-6 border border-[rgba(59,77,67,0.08)]">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-[#3D4A44]">Upload & Auto-Match</h3>
+          <button
+            onClick={() => setShowUpload(!showUpload)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium"
+          >
+            <ArrowUpTrayIcon className="w-4 h-4" /> Upload & Auto-Match
+          </button>
+        </div>
+
+        {showUpload && (
+          <div className="mt-4 space-y-4 border-t border-[rgba(59,77,67,0.08)] pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-[#7A8580] mb-1">Source Name *</label>
+                <input type="text" value={uploadForm.source_name} onChange={(e) => setUploadForm(prev => ({ ...prev, source_name: e.target.value }))} className={inputClass} placeholder="e.g., DistroKid, BMI" />
+              </div>
+              <div>
+                <label className="block text-xs text-[#7A8580] mb-1">Source Type</label>
+                <select value={uploadForm.source_type} onChange={(e) => setUploadForm(prev => ({ ...prev, source_type: e.target.value }))} className={inputClass}>
+                  {SOURCE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-[#7A8580] mb-1">Period Start</label>
+                <input type="date" value={uploadForm.period_start} onChange={(e) => setUploadForm(prev => ({ ...prev, period_start: e.target.value }))} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-[#7A8580] mb-1">Period End</label>
+                <input type="date" value={uploadForm.period_end} onChange={(e) => setUploadForm(prev => ({ ...prev, period_end: e.target.value }))} className={inputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-[#7A8580] mb-1">Currency</label>
+                <select value={uploadForm.currency} onChange={(e) => setUploadForm(prev => ({ ...prev, currency: e.target.value }))} className={inputClass}>
+                  {['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY'].map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-[#7A8580] mb-1">File *</label>
+                <input type="file" accept=".csv,.xlsx,.xls,.pdf" onChange={(e) => setUploadFile(e.target.files[0])} className={inputClass} />
+              </div>
+            </div>
+            <div className="flex items-center gap-3 pt-2">
+              <button onClick={handleUpload} disabled={!uploadFile || !uploadForm.source_name || uploading} className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7A62] disabled:opacity-50 transition-colors">
+                {uploading ? 'Uploading...' : 'Upload & Process'}
+              </button>
+              <button onClick={() => setShowUpload(false)} className="px-4 py-2 text-[#7A8580] hover:text-[#3D4A44] text-sm transition-colors">Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        {STATUS_OPTIONS.map(opt => (
+          <button
+            key={opt.key}
+            onClick={() => setStatusFilter(opt.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              statusFilter === opt.key
+                ? 'bg-[rgba(91,138,114,0.15)] text-[#5B8A72] border border-[rgba(91,138,114,0.3)]'
+                : 'text-[#7A8580] hover:bg-[rgba(91,138,114,0.06)] border border-transparent'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)]">
+        {loading ? (
+          <div className="text-center py-12 text-[#7A8580]">Loading processing pipeline...</div>
+        ) : filteredStatements.length === 0 ? (
+          <div className="text-center py-12">
+            <ArrowPathIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
+            <p className="text-[#7A8580]">No statements in the processing pipeline</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-[rgba(59,77,67,0.08)]">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Source</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Period</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Revenue</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Matched</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Status</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                {filteredStatements.map(stmt => {
+                  const colors = STATEMENT_STATUS_COLORS[stmt.status] || { bg: 'bg-gray-100', text: 'text-gray-700' }
+                  const matchRate = stmt.total_lines > 0 ? Math.round(((stmt.matched_lines || 0) / stmt.total_lines) * 100) : 0
+                  return (
+                    <tr key={stmt.id} className="hover:bg-[rgba(91,138,114,0.04)]">
+                      <td className="px-6 py-3 text-sm font-medium text-[#3D4A44]">{stmt.source_name || '—'}</td>
+                      <td className="px-6 py-3 text-sm text-[#7A8580]">
+                        {stmt.period_start ? `${formatDate(stmt.period_start)} – ${formatDate(stmt.period_end)}` : formatDate(stmt.created_at)}
+                      </td>
+                      <td className="px-6 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatCents(stmt.total_revenue_cents)}</td>
+                      <td className="px-6 py-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-16 bg-[#EEF1EC] rounded-full h-1.5">
+                            <div className="h-1.5 rounded-full bg-[#5B8A72]" style={{ width: `${matchRate}%` }} />
+                          </div>
+                          <span className="text-xs text-[#7A8580]">{matchRate}%</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-3 text-center">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
+                          {(stmt.status || '').replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => setSelectedStatementId(stmt.id)} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors" title="Review">
+                            <EyeIcon className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleRematch(stmt.id)} className="p-1.5 text-[#5A8A9A] hover:bg-[rgba(90,138,154,0.1)] rounded-lg transition-colors" title="Re-match">
+                            <ArrowPathIcon className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleCalculate(stmt.id)} className="p-1.5 text-[#C4956B] hover:bg-[rgba(196,149,107,0.1)] rounded-lg transition-colors" title="Calculate Royalties">
+                            <CurrencyDollarIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MoneyOutSubTab({ orgId, creatorId }) {
+  const [expenses, setExpenses] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showCreate, setShowCreate] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [form, setForm] = useState({
+    category: 'OTHER', description: '', amount: '', expense_date: '', payment_method: '', notes: ''
+  })
+
+  const EXPENSE_CATEGORIES = ['RECORDING', 'MARKETING', 'DISTRIBUTION', 'LEGAL', 'MANAGEMENT_FEE', 'ADVANCE', 'SYNC_FEE', 'OTHER']
+  const EXPENSE_STATUS_COLORS = {
+    PENDING: 'bg-amber-100 text-amber-700',
+    APPROVED: 'bg-blue-100 text-blue-700',
+    PAID: 'bg-green-100 text-green-700',
+    CANCELLED: 'bg-red-100 text-red-700',
+  }
+
+  const loadExpenses = useCallback(async () => {
+    if (!orgId) return
+    try {
+      const res = await axios.get(`/api/expenses/org/${orgId}`)
+      const allExpenses = Array.isArray(res.data) ? res.data : []
+      setExpenses(creatorId ? allExpenses.filter(e => Number(e.creator_id) === Number(creatorId)) : allExpenses)
+    } catch (err) {
+      console.error('Failed to load expenses:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [orgId, creatorId])
+
+  useEffect(() => { loadExpenses() }, [loadExpenses])
+
+  const handleCreate = async () => {
+    if (!form.description || !form.amount) return
+    setCreating(true)
+    try {
+      await axios.post(`/api/expenses/org/${orgId}`, {
+        category: form.category,
+        description: form.description,
+        amount_cents: Math.round(parseFloat(form.amount) * 100),
+        creator_id: creatorId ? Number(creatorId) : null,
+        expense_date: form.expense_date || null,
+        payment_method: form.payment_method || null,
+        notes: form.notes || null,
+      })
+      setShowCreate(false)
+      setForm({ category: 'OTHER', description: '', amount: '', expense_date: '', payment_method: '', notes: '' })
+      loadExpenses()
+    } catch (err) {
+      console.error('Failed to create expense:', err)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleUpdateStatus = async (expenseId, newStatus) => {
+    try {
+      await axios.patch(`/api/expenses/${expenseId}/status`, { status: newStatus })
+      loadExpenses()
+    } catch (err) {
+      console.error('Failed to update expense status:', err)
+    }
+  }
+
+  const handleDelete = async (expenseId) => {
+    if (!window.confirm('Delete this expense?')) return
+    try {
+      await axios.delete(`/api/expenses/${expenseId}`)
+      loadExpenses()
+    } catch (err) {
+      console.error('Failed to delete expense:', err)
+    }
+  }
+
+  const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount_cents || 0), 0)
+  const inputClass = "w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30"
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <h3 className="text-lg font-semibold text-[#3D4A44]">Expenses</h3>
+          <span className="text-sm text-[#7A8580]">Total: {formatCents(totalExpenses)}</span>
+        </div>
+        <button
+          onClick={() => setShowCreate(!showCreate)}
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl text-sm font-medium hover:shadow-md transition-all"
+        >
+          <ArrowUpTrayIcon className="w-4 h-4" /> Add Expense
+        </button>
+      </div>
+
+      {showCreate && (
+        <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-[#7A8580] mb-1">Category</label>
+              <select value={form.category} onChange={(e) => setForm(prev => ({ ...prev, category: e.target.value }))} className={inputClass}>
+                {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-[#7A8580] mb-1">Amount ($) *</label>
+              <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm(prev => ({ ...prev, amount: e.target.value }))} className={inputClass} placeholder="0.00" />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs text-[#7A8580] mb-1">Description *</label>
+              <input type="text" value={form.description} onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))} className={inputClass} placeholder="Expense description" />
+            </div>
+            <div>
+              <label className="block text-xs text-[#7A8580] mb-1">Date</label>
+              <input type="date" value={form.expense_date} onChange={(e) => setForm(prev => ({ ...prev, expense_date: e.target.value }))} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-[#7A8580] mb-1">Payment Method</label>
+              <input type="text" value={form.payment_method} onChange={(e) => setForm(prev => ({ ...prev, payment_method: e.target.value }))} className={inputClass} placeholder="e.g., Wire, Check" />
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={handleCreate} disabled={!form.description || !form.amount || creating} className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7A62] disabled:opacity-50 transition-colors">
+              {creating ? 'Creating...' : 'Create Expense'}
+            </button>
+            <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-[#7A8580] hover:text-[#3D4A44] text-sm transition-colors">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)]">
+        {loading ? (
+          <div className="text-center py-12 text-[#7A8580]">Loading expenses...</div>
+        ) : expenses.length === 0 ? (
+          <div className="text-center py-12">
+            <ArrowUpTrayIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
+            <p className="text-[#7A8580]">No expenses recorded for this client</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-[rgba(59,77,67,0.08)]">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Category</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Description</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Amount</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Status</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                {expenses.map(exp => (
+                  <tr key={exp.id} className="hover:bg-[rgba(91,138,114,0.04)]">
+                    <td className="px-6 py-3 text-sm text-[#7A8580]">{formatDate(exp.expense_date || exp.created_at)}</td>
+                    <td className="px-6 py-3 text-sm text-[#3D4A44]">{(exp.category || '').replace(/_/g, ' ')}</td>
+                    <td className="px-6 py-3 text-sm text-[#3D4A44] max-w-[200px] truncate">{exp.description}</td>
+                    <td className="px-6 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatCents(exp.amount_cents)}</td>
+                    <td className="px-6 py-3 text-center">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${EXPENSE_STATUS_COLORS[exp.status] || 'bg-gray-100 text-gray-700'}`}>
+                        {exp.status || 'PENDING'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        {exp.status === 'PENDING' && (
+                          <button onClick={() => handleUpdateStatus(exp.id, 'APPROVED')} className="px-2 py-1 text-xs text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded transition-colors">Approve</button>
+                        )}
+                        {exp.status === 'APPROVED' && (
+                          <button onClick={() => handleUpdateStatus(exp.id, 'PAID')} className="px-2 py-1 text-xs text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded transition-colors">Mark Paid</button>
+                        )}
+                        <button onClick={() => handleDelete(exp.id)} className="p-1 text-[#C47068] hover:bg-[rgba(196,112,104,0.1)] rounded transition-colors">
+                          <TrashIcon className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function FeesAdvancesSubTab({ orgId, creatorId }) {
+  const [fees, setFees] = useState([])
+  const [advances, setAdvances] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeSection, setActiveSection] = useState('fees')
+  const [showAddFee, setShowAddFee] = useState(false)
+  const [showAddAdvance, setShowAddAdvance] = useState(false)
+  const [feeForm, setFeeForm] = useState({ fee_type: 'MANAGEMENT_FEE', description: '', amount: '', fee_date: '', notes: '' })
+  const [advanceForm, setAdvanceForm] = useState({ description: '', amount: '', advance_date: '', notes: '' })
+  const [savingFee, setSavingFee] = useState(false)
+  const [savingAdvance, setSavingAdvance] = useState(false)
+
+  const FEE_TYPES = ['MANAGEMENT_FEE', 'DISTRIBUTION_FEE', 'ADMIN_FEE', 'SYNC_FEE', 'MECHANICAL_FEE', 'OTHER']
+
+  const loadData = useCallback(async () => {
+    if (!orgId) return
+    try {
+      const [feesRes, advancesRes] = await Promise.all([
+        axios.get(`/api/royalties/fees/${orgId}`),
+        axios.get(`/api/royalties/advances/${orgId}`)
+      ])
+      const allFees = Array.isArray(feesRes.data) ? feesRes.data : feesRes.data.fees || []
+      const allAdvances = Array.isArray(advancesRes.data) ? advancesRes.data : advancesRes.data.advances || []
+      setFees(creatorId ? allFees.filter(f => Number(f.creator_id) === Number(creatorId)) : allFees)
+      setAdvances(creatorId ? allAdvances.filter(a => Number(a.creator_id) === Number(creatorId)) : allAdvances)
+    } catch (err) {
+      console.error('Failed to load fees/advances:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [orgId, creatorId])
+
+  useEffect(() => { loadData() }, [loadData])
+
+  const handleAddFee = async () => {
+    if (!feeForm.description || !feeForm.amount) return
+    setSavingFee(true)
+    try {
+      await axios.post(`/api/royalties/fees/${orgId}`, {
+        fee_type: feeForm.fee_type,
+        description: feeForm.description,
+        amount_cents: Math.round(parseFloat(feeForm.amount) * 100),
+        creator_id: creatorId ? Number(creatorId) : null,
+        fee_date: feeForm.fee_date || null,
+        notes: feeForm.notes || null,
+      })
+      setShowAddFee(false)
+      setFeeForm({ fee_type: 'MANAGEMENT_FEE', description: '', amount: '', fee_date: '', notes: '' })
+      loadData()
+    } catch (err) {
+      console.error('Failed to add fee:', err)
+    } finally {
+      setSavingFee(false)
+    }
+  }
+
+  const handleAddAdvance = async () => {
+    if (!advanceForm.description || !advanceForm.amount) return
+    setSavingAdvance(true)
+    try {
+      await axios.post(`/api/royalties/advances/${orgId}`, {
+        description: advanceForm.description,
+        amount_cents: Math.round(parseFloat(advanceForm.amount) * 100),
+        creator_id: creatorId ? Number(creatorId) : null,
+        advance_date: advanceForm.advance_date || null,
+        notes: advanceForm.notes || null,
+      })
+      setShowAddAdvance(false)
+      setAdvanceForm({ description: '', amount: '', advance_date: '', notes: '' })
+      loadData()
+    } catch (err) {
+      console.error('Failed to add advance:', err)
+    } finally {
+      setSavingAdvance(false)
+    }
+  }
+
+  const inputClass = "w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30"
+
+  if (loading) return <div className="text-center py-12 text-[#7A8580]">Loading fees & advances...</div>
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <button onClick={() => setActiveSection('fees')} className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${activeSection === 'fees' ? 'bg-[rgba(91,138,114,0.12)] text-[#5B8A72] border border-[rgba(91,138,114,0.2)]' : 'text-[#7A8580] hover:text-[#3D4A44]'}`}>
+          Fees ({fees.length})
+        </button>
+        <button onClick={() => setActiveSection('advances')} className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${activeSection === 'advances' ? 'bg-[rgba(91,138,114,0.12)] text-[#5B8A72] border border-[rgba(91,138,114,0.2)]' : 'text-[#7A8580] hover:text-[#3D4A44]'}`}>
+          Advances ({advances.length})
+        </button>
+      </div>
+
+      {activeSection === 'fees' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button onClick={() => setShowAddFee(!showAddFee)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl text-sm font-medium hover:shadow-md transition-all">
+              <ArrowUpTrayIcon className="w-4 h-4" /> Add Fee
+            </button>
+          </div>
+
+          {showAddFee && (
+            <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-[#7A8580] mb-1">Fee Type</label>
+                  <select value={feeForm.fee_type} onChange={(e) => setFeeForm(prev => ({ ...prev, fee_type: e.target.value }))} className={inputClass}>
+                    {FEE_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-[#7A8580] mb-1">Amount ($) *</label>
+                  <input type="number" step="0.01" value={feeForm.amount} onChange={(e) => setFeeForm(prev => ({ ...prev, amount: e.target.value }))} className={inputClass} />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs text-[#7A8580] mb-1">Description *</label>
+                  <input type="text" value={feeForm.description} onChange={(e) => setFeeForm(prev => ({ ...prev, description: e.target.value }))} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#7A8580] mb-1">Date</label>
+                  <input type="date" value={feeForm.fee_date} onChange={(e) => setFeeForm(prev => ({ ...prev, fee_date: e.target.value }))} className={inputClass} />
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={handleAddFee} disabled={!feeForm.description || !feeForm.amount || savingFee} className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7A62] disabled:opacity-50 transition-colors">
+                  {savingFee ? 'Adding...' : 'Add Fee'}
+                </button>
+                <button onClick={() => setShowAddFee(false)} className="px-4 py-2 text-[#7A8580] text-sm">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)]">
+            {fees.length === 0 ? (
+              <div className="text-center py-12 text-[#7A8580]">No fees recorded</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="border-b border-[rgba(59,77,67,0.08)]">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Type</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Description</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                    {fees.map((fee, i) => (
+                      <tr key={fee.id || i} className="hover:bg-[rgba(91,138,114,0.04)]">
+                        <td className="px-6 py-3 text-sm text-[#7A8580]">{formatDate(fee.fee_date || fee.created_at)}</td>
+                        <td className="px-6 py-3 text-sm text-[#3D4A44]">{(fee.fee_type || '').replace(/_/g, ' ')}</td>
+                        <td className="px-6 py-3 text-sm text-[#3D4A44]">{fee.description || '—'}</td>
+                        <td className="px-6 py-3 text-sm text-right font-medium text-[#C47068]">{formatCents(fee.amount_cents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeSection === 'advances' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button onClick={() => setShowAddAdvance(!showAddAdvance)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl text-sm font-medium hover:shadow-md transition-all">
+              <ArrowUpTrayIcon className="w-4 h-4" /> Add Advance
+            </button>
+          </div>
+
+          {showAddAdvance && (
+            <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-[#7A8580] mb-1">Amount ($) *</label>
+                  <input type="number" step="0.01" value={advanceForm.amount} onChange={(e) => setAdvanceForm(prev => ({ ...prev, amount: e.target.value }))} className={inputClass} />
+                </div>
+                <div>
+                  <label className="block text-xs text-[#7A8580] mb-1">Date</label>
+                  <input type="date" value={advanceForm.advance_date} onChange={(e) => setAdvanceForm(prev => ({ ...prev, advance_date: e.target.value }))} className={inputClass} />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs text-[#7A8580] mb-1">Description *</label>
+                  <input type="text" value={advanceForm.description} onChange={(e) => setAdvanceForm(prev => ({ ...prev, description: e.target.value }))} className={inputClass} />
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={handleAddAdvance} disabled={!advanceForm.description || !advanceForm.amount || savingAdvance} className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7A62] disabled:opacity-50 transition-colors">
+                  {savingAdvance ? 'Adding...' : 'Add Advance'}
+                </button>
+                <button onClick={() => setShowAddAdvance(false)} className="px-4 py-2 text-[#7A8580] text-sm">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)]">
+            {advances.length === 0 ? (
+              <div className="text-center py-12 text-[#7A8580]">No advances recorded</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="border-b border-[rgba(59,77,67,0.08)]">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Date</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Description</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Amount</th>
+                      <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                    {advances.map((adv, i) => (
+                      <tr key={adv.id || i} className="hover:bg-[rgba(91,138,114,0.04)]">
+                        <td className="px-6 py-3 text-sm text-[#7A8580]">{formatDate(adv.advance_date || adv.created_at)}</td>
+                        <td className="px-6 py-3 text-sm text-[#3D4A44]">{adv.description || '—'}</td>
+                        <td className="px-6 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatCents(adv.amount_cents)}</td>
+                        <td className="px-6 py-3 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${adv.is_recouped ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {adv.is_recouped ? 'Recouped' : 'Active'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
