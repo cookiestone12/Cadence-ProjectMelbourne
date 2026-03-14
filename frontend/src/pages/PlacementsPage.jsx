@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import {
   PlusIcon,
@@ -23,8 +24,10 @@ import {
   EnvelopeIcon,
   UserIcon,
   DocumentTextIcon,
-  GlobeAltIcon
+  GlobeAltIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline'
+import SyncReportsPage from './SyncReportsPage'
 
 const STATUS_BADGE_STYLES = {
   PITCHED: { bg: 'rgba(91, 138, 114, 0.12)', text: '#5B8A72' },
@@ -102,7 +105,22 @@ const emptyCreateForm = {
   assigned_to_user_id: '',
 }
 
+const SYNC_HQ_TABS = [
+  { key: 'placements', label: 'Placements', icon: FilmIcon },
+  { key: 'reports', label: 'Reports', icon: DocumentDuplicateIcon },
+]
+
 export default function PlacementsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = searchParams.get('tab') === 'reports' ? 'reports' : 'placements'
+  const setActiveTab = (tab) => {
+    if (tab === 'placements') {
+      setSearchParams({})
+    } else {
+      setSearchParams({ tab })
+    }
+  }
+
   const [orgId, setOrgId] = useState(null)
   const [placements, setPlacements] = useState([])
   const [summary, setSummary] = useState({ status_counts: {}, total_pipeline_value: 0, total_paid: 0, total_placements: 0 })
@@ -362,20 +380,46 @@ export default function PlacementsPage() {
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">Sync Placements</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold">Sync HQ</h1>
               <p className="mt-1 text-white/80">Sync licensing, film, TV & advertising pipeline</p>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white px-5 py-2.5 rounded-xl font-medium transition-all"
-            >
-              <PlusIcon className="w-5 h-5" />
-              New Placement
-            </button>
+            {activeTab === 'placements' && (
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white px-5 py-2.5 rounded-xl font-medium transition-all"
+              >
+                <PlusIcon className="w-5 h-5" />
+                New Placement
+              </button>
+            )}
+          </div>
+          <div className="flex gap-1 mt-5">
+            {SYNC_HQ_TABS.map((tab) => {
+              const Icon = tab.icon
+              const isActive = activeTab === tab.key
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-[#F5F7F4] text-[#3D4A44] shadow-sm'
+                      : 'text-white/70 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>
 
+      {activeTab === 'reports' ? (
+        <SyncReportsPage />
+      ) : (
+      <>
       <div className="max-w-7xl mx-auto px-6 -mt-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-[18px] border border-[rgba(59,77,67,0.08)] shadow-sm p-5">
@@ -947,6 +991,8 @@ export default function PlacementsPage() {
             </form>
           </div>
         </div>
+      )}
+      </>
       )}
 
       <style>{`

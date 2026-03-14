@@ -54,7 +54,6 @@ import UserGuidePage from './pages/UserGuidePage'
 import TenantAdminPage from './pages/TenantAdminPage'
 import CreativeDirectoryPage from './pages/CreativeDirectoryPage'
 import RegistrationReportPage from './pages/RegistrationReportPage'
-import SyncReportsPage from './pages/SyncReportsPage'
 import BriefBuilderPage from './pages/BriefBuilderPage'
 import StorageScanPage from './pages/StorageScanPage'
 import CreditsPage from './pages/CreditsPage'
@@ -193,7 +192,7 @@ function App() {
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/valuation" element={<ValuationPage />} />
                 <Route path="/registration-reports" element={<RegistrationReportPage />} />
-                <Route path="/sync-reports" element={<SyncReportsPage />} />
+                <Route path="/sync-reports" element={<Navigate to="/placements?tab=reports" replace />} />
                 <Route path="/brief-builder" element={<BriefBuilderPage />} />
                 <Route path="/credits" element={<CreditsPage />} />
                 <Route path="/storage-scan" element={<StorageScanPage />} />

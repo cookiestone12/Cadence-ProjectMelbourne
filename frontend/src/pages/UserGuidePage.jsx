@@ -16,19 +16,18 @@ const sections = [
   { id: 'contracts', title: '9. Contracts & Rights' },
   { id: 'actions', title: '10. Action Items' },
   { id: 'royalties', title: '11. Royalties' },
-  { id: 'placements', title: '12. Placements' },
-  { id: 'sync-reports', title: '13. Sync Reports' },
-  { id: 'brief-builder', title: '14. Brief Builder' },
-  { id: 'directory', title: '15. Creative Directory' },
-  { id: 'registration-reports', title: '16. Registration Reports' },
-  { id: 'cloud-storage', title: '17. Cloud Storage Integration' },
-  { id: 'storage-scan', title: '18. Storage Scan' },
-  { id: 'audio-analysis', title: '19. Audio Analysis & Tagging' },
-  { id: 'reports', title: '20. Reports & Analytics' },
-  { id: 'valuation', title: '21. Catalog Valuation' },
-  { id: 'settings', title: '22. Settings & Integrations' },
-  { id: 'tips', title: '23. Tips & Best Practices' },
-  { id: 'glossary', title: '24. Glossary' },
+  { id: 'sync-hq', title: '12. Sync HQ' },
+  { id: 'brief-builder', title: '13. Brief Builder' },
+  { id: 'directory', title: '14. Creative Directory' },
+  { id: 'registration-reports', title: '15. Registration Reports' },
+  { id: 'cloud-storage', title: '16. Cloud Storage Integration' },
+  { id: 'storage-scan', title: '17. Storage Scan' },
+  { id: 'audio-analysis', title: '18. Audio Analysis & Tagging' },
+  { id: 'reports', title: '19. Reports & Analytics' },
+  { id: 'valuation', title: '20. Catalog Valuation' },
+  { id: 'settings', title: '21. Settings & Integrations' },
+  { id: 'tips', title: '22. Tips & Best Practices' },
+  { id: 'glossary', title: '23. Glossary' },
 ]
 
 function SectionHeading({ id, children }) {
@@ -256,8 +255,7 @@ export default function UserGuidePage() {
               { icon: '📋', label: 'Contracts', desc: 'Deal management' },
               { icon: '✅', label: 'Actions', desc: 'Task inbox' },
               { icon: '💰', label: 'Royalties', desc: 'Financial engine' },
-              { icon: '🎬', label: 'Placements', desc: 'Sync licensing' },
-              { icon: '📄', label: 'Sync Reports', desc: 'Placement reports' },
+              { icon: '🎬', label: 'Sync HQ', desc: 'Placements & reports' },
               { icon: '✨', label: 'Brief Builder', desc: 'AI song matching' },
               { icon: '☁️', label: 'Storage Scan', desc: 'File scanning' },
               { icon: '📋', label: 'Reg. Reports', desc: 'PRO registration' },
@@ -812,10 +810,15 @@ export default function UserGuidePage() {
           <li><strong>Payables Report:</strong> CSV of payable amounts per payee after processing.</li>
         </ul>
 
-        {/* ===== 12. PLACEMENTS ===== */}
-        <SectionHeading id="placements">12. Placements</SectionHeading>
+        {/* ===== 12. SYNC HQ ===== */}
+        <SectionHeading id="sync-hq">12. Sync HQ</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          The Placements module tracks sync licensing opportunities from initial pitch through to payment. It provides a visual pipeline for managing your placement workflow.
+          Sync HQ is your unified hub for sync licensing. It combines placement pipeline management and sync reporting into a single page with two tabs: <strong>Placements</strong> and <strong>Reports</strong>.
+        </p>
+
+        <SubHeading>Placements Tab</SubHeading>
+        <p className="text-sm text-[#7A8580] mb-3">
+          The Placements tab tracks sync licensing opportunities from initial pitch through to payment. It provides a visual pipeline for managing your placement workflow.
         </p>
 
         <SubHeading>Placement Pipeline</SubHeading>
@@ -847,18 +850,17 @@ export default function UserGuidePage() {
 
         <SubHeading>Summary Cards</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          The top of the Placements page shows summary cards: total placements, total pipeline value (sum of all active license fees), total paid, and number of active pitches. Use the status filter buttons to view placements at specific pipeline stages.
+          The top of the Placements tab shows summary cards: total placements, total pipeline value (sum of all active license fees), total paid, and number of active pitches. Use the status filter buttons to view placements at specific pipeline stages.
         </p>
 
-        {/* ===== 13. SYNC REPORTS ===== */}
-        <SectionHeading id="sync-reports">13. Sync Reports</SectionHeading>
+        <SubHeading>Reports Tab</SubHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          The Sync Reports module generates customizable reports for your sync placement activity. Use it to create professional summaries for clients, internal reviews, or stakeholder updates.
+          The Reports tab generates customizable reports for your sync placement activity. Use it to create professional summaries for clients, internal reviews, or stakeholder updates.
         </p>
 
         <SubHeading>Creating a Sync Report</SubHeading>
         <StepList steps={[
-          'Navigate to the Sync Reports page from the sidebar.',
+          'Switch to the Reports tab in Sync HQ.',
           'Use the filter controls to narrow placements by client, status, and date range.',
           'Preview the filtered results to ensure the report captures the right data.',
           'Choose your export format: PDF for branded, printable reports or CSV for spreadsheet analysis.',
@@ -874,8 +876,8 @@ export default function UserGuidePage() {
         </div>
         <Tip>Create monthly or quarterly sync reports for each client to demonstrate your pitching activity and success rate. Filter by client and date range for targeted summaries.</Tip>
 
-        {/* ===== 14. BRIEF BUILDER ===== */}
-        <SectionHeading id="brief-builder">14. Brief Builder</SectionHeading>
+        {/* ===== 13. BRIEF BUILDER ===== */}
+        <SectionHeading id="brief-builder">13. Brief Builder</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           The Brief Builder is an AI-powered tool for matching songs in your catalog to sync briefs. Describe what you're looking for in natural language, add optional structured filters, and the system returns ranked song recommendations.
         </p>
@@ -899,8 +901,8 @@ export default function UserGuidePage() {
         </div>
         <Tip>The Brief Builder works best when your catalog has been analyzed with the Audio Analysis tool. Songs with BPM, key, mood, and texture data produce more accurate matches.</Tip>
 
-        {/* ===== 15. CREATIVE DIRECTORY ===== */}
-        <SectionHeading id="directory">15. Creative Directory</SectionHeading>
+        {/* ===== 14. CREATIVE DIRECTORY ===== */}
+        <SectionHeading id="directory">14. Creative Directory</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           The Creative Directory is a contact management system for industry collaborators — producers, engineers, mixers, session musicians, A&R contacts, and other professionals you work with regularly.
         </p>
@@ -923,8 +925,8 @@ export default function UserGuidePage() {
         </div>
         <Tip>Use the Directory to keep track of all collaborators you might need for sync placements, recording sessions, or contract negotiations. It's separate from the Creator Roster, which focuses on your signed artists and writers.</Tip>
 
-        {/* ===== 16. REGISTRATION REPORTS ===== */}
-        <SectionHeading id="registration-reports">16. Registration Reports</SectionHeading>
+        {/* ===== 15. REGISTRATION REPORTS ===== */}
+        <SectionHeading id="registration-reports">15. Registration Reports</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           The Registration Reports module helps you manage PRO (Performing Rights Organization) registrations for your songs and works. Track which assets are registered, generate branded reports, and email them directly to your admin or PRO contacts.
         </p>
@@ -950,8 +952,8 @@ export default function UserGuidePage() {
         </div>
         <Tip>Run a monthly registration check using the Outstanding filter to catch any new songs or works that haven't been submitted to your PRO yet.</Tip>
 
-        {/* ===== 17. CLOUD STORAGE INTEGRATION ===== */}
-        <SectionHeading id="cloud-storage">17. Cloud Storage Integration</SectionHeading>
+        {/* ===== 16. CLOUD STORAGE INTEGRATION ===== */}
+        <SectionHeading id="cloud-storage">16. Cloud Storage Integration</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           Cadence integrates with Dropbox and Google Drive to link audio files to your catalog without hosting files locally. This enables AI audio analysis and file management directly from your existing cloud storage.
         </p>
@@ -992,8 +994,8 @@ export default function UserGuidePage() {
           Google Drive integration follows the same connection flow. Once connected, the folder picker uses Google Drive's folder ID system for navigation, with a visual breadcrumb trail showing your current path.
         </p>
 
-        {/* ===== 18. STORAGE SCAN ===== */}
-        <SectionHeading id="storage-scan">18. Storage Scan</SectionHeading>
+        {/* ===== 17. STORAGE SCAN ===== */}
+        <SectionHeading id="storage-scan">17. Storage Scan</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           The Storage Scan module connects individual creators to specific folders in your cloud storage, then uses AI to scan files, match them to catalog entries, and link audio files to songs automatically.
         </p>
@@ -1032,8 +1034,8 @@ export default function UserGuidePage() {
         </p>
         <Tip>Start by scanning your most active creators' folders first. Use Bulk Approve for high-confidence matches, then manually review medium and low confidence results.</Tip>
 
-        {/* ===== 19. AUDIO ANALYSIS & TAGGING ===== */}
-        <SectionHeading id="audio-analysis">19. Audio Analysis & Tagging</SectionHeading>
+        {/* ===== 18. AUDIO ANALYSIS & TAGGING ===== */}
+        <SectionHeading id="audio-analysis">18. Audio Analysis & Tagging</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           The Audio Analysis system uses AI to analyze your linked audio files and generate detailed metadata tags. This enriches your catalog with searchable attributes that power the Brief Builder and catalog filtering.
         </p>
@@ -1064,8 +1066,8 @@ export default function UserGuidePage() {
         </p>
         <Tip>Run audio analysis on your entire catalog to unlock the full power of the Brief Builder. Songs with complete audio metadata produce significantly better match results for sync briefs.</Tip>
 
-        {/* ===== 20. REPORTS ===== */}
-        <SectionHeading id="reports">20. Reports & Analytics</SectionHeading>
+        {/* ===== 19. REPORTS ===== */}
+        <SectionHeading id="reports">19. Reports & Analytics</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           The Reports page provides comprehensive analytics across your entire catalog through a tabbed dashboard with interactive visualizations.
         </p>
@@ -1085,8 +1087,8 @@ export default function UserGuidePage() {
           Reports use a variety of visualizations including area charts, pie charts, bar charts, line charts, funnel views, progress bars, and data tables. All charts are interactive — hover for details and tooltips.
         </p>
 
-        {/* ===== 21. VALUATION ===== */}
-        <SectionHeading id="valuation">21. Catalog Valuation</SectionHeading>
+        {/* ===== 20. VALUATION ===== */}
+        <SectionHeading id="valuation">20. Catalog Valuation</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           The Catalog Valuation page provides both traditional valuation estimates and an institutional-grade Underwriting Engine powered by your ingested royalty statement data. It offers actionable insights for business planning, investment discussions, and catalog transactions.
         </p>
@@ -1161,8 +1163,8 @@ export default function UserGuidePage() {
         </p>
         <Tip>Run underwriting analyses periodically to track how your catalog's estimated value and decay characteristics change over time as you add new content and process new royalty statements.</Tip>
 
-        {/* ===== 22. SETTINGS ===== */}
-        <SectionHeading id="settings">22. Settings & Integrations</SectionHeading>
+        {/* ===== 21. SETTINGS ===== */}
+        <SectionHeading id="settings">21. Settings & Integrations</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
           The Settings page allows you to configure your account, organization preferences, and third-party integrations.
         </p>
@@ -1240,8 +1242,8 @@ export default function UserGuidePage() {
           Link Individual accounts to Enterprise organizations for creators who work across multiple labels or publishers. Account linking requires mutual consent from both parties and enables cross-organization visibility where permitted.
         </p>
 
-        {/* ===== 23. TIPS ===== */}
-        <SectionHeading id="tips">23. Tips & Best Practices</SectionHeading>
+        {/* ===== 22. TIPS ===== */}
+        <SectionHeading id="tips">22. Tips & Best Practices</SectionHeading>
 
         <SubHeading>Catalog Health</SubHeading>
         <div className="space-y-3 my-4">
@@ -1287,8 +1289,8 @@ export default function UserGuidePage() {
           <Tip>Run a monthly PRO registration check using the Registration Reports Outstanding filter to catch any unregistered songs.</Tip>
         </div>
 
-        {/* ===== 24. GLOSSARY ===== */}
-        <SectionHeading id="glossary">24. Glossary</SectionHeading>
+        {/* ===== 23. GLOSSARY ===== */}
+        <SectionHeading id="glossary">23. Glossary</SectionHeading>
         <div className="space-y-4 my-4">
           {[
             ['Audio Analysis', 'AI-powered processing of audio files to extract BPM, key, loudness, and mood/texture/sync tags for catalog enrichment.'],

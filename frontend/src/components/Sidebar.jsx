@@ -19,7 +19,6 @@ import {
   FilmIcon,
   BuildingOfficeIcon,
   UserGroupIcon,
-  DocumentDuplicateIcon,
   SparklesIcon,
   CloudArrowUpIcon,
   StarIcon
@@ -72,8 +71,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/contracts', label: 'Contracts', icon: ClipboardDocumentListIcon },
     { path: '/actions', label: 'Actions', icon: ClipboardDocumentCheckIcon },
     { path: '/royalties', label: 'Royalties', icon: BanknotesIcon },
-    { path: '/placements', label: 'Sync Placements', icon: FilmIcon },
-    { path: '/sync-reports', label: 'Sync Reports', icon: DocumentDuplicateIcon },
+    { path: '/placements', label: 'Sync HQ', icon: FilmIcon },
     { path: '/brief-builder', label: 'Brief Builder', icon: SparklesIcon },
     { path: '/credits', label: 'Credits', icon: StarIcon },
     { path: '/storage-scan', label: 'Storage Scan', icon: CloudArrowUpIcon },
