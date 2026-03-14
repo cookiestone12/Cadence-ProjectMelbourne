@@ -1,5 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
+import {
+  ArrowUpTrayIcon, DocumentTextIcon, CurrencyDollarIcon,
+  ArrowPathIcon, BanknotesIcon, ChartBarIcon, TrashIcon,
+  EyeIcon, XMarkIcon
+} from '@heroicons/react/24/outline'
+import StatementDetailView from './StatementDetailView'
 
 const formatCents = (cents) => {
   if (cents == null) return '$0.00'
@@ -34,6 +40,27 @@ const POOL_COLORS = {
   CUSTOM: 'bg-orange-100 text-orange-700',
 }
 
+const STATEMENT_STATUS_COLORS = {
+  PENDING: { bg: 'bg-amber-100', text: 'text-amber-700' },
+  UPLOADED: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  PROCESSING: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  PROCESSED: { bg: 'bg-green-100', text: 'text-green-700' },
+  FAILED: { bg: 'bg-red-100', text: 'text-red-700' },
+  PARTIALLY_MATCHED: { bg: 'bg-orange-100', text: 'text-orange-700' },
+  FULLY_MATCHED: { bg: 'bg-green-100', text: 'text-green-700' },
+  REVIEW_REQUIRED: { bg: 'bg-amber-100', text: 'text-amber-700' },
+}
+
+const SOURCE_TYPE_OPTIONS = [
+  { value: '', label: 'Auto-detect' },
+  { value: 'DSP', label: 'DSP / Distributor' },
+  { value: 'BMI', label: 'BMI' },
+  { value: 'ASCAP', label: 'ASCAP' },
+  { value: 'SESAC', label: 'SESAC' },
+  { value: 'SoundExchange', label: 'SoundExchange' },
+  { value: 'OTHER_PRO', label: 'Other PRO' },
+]
+
 export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAccountingData, accountingLoading, onRefresh }) {
   const [activeSubTab, setActiveSubTab] = useState('summary')
   const [payeeId, setPayeeId] = useState(null)
@@ -60,7 +87,7 @@ export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAc
     try {
       const res = await axios.get(`/api/royalty-processing/${orgId}/payees`)
       const payees = Array.isArray(res.data) ? res.data : res.data.payees || []
-      const match = payees.find(p => p.creator_id === creatorId)
+      const match = payees.find(p => Number(p.creator_id) === Number(creatorId))
       if (match) {
         setPayeeId(match.id)
       }
@@ -123,18 +150,21 @@ export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAc
 
   const subTabs = [
     { key: 'summary', label: 'Summary' },
+    { key: 'statements', label: 'Statements' },
+    { key: 'earnings', label: 'Earnings' },
     { key: 'ledger', label: 'Ledger' },
+    { key: 'payables', label: 'Payables' },
     { key: 'recoupment', label: 'Recoupment' },
   ]
 
   return (
     <div className="space-y-6">
-      <div className="flex space-x-1 bg-[#F5F7F4] rounded-xl p-1">
+      <div className="flex space-x-1 bg-[#F5F7F4] rounded-xl p-1 overflow-x-auto">
         {subTabs.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveSubTab(tab.key)}
-            className={`flex-1 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
+            className={`flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-colors whitespace-nowrap ${
               activeSubTab === tab.key
                 ? 'bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white shadow-sm'
                 : 'text-[#7A8580] hover:text-[#3D4A44]'
@@ -147,6 +177,14 @@ export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAc
 
       {activeSubTab === 'summary' && (
         <SummarySubTab data={existingAccountingData} loading={accountingLoading} orgId={orgId} onRefresh={onRefresh} />
+      )}
+
+      {activeSubTab === 'statements' && (
+        <StatementsSubTab orgId={orgId} creatorId={creatorId} />
+      )}
+
+      {activeSubTab === 'earnings' && (
+        <EarningsSubTab orgId={orgId} creatorId={creatorId} />
       )}
 
       {activeSubTab === 'ledger' && (
@@ -171,6 +209,18 @@ export default function CreatorAccountingEnhanced({ orgId, creatorId, existingAc
             onDateToChange={setDateTo}
             onOffsetChange={setLedgerOffset}
           />
+        )
+      )}
+
+      {activeSubTab === 'payables' && (
+        !payeeResolved ? (
+          <div className="text-center py-12 text-[#7A8580]">Resolving payee...</div>
+        ) : !payeeId ? (
+          <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-8 text-center">
+            <p className="text-[#7A8580]">No payables data available. This creator does not have a payee profile yet.</p>
+          </div>
+        ) : (
+          <CreatorPayablesSubTab orgId={orgId} payeeId={payeeId} />
         )
       )}
 
@@ -379,6 +429,292 @@ function SummarySubTab({ data, loading, orgId, onRefresh }) {
   )
 }
 
+function StatementsSubTab({ orgId, creatorId }) {
+  const [statements, setStatements] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [selectedStatementId, setSelectedStatementId] = useState(null)
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploadFile, setUploadFile] = useState(null)
+  const [uploadSource, setUploadSource] = useState('')
+  const [uploadSourceType, setUploadSourceType] = useState('')
+  const [uploadPeriodStart, setUploadPeriodStart] = useState('')
+  const [uploadPeriodEnd, setUploadPeriodEnd] = useState('')
+  const [uploadCurrency, setUploadCurrency] = useState('USD')
+  const [uploading, setUploading] = useState(false)
+
+  const loadStatements = useCallback(async () => {
+    if (!orgId) return
+    try {
+      let url = `/api/royalties/statements/${orgId}`
+      if (creatorId) url += `?creator_id=${creatorId}`
+      const res = await axios.get(url)
+      setStatements(Array.isArray(res.data) ? res.data : res.data.statements || [])
+    } catch (err) {
+      console.error('Failed to load statements:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [orgId, creatorId])
+
+  useEffect(() => { loadStatements() }, [loadStatements])
+
+  const handleUpload = async () => {
+    if (!uploadFile || !uploadSource) return
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', uploadFile)
+      formData.append('source_name', uploadSource)
+      if (uploadSourceType) formData.append('source_type', uploadSourceType)
+      if (uploadPeriodStart) formData.append('period_start', uploadPeriodStart)
+      if (uploadPeriodEnd) formData.append('period_end', uploadPeriodEnd)
+      formData.append('currency', uploadCurrency)
+      if (creatorId) formData.append('creator_id', creatorId)
+      await axios.post(`/api/royalty-processing/${orgId}/statements/upload`, formData)
+      setShowUpload(false)
+      setUploadFile(null)
+      setUploadSource('')
+      setUploadSourceType('')
+      setUploadPeriodStart('')
+      setUploadPeriodEnd('')
+      setUploadCurrency('USD')
+      loadStatements()
+    } catch (err) {
+      console.error('Upload failed:', err)
+      alert('Upload failed: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDelete = async (stmtId) => {
+    if (!window.confirm('Delete this statement? This cannot be undone.')) return
+    try {
+      await axios.delete(`/api/royalties/statements/${orgId}/${stmtId}`)
+      loadStatements()
+    } catch (err) {
+      console.error('Delete failed:', err)
+    }
+  }
+
+  if (selectedStatementId) {
+    return (
+      <StatementDetailView
+        orgId={orgId}
+        statementId={selectedStatementId}
+        onBack={() => { setSelectedStatementId(null); loadStatements() }}
+      />
+    )
+  }
+
+  const inputClass = "w-full border border-[rgba(59,77,67,0.15)] rounded-lg px-3 py-2 text-sm text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30"
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-[#3D4A44]">Royalty Statements</h3>
+        <button
+          onClick={() => setShowUpload(!showUpload)}
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium"
+        >
+          <ArrowUpTrayIcon className="w-4 h-4" /> Upload Statement
+        </button>
+      </div>
+
+      {showUpload && (
+        <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs text-[#7A8580] mb-1">Source Name *</label>
+              <input type="text" value={uploadSource} onChange={(e) => setUploadSource(e.target.value)} className={inputClass} placeholder="e.g., DistroKid, BMI" />
+            </div>
+            <div>
+              <label className="block text-xs text-[#7A8580] mb-1">Source Type</label>
+              <select value={uploadSourceType} onChange={(e) => setUploadSourceType(e.target.value)} className={inputClass}>
+                {SOURCE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-[#7A8580] mb-1">Period Start</label>
+              <input type="date" value={uploadPeriodStart} onChange={(e) => setUploadPeriodStart(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-[#7A8580] mb-1">Period End</label>
+              <input type="date" value={uploadPeriodEnd} onChange={(e) => setUploadPeriodEnd(e.target.value)} className={inputClass} />
+            </div>
+            <div>
+              <label className="block text-xs text-[#7A8580] mb-1">Currency</label>
+              <select value={uploadCurrency} onChange={(e) => setUploadCurrency(e.target.value)} className={inputClass}>
+                {['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY'].map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-[#7A8580] mb-1">File *</label>
+              <input type="file" accept=".csv,.xlsx,.xls,.pdf" onChange={(e) => setUploadFile(e.target.files[0])} className={inputClass} />
+            </div>
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            <button onClick={handleUpload} disabled={!uploadFile || !uploadSource || uploading} className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg text-sm font-medium hover:bg-[#4A7A62] disabled:opacity-50 transition-colors">
+              {uploading ? 'Uploading...' : 'Upload & Auto-Match'}
+            </button>
+            <button onClick={() => setShowUpload(false)} className="px-4 py-2 text-[#7A8580] hover:text-[#3D4A44] text-sm transition-colors">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)]">
+        {loading ? (
+          <div className="text-center py-12 text-[#7A8580]">Loading statements...</div>
+        ) : statements.length === 0 ? (
+          <div className="text-center py-12">
+            <DocumentTextIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
+            <p className="text-[#7A8580]">No statements found for this client</p>
+            <p className="text-xs text-[#7A8580] mt-1">Upload a royalty statement to get started</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-[rgba(59,77,67,0.08)]">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Source</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Period</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Revenue</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Lines</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Matched</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Status</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                {statements.map(stmt => {
+                  const colors = STATEMENT_STATUS_COLORS[stmt.status] || { bg: 'bg-gray-100', text: 'text-gray-700' }
+                  return (
+                    <tr key={stmt.id} className="hover:bg-[rgba(91,138,114,0.04)]">
+                      <td className="px-6 py-3 text-sm font-medium text-[#3D4A44]">{stmt.source_name || stmt.source || '—'}</td>
+                      <td className="px-6 py-3 text-sm text-[#7A8580]">
+                        {stmt.period_start ? `${formatDate(stmt.period_start)} – ${formatDate(stmt.period_end)}` : formatDate(stmt.created_at)}
+                      </td>
+                      <td className="px-6 py-3 text-sm text-right font-medium text-[#3D4A44]">
+                        {formatCents(stmt.total_revenue_cents)}
+                      </td>
+                      <td className="px-6 py-3 text-sm text-center text-[#7A8580]">{stmt.total_lines || stmt.transaction_count || 0}</td>
+                      <td className="px-6 py-3 text-sm text-center text-[#7A8580]">{stmt.matched_lines || stmt.matched_count || 0}</td>
+                      <td className="px-6 py-3 text-center">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
+                          {(stmt.status || '').replace(/_/g, ' ')}
+                        </span>
+                      </td>
+                      <td className="px-6 py-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button onClick={() => setSelectedStatementId(stmt.id)} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors" title="View Details">
+                            <EyeIcon className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => handleDelete(stmt.id)} className="p-1.5 text-[#C47068] hover:bg-[rgba(196,112,104,0.1)] rounded-lg transition-colors" title="Delete">
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function EarningsSubTab({ orgId, creatorId }) {
+  const [earnings, setEarnings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [summary, setSummary] = useState(null)
+
+  useEffect(() => {
+    if (!orgId) return
+    loadEarnings()
+  }, [orgId, creatorId])
+
+  const loadEarnings = async () => {
+    try {
+      const params = {}
+      if (creatorId) params.creator_id = creatorId
+      const res = await axios.get(`/api/royalties/earnings/${orgId}`, { params })
+      const data = res.data
+      if (Array.isArray(data)) {
+        setEarnings(data)
+      } else {
+        setEarnings(data.earnings || data.items || [])
+        if (data.summary) setSummary(data.summary)
+      }
+    } catch (err) {
+      console.error('Failed to load earnings:', err)
+      setEarnings([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) return <div className="text-center py-12 text-[#7A8580]">Loading earnings...</div>
+
+  return (
+    <div className="space-y-4">
+      {summary && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5">
+            <p className="text-xs text-[#7A8580] mb-1">Total Earnings</p>
+            <p className="text-2xl font-bold text-[#5B8A72]">{formatCents(summary.total_cents)}</p>
+          </div>
+          <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5">
+            <p className="text-xs text-[#7A8580] mb-1">Allocated</p>
+            <p className="text-2xl font-bold text-[#3D4A44]">{formatCents(summary.allocated_cents)}</p>
+          </div>
+          <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5">
+            <p className="text-xs text-[#7A8580] mb-1">Unallocated</p>
+            <p className="text-2xl font-bold text-[#C4956B]">{formatCents(summary.unallocated_cents)}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)]">
+        {earnings.length === 0 ? (
+          <div className="text-center py-12">
+            <CurrencyDollarIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
+            <p className="text-[#7A8580]">No earnings data found for this client</p>
+            <p className="text-xs text-[#7A8580] mt-1">Earnings appear after statements are processed</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-[rgba(59,77,67,0.08)]">
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Song</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Source</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Period</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Revenue</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Quantity</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                {earnings.slice(0, 100).map((e, i) => (
+                  <tr key={e.id || i} className="hover:bg-[rgba(91,138,114,0.04)]">
+                    <td className="px-6 py-3 text-sm font-medium text-[#3D4A44]">{e.track_title || e.song_title || '—'}</td>
+                    <td className="px-6 py-3 text-sm text-[#7A8580]">{e.source_name || e.platform || '—'}</td>
+                    <td className="px-6 py-3 text-sm text-[#7A8580]">{e.period || formatDate(e.period_start)}</td>
+                    <td className="px-6 py-3 text-sm text-right font-medium text-[#5B8A72]">{e.revenue_cents != null ? formatCents(e.revenue_cents) : formatDollars(e.revenue)}</td>
+                    <td className="px-6 py-3 text-sm text-right text-[#7A8580]">{(e.quantity || 0).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function LedgerSubTab({ entries, loading, total, offset, limit, entryTypeFilter, dateFrom, dateTo, onEntryTypeChange, onDateFromChange, onDateToChange, onOffsetChange }) {
   return (
     <div className="space-y-4">
@@ -554,6 +890,87 @@ function RecoupmentSubTab({ advances, loading }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function CreatorPayablesSubTab({ orgId, payeeId }) {
+  const [payableData, setPayableData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!orgId || !payeeId) return
+    loadPayableData()
+  }, [orgId, payeeId])
+
+  const loadPayableData = async () => {
+    try {
+      const res = await axios.get(`/api/royalty-processing/${orgId}/payables`)
+      const allPayables = Array.isArray(res.data) ? res.data : res.data.payables || []
+      const match = allPayables.find(p => Number(p.payee_id) === Number(payeeId) || Number(p.id) === Number(payeeId))
+      setPayableData(match || null)
+    } catch (err) {
+      console.error('Failed to load payables:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) return <div className="text-center py-12 text-[#7A8580]">Loading payables...</div>
+
+  if (!payableData) {
+    return (
+      <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-8 text-center">
+        <BanknotesIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
+        <p className="text-[#7A8580]">No payable balance found for this client</p>
+        <p className="text-xs text-[#7A8580] mt-1">Payables are created after royalty statements are processed</p>
+      </div>
+    )
+  }
+
+  const balance = payableData.balance || {}
+  const cards = [
+    { label: 'Total Earned', value: formatCents(balance.total_earned_cents || payableData.total_earned_cents), color: 'text-[#5B8A72]' },
+    { label: 'Total Paid', value: formatCents(balance.total_paid_cents || payableData.total_paid_cents), color: 'text-[#3D4A44]' },
+    { label: 'Current Balance', value: formatCents(balance.current_balance_cents || payableData.current_balance_cents), color: 'text-[#C4956B]' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {cards.map((card, i) => (
+          <div key={i} className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5">
+            <p className="text-xs text-[#7A8580] mb-1">{card.label}</p>
+            <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white/60 backdrop-blur-xl rounded-[14px] border border-[rgba(59,77,67,0.08)] p-5">
+        <h4 className="font-semibold text-[#3D4A44] mb-3">Payee Details</h4>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-xs text-[#7A8580]">Name</p>
+            <p className="text-[#3D4A44] font-medium">{payableData.creator_name || payableData.company_name || '—'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-[#7A8580]">Type</p>
+            <p className="text-[#3D4A44]">{payableData.payee_type || '—'}</p>
+          </div>
+          {payableData.payment_method && (
+            <div>
+              <p className="text-xs text-[#7A8580]">Payment Method</p>
+              <p className="text-[#3D4A44]">{payableData.payment_method}</p>
+            </div>
+          )}
+          {payableData.payment_details && (
+            <div>
+              <p className="text-xs text-[#7A8580]">Payment Details</p>
+              <p className="text-[#3D4A44]">{payableData.payment_details}</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

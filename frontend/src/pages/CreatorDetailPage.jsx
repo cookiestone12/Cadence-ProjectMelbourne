@@ -7,6 +7,7 @@ import ActionsTab from '../components/ActionsTab'
 import CreatorAccountingEnhanced from '../components/CreatorAccountingEnhanced'
 import PlatformIcon from '../components/PlatformIcon'
 import SocialCard from '../components/SocialCard'
+import SongDetailModal from '../components/SongDetailModal'
 
 export default function CreatorDetailPage() {
   const { id } = useParams()
@@ -42,6 +43,7 @@ export default function CreatorDetailPage() {
     credit_role: 'ARTIST'
   })
   const [selectedSongs, setSelectedSongs] = useState(new Set())
+  const [selectedSongForDetail, setSelectedSongForDetail] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showMergeModal, setShowMergeModal] = useState(false)
   const [mergePrimaryId, setMergePrimaryId] = useState(null)
@@ -1612,8 +1614,8 @@ export default function CreatorDetailPage() {
                 </thead>
                 <tbody>
                   {sortedSongs.map((song, index) => (
-                    <tr key={song.id} className={`hover:bg-[#F8F8FB] transition-colors border-b border-[rgba(0,0,0,0.05)] ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'} ${selectedSongs.has(song.id) ? 'bg-[#EDF5F0] hover:bg-[#E0EDE5]' : ''}`}>
-                      <td className="px-3 py-3 text-center w-10">
+                    <tr key={song.id} onClick={() => { if (editingSong !== song.id) setSelectedSongForDetail(song) }} className={`hover:bg-[#F8F8FB] transition-colors border-b border-[rgba(0,0,0,0.05)] cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-[#F8F8FB]'} ${selectedSongs.has(song.id) ? 'bg-[#EDF5F0] hover:bg-[#E0EDE5]' : ''}`}>
+                      <td className="px-3 py-3 text-center w-10" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selectedSongs.has(song.id)}
@@ -1786,7 +1788,7 @@ export default function CreatorDetailPage() {
                             <div className="font-medium text-[#3D4A44]">{song.title}</div>
                             <div className="text-xs text-[#7A8580]">{song.primary_artist}</div>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                             <select
                               value={song.credit_role || 'ARTIST'}
                               onChange={async (e) => {
@@ -1835,7 +1837,7 @@ export default function CreatorDetailPage() {
                           <td className="px-4 py-3 text-center">
                             <StatusBadge value={song.is_paid} />
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <input 
                               type="checkbox" 
                               checked={song.is_released || false}
@@ -1843,7 +1845,7 @@ export default function CreatorDetailPage() {
                               className="w-4 h-4 text-[#5B8A72] rounded accent-[#5B8A72] cursor-pointer"
                             />
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                             {song.is_released && song.spotify_link ? (
                               <a
                                 href={song.spotify_link}
@@ -1860,7 +1862,7 @@ export default function CreatorDetailPage() {
                               </span>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                             <button 
                               onClick={() => startEdit(song)}
                               className="p-2 text-[#7A8580] hover:text-[#5B8A72] rounded-lg transition-colors" style={{ background: 'rgba(0,0,0,0.03)' }}
@@ -3670,6 +3672,17 @@ export default function CreatorDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedSongForDetail && (
+        <SongDetailModal
+          song={selectedSongForDetail}
+          onClose={() => setSelectedSongForDetail(null)}
+          onSongUpdated={() => {
+            if (organizationId) loadSongs(organizationId)
+            if (activeTab === 'accounting') loadAccounting()
+          }}
+        />
       )}
     </div>
   )
