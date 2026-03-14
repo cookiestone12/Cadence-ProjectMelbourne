@@ -153,10 +153,10 @@ export default function PlacementsPage() {
   }, [])
 
   useEffect(() => {
-    if (orgId) {
+    if (orgId && activeTab === 'placements') {
       loadPlacements()
     }
-  }, [filterStatus, filterType, filterClient, filterCreator, orgId])
+  }, [filterStatus, filterType, filterClient, filterCreator, orgId, activeTab])
 
   const loadInitialData = async () => {
     try {
@@ -165,16 +165,20 @@ export default function PlacementsPage() {
       if (!id) { setLoading(false); return }
       setOrgId(id)
 
-      loadPlacements(id)
-        .catch(err => console.error('Failed to load placements:', err))
-        .finally(() => setLoading(false))
+      if (activeTab === 'placements') {
+        loadPlacements(id)
+          .catch(err => console.error('Failed to load placements:', err))
+          .finally(() => setLoading(false))
 
-      loadSummary(id)
-        .catch(err => console.error('Failed to load summary:', err))
+        loadSummary(id)
+          .catch(err => console.error('Failed to load summary:', err))
 
-      axios.get(`/api/placements/org/${id}/creators`)
-        .then(res => setCreators(res.data || []))
-        .catch(() => {})
+        axios.get(`/api/placements/org/${id}/creators`)
+          .then(res => setCreators(res.data || []))
+          .catch(() => {})
+      } else {
+        setLoading(false)
+      }
     } catch (err) {
       console.error('Failed to load data:', err)
       setLoading(false)
