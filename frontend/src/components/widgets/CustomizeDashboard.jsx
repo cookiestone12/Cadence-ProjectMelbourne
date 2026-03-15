@@ -15,7 +15,12 @@ import {
   useSortable
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { XMarkIcon, Bars3Icon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline'
+import {
+  XMarkIcon, Bars3Icon, EyeIcon, EyeSlashIcon,
+  ChartBarIcon, FilmIcon, ClipboardDocumentListIcon,
+  ExclamationTriangleIcon, MagnifyingGlassIcon,
+  BellIcon, StarIcon
+} from '@heroicons/react/24/outline'
 
 const WIDGET_LABELS = {
   stats: 'Stats Overview',
@@ -28,13 +33,13 @@ const WIDGET_LABELS = {
 }
 
 const WIDGET_ICONS = {
-  stats: '📊',
-  placements: '🎬',
-  taskBreakdown: '📋',
-  urgentActions: '⚠️',
-  needsAttention: '🔍',
-  notifications: '🔔',
-  topCreators: '⭐'
+  stats: ChartBarIcon,
+  placements: FilmIcon,
+  taskBreakdown: ClipboardDocumentListIcon,
+  urgentActions: ExclamationTriangleIcon,
+  needsAttention: MagnifyingGlassIcon,
+  notifications: BellIcon,
+  topCreators: StarIcon
 }
 
 function SortableItem({ id, visible, onToggle }) {
@@ -54,6 +59,8 @@ function SortableItem({ id, visible, onToggle }) {
     zIndex: isDragging ? 10 : 'auto'
   }
 
+  const IconComponent = WIDGET_ICONS[id]
+
   return (
     <div
       ref={setNodeRef}
@@ -69,7 +76,7 @@ function SortableItem({ id, visible, onToggle }) {
       >
         <Bars3Icon className="w-5 h-5" />
       </button>
-      <span className="text-lg">{WIDGET_ICONS[id]}</span>
+      {IconComponent && <IconComponent className={`w-5 h-5 flex-shrink-0 ${visible ? 'text-[#5B8A72]' : 'text-[#7A8580]'}`} />}
       <span className={`flex-1 text-sm font-medium ${visible ? 'text-[#3D4A44]' : 'text-[#7A8580]'}`}>
         {WIDGET_LABELS[id]}
       </span>

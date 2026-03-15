@@ -1,7 +1,20 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline'
+import {
+  ClipboardDocumentCheckIcon, MusicalNoteIcon, DocumentTextIcon,
+  ClipboardDocumentListIcon, FilmIcon, BanknotesIcon,
+  CircleStackIcon, BookmarkIcon
+} from '@heroicons/react/24/outline'
 import axios from 'axios'
+
+const TYPE_ICONS = {
+  song: MusicalNoteIcon,
+  work: DocumentTextIcon,
+  release: CircleStackIcon,
+  contract: ClipboardDocumentListIcon,
+  placement: FilmIcon,
+  royalty: BanknotesIcon,
+}
 
 export default function TaskBreakdownWidget({ orgId }) {
   const [actionSummary, setActionSummary] = useState(null)
@@ -41,10 +54,12 @@ export default function TaskBreakdownWidget({ orgId }) {
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {Object.entries(actionSummary.by_entity_type).map(([type, count]) => {
-          const icons = { song: '🎵', work: '📝', release: '💿', contract: '📋', placement: '🎬', royalty: '💰' }
+          const IconComp = TYPE_ICONS[type] || BookmarkIcon
           return (
             <div key={type} className="bg-[#FAFBF9] rounded-xl p-3 text-center">
-              <p className="text-[20px] mb-1">{icons[type] || '📌'}</p>
+              <div className="flex justify-center mb-1">
+                <IconComp className="w-5 h-5 text-[#5B8A72]" />
+              </div>
               <p className="text-[20px] font-semibold text-[#3D4A44]">{count}</p>
               <p className="text-[11px] text-[#7A8580] capitalize">{type}</p>
             </div>

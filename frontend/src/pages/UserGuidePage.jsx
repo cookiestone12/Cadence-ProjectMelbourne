@@ -1,5 +1,12 @@
 import React, { useRef, useState } from 'react'
-import { ArrowDownTrayIcon, ChevronRightIcon, LockClosedIcon } from '@heroicons/react/24/outline'
+import {
+  ArrowDownTrayIcon, ChevronRightIcon, LockClosedIcon,
+  HomeIcon, MagnifyingGlassIcon, UsersIcon, UserGroupIcon,
+  MusicalNoteIcon, DocumentTextIcon, CircleStackIcon,
+  ClipboardDocumentListIcon, CheckCircleIcon, BanknotesIcon,
+  FilmIcon, SparklesIcon, CloudIcon, DocumentChartBarIcon,
+  ChartBarIcon, CurrencyDollarIcon
+} from '@heroicons/react/24/outline'
 
 const VERSION = '2.6'
 const LAST_UPDATED = 'February 2026'
@@ -245,25 +252,25 @@ export default function UserGuidePage() {
         <div className="bg-white rounded-xl border border-[rgba(59,77,67,0.1)] p-4 my-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {[
-              { icon: '🏠', label: 'Home', desc: 'Dashboard overview' },
-              { icon: '🔍', label: 'Search', desc: 'Global search' },
-              { icon: '👥', label: 'Roster', desc: 'Creator management' },
-              { icon: '📇', label: 'Directory', desc: 'Industry contacts' },
-              { icon: '🎵', label: 'Catalog', desc: 'Song management' },
-              { icon: '📝', label: 'Works', desc: 'Compositions' },
-              { icon: '💿', label: 'Releases', desc: 'Albums & EPs' },
-              { icon: '📋', label: 'Contracts', desc: 'Deal management' },
-              { icon: '✅', label: 'Actions', desc: 'Task inbox' },
-              { icon: '💰', label: 'Royalties', desc: 'Financial engine' },
-              { icon: '🎬', label: 'Sync HQ', desc: 'Placements & reports' },
-              { icon: '✨', label: 'Brief Builder', desc: 'AI song matching' },
-              { icon: '☁️', label: 'Storage Scan', desc: 'File scanning' },
-              { icon: '📋', label: 'Reg. Reports', desc: 'PRO registration' },
-              { icon: '📊', label: 'Reports', desc: 'Analytics' },
-              { icon: '💎', label: 'Valuation', desc: 'Catalog value' },
+              { Icon: HomeIcon, label: 'Home', desc: 'Dashboard overview' },
+              { Icon: MagnifyingGlassIcon, label: 'Search', desc: 'Global search' },
+              { Icon: UsersIcon, label: 'Roster', desc: 'Creator management' },
+              { Icon: UserGroupIcon, label: 'Directory', desc: 'Industry contacts' },
+              { Icon: MusicalNoteIcon, label: 'Catalog', desc: 'Song management' },
+              { Icon: DocumentTextIcon, label: 'Works', desc: 'Compositions' },
+              { Icon: CircleStackIcon, label: 'Releases', desc: 'Albums & EPs' },
+              { Icon: ClipboardDocumentListIcon, label: 'Contracts', desc: 'Deal management' },
+              { Icon: CheckCircleIcon, label: 'Actions', desc: 'Task inbox' },
+              { Icon: BanknotesIcon, label: 'Royalties', desc: 'Financial engine' },
+              { Icon: FilmIcon, label: 'Sync HQ', desc: 'Placements & reports' },
+              { Icon: SparklesIcon, label: 'Brief Builder', desc: 'AI song matching' },
+              { Icon: CloudIcon, label: 'Storage Scan', desc: 'File scanning' },
+              { Icon: DocumentChartBarIcon, label: 'Reg. Reports', desc: 'PRO registration' },
+              { Icon: ChartBarIcon, label: 'Reports', desc: 'Analytics' },
+              { Icon: CurrencyDollarIcon, label: 'Valuation', desc: 'Catalog value' },
             ].map(item => (
               <div key={item.label} className="flex items-center gap-2 p-2 rounded-lg bg-[#FAFBF9]">
-                <span className="text-lg">{item.icon}</span>
+                <item.Icon className="w-5 h-5 text-[#5B8A72] flex-shrink-0" />
                 <div>
                   <div className="text-xs font-semibold text-[#3D4A44]">{item.label}</div>
                   <div className="text-[10px] text-[#7A8580]">{item.desc}</div>
