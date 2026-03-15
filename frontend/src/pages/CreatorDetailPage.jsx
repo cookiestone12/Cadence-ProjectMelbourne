@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon, CloudArrowUpIcon, PaperClipIcon, LinkIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon, CloudArrowUpIcon, PaperClipIcon, LinkIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline'
 import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/24/solid'
 import ActionsTab from '../components/ActionsTab'
 import CreatorAccountingEnhanced from '../components/CreatorAccountingEnhanced'
@@ -1044,6 +1044,18 @@ export default function CreatorDetailPage() {
     }
   }
 
+  const handleDuplicateSong = async (songId, e) => {
+    if (e) e.stopPropagation()
+    try {
+      const res = await axios.post(`/api/songs/${songId}/duplicate`)
+      if (organizationId) await loadSongs(organizationId)
+      setSelectedSongForDetail(res.data)
+    } catch (error) {
+      console.error('Failed to duplicate song:', error)
+      alert(error.response?.data?.detail || 'Failed to duplicate song')
+    }
+  }
+
   const handleBulkDelete = async () => {
     if (selectedSongs.size === 0) return
     setDeleting(true)
@@ -1863,12 +1875,21 @@ export default function CreatorDetailPage() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                            <button 
-                              onClick={() => startEdit(song)}
-                              className="p-2 text-[#7A8580] hover:text-[#5B8A72] rounded-lg transition-colors" style={{ background: 'rgba(0,0,0,0.03)' }}
-                            >
-                              <PencilIcon className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center justify-center gap-1">
+                              <button 
+                                onClick={(e) => handleDuplicateSong(song.id, e)}
+                                className="p-2 text-[#7A8580] hover:text-[#5A8A9A] rounded-lg transition-colors"
+                                title="Duplicate song"
+                              >
+                                <DocumentDuplicateIcon className="w-4 h-4" />
+                              </button>
+                              <button 
+                                onClick={() => startEdit(song)}
+                                className="p-2 text-[#7A8580] hover:text-[#5B8A72] rounded-lg transition-colors" style={{ background: 'rgba(0,0,0,0.03)' }}
+                              >
+                                <PencilIcon className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </>
                       )}
@@ -3678,7 +3699,10 @@ export default function CreatorDetailPage() {
         <SongDetailModal
           song={selectedSongForDetail}
           onClose={() => setSelectedSongForDetail(null)}
-          onSongUpdated={() => {
+          onSongUpdated={(data, action) => {
+            if (action === 'duplicate' && data) {
+              setTimeout(() => setSelectedSongForDetail(data), 100)
+            }
             if (organizationId) loadSongs(organizationId)
             if (activeTab === 'accounting') loadAccounting()
           }}

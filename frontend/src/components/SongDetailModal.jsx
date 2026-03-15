@@ -6,11 +6,14 @@ import {
   MusicalNoteIcon, ChartBarIcon, DocumentTextIcon, LinkIcon,
   DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon, UserIcon,
   ScaleIcon, PencilSquareIcon, PlusIcon, SpeakerWaveIcon,
-  FolderIcon, FolderOpenIcon, ArrowLeftIcon
+  FolderIcon, FolderOpenIcon, ArrowLeftIcon, DocumentDuplicateIcon
 } from '@heroicons/react/24/outline'
+
+import ShareModal from './ShareModal'
 
 export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [activeTab, setActiveTab] = useState('overview')
+  const [shareTarget, setShareTarget] = useState(null)
   const [songDetails, setSongDetails] = useState(null)
   const [loading, setLoading] = useState(true)
   const [contracts, setContracts] = useState([])
@@ -264,6 +267,25 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   function downloadContract(contractId) {
     const token = localStorage.getItem('token')
     window.open(`/api/contracts/download/${contractId}?token=${token}`, '_blank')
+  }
+
+  const [duplicating, setDuplicating] = useState(false)
+
+  async function handleDuplicate() {
+    setDuplicating(true)
+    try {
+      const token = localStorage.getItem('token')
+      const res = await axios.post(`/api/songs/${song.id}/duplicate`, {}, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (onSongUpdated) onSongUpdated(res.data, 'duplicate')
+      onClose()
+    } catch (error) {
+      console.error('Failed to duplicate song:', error)
+      alert(error.response?.data?.detail || 'Failed to duplicate song')
+    } finally {
+      setDuplicating(false)
+    }
   }
 
   function startEditing() {
@@ -734,13 +756,24 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
             </div>
             <div className="flex items-center gap-2">
               {!isEditing && (
-                <button
-                  onClick={startEditing}
-                  className="flex items-center gap-1.5 px-4 py-2 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
-                >
-                  <PencilSquareIcon className="w-5 h-5" />
-                  <span>Edit</span>
-                </button>
+                <>
+                  <button
+                    onClick={handleDuplicate}
+                    disabled={duplicating}
+                    className="flex items-center gap-1.5 px-4 py-2 text-[#5A8A9A] hover:bg-[rgba(90,138,154,0.08)] rounded-[12px] font-medium text-[14px] transition-colors disabled:opacity-50"
+                    title="Duplicate this song"
+                  >
+                    <DocumentDuplicateIcon className="w-5 h-5" />
+                    <span>{duplicating ? 'Duplicating...' : 'Duplicate'}</span>
+                  </button>
+                  <button
+                    onClick={startEditing}
+                    className="flex items-center gap-1.5 px-4 py-2 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
+                  >
+                    <PencilSquareIcon className="w-5 h-5" />
+                    <span>Edit</span>
+                  </button>
+                </>
               )}
               <button
                 onClick={onClose}
@@ -1725,6 +1758,13 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                             </div>
                             <div className="flex items-center space-x-2">
                               <button
+                                onClick={() => setShareTarget({ type: 'DOCUMENT', id: contract.id, name: contract.file_name })}
+                                className="p-2 text-[#7A8580] hover:text-[#5A8A9A] hover:bg-[rgba(90,138,154,0.1)] rounded-[8px] transition-colors"
+                                title="Share"
+                              >
+                                <LinkIcon className="w-5 h-5" />
+                              </button>
+                              <button
                                 onClick={() => downloadContract(contract.id)}
                                 className="p-2 text-[#7A8580] hover:text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-[8px] transition-colors"
                                 title="Download"
@@ -1974,6 +2014,13 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                             )}
                           </div>
                           <button
+                            onClick={() => setShareTarget({ type: 'AUDIO', id: asset.id, name: asset.name || asset.filename })}
+                            className="p-1.5 text-[#7A8580] hover:text-[#5A8A9A] rounded transition-colors"
+                            title="Share audio file"
+                          >
+                            <LinkIcon className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => unlinkFile(asset.id)}
                             className="p-1.5 text-[#7A8580] hover:text-[#C47068] rounded transition-colors"
                             title="Unlink file"
@@ -2177,6 +2224,14 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
           )}
         </div>
       </div>
+      {shareTarget && (
+        <ShareModal
+          itemType={shareTarget.type}
+          itemId={shareTarget.id}
+          itemName={shareTarget.name}
+          onClose={() => setShareTarget(null)}
+        />
+      )}
     </div>
   )
 }

@@ -30,6 +30,7 @@ from .models import (
     SharedContactLink,
     ClientSharedContact,
     AccountMergeRequest,
+    SharedItem, SharedItemType, SharedItemStatus,
 )
 
 __all__ = [
@@ -63,4 +64,5 @@ __all__ = [
     "RegistrationReport",
     "ClientSharedContact",
     "AccountMergeRequest",
+    "SharedItem", "SharedItemType", "SharedItemStatus",
 ]

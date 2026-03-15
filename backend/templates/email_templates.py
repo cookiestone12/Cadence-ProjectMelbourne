@@ -360,3 +360,45 @@ def merge_verification(
     content += muted_text("If you did not request this, you can safely ignore this email. No changes will be made to your account.")
 
     return wrap_email(content, subject="Account Merge Verification Code — Cadence", preheader=f"Your verification code is {code}")
+
+
+def document_shared_email(
+    sender_name: str,
+    item_name: str,
+    item_type: str = "DOCUMENT",
+    message: str = "",
+    platform_url: str = "",
+) -> str:
+    type_labels = {
+        "DOCUMENT": "Document",
+        "AUDIO": "Audio File",
+        "STATEMENT": "Royalty Statement",
+        "CONTACT_CARD": "Contact Card",
+    }
+    type_label = type_labels.get(item_type, "Item")
+
+    content = heading(f"{type_label} Shared With You")
+    content += paragraph(f"<strong>{sender_name}</strong> shared a {type_label.lower()} with you from Cadence.")
+
+    if message:
+        content += f'''<div style="background:{SAGE_GREEN_BG};border-left:4px solid {SAGE_GREEN};padding:12px 16px;margin:16px 0;border-radius:4px;">
+            <p style="margin:0;font-size:14px;color:{TEXT_DARK};font-family:Arial,sans-serif;font-style:italic;">"{message}"</p>
+        </div>'''
+
+    content += divider()
+
+    rows = [
+        ("Item", f"<strong>{item_name}</strong>"),
+        ("Type", type_label),
+        ("Shared By", sender_name),
+    ]
+    content += key_value_table(rows)
+
+    if platform_url:
+        content += button("View in Cadence &rarr;", platform_url)
+    else:
+        content += paragraph("Log in to Cadence to view this shared item.")
+
+    content += muted_text("If you don&#39;t recognize the sender, you can safely ignore this email.")
+
+    return wrap_email(content, subject=f"{type_label} Shared: {item_name}", preheader=f"{sender_name} shared {item_name} with you", platform_url=platform_url)

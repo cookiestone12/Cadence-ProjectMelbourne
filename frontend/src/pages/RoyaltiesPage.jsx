@@ -20,13 +20,15 @@ import {
   ArrowLeftIcon,
   UserGroupIcon,
   MusicalNoteIcon,
-  DocumentDuplicateIcon
+  DocumentDuplicateIcon,
+  ShareIcon
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell
 } from 'recharts'
+import ShareModal from '../components/ShareModal'
 import ProcessingInboxPanel from '../components/ProcessingInboxPanel'
 import StatementDetailView from '../components/StatementDetailView'
 import PayablesTab from '../components/PayablesTab'
@@ -277,6 +279,7 @@ function StatementsTab({ orgId, songs }) {
   const [statements, setStatements] = useState([])
   const [loading, setLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
+  const [shareStatement, setShareStatement] = useState(null)
   const [selectedStatement, setSelectedStatement] = useState(null)
   const [transactions, setTransactions] = useState([])
   const [txLoading, setTxLoading] = useState(false)
@@ -661,6 +664,9 @@ function StatementsTab({ orgId, songs }) {
                       <button onClick={() => handleCalculate(stmt.id)} disabled={calculating[stmt.id]} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors disabled:opacity-40" title="Calculate">
                         <CalculatorIcon className="w-4 h-4" />
                       </button>
+                      <button onClick={() => setShareStatement(stmt)} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors" title="Share">
+                        <ShareIcon className="w-4 h-4" />
+                      </button>
                       <button onClick={() => handleDelete(stmt.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
                         <TrashIcon className="w-4 h-4" />
                       </button>
@@ -1019,6 +1025,15 @@ function StatementsTab({ orgId, songs }) {
             </div>
           </div>
         </div>
+      )}
+
+      {shareStatement && (
+        <ShareModal
+          itemType="STATEMENT"
+          itemId={shareStatement.id}
+          itemName={`${shareStatement.source_name || 'Statement'} (${formatDate(shareStatement.period_start)} — ${formatDate(shareStatement.period_end)})`}
+          onClose={() => setShareStatement(null)}
+        />
       )}
     </div>
   )

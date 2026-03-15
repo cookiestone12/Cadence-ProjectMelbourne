@@ -2294,3 +2294,34 @@ class UnderwritingRun(Base):
 
     organization = relationship("Organization")
     created_by = relationship("User")
+
+
+class SharedItemType(str, enum.Enum):
+    DOCUMENT = "DOCUMENT"
+    CONTACT_CARD = "CONTACT_CARD"
+    AUDIO = "AUDIO"
+    STATEMENT = "STATEMENT"
+
+class SharedItemStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    REVOKED = "REVOKED"
+
+class SharedItem(Base):
+    __tablename__ = "shared_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    item_type = Column(String, nullable=False)
+    item_id = Column(Integer, nullable=False)
+    item_name = Column(String, nullable=True)
+    shared_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    shared_with_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    shared_with_email = Column(String, nullable=True)
+    shared_with_org_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    message = Column(Text, nullable=True)
+    status = Column(String, default="ACTIVE")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    organization = relationship("Organization", foreign_keys=[organization_id])
+    shared_by_user = relationship("User", foreign_keys=[shared_by_user_id])
+    shared_with_user = relationship("User", foreign_keys=[shared_with_user_id])

@@ -901,3 +901,108 @@ def merge_songs(
         "credits": credit_list,
         "merged_count": len(merge_ids),
     }
+
+@router.post("/{song_id}/duplicate")
+def duplicate_song(
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    source = db.query(Song).filter(Song.id == song_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == source.organization_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    new_song = Song(
+        organization_id=source.organization_id,
+        title=f"{source.title} (Copy)",
+        asset_type=source.asset_type,
+        primary_artist=source.primary_artist,
+        project_title=source.project_title,
+        release_date=source.release_date,
+        is_released=source.is_released,
+        label=source.label,
+        publishing_percentage=source.publishing_percentage,
+        master_percentage=source.master_percentage,
+        advance_amount=source.advance_amount,
+        recording_code=source.recording_code,
+        master_paid=source.master_paid,
+        soundexchange_registered=source.soundexchange_registered,
+        mlc_registered=source.mlc_registered,
+        payment_status=source.payment_status,
+        contract_location=source.contract_location,
+        notes=source.notes,
+        media_url=source.media_url,
+        audio_file_url=source.audio_file_url,
+        has_contract_sent=source.has_contract_sent,
+        has_contract_executed=source.has_contract_executed,
+        is_registered_with_pro=source.is_registered_with_pro,
+        is_registered_with_dsp=source.is_registered_with_dsp,
+        is_invoiced=source.is_invoiced,
+        is_paid=source.is_paid,
+    )
+    db.add(new_song)
+    db.flush()
+
+    source_credits = db.query(SongCredit).filter(SongCredit.song_id == song_id).all()
+    for credit in source_credits:
+        new_credit = SongCredit(
+            song_id=new_song.id,
+            creator_id=credit.creator_id,
+            role=credit.role,
+            share_percentage=credit.share_percentage,
+            pub_share=credit.pub_share,
+            master_share=credit.master_share,
+            creative_contact_id=credit.creative_contact_id,
+        )
+        db.add(new_credit)
+
+    checklist_items = db.query(ChecklistItem).all()
+    for item in checklist_items:
+        status = SongChecklistStatus(
+            song_id=new_song.id,
+            checklist_item_id=item.id,
+            status="NOT_STARTED"
+        )
+        db.add(status)
+
+    from ..services.audit_service import log_action
+    log_action(db, source.organization_id, current_user.id, "DUPLICATE", "SONG", new_song.id, new_song.title)
+    db.commit()
+    db.refresh(new_song)
+
+    return {
+        "id": new_song.id,
+        "title": new_song.title,
+        "primary_artist": new_song.primary_artist,
+        "isrc": new_song.isrc,
+        "iswc": new_song.iswc,
+        "project_title": new_song.project_title,
+        "release_date": new_song.release_date.isoformat() if new_song.release_date else None,
+        "status_health_score": new_song.status_health_score,
+        "has_contract_sent": new_song.has_contract_sent,
+        "has_contract_executed": new_song.has_contract_executed,
+        "is_registered_with_pro": new_song.is_registered_with_pro,
+        "is_registered_with_dsp": new_song.is_registered_with_dsp,
+        "is_invoiced": new_song.is_invoiced,
+        "is_paid": new_song.is_paid,
+        "is_released": new_song.is_released,
+        "label": new_song.label,
+        "publishing_percentage": new_song.publishing_percentage,
+        "master_percentage": new_song.master_percentage,
+        "advance_amount": new_song.advance_amount,
+        "recording_code": new_song.recording_code,
+        "master_paid": new_song.master_paid,
+        "soundexchange_registered": new_song.soundexchange_registered,
+        "mlc_registered": new_song.mlc_registered,
+        "payment_status": new_song.payment_status,
+        "contract_location": new_song.contract_location,
+        "notes": new_song.notes,
+        "media_url": new_song.media_url,
+    }

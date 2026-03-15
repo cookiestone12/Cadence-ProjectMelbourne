@@ -4,8 +4,9 @@ import {
   ArrowUpTrayIcon, DocumentTextIcon, CurrencyDollarIcon,
   ArrowPathIcon, BanknotesIcon, ChartBarIcon, TrashIcon,
   EyeIcon, XMarkIcon, UserGroupIcon, DocumentDuplicateIcon,
-  MusicalNoteIcon, CalculatorIcon, CheckCircleIcon
+  MusicalNoteIcon, CalculatorIcon, CheckCircleIcon, ShareIcon
 } from '@heroicons/react/24/outline'
+import ShareModal from './ShareModal'
 import StatementDetailView from './StatementDetailView'
 import ProcessingInboxPanel from './ProcessingInboxPanel'
 import RoyaltyAnalyticsDashboard from './RoyaltyAnalyticsDashboard'
@@ -462,6 +463,7 @@ function StatementsSubTab({ orgId, creatorId }) {
   const [statements, setStatements] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedStatementId, setSelectedStatementId] = useState(null)
+  const [shareStatementTarget, setShareStatementTarget] = useState(null)
   const [showUpload, setShowUpload] = useState(false)
   const [uploadFile, setUploadFile] = useState(null)
   const [uploadSource, setUploadSource] = useState('')
@@ -971,6 +973,9 @@ function StatementsSubTab({ orgId, creatorId }) {
                           <button onClick={() => handleCalculate(stmt.id)} disabled={calculating[stmt.id]} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors disabled:opacity-40" title="Calculate">
                             <CalculatorIcon className="w-4 h-4" />
                           </button>
+                          <button onClick={() => setShareStatementTarget(stmt)} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors" title="Share">
+                            <ShareIcon className="w-4 h-4" />
+                          </button>
                           <button onClick={() => handleDelete(stmt.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
                             <TrashIcon className="w-4 h-4" />
                           </button>
@@ -984,6 +989,15 @@ function StatementsSubTab({ orgId, creatorId }) {
           </div>
         )}
       </div>
+
+      {shareStatementTarget && (
+        <ShareModal
+          itemType="STATEMENT"
+          itemId={shareStatementTarget.id}
+          itemName={`${shareStatementTarget.source_name || 'Statement'} (${shareStatementTarget.period_start || ''} — ${shareStatementTarget.period_end || ''})`}
+          onClose={() => setShareStatementTarget(null)}
+        />
+      )}
     </div>
   )
 }

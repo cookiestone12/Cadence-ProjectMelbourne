@@ -7,6 +7,7 @@ import {
   CheckIcon, ClipboardDocumentIcon, UsersIcon
 } from '@heroicons/react/24/outline'
 import EmailSendModal from '../components/EmailSendModal'
+import ShareModal from '../components/ShareModal'
 import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
 
 const PRO_OPTIONS = ['BMI', 'ASCAP', 'SESAC', 'SOCAN', 'PRS', 'GEMA', 'SACEM', 'SIAE', 'JASRAC', 'Other']
@@ -286,6 +287,7 @@ export default function CreativeDirectoryPage() {
   const [shareToClientLoading, setShareToClientLoading] = useState(false)
   const [clientUsers, setClientUsers] = useState([])
   const [clientShares, setClientShares] = useState([])
+  const [shareToAccountOpen, setShareToAccountOpen] = useState(false)
   const [viewMode, setViewMode] = useState(() => getStoredViewMode('creative-directory'))
 
   const handleViewModeChange = (mode) => {
@@ -586,6 +588,13 @@ export default function CreativeDirectoryPage() {
           >
             <UsersIcon className="w-3.5 h-3.5" />
             Share to Client
+          </button>
+          <button
+            onClick={() => setShareToAccountOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white border border-[#5A8A9A] text-[#5A8A9A] rounded-lg hover:bg-[#5A8A9A]/10 transition-colors"
+          >
+            <LinkIcon className="w-3.5 h-3.5" />
+            Share to Account
           </button>
           <button
             onClick={handleGenerateShareLink}
@@ -900,6 +909,16 @@ export default function CreativeDirectoryPage() {
         onShare={handleShareToClient}
         loading={shareToClientLoading}
       />
+
+      {shareToAccountOpen && (
+        <ShareModal
+          itemType="CONTACT_CARD"
+          itemIds={Array.from(selectedIds)}
+          itemName={`${selectedIds.size} Contact${selectedIds.size > 1 ? 's' : ''}`}
+          onClose={() => setShareToAccountOpen(false)}
+          orgId={organizationId}
+        />
+      )}
     </div>
   )
 }

@@ -60,6 +60,7 @@ import CreditsPage from './pages/CreditsPage'
 import ClientPortalPage from './pages/ClientPortalPage'
 import SharedContactsPage from './pages/SharedContactsPage'
 import SharedCreditsPage from './pages/SharedCreditsPage'
+import SharedWithMePage from './pages/SharedWithMePage'
 import Sidebar from './components/Sidebar'
 import PullToRefresh from './components/PullToRefresh'
 
@@ -196,6 +197,7 @@ function App() {
                 <Route path="/brief-builder" element={<BriefBuilderPage />} />
                 <Route path="/credits" element={<CreditsPage />} />
                 <Route path="/storage-scan" element={<StorageScanPage />} />
+                <Route path="/shared-with-me" element={<SharedWithMePage />} />
                 <Route path="/client-portal" element={<ClientPortalPage />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/guide" element={<UserGuidePage />} />

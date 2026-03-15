@@ -3,7 +3,8 @@ import axios from 'axios'
 import { 
   FunnelIcon, MagnifyingGlassIcon, PlusIcon, ArrowUpTrayIcon,
   CheckCircleIcon, XCircleIcon, MinusCircleIcon, LinkIcon, TrashIcon,
-  SpeakerWaveIcon, ChevronDownIcon, ChevronUpIcon, ArrowPathIcon
+  SpeakerWaveIcon, ChevronDownIcon, ChevronUpIcon, ArrowPathIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline'
 import SongDetailModal from '../components/SongDetailModal'
 import AddSongModal from '../components/AddSongModal'
@@ -348,6 +349,19 @@ export default function NewCatalogPage() {
       console.error('Bulk edit failed:', error)
     } finally {
       setBulkEditLoading(false)
+    }
+  }
+
+  const handleDuplicateSong = async (songId, e) => {
+    if (e) e.stopPropagation()
+    try {
+      const res = await axios.post(`/api/songs/${songId}/duplicate`)
+      const newSong = res.data
+      setSongs(prev => [newSong, ...prev])
+      setSelectedSong(newSong)
+    } catch (error) {
+      console.error('Failed to duplicate song:', error)
+      alert(error.response?.data?.detail || 'Failed to duplicate song')
     }
   }
 
@@ -1106,13 +1120,22 @@ export default function NewCatalogPage() {
                     )
                   })()}
                   <td className="px-3 py-3 text-center">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteSong(song.id, song.title) }}
-                      className="p-1.5 rounded-lg text-[#9CA8A3] hover:text-[#C47068] hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
-                      title="Delete song"
-                    >
-                      <TrashIcon className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={(e) => handleDuplicateSong(song.id, e)}
+                        className="p-1.5 rounded-lg text-[#9CA8A3] hover:text-[#5B8A72] hover:bg-[rgba(91,138,114,0.08)] transition-colors opacity-0 group-hover:opacity-100"
+                        title="Duplicate song"
+                      >
+                        <DocumentDuplicateIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteSong(song.id, song.title) }}
+                        className="p-1.5 rounded-lg text-[#9CA8A3] hover:text-[#C47068] hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                        title="Delete song"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1176,7 +1199,13 @@ export default function NewCatalogPage() {
       )}
       
       {selectedSong && (
-        <SongDetailModal song={selectedSong} onClose={() => setSelectedSong(null)} onSongUpdated={loadData} />
+        <SongDetailModal song={selectedSong} onClose={() => setSelectedSong(null)} onSongUpdated={(data, action) => {
+          if (action === 'duplicate' && data) {
+            setSongs(prev => [data, ...prev])
+            setTimeout(() => setSelectedSong(data), 100)
+          }
+          loadData()
+        }} />
       )}
       
       {showAddModal && organizationId && (
