@@ -244,7 +244,7 @@ async def assistant_chat(
     ).first()
     org_id = membership.organization_id if membership else None
 
-    user_role = current_user.role or "MEMBER"
+    user_role = membership.role if membership else "MEMBER"
     role_context = ""
     if user_role == "CLIENT":
         role_context = "\n\nThis user is a CLIENT. They can only access: Client Portal, Support, and Settings. Do not reference other pages they cannot access."
