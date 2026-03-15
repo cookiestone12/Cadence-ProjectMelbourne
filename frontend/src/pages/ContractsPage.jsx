@@ -8,6 +8,7 @@ import {
   SparklesIcon
 } from '@heroicons/react/24/outline'
 import ContractAdvancesSection from '../components/ContractAdvancesSection'
+import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
 
 function SearchableSelect({ options, value, onChange, placeholder, className }) {
   const [search, setSearch] = useState('')
@@ -152,6 +153,7 @@ const emptyPartyForm = { party_name: '', party_role: 'ARTIST', creator_id: '', c
 function ContractsPageInner() {
   const [contracts, setContracts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [viewMode, setViewMode] = useState(() => getStoredViewMode('contracts'))
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
@@ -882,8 +884,8 @@ function ContractsPageInner() {
       </div>
 
       <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
-        <div className="flex items-center space-x-4">
-          <div className="flex-1 relative">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-[200px] relative">
             <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7A8580]" />
             <input
               type="text"
@@ -915,71 +917,142 @@ function ContractsPageInner() {
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
+          <ViewToggle viewMode={viewMode} onViewModeChange={(m) => { setViewMode(m); setStoredViewMode('contracts', m) }} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredContracts.map(contract => (
-          <div
-            key={contract.id}
-            onClick={() => openContractDetail(contract)}
-            className="bg-[#FAFBF9] rounded-xl shadow-sm p-5 hover:shadow-md cursor-pointer transition-all hover:bg-[rgba(91,138,114,0.04)]"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="font-semibold text-[#3D4A44] text-sm leading-tight flex-1 mr-2">{contract.title}</h3>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getStatusBadgeClass(contract.status)}`}>
-                {contract.status}
-              </span>
-            </div>
-            {contract.creator_name && (
-              <p className="text-xs text-[#5B8A72] font-medium mb-2 flex items-center space-x-1">
-                <UserGroupIcon className="w-3.5 h-3.5" />
-                <span>{contract.creator_name}</span>
-              </p>
-            )}
-            <div className="flex items-center space-x-2 mb-3 flex-wrap gap-y-1">
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTypeBadgeClass(contract.contract_type)}`}>
-                {TYPE_LABELS[contract.contract_type] || contract.contract_type}
-              </span>
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${contract.payment_direction === 'OUTGOING' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
-                {contract.payment_direction === 'OUTGOING' ? '↑ Outgoing' : '↓ Incoming'}
-              </span>
-              {contract.territory && (Array.isArray(contract.territory) ? contract.territory.length > 0 : contract.territory) && (
-                <span className="px-2 py-0.5 rounded-full text-xs bg-[#EEF1EC] text-[#7A8580]">
-                  {Array.isArray(contract.territory) ? contract.territory.join(', ') : contract.territory}
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredContracts.map(contract => (
+            <div
+              key={contract.id}
+              onClick={() => openContractDetail(contract)}
+              className="bg-[#FAFBF9] rounded-xl shadow-sm p-5 hover:shadow-md cursor-pointer transition-all hover:bg-[rgba(91,138,114,0.04)]"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <h3 className="font-semibold text-[#3D4A44] text-sm leading-tight flex-1 mr-2">{contract.title}</h3>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getStatusBadgeClass(contract.status)}`}>
+                  {contract.status}
                 </span>
-              )}
-            </div>
-            <div className="flex items-center text-xs text-[#7A8580] space-x-3 mb-2">
-              <span className="flex items-center space-x-1">
-                <CalendarIcon className="w-3.5 h-3.5" />
-                <span>{formatDate(contract.start_date)} — {formatDate(contract.end_date)}</span>
-              </span>
-            </div>
-            {contract.advance_amount > 0 && (
-              <div className="flex items-center text-xs text-[#5B8A72] font-medium mb-2">
-                <CurrencyDollarIcon className="w-3.5 h-3.5 mr-1" />
-                {formatCurrency(contract.advance_amount, contract.advance_currency)}
               </div>
-            )}
-            <div className="flex items-center space-x-4 text-xs text-[#7A8580] pt-2 border-t border-[rgba(59,77,67,0.08)]">
-              <span className="flex items-center space-x-1">
-                <UserGroupIcon className="w-3.5 h-3.5" />
-                <span>{contract.party_count || (contract.parties ? contract.parties.length : 0)} parties</span>
-              </span>
-              <span className="flex items-center space-x-1">
-                <LinkIcon className="w-3.5 h-3.5" />
-                <span>{contract.asset_count || 0} assets</span>
-              </span>
+              {contract.creator_name && (
+                <p className="text-xs text-[#5B8A72] font-medium mb-2 flex items-center space-x-1">
+                  <UserGroupIcon className="w-3.5 h-3.5" />
+                  <span>{contract.creator_name}</span>
+                </p>
+              )}
+              <div className="flex items-center space-x-2 mb-3 flex-wrap gap-y-1">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getTypeBadgeClass(contract.contract_type)}`}>
+                  {TYPE_LABELS[contract.contract_type] || contract.contract_type}
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${contract.payment_direction === 'OUTGOING' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                  {contract.payment_direction === 'OUTGOING' ? '↑ Outgoing' : '↓ Incoming'}
+                </span>
+                {contract.territory && (Array.isArray(contract.territory) ? contract.territory.length > 0 : contract.territory) && (
+                  <span className="px-2 py-0.5 rounded-full text-xs bg-[#EEF1EC] text-[#7A8580]">
+                    {Array.isArray(contract.territory) ? contract.territory.join(', ') : contract.territory}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center text-xs text-[#7A8580] space-x-3 mb-2">
+                <span className="flex items-center space-x-1">
+                  <CalendarIcon className="w-3.5 h-3.5" />
+                  <span>{formatDate(contract.start_date)} — {formatDate(contract.end_date)}</span>
+                </span>
+              </div>
+              {contract.advance_amount > 0 && (
+                <div className="flex items-center text-xs text-[#5B8A72] font-medium mb-2">
+                  <CurrencyDollarIcon className="w-3.5 h-3.5 mr-1" />
+                  {formatCurrency(contract.advance_amount, contract.advance_currency)}
+                </div>
+              )}
+              <div className="flex items-center space-x-4 text-xs text-[#7A8580] pt-2 border-t border-[rgba(59,77,67,0.08)]">
+                <span className="flex items-center space-x-1">
+                  <UserGroupIcon className="w-3.5 h-3.5" />
+                  <span>{contract.party_count || (contract.parties ? contract.parties.length : 0)} parties</span>
+                </span>
+                <span className="flex items-center space-x-1">
+                  <LinkIcon className="w-3.5 h-3.5" />
+                  <span>{contract.asset_count || 0} assets</span>
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
-        {filteredContracts.length === 0 && (
-          <div className="col-span-full py-12 text-center text-[#7A8580]">
-            No contracts found
-          </div>
-        )}
-      </div>
+          ))}
+          {filteredContracts.length === 0 && (
+            <div className="col-span-full py-12 text-center text-[#7A8580]">
+              No contracts found
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] overflow-x-auto">
+          <table className="w-full table-fixed">
+            <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
+              <tr>
+                <th className="px-3 sm:px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] w-[30%]">Title</th>
+                <th className="px-3 sm:px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] w-[15%]">Type</th>
+                <th className="px-3 sm:px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] w-[12%]">Status</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] hidden md:table-cell">Creator</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] hidden lg:table-cell">Dates</th>
+                <th className="px-4 py-3 text-right text-sm font-semibold text-[#3D4A44] hidden sm:table-cell">Advance</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+              {filteredContracts.map(contract => (
+                <tr
+                  key={contract.id}
+                  onClick={() => openContractDetail(contract)}
+                  className="hover:bg-[#FAFBF9] cursor-pointer transition-colors"
+                >
+                  <td className="px-3 sm:px-4 py-3">
+                    <div className="min-w-0 overflow-hidden">
+                      <p className="font-semibold text-[#3D4A44] text-sm truncate">{contract.title}</p>
+                      {contract.creator_name && (
+                        <p className="text-xs text-[#5B8A72] truncate md:hidden">{contract.creator_name}</p>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-3 sm:px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium w-fit ${getTypeBadgeClass(contract.contract_type)}`}>
+                        {TYPE_LABELS[contract.contract_type] || contract.contract_type}
+                      </span>
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium w-fit ${contract.payment_direction === 'OUTGOING' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                        {contract.payment_direction === 'OUTGOING' ? '↑ Out' : '↓ In'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 sm:px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${getStatusBadgeClass(contract.status)}`}>
+                      {contract.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-[#7A8580] hidden md:table-cell truncate">
+                    {contract.creator_name || '-'}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-[#7A8580] hidden lg:table-cell whitespace-nowrap">
+                    {formatDate(contract.start_date)} — {formatDate(contract.end_date)}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right hidden sm:table-cell">
+                    {contract.advance_amount > 0 ? (
+                      <span className="text-[#5B8A72] font-medium">{formatCurrency(contract.advance_amount, contract.advance_currency)}</span>
+                    ) : (
+                      <span className="text-[#B0BDB4]">-</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {filteredContracts.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="py-12 text-center text-[#7A8580]">
+                    No contracts found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
