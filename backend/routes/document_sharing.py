@@ -7,7 +7,7 @@ from pathlib import Path
 from ..models import (
     get_db, User, OrganizationMember, Organization,
     SharedItem, ContractDocument, AudioAsset, RoyaltyStatement,
-    CreativeContact, Song,
+    CreativeContact, Song, Contract, ContractParty, ContractAsset,
 )
 from ..utils.auth import get_current_user
 import logging
@@ -59,6 +59,8 @@ def _verify_item_ownership(db: Session, item_type: str, item_id: int, org_id: in
         item = db.query(CreativeContact).filter(CreativeContact.id == item_id, CreativeContact.organization_id == org_id).first()
     elif item_type == "SONG":
         item = db.query(Song).filter(Song.id == item_id, Song.organization_id == org_id).first()
+    elif item_type == "CONTRACT":
+        item = db.query(Contract).filter(Contract.id == item_id, Contract.organization_id == org_id).first()
     else:
         item = None
     if not item:
@@ -84,6 +86,9 @@ def _resolve_item_name(db: Session, item_type: str, item_id: int, fallback_name:
     elif item_type == "SONG":
         song = db.query(Song).filter(Song.id == item_id).first()
         return f"{song.title} - {song.primary_artist}" if song else f"Song #{item_id}"
+    elif item_type == "CONTRACT":
+        contract = db.query(Contract).filter(Contract.id == item_id).first()
+        return contract.title if contract else f"Contract #{item_id}"
     return f"Item #{item_id}"
 
 
@@ -448,6 +453,53 @@ def get_shared_item_details(
         else:
             detail["data"] = None
             detail["error"] = "Original statement no longer exists"
+    elif share.item_type == "CONTRACT":
+        contract = db.query(Contract).filter(Contract.id == share.item_id, Contract.organization_id == source_org_id).first()
+        if contract:
+            parties = db.query(ContractParty).filter(ContractParty.contract_id == contract.id).all()
+            assets = db.query(ContractAsset).filter(ContractAsset.contract_id == contract.id).all()
+            docs = db.query(ContractDocument).filter(ContractDocument.contract_id == contract.id).all()
+
+            asset_names = []
+            for a in assets:
+                if a.asset_type == "SONG":
+                    song = db.query(Song).filter(Song.id == a.asset_id).first()
+                    asset_names.append({"type": a.asset_type, "name": song.title if song else f"Song #{a.asset_id}"})
+                else:
+                    asset_names.append({"type": a.asset_type, "name": f"{a.asset_type} #{a.asset_id}"})
+
+            detail["data"] = {
+                "title": contract.title,
+                "contract_type": contract.contract_type,
+                "status": contract.status,
+                "payment_direction": contract.payment_direction,
+                "reference_number": contract.reference_number,
+                "start_date": contract.start_date.isoformat() if contract.start_date else None,
+                "end_date": contract.end_date.isoformat() if contract.end_date else None,
+                "territory": contract.territory or [],
+                "advance_amount": contract.advance_amount,
+                "advance_currency": contract.advance_currency,
+                "advance_recouped": contract.advance_recouped,
+                "notes": contract.notes,
+                "terms_summary": contract.terms_summary,
+                "parties": [
+                    {"party_name": p.party_name, "party_role": p.party_role, "contact_email": p.contact_email}
+                    for p in parties
+                ],
+                "assets": asset_names,
+                "documents": [
+                    {
+                        "file_name": d.file_name,
+                        "description": d.description,
+                        "has_file": bool(d.file_path and Path(d.file_path).exists()),
+                        "document_id": d.id,
+                    }
+                    for d in docs
+                ],
+            }
+        else:
+            detail["data"] = None
+            detail["error"] = "Original contract no longer exists"
 
     return detail
 

@@ -2305,6 +2305,7 @@ class SharedItemType(str, enum.Enum):
     AUDIO = "AUDIO"
     STATEMENT = "STATEMENT"
     SONG = "SONG"
+    CONTRACT = "CONTRACT"
 
 class SharedItemStatus(str, enum.Enum):
     ACTIVE = "ACTIVE"

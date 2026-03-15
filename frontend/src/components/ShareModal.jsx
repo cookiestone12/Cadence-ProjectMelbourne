@@ -106,6 +106,7 @@ export default function ShareModal({ itemType, itemId, itemIds, itemName, onClos
     STATEMENT: 'Statement',
     CONTACT_CARD: 'Contact Card',
     SONG: 'Catalog Entry',
+    CONTRACT: 'Contract',
   }
 
   return (

@@ -5,10 +5,11 @@ import {
   PencilIcon, UserGroupIcon, LinkIcon, DocumentTextIcon,
   MusicalNoteIcon, CalendarIcon, CurrencyDollarIcon,
   ChevronDownIcon, ArrowDownTrayIcon, PaperClipIcon, CloudArrowUpIcon,
-  SparklesIcon
+  SparklesIcon, PaperAirplaneIcon
 } from '@heroicons/react/24/outline'
 import ContractAdvancesSection from '../components/ContractAdvancesSection'
 import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
+import ShareModal from '../components/ShareModal'
 
 function SearchableSelect({ options, value, onChange, placeholder, className }) {
   const [search, setSearch] = useState('')
@@ -201,6 +202,7 @@ function ContractsPageInner() {
   const [uploadParsedForm, setUploadParsedForm] = useState(null)
   const [uploadParsedParties, setUploadParsedParties] = useState([])
   const [showSplitSheetMenu, setShowSplitSheetMenu] = useState(false)
+  const [shareContract, setShareContract] = useState(null)
   const splitSheetRef = useRef(null)
 
   useEffect(() => {
@@ -1674,6 +1676,13 @@ function ContractsPageInner() {
                     >
                       <TrashIcon className="w-5 h-5" />
                     </button>
+                    <button
+                      onClick={() => setShareContract(contractDetail || selectedContract)}
+                      className="p-2 text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#EEF1EC] rounded-lg transition-colors"
+                      title="Share Contract"
+                    >
+                      <PaperAirplaneIcon className="w-5 h-5" />
+                    </button>
                   </>
                 )}
                 <button
@@ -2457,6 +2466,16 @@ function ContractsPageInner() {
             </div>
           </div>
         </div>
+      )}
+
+      {shareContract && (
+        <ShareModal
+          itemType="CONTRACT"
+          itemId={shareContract.id}
+          itemName={shareContract.title}
+          onClose={() => setShareContract(null)}
+          orgId={organizationId}
+        />
       )}
     </div>
   )

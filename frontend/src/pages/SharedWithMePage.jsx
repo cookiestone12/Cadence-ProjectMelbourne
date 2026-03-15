@@ -4,7 +4,8 @@ import {
   ShareIcon, DocumentTextIcon, MusicalNoteIcon,
   BanknotesIcon, UserGroupIcon, ClockIcon, XMarkIcon,
   ArrowDownTrayIcon, PlusCircleIcon, EyeIcon,
-  CheckCircleIcon, ChevronDownIcon, ChevronUpIcon
+  CheckCircleIcon, ChevronDownIcon, ChevronUpIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline'
 
 export default function SharedWithMePage() {
@@ -111,6 +112,7 @@ export default function SharedWithMePage() {
     STATEMENT: BanknotesIcon,
     CONTACT_CARD: UserGroupIcon,
     SONG: MusicalNoteIcon,
+    CONTRACT: DocumentDuplicateIcon,
   }
   const typeLabels = {
     DOCUMENT: 'Document',
@@ -118,6 +120,7 @@ export default function SharedWithMePage() {
     STATEMENT: 'Statement',
     CONTACT_CARD: 'Contact Card',
     SONG: 'Catalog Entry',
+    CONTRACT: 'Contract',
   }
   const typeColors = {
     DOCUMENT: 'bg-blue-50 text-blue-600',
@@ -125,6 +128,7 @@ export default function SharedWithMePage() {
     STATEMENT: 'bg-amber-50 text-amber-600',
     CONTACT_CARD: 'bg-teal-50 text-teal-600',
     SONG: 'bg-green-50 text-green-600',
+    CONTRACT: 'bg-indigo-50 text-indigo-600',
   }
 
   const canDownload = (type) => ['DOCUMENT', 'STATEMENT'].includes(type)
@@ -213,6 +217,66 @@ export default function SharedWithMePage() {
           {data.provider && <div><span className="text-[#7A8580]">Source:</span> <span className="text-[#3D4A44]">{data.provider}</span></div>}
           {data.duration_seconds && <div><span className="text-[#7A8580]">Duration:</span> <span className="text-[#3D4A44]">{Math.floor(data.duration_seconds / 60)}:{String(Math.floor(data.duration_seconds % 60)).padStart(2, '0')}</span></div>}
           {data.size_bytes && <div><span className="text-[#7A8580]">Size:</span> <span className="text-[#3D4A44]">{(data.size_bytes / 1024 / 1024).toFixed(2)} MB</span></div>}
+        </div>
+      )
+    }
+
+    if (detail.item_type === 'CONTRACT') {
+      return (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2 text-xs">
+            <div><span className="text-[#7A8580]">Title:</span> <span className="text-[#3D4A44] font-medium">{data.title}</span></div>
+            <div><span className="text-[#7A8580]">Type:</span> <span className="text-[#3D4A44]">{data.contract_type?.replace(/_/g, ' ')}</span></div>
+            <div><span className="text-[#7A8580]">Status:</span> <span className="text-[#3D4A44]">{data.status}</span></div>
+            {data.payment_direction && <div><span className="text-[#7A8580]">Direction:</span> <span className="text-[#3D4A44]">{data.payment_direction}</span></div>}
+            {data.reference_number && <div><span className="text-[#7A8580]">Ref #:</span> <span className="text-[#3D4A44]">{data.reference_number}</span></div>}
+            {data.start_date && <div><span className="text-[#7A8580]">Start:</span> <span className="text-[#3D4A44]">{data.start_date}</span></div>}
+            {data.end_date && <div><span className="text-[#7A8580]">End:</span> <span className="text-[#3D4A44]">{data.end_date}</span></div>}
+            {(data.territory || []).length > 0 && <div className="col-span-full"><span className="text-[#7A8580]">Territory:</span> <span className="text-[#3D4A44]">{data.territory.join(', ')}</span></div>}
+            {data.advance_amount > 0 && <div><span className="text-[#7A8580]">Advance:</span> <span className="text-[#3D4A44]">{data.advance_currency} {data.advance_amount?.toLocaleString()}</span></div>}
+            {data.terms_summary && <div className="col-span-full"><span className="text-[#7A8580]">Terms:</span> <span className="text-[#3D4A44]">{data.terms_summary}</span></div>}
+            {data.notes && <div className="col-span-full"><span className="text-[#7A8580]">Notes:</span> <span className="text-[#3D4A44]">{data.notes}</span></div>}
+          </div>
+          {(data.parties || []).length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-[#7A8580] mb-1">Parties</p>
+              <div className="space-y-1">
+                {data.parties.map((p, i) => (
+                  <div key={i} className="text-xs text-[#3D4A44] flex items-center gap-2">
+                    <span className="font-medium">{p.party_name}</span>
+                    <span className="text-[#7A8580]">({p.party_role})</span>
+                    {p.contact_email && <span className="text-[#7A8580]">{p.contact_email}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {(data.assets || []).length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-[#7A8580] mb-1">Linked Assets</p>
+              <div className="flex flex-wrap gap-1.5">
+                {data.assets.map((a, i) => (
+                  <span key={i} className="px-2 py-0.5 bg-[rgba(91,138,114,0.08)] text-[#3D4A44] rounded-full text-xs">
+                    {a.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {(data.documents || []).length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-[#7A8580] mb-1">Attached Documents</p>
+              <div className="space-y-1">
+                {data.documents.map((d, i) => (
+                  <div key={i} className="text-xs text-[#3D4A44] flex items-center gap-2">
+                    <DocumentTextIcon className="w-3.5 h-3.5 text-[#7A8580]" />
+                    <span>{d.file_name}</span>
+                    {d.description && <span className="text-[#7A8580]">- {d.description}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )
     }
