@@ -13,6 +13,7 @@ from ..models import (
     OrganizationMember, User, Organization
 )
 from ..utils.auth import get_current_user
+from ..services.audit_service import log_action
 
 router = APIRouter(prefix="/api/registration-reports", tags=["registration-reports"])
 
@@ -89,6 +90,8 @@ def build_work_registration_data(work, lookups: OrgLookups):
         creator_ids_seen.add(creator.id)
 
         writer_data = {
+            "credit_id": credit.id,
+            "creator_id": creator.id,
             "name": creator.display_name,
             "legal_name": creator.legal_name,
             "role": credit.role,
@@ -147,6 +150,8 @@ def build_song_registration_data(song, lookups: OrgLookups):
         creator_ids_seen.add(creator.id)
 
         writer_data = {
+            "credit_id": credit.id,
+            "creator_id": creator.id,
             "name": creator.display_name,
             "legal_name": creator.legal_name,
             "role": credit.role,
@@ -265,6 +270,98 @@ def get_song_registration_report(
     report_items = _build_report_items(db, org_id, "songs", creator_id=creator_id, status=status)
     stats = _compute_report_stats(report_items)
     return {"type": "songs", **stats, "items": report_items}
+
+
+class InlineEditRequest(BaseModel):
+    asset_type: str = "songs"
+    asset_id: int
+    isrc: Optional[str] = None
+    iswc: Optional[str] = None
+    writers: Optional[List[Dict]] = None
+
+
+@router.patch("/org/{org_id}/inline-edit")
+def inline_edit_registration_item(
+    org_id: int,
+    request: InlineEditRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    verify_org_access(current_user, org_id, db)
+    changed = []
+
+    if request.asset_type == "songs":
+        song = db.query(Song).filter(Song.id == request.asset_id, Song.organization_id == org_id).first()
+        if not song:
+            raise HTTPException(status_code=404, detail="Song not found")
+        if request.isrc is not None and request.isrc != (song.isrc or ""):
+            song.isrc = request.isrc.strip() or None
+            changed.append("isrc")
+        if request.iswc is not None and request.iswc != (song.iswc or ""):
+            song.iswc = request.iswc.strip() or None
+            changed.append("iswc")
+    else:
+        work = db.query(Work).filter(Work.id == request.asset_id, Work.organization_id == org_id).first()
+        if not work:
+            raise HTTPException(status_code=404, detail="Work not found")
+        if request.iswc is not None and request.iswc != (work.iswc or ""):
+            work.iswc = request.iswc.strip() or None
+            changed.append("iswc")
+
+    if request.writers:
+        for w_update in request.writers:
+            credit_id = w_update.get("credit_id")
+            creator_id = w_update.get("creator_id")
+            if not credit_id:
+                continue
+
+            if request.asset_type == "songs":
+                credit = db.query(SongCredit).filter(
+                    SongCredit.id == credit_id,
+                    SongCredit.song_id == request.asset_id
+                ).first()
+            else:
+                credit = db.query(WorkCredit).filter(
+                    WorkCredit.id == credit_id,
+                    WorkCredit.work_id == request.asset_id
+                ).first()
+
+            if credit:
+                if "role" in w_update and w_update["role"] != credit.role:
+                    credit.role = w_update["role"]
+                    changed.append(f"writer_role_{credit_id}")
+                if "share" in w_update:
+                    new_share = w_update["share"]
+                    if new_share is not None:
+                        try:
+                            new_share = float(new_share)
+                        except (ValueError, TypeError):
+                            new_share = None
+                    if new_share != credit.share_percentage:
+                        credit.share_percentage = new_share
+                        changed.append(f"writer_share_{credit_id}")
+
+            if creator_id:
+                creator = db.query(Creator).filter(
+                    Creator.id == creator_id,
+                    Creator.organization_id == org_id
+                ).first()
+                if creator:
+                    if "pro" in w_update and w_update["pro"] != (creator.primary_pro or ""):
+                        creator.primary_pro = w_update["pro"].strip() or None
+                        changed.append(f"creator_pro_{creator_id}")
+                    if "ipi" in w_update and w_update["ipi"] != (creator.primary_ipi or ""):
+                        creator.primary_ipi = w_update["ipi"].strip() or None
+                        changed.append(f"creator_ipi_{creator_id}")
+
+    if changed:
+        entity_type = "SONG" if request.asset_type == "songs" else "WORK"
+        entity_name = song.title if request.asset_type == "songs" else work.title
+        log_action(db, org_id, current_user.id, "UPDATE", entity_type, request.asset_id, entity_name,
+                   {"source": "registration_report_inline_edit", "changed_fields": changed})
+        db.commit()
+        return {"status": "ok", "changed": changed}
+    return {"status": "no_changes", "changed": []}
 
 
 @router.get("/org/{org_id}/creators")

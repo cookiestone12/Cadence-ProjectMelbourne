@@ -14,7 +14,8 @@ import {
   ArrowPathIcon,
   BookmarkIcon,
   TrashIcon,
-  ClockIcon
+  ClockIcon,
+  PencilIcon
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon, BookmarkIcon as BookmarkSolidIcon } from '@heroicons/react/24/solid'
 
@@ -679,10 +680,12 @@ export default function RegistrationReportPage() {
                   key={item.id}
                   item={item}
                   assetType={assetType}
+                  orgId={orgId}
                   isSelected={selectedItems.has(item.id)}
                   isExpanded={expandedItems.has(item.id)}
                   onToggleSelect={() => toggleSelected(item.id)}
                   onToggleExpand={() => toggleExpanded(item.id)}
+                  onSaved={() => fetchReport(orgId, assetType, selectedCreatorId, statusFilter)}
                 />
               ))}
             </div>
@@ -699,10 +702,12 @@ export default function RegistrationReportPage() {
                       key={`${key}_${item.id}`}
                       item={item}
                       assetType={assetType}
+                      orgId={orgId}
                       isSelected={selectedItems.has(item.id)}
                       isExpanded={expandedItems.has(item.id)}
                       onToggleSelect={() => toggleSelected(item.id)}
                       onToggleExpand={() => toggleExpanded(item.id)}
+                      onSaved={() => fetchReport(orgId, assetType, selectedCreatorId, statusFilter)}
                     />
                   ))}
                 </div>
@@ -873,7 +878,69 @@ export default function RegistrationReportPage() {
   )
 }
 
-function ItemRow({ item, assetType, isSelected, isExpanded, onToggleSelect, onToggleExpand }) {
+const ROLE_OPTIONS_REG = ['Songwriter', 'Producer', 'Artist', 'Composer', 'Lyricist', 'Arranger', 'Featured Artist', 'Musician', 'Engineer']
+
+function ItemRow({ item, assetType, orgId, isSelected, isExpanded, onToggleSelect, onToggleExpand, onSaved }) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editIsrc, setEditIsrc] = useState('')
+  const [editIswc, setEditIswc] = useState('')
+  const [editWriters, setEditWriters] = useState([])
+
+  function startEditing() {
+    setEditIsrc(item.isrc || '')
+    setEditIswc(item.iswc || '')
+    setEditWriters((item.writers || []).map(w => ({
+      credit_id: w.credit_id,
+      creator_id: w.creator_id,
+      name: w.name,
+      role: w.role || '',
+      share: w.share != null ? String(w.share) : '',
+      pro: w.pro || '',
+      ipi: w.ipi || '',
+    })))
+    setEditing(true)
+  }
+
+  function cancelEditing() {
+    setEditing(false)
+  }
+
+  async function saveEdits() {
+    setSaving(true)
+    try {
+      const payload = {
+        asset_type: assetType,
+        asset_id: item.id,
+        writers: editWriters.map(w => ({
+          credit_id: w.credit_id,
+          creator_id: w.creator_id,
+          role: w.role,
+          share: w.share === '' ? null : parseFloat(w.share),
+          pro: w.pro,
+          ipi: w.ipi,
+        }))
+      }
+      if (assetType === 'songs') {
+        payload.isrc = editIsrc
+        payload.iswc = editIswc
+      } else {
+        payload.iswc = editIswc
+      }
+      await axios.patch(`/api/registration-reports/org/${orgId}/inline-edit`, payload)
+      setEditing(false)
+      if (onSaved) onSaved()
+    } catch (err) {
+      console.error('Inline edit failed:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function updateWriter(idx, field, value) {
+    setEditWriters(prev => prev.map((w, i) => i === idx ? { ...w, [field]: value } : w))
+  }
+
   return (
     <div className={`${isSelected ? 'bg-[#5B8A72]/5' : 'hover:bg-[#F5F7F4]/50'} transition-colors`}>
       <div className="flex items-center gap-3 px-5 py-3.5">
@@ -938,38 +1005,165 @@ function ItemRow({ item, assetType, isSelected, isExpanded, onToggleSelect, onTo
 
       {isExpanded && (
         <div className="px-5 pb-4 ml-7 border-t border-[rgba(59,77,67,0.06)]">
-          {item.writers && item.writers.length > 0 && (
-            <div className="mt-3">
-              <h4 className="text-xs font-semibold text-[#3D4A44] mb-2 uppercase tracking-wide">Writers / Credits</h4>
-              <div className="space-y-1.5">
-                {item.writers.map((writer, idx) => (
-                  <div key={idx} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 px-3 bg-[#F5F7F4] rounded-lg text-sm">
-                    <span className="font-medium text-[#3D4A44]">{writer.name}</span>
-                    {writer.legal_name && <span className="text-[#7A8580] text-xs">({writer.legal_name})</span>}
-                    {writer.role && <span className="text-[#7A8580] text-xs">Role: <span className="text-[#3D4A44]">{writer.role}</span></span>}
-                    {writer.pro && <span className="text-[#7A8580] text-xs">PRO: <span className="text-[#3D4A44]">{writer.pro}</span></span>}
-                    {writer.ipi && <span className="text-[#7A8580] text-xs">IPI: <span className="text-[#3D4A44]">{writer.ipi}</span></span>}
-                    {writer.share != null && <span className="text-[#7A8580] text-xs">Share: <span className="text-[#3D4A44]">{writer.share}%</span></span>}
-                    {writer.publisher && typeof writer.publisher === 'object' && writer.publisher.name && (
-                      <span className="text-[#7A8580] text-xs">Publisher: <span className="text-[#3D4A44]">{writer.publisher.name}</span></span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {!editing ? (
+            <>
+              {assetType === 'songs' && (
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#7A8580]">
+                  <span>ISRC: <span className={item.isrc ? 'text-[#3D4A44] font-medium' : 'text-amber-500 italic'}>{item.isrc || 'Missing'}</span></span>
+                  {item.iswc && <span>ISWC: <span className="text-[#3D4A44] font-medium">{item.iswc}</span></span>}
+                </div>
+              )}
+              {assetType === 'works' && (
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#7A8580]">
+                  <span>ISWC: <span className={item.iswc ? 'text-[#3D4A44] font-medium' : 'text-amber-500 italic'}>{item.iswc || 'Missing'}</span></span>
+                </div>
+              )}
 
-          {item.validation_issues && item.validation_issues.length > 0 && (
-            <div className="mt-3">
-              <h4 className="text-xs font-semibold text-amber-600 mb-2 uppercase tracking-wide">Validation Issues</h4>
-              <ul className="space-y-1">
-                {item.validation_issues.map((issue, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-xs text-amber-600">
-                    <ExclamationTriangleIcon className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                    {issue}
-                  </li>
-                ))}
-              </ul>
+              {item.writers && item.writers.length > 0 && (
+                <div className="mt-3">
+                  <h4 className="text-xs font-semibold text-[#3D4A44] mb-2 uppercase tracking-wide">Writers / Credits</h4>
+                  <div className="space-y-1.5">
+                    {item.writers.map((writer, idx) => (
+                      <div key={idx} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 px-3 bg-[#F5F7F4] rounded-lg text-sm">
+                        <span className="font-medium text-[#3D4A44]">{writer.name}</span>
+                        {writer.legal_name && <span className="text-[#7A8580] text-xs">({writer.legal_name})</span>}
+                        {writer.role && <span className="text-[#7A8580] text-xs">Role: <span className="text-[#3D4A44]">{writer.role}</span></span>}
+                        {writer.pro && <span className="text-[#7A8580] text-xs">PRO: <span className="text-[#3D4A44]">{writer.pro}</span></span>}
+                        {writer.ipi && <span className="text-[#7A8580] text-xs">IPI: <span className="text-[#3D4A44]">{writer.ipi}</span></span>}
+                        {writer.share != null && <span className="text-[#7A8580] text-xs">Share: <span className="text-[#3D4A44]">{writer.share}%</span></span>}
+                        {writer.publisher && typeof writer.publisher === 'object' && writer.publisher.name && (
+                          <span className="text-[#7A8580] text-xs">Publisher: <span className="text-[#3D4A44]">{writer.publisher.name}</span></span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {item.validation_issues && item.validation_issues.length > 0 && (
+                <div className="mt-3">
+                  <h4 className="text-xs font-semibold text-amber-600 mb-2 uppercase tracking-wide">Validation Issues</h4>
+                  <ul className="space-y-1">
+                    {item.validation_issues.map((issue, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-xs text-amber-600">
+                        <ExclamationTriangleIcon className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        {issue}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <button
+                onClick={startEditing}
+                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#5B8A72] bg-[#5B8A72]/10 rounded-lg hover:bg-[#5B8A72]/20 transition-colors"
+              >
+                <PencilIcon className="w-3.5 h-3.5" />
+                Edit Details
+              </button>
+            </>
+          ) : (
+            <div className="mt-3 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {assetType === 'songs' && (
+                  <div>
+                    <label className="block text-xs font-medium text-[#3D4A44] mb-1">ISRC</label>
+                    <input
+                      type="text"
+                      value={editIsrc}
+                      onChange={e => setEditIsrc(e.target.value)}
+                      placeholder="e.g. USRC17607839"
+                      className="w-full border border-[rgba(59,77,67,0.2)] rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-medium text-[#3D4A44] mb-1">ISWC</label>
+                  <input
+                    type="text"
+                    value={editIswc}
+                    onChange={e => setEditIswc(e.target.value)}
+                    placeholder="e.g. T-345246800-1"
+                    className="w-full border border-[rgba(59,77,67,0.2)] rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                  />
+                </div>
+              </div>
+
+              {editWriters.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-[#3D4A44] mb-2 uppercase tracking-wide">Writers / Credits</h4>
+                  <div className="space-y-3">
+                    {editWriters.map((writer, idx) => (
+                      <div key={writer.credit_id || idx} className="p-3 bg-[#F5F7F4] rounded-lg space-y-2">
+                        <p className="text-sm font-medium text-[#3D4A44]">{writer.name}</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-medium text-[#7A8580] mb-0.5">Role</label>
+                            <select
+                              value={writer.role}
+                              onChange={e => updateWriter(idx, 'role', e.target.value)}
+                              className="w-full border border-[rgba(59,77,67,0.2)] rounded-md px-2 py-1 text-xs bg-white text-[#3D4A44] focus:ring-1 focus:ring-[#5B8A72]"
+                            >
+                              <option value="">Select</option>
+                              {ROLE_OPTIONS_REG.map(r => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-medium text-[#7A8580] mb-0.5">Share %</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={writer.share}
+                              onChange={e => updateWriter(idx, 'share', e.target.value)}
+                              placeholder="25"
+                              className="w-full border border-[rgba(59,77,67,0.2)] rounded-md px-2 py-1 text-xs bg-white text-[#3D4A44] focus:ring-1 focus:ring-[#5B8A72]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-medium text-[#7A8580] mb-0.5">PRO</label>
+                            <input
+                              type="text"
+                              value={writer.pro}
+                              onChange={e => updateWriter(idx, 'pro', e.target.value)}
+                              placeholder="BMI"
+                              className="w-full border border-[rgba(59,77,67,0.2)] rounded-md px-2 py-1 text-xs bg-white text-[#3D4A44] focus:ring-1 focus:ring-[#5B8A72]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-medium text-[#7A8580] mb-0.5">IPI</label>
+                            <input
+                              type="text"
+                              value={writer.ipi}
+                              onChange={e => updateWriter(idx, 'ipi', e.target.value)}
+                              placeholder="123456789"
+                              className="w-full border border-[rgba(59,77,67,0.2)] rounded-md px-2 py-1 text-xs bg-white text-[#3D4A44] focus:ring-1 focus:ring-[#5B8A72]"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={saveEdits}
+                  disabled={saving}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white bg-[#5B8A72] rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                >
+                  <CheckIcon className="w-3.5 h-3.5" />
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  onClick={cancelEditing}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-[#7A8580] bg-white border border-[rgba(59,77,67,0.15)] rounded-lg hover:bg-[#F5F7F4] transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
         </div>
