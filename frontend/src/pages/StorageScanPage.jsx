@@ -332,7 +332,7 @@ export default function StorageScanPage() {
     if (!selectedBatch && batches.length === 0) { showToast('No scan batch available', 'error'); return }
     setAnalyzeLoading(true)
     try {
-      const batchId = selectedBatch || (batches[0]?.id)
+      const batchId = selectedBatch || (batches[0]?.scan_batch_id)
       const res = await axios.post(`/api/storage-scan/org/${orgId}/analyze-linked`, { scan_batch_id: batchId }, getAuthHeaders())
       setAnalyzeStatus(res.data)
       showToast('Analysis started')

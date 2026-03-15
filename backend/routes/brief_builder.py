@@ -180,14 +180,14 @@ Respond ONLY with valid JSON."""
                 match_reasons.append("Has stems")
 
         if not is_analyzed and not request.analyzed_only:
-            if score == 0 and not has_strict_filters:
-                score = 5
+            if not match_reasons:
                 match_reasons.append("Not yet analyzed")
-            elif score == 0 and has_strict_filters:
-                score = 1
-                match_reasons.append("Not yet analyzed — may match criteria")
 
-        if score > 0 or not (moods or textures or genres or bpm_min or bpm_max or key):
+        include = score > 0 or not (moods or textures or genres or bpm_min or bpm_max or key)
+        if not is_analyzed and not request.analyzed_only and not include:
+            include = True
+
+        if include:
             scored_results.append({
                 "song_id": song.id,
                 "title": song.title,
@@ -201,5 +201,5 @@ Respond ONLY with valid JSON."""
                 "match_reasons": match_reasons if match_reasons else ["Catalog match"],
             })
 
-    scored_results.sort(key=lambda x: x["score"], reverse=True)
+    scored_results.sort(key=lambda x: (0 if x["is_analyzed"] else 1, -x["score"]))
     return {"results": scored_results[:request.limit], "total": len(scored_results)}
