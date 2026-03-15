@@ -1191,7 +1191,7 @@ async def upload_and_parse_statement(
     verify_org_access(current_user, org_id, db)
     content = await file.read()
     try:
-        headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv")
+        headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)
     except HTTPException:
         raise
     except Exception as e:

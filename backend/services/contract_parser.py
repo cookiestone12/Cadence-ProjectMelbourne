@@ -37,7 +37,7 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
     return "\n".join(text_parts)
 
 
-def parse_contract_document(file_bytes: bytes, filename: str) -> Dict[str, Any]:
+def parse_contract_document(file_bytes: bytes, filename: str, org_id: int = None) -> Dict[str, Any]:
     ext = os.path.splitext(filename)[1].lower()
 
     try:
@@ -57,7 +57,7 @@ def parse_contract_document(file_bytes: bytes, filename: str) -> Dict[str, Any]:
     truncated_text = text[:12000]
 
     try:
-        parsed = call_ai_parser(truncated_text)
+        parsed = call_ai_parser(truncated_text, org_id=org_id)
     except Exception as e:
         logger.error(f"AI contract parsing failed: {e}")
         return {"success": False, "error": "AI analysis failed. Please try again or enter details manually."}
@@ -71,7 +71,7 @@ def parse_contract_document(file_bytes: bytes, filename: str) -> Dict[str, Any]:
     }
 
 
-def call_ai_parser(document_text: str) -> Dict[str, Any]:
+def call_ai_parser(document_text: str, org_id: int = None) -> Dict[str, Any]:
     from openai import OpenAI
 
     client = OpenAI(
@@ -128,6 +128,7 @@ IMPORTANT:
                 model="gpt-4o-mini",
                 input_tokens=usage.prompt_tokens or 0,
                 output_tokens=usage.completion_tokens or 0,
+                org_id=org_id,
             )
     except Exception as e:
         logger.warning(f"Failed to log AI usage for contract parsing: {e}")

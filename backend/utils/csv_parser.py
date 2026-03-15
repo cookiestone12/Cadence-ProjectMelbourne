@@ -34,7 +34,7 @@ FIELD_DESCRIPTIONS = {
 }
 
 
-def parse_csv_with_ai(csv_content: str, headers: List[str]) -> Dict[str, Any]:
+def parse_csv_with_ai(csv_content: str, headers: List[str], org_id: int = None) -> Dict[str, Any]:
     client = OpenAI(
         api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY"),
         base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
@@ -79,6 +79,7 @@ Respond ONLY with the JSON mapping object, no other text."""
                 model="gpt-4o-mini",
                 input_tokens=usage.prompt_tokens or 0,
                 output_tokens=usage.completion_tokens or 0,
+                org_id=org_id,
             )
     except Exception as ai_log_err:
         import logging

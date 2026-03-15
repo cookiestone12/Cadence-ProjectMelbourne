@@ -511,6 +511,7 @@ def list_contracts(
 @router.post("/contracts/parse-document")
 async def parse_contract_doc(
     file: UploadFile = File(...),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if not file.filename:
@@ -524,7 +525,12 @@ async def parse_contract_doc(
     if len(file_bytes) > 20 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large. Maximum size is 20MB.")
 
-    result = parse_contract_document(file_bytes, file.filename)
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    caller_org_id = membership.organization_id if membership else None
+
+    result = parse_contract_document(file_bytes, file.filename, org_id=caller_org_id)
 
     if not result.get("success"):
         raise HTTPException(status_code=422, detail=result.get("error", "Failed to parse document"))

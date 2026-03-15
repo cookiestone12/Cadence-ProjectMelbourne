@@ -312,7 +312,7 @@ def _extract_pdf_text(content: bytes) -> str:
     return full_text
 
 
-def _parse_pdf_with_ai(content: bytes) -> tuple:
+def _parse_pdf_with_ai(content: bytes, org_id: int = None) -> tuple:
     import os
     import json
 
@@ -364,6 +364,7 @@ Respond ONLY with valid JSON."""
                     model="gpt-4o-mini",
                     input_tokens=usage.prompt_tokens or 0,
                     output_tokens=usage.completion_tokens or 0,
+                    org_id=org_id,
                 )
         except Exception as ai_log_err:
             logger.warning(f"Failed to log AI usage for royalty PDF parsing: {ai_log_err}")
@@ -392,7 +393,7 @@ Respond ONLY with valid JSON."""
         raise HTTPException(status_code=400, detail=f"Failed to parse PDF with AI: {str(e)}")
 
 
-def parse_uploaded_file(content: bytes, filename: str) -> tuple:
+def parse_uploaded_file(content: bytes, filename: str, org_id: int = None) -> tuple:
     ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
     if ext == "pdf":
         if not PDF_SUPPORT:
@@ -422,7 +423,7 @@ def parse_uploaded_file(content: bytes, filename: str) -> tuple:
         headers, rows = _parse_pdf_with_tables(content)
         if headers and rows:
             return headers, rows, {}
-        result = _parse_pdf_with_ai(content)
+        result = _parse_pdf_with_ai(content, org_id=org_id)
         if isinstance(result, tuple) and len(result) == 2:
             return result[0], result[1], {}
         return result
@@ -517,7 +518,7 @@ async def preview_statement(
 ):
     verify_org_access(current_user, org_id, db)
     content = await file.read()
-    headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv")
+    headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)
     detected_source = detect_pro_source(headers, source_name or "")
     suggested = pdf_metadata.get("suggested_mapping") if pdf_metadata else None
     mapping = suggested if suggested else suggest_column_mapping(headers, source_name or "")
@@ -714,7 +715,7 @@ async def upload_statement(
 ):
     verify_org_access(current_user, org_id, db)
     content = await file.read()
-    headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv")
+    headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)
 
     suggested = pdf_metadata.get("suggested_mapping") if pdf_metadata else None
     if suggested:

@@ -200,7 +200,7 @@ async def preview_csv(
     else:
         headers, rows = parse_csv_file(content)
     
-    ai_result = parse_csv_with_ai("", headers)
+    ai_result = parse_csv_with_ai("", headers, org_id=org_id)
     initial_mapping = ai_result.get("mapping", {})
     
     generic_count = sum(1 for h in headers if h.startswith("Column_"))
