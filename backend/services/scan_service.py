@@ -349,6 +349,120 @@ def reject_scan_result(org_id: int, scan_result_id: int, db: Session):
     db.commit()
 
 
+def scan_org_wide(
+    org_id: int,
+    folder_path: str,
+    db: Session,
+    auto_link_threshold: float = 0.85,
+) -> Dict[str, Any]:
+    scan_batch_id = str(uuid.uuid4())[:12]
+
+    audio_files = list_files_recursive(org_id, "DROPBOX", folder_path or "/", db, max_depth=20)
+
+    songs = db.query(Song).filter(Song.organization_id == org_id).all()
+    works = db.query(Work).filter(Work.organization_id == org_id).all()
+
+    existing_paths = set(
+        r[0] for r in db.query(AudioAsset.path_display).filter(
+            AudioAsset.org_id == org_id,
+        ).all() if r[0]
+    )
+
+    stats = {
+        "scan_batch_id": scan_batch_id,
+        "total_files_found": len(audio_files),
+        "new_files": 0,
+        "already_linked": 0,
+        "auto_linked": 0,
+        "needs_review": 0,
+        "no_match": 0,
+        "analysis_queued": 0,
+    }
+
+    auto_linked_asset_ids = []
+
+    for f in audio_files:
+        file_path = f.get("path_display", "")
+        if file_path in existing_paths:
+            stats["already_linked"] += 1
+            continue
+
+        match_result = match_file_to_catalog(f["name"], songs, works, creator=None)
+
+        scan_result = StorageScanResult(
+            org_id=org_id,
+            scan_batch_id=scan_batch_id,
+            creator_storage_link_id=None,
+            creator_id=None,
+            provider="DROPBOX",
+            file_path=file_path,
+            file_name=f["name"],
+            file_size=f.get("size"),
+            provider_file_id=f.get("id"),
+            matched_song_id=match_result["match"].id if match_result["match_type"] == "song" else None,
+            matched_work_id=match_result["match"].id if match_result["match_type"] == "work" else None,
+            match_confidence=match_result["confidence"],
+            match_score=match_result["score"],
+            match_reason=match_result["reason"],
+            suggested_title=match_result["suggested_title"],
+            suggested_artist=match_result["suggested_artist"],
+            status="COMPLETED",
+        )
+        db.add(scan_result)
+        db.flush()
+        stats["new_files"] += 1
+
+        if match_result["score"] >= auto_link_threshold and match_result["match_type"] == "song":
+            audio_asset = AudioAsset(
+                org_id=org_id,
+                song_id=match_result["match"].id,
+                provider="DROPBOX",
+                provider_file_id=f.get("id"),
+                path_display=file_path,
+                name=f["name"],
+                size_bytes=f.get("size"),
+                file_type="MAIN",
+                is_available=True,
+            )
+            db.add(audio_asset)
+            db.flush()
+
+            scan_result.reviewed = True
+            scan_result.approved = True
+            scan_result.linked_audio_asset_id = audio_asset.id
+            stats["auto_linked"] += 1
+            auto_linked_asset_ids.append((audio_asset.id, match_result["match"].id))
+        elif match_result["confidence"] == "NONE":
+            stats["no_match"] += 1
+        else:
+            stats["needs_review"] += 1
+
+    db.commit()
+
+    queued_analysis_ids = []
+    for asset_id, song_id in auto_linked_asset_ids:
+        existing = db.query(AudioAnalysis).filter(
+            AudioAnalysis.audio_asset_id == asset_id,
+        ).first()
+        if existing and existing.status in ("SUCCEEDED", "RUNNING", "QUEUED"):
+            continue
+        if not existing:
+            analysis = AudioAnalysis(
+                org_id=org_id,
+                audio_asset_id=asset_id,
+                status="QUEUED",
+            )
+            db.add(analysis)
+            db.flush()
+            queued_analysis_ids.append((analysis.id, asset_id))
+            stats["analysis_queued"] += 1
+
+    db.commit()
+
+    stats["queued_analysis_ids"] = queued_analysis_ids
+    return stats
+
+
 def bulk_approve_high_confidence(
     org_id: int,
     scan_batch_id: str,

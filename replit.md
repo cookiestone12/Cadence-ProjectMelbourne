@@ -42,7 +42,8 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **AI Contract Parsing**: Uses OpenAI to extract key terms from PDF/DOCX contracts for auto-filling contract forms.
 - **AI Audio Analysis**: Background analysis pipeline using OpenAI for generating BPM, key, loudness, mood/texture/sync tags from audio files.
 - **Audio Tagging System**: AI-generated tags with confidence scores and user-editable overrides.
-- **Brief Builder**: Sync brief matching tool using OpenAI for natural language query parsing.
+- **Brief Builder**: Sync brief matching tool using OpenAI for natural language query parsing. Includes fallback for unanalyzed songs (scored lower but included in results) and structured filter support.
+- **Org-Wide Audio Linking Pipeline**: Org-level Dropbox scan that fuzzy-matches audio files to catalog songs, auto-links high-confidence matches (creating AudioAssets), and queues AI analysis. Coverage dashboard shows linked/analyzed/unlinked song stats.
 - **Royalty Accounting System**: Financial engine for statement ingestion, asset matching, royalty calculation, and payment management, supporting multi-currency and PRO statements. Features tiered PDF parsing and a professional royalty processing pipeline.
 - **Release Delivery & Distribution Readiness**: Validation checks for release and track metadata, artwork, legal, and credits.
 - **Per-Creator Storage Linking**: Links creators to cloud storage folders with AI-powered file scanning and fuzzy matching.

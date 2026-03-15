@@ -85,6 +85,8 @@ Respond ONLY with valid JSON."""
     energy_level = parsed_criteria.get("energy_level")
     genres = parsed_criteria.get("genres", [])
 
+    has_strict_filters = bool(bpm_min or bpm_max or key or vocal_present is not None or energy_level)
+
     if request.analyzed_only:
         q = (
             db.query(Song, AudioAnalysis)
@@ -95,6 +97,19 @@ Respond ONLY with valid JSON."""
                 AudioAnalysis.status == "SUCCEEDED",
             )
         )
+
+        if bpm_min:
+            q = q.filter(AudioAnalysis.bpm >= bpm_min)
+        if bpm_max:
+            q = q.filter(AudioAnalysis.bpm <= bpm_max)
+        if key:
+            q = q.filter(AudioAnalysis.musical_key.ilike(f"%{key}%"))
+        if vocal_present is not None:
+            q = q.filter(AudioAnalysis.vocal_present == vocal_present)
+        if energy_level:
+            q = q.filter(AudioAnalysis.energy_level == energy_level)
+
+        results_raw = q.distinct().limit(request.limit * 3).all()
     else:
         q = (
             db.query(Song, AudioAnalysis)
@@ -102,24 +117,18 @@ Respond ONLY with valid JSON."""
             .outerjoin(AudioAnalysis, (AudioAnalysis.audio_asset_id == AudioAsset.id) & (AudioAnalysis.status == "SUCCEEDED"))
             .filter(Song.organization_id == org_id)
         )
+        results_raw = q.distinct().limit(request.limit * 5).all()
 
-    if bpm_min:
-        q = q.filter(AudioAnalysis.bpm >= bpm_min)
-    if bpm_max:
-        q = q.filter(AudioAnalysis.bpm <= bpm_max)
-    if key:
-        q = q.filter(AudioAnalysis.musical_key.ilike(f"%{key}%"))
-    if vocal_present is not None:
-        q = q.filter(AudioAnalysis.vocal_present == vocal_present)
-    if energy_level:
-        q = q.filter(AudioAnalysis.energy_level == energy_level)
-
-    results_raw = q.distinct().limit(request.limit * 3).all()
-
+    seen_song_ids = set()
     scored_results = []
     for song, analysis in results_raw:
+        if song.id in seen_song_ids:
+            continue
+        seen_song_ids.add(song.id)
+
         score = 0.0
         match_reasons = []
+        is_analyzed = analysis is not None
 
         if analysis:
             if bpm_min or bpm_max:
@@ -170,6 +179,14 @@ Respond ONLY with valid JSON."""
                 score += 10
                 match_reasons.append("Has stems")
 
+        if not is_analyzed and not request.analyzed_only:
+            if score == 0 and not has_strict_filters:
+                score = 5
+                match_reasons.append("Not yet analyzed")
+            elif score == 0 and has_strict_filters:
+                score = 1
+                match_reasons.append("Not yet analyzed — may match criteria")
+
         if score > 0 or not (moods or textures or genres or bpm_min or bpm_max or key):
             scored_results.append({
                 "song_id": song.id,
@@ -179,8 +196,9 @@ Respond ONLY with valid JSON."""
                 "musical_key": analysis.musical_key if analysis else None,
                 "energy_level": analysis.energy_level if analysis else None,
                 "vocal_present": analysis.vocal_present if analysis else None,
+                "is_analyzed": is_analyzed,
                 "score": score,
-                "match_reasons": match_reasons if match_reasons else (["Catalog match"] if not analysis else []),
+                "match_reasons": match_reasons if match_reasons else ["Catalog match"],
             })
 
     scored_results.sort(key=lambda x: x["score"], reverse=True)

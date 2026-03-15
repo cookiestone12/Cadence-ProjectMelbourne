@@ -314,99 +314,119 @@ export default function BriefBuilderPage() {
             </div>
           )}
 
-          {!searching && results.map((result, idx) => (
-            <div
-              key={result.id || idx}
-              className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 transition-all hover:shadow-[0px_6px_16px_rgba(0,0,0,0.12)]"
-            >
-              <div className="flex items-start gap-4">
-                <input
-                  type="checkbox"
-                  checked={selectedResults.includes(result.id || idx)}
-                  onChange={() => toggleResultSelection(result.id || idx)}
-                  className="mt-1 w-4 h-4 rounded border-[rgba(59,77,67,0.2)] text-[#5B8A72] focus:ring-[#5B8A72]"
-                />
+          {!searching && results.map((result, idx) => {
+            const resultKey = result.song_id || result.id || idx
+            return (
+              <div
+                key={resultKey}
+                className={`bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 transition-all hover:shadow-[0px_6px_16px_rgba(0,0,0,0.12)] ${result.is_analyzed === false ? 'opacity-75' : ''}`}
+              >
+                <div className="flex items-start gap-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedResults.includes(resultKey)}
+                    onChange={() => toggleResultSelection(resultKey)}
+                    className="mt-1 w-4 h-4 rounded border-[rgba(59,77,67,0.2)] text-[#5B8A72] focus:ring-[#5B8A72]"
+                  />
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="text-[16px] font-semibold text-[#3D4A44]">{result.title || 'Untitled'}</h3>
-                      <p className="text-[14px] text-[#7A8580]">{result.artist || result.primary_artist || 'Unknown Artist'}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <h3 className="text-[16px] font-semibold text-[#3D4A44]">{result.title || 'Untitled'}</h3>
+                          <p className="text-[14px] text-[#7A8580]">{result.artist || result.primary_artist || 'Unknown Artist'}</p>
+                        </div>
+                        {result.is_analyzed === false && (
+                          <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold bg-amber-100 text-amber-700 whitespace-nowrap">
+                            Not Analyzed
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {result.score != null && result.score > 0 && (
+                          <span className={`text-sm font-bold px-3 py-1 rounded-full border ${getMatchScoreColor(result.score)}`}>
+                            {Math.round(result.score)} pts
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {result.match_score != null && (
-                        <span className={`text-sm font-bold px-3 py-1 rounded-full border ${getMatchScoreColor(result.match_score)}`}>
-                          {Math.round(result.match_score)}% match
+
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                      {result.bpm && (
+                        <span className="rounded-full px-3 py-1 text-[13px] font-medium bg-[#EEF1EC] text-[#3D4A44]">
+                          {Math.round(result.bpm)} BPM
                         </span>
                       )}
+                      {(result.musical_key || result.key) && (
+                        <span className="rounded-full px-3 py-1 text-[13px] font-medium bg-[#EEF1EC] text-[#3D4A44]">
+                          {result.musical_key || result.key}
+                        </span>
+                      )}
+                      {result.energy_level && (
+                        <span className="rounded-full px-3 py-1 text-[13px] font-medium bg-[#EEF1EC] text-[#3D4A44]">
+                          {result.energy_level} energy
+                        </span>
+                      )}
+                      {result.vocal_present != null && (
+                        <span className="rounded-full px-3 py-1 text-[13px] font-medium bg-[#EEF1EC] text-[#3D4A44]">
+                          {result.vocal_present ? 'Vocal' : 'Instrumental'}
+                        </span>
+                      )}
+                      {result.moods && result.moods.map(mood => (
+                        <span key={mood} className={`rounded-full px-3 py-1 text-[13px] font-medium ${MOOD_COLORS[mood.toLowerCase()] || 'bg-gray-100 text-gray-700'}`}>
+                          {mood}
+                        </span>
+                      ))}
+                      {result.textures && result.textures.map(texture => (
+                        <span key={texture} className={`rounded-full px-3 py-1 text-[13px] font-medium ${TEXTURE_COLORS[texture.toLowerCase()] || 'bg-gray-100 text-gray-700'}`}>
+                          {texture}
+                        </span>
+                      ))}
+                      {result.sync_tags && result.sync_tags.map(tag => (
+                        <span key={tag} className="rounded-full px-3 py-1 text-[13px] font-medium bg-[#F0EBF8] text-[#6B4FA0]">
+                          {tag}
+                        </span>
+                      ))}
                     </div>
-                  </div>
 
-                  <div className="flex flex-wrap items-center gap-2 mt-3">
-                    {result.bpm && (
-                      <span className="rounded-full px-3 py-1 text-[13px] font-medium bg-[#EEF1EC] text-[#3D4A44]">
-                        {result.bpm} BPM
-                      </span>
-                    )}
-                    {result.key && (
-                      <span className="rounded-full px-3 py-1 text-[13px] font-medium bg-[#EEF1EC] text-[#3D4A44]">
-                        {result.key}
-                      </span>
-                    )}
-                    {result.moods && result.moods.map(mood => (
-                      <span key={mood} className={`rounded-full px-3 py-1 text-[13px] font-medium ${MOOD_COLORS[mood.toLowerCase()] || 'bg-gray-100 text-gray-700'}`}>
-                        {mood}
-                      </span>
-                    ))}
-                    {result.textures && result.textures.map(texture => (
-                      <span key={texture} className={`rounded-full px-3 py-1 text-[13px] font-medium ${TEXTURE_COLORS[texture.toLowerCase()] || 'bg-gray-100 text-gray-700'}`}>
-                        {texture}
-                      </span>
-                    ))}
-                    {result.sync_tags && result.sync_tags.map(tag => (
-                      <span key={tag} className="rounded-full px-3 py-1 text-[13px] font-medium bg-[#F0EBF8] text-[#6B4FA0]">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center gap-3 mt-3">
-                    {(result.dropbox_link || result.audio_url) && (
+                    <div className="flex items-center gap-3 mt-3">
+                      {(result.dropbox_link || result.audio_url) && (
+                        <button
+                          onClick={() => window.open(result.dropbox_link || result.audio_url, '_blank')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#5B8A72] bg-[#EEF1EC] rounded-lg hover:bg-[#D8DDD6] transition-colors font-medium"
+                        >
+                          <PlayIcon className="w-4 h-4" />
+                          <span>Play</span>
+                        </button>
+                      )}
                       <button
-                        onClick={() => window.open(result.dropbox_link || result.audio_url, '_blank')}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#5B8A72] bg-[#EEF1EC] rounded-lg hover:bg-[#D8DDD6] transition-colors font-medium"
+                        onClick={() => setExpandedResult(expandedResult === resultKey ? null : resultKey)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors font-medium"
                       >
-                        <PlayIcon className="w-4 h-4" />
-                        <span>Play</span>
+                        <span>Why it matched</span>
+                        {expandedResult === resultKey
+                          ? <ChevronUpIcon className="w-3.5 h-3.5" />
+                          : <ChevronDownIcon className="w-3.5 h-3.5" />
+                        }
                       </button>
-                    )}
-                    <button
-                      onClick={() => setExpandedResult(expandedResult === (result.id || idx) ? null : (result.id || idx))}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors font-medium"
-                    >
-                      <span>Why it matched</span>
-                      {expandedResult === (result.id || idx)
-                        ? <ChevronUpIcon className="w-3.5 h-3.5" />
-                        : <ChevronDownIcon className="w-3.5 h-3.5" />
-                      }
-                    </button>
-                  </div>
-
-                  {expandedResult === (result.id || idx) && (
-                    <div className="mt-3 pt-3 border-t border-[rgba(59,77,67,0.08)]">
-                      <p className="text-sm text-[#7A8580]">
-                        {result.match_reasons
-                          ? (Array.isArray(result.match_reasons)
-                              ? result.match_reasons.join(' • ')
-                              : result.match_reasons)
-                          : 'Match criteria details not available for this result.'}
-                      </p>
                     </div>
-                  )}
+
+                    {expandedResult === resultKey && (
+                      <div className="mt-3 pt-3 border-t border-[rgba(59,77,67,0.08)]">
+                        <p className="text-sm text-[#7A8580]">
+                          {result.match_reasons
+                            ? (Array.isArray(result.match_reasons)
+                                ? result.match_reasons.join(' \u2022 ')
+                                : result.match_reasons)
+                            : 'Match criteria details not available for this result.'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           {!searching && results.length === 0 && query && (
             <div className="flex flex-col items-center justify-center py-16 text-center">

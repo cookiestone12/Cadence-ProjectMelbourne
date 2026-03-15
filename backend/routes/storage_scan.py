@@ -468,6 +468,157 @@ def analyze_linked_songs(
     return {"queued": queued, "total_assets": len(assets)}
 
 
+class OrgWideScanRequest(BaseModel):
+    folder_path: str = "/"
+
+
+@router.post("/org/{org_id}/org-scan")
+def org_wide_scan(
+    org_id: int,
+    request: OrgWideScanRequest = OrgWideScanRequest(),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+
+    integration = db.query(IntegrationAccount).filter(
+        IntegrationAccount.org_id == org_id,
+        IntegrationAccount.provider == "DROPBOX",
+        IntegrationAccount.is_active == True,
+    ).first()
+    if not integration:
+        raise HTTPException(status_code=400, detail="Dropbox is not connected. Please connect it first in Settings.")
+
+    try:
+        result = scan_service.scan_org_wide(org_id, request.folder_path, db)
+
+        queued_pairs = result.pop("queued_analysis_ids", [])
+        if queued_pairs:
+            import threading
+            from ..routes.audio import _run_analysis_worker
+
+            for analysis_id, asset_id in queued_pairs:
+                thread = threading.Thread(
+                    target=_run_analysis_worker,
+                    args=(analysis_id, asset_id, org_id),
+                    daemon=True,
+                )
+                thread.start()
+
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Org-wide scan error: {e}")
+        raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
+
+
+@router.get("/org/{org_id}/coverage")
+def get_audio_coverage(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    from sqlalchemy import func
+
+    total_songs = db.query(func.count(Song.id)).filter(
+        Song.organization_id == org_id
+    ).scalar() or 0
+
+    songs_with_audio = db.query(func.count(func.distinct(AudioAsset.song_id))).filter(
+        AudioAsset.org_id == org_id,
+        AudioAsset.song_id.isnot(None),
+    ).scalar() or 0
+
+    songs_analyzed = db.query(func.count(func.distinct(AudioAsset.song_id))).filter(
+        AudioAsset.org_id == org_id,
+        AudioAsset.song_id.isnot(None),
+    ).join(AudioAnalysis, AudioAnalysis.audio_asset_id == AudioAsset.id).filter(
+        AudioAnalysis.status == "SUCCEEDED",
+    ).scalar() or 0
+
+    songs_queued = db.query(func.count(func.distinct(AudioAsset.song_id))).filter(
+        AudioAsset.org_id == org_id,
+        AudioAsset.song_id.isnot(None),
+    ).join(AudioAnalysis, AudioAnalysis.audio_asset_id == AudioAsset.id).filter(
+        AudioAnalysis.status.in_(["QUEUED", "RUNNING"]),
+    ).scalar() or 0
+
+    songs_failed = db.query(func.count(func.distinct(AudioAsset.song_id))).filter(
+        AudioAsset.org_id == org_id,
+        AudioAsset.song_id.isnot(None),
+    ).join(AudioAnalysis, AudioAnalysis.audio_asset_id == AudioAsset.id).filter(
+        AudioAnalysis.status == "FAILED",
+    ).scalar() or 0
+
+    total_assets = db.query(func.count(AudioAsset.id)).filter(
+        AudioAsset.org_id == org_id,
+    ).scalar() or 0
+
+    return {
+        "total_songs": total_songs,
+        "songs_with_audio": songs_with_audio,
+        "songs_analyzed": songs_analyzed,
+        "songs_queued": songs_queued,
+        "songs_failed": songs_failed,
+        "songs_unlinked": total_songs - songs_with_audio,
+        "total_assets": total_assets,
+        "audio_coverage_pct": round((songs_with_audio / total_songs * 100), 1) if total_songs > 0 else 0,
+        "analysis_coverage_pct": round((songs_analyzed / total_songs * 100), 1) if total_songs > 0 else 0,
+    }
+
+
+@router.post("/org/{org_id}/analyze-all-unanalyzed")
+def analyze_all_unanalyzed(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    import threading
+    from ..routes.audio import _run_analysis_worker
+
+    assets = db.query(AudioAsset).filter(
+        AudioAsset.org_id == org_id,
+        AudioAsset.song_id.isnot(None),
+    ).all()
+
+    queued = 0
+    for asset in assets:
+        existing = db.query(AudioAnalysis).filter(
+            AudioAnalysis.audio_asset_id == asset.id,
+        ).first()
+        if existing and existing.status in ("SUCCEEDED", "RUNNING", "QUEUED"):
+            continue
+
+        if existing:
+            existing.status = "QUEUED"
+            existing.error_message = None
+            db.commit()
+            analysis_id = existing.id
+        else:
+            analysis = AudioAnalysis(
+                org_id=org_id,
+                audio_asset_id=asset.id,
+                status="QUEUED",
+            )
+            db.add(analysis)
+            db.commit()
+            db.refresh(analysis)
+            analysis_id = analysis.id
+
+        thread = threading.Thread(
+            target=_run_analysis_worker,
+            args=(analysis_id, asset.id, org_id),
+            daemon=True,
+        )
+        thread.start()
+        queued += 1
+
+    return {"queued": queued, "message": f"Queued {queued} assets for analysis"}
+
+
 class ScheduleScanRequest(BaseModel):
     auto_scan_enabled: bool
     auto_scan_frequency: Optional[str] = "daily"

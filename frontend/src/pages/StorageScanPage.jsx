@@ -4,7 +4,8 @@ import {
   FolderIcon, CloudArrowUpIcon, MagnifyingGlassIcon, PlusIcon,
   TrashIcon, PencilSquareIcon, CheckCircleIcon, XCircleIcon,
   ArrowPathIcon, FunnelIcon, SparklesIcon, LinkIcon,
-  ChevronDownIcon, XMarkIcon, FolderOpenIcon
+  ChevronDownIcon, XMarkIcon, FolderOpenIcon, GlobeAltIcon,
+  ChartBarIcon, MusicalNoteIcon, ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
 import FolderPicker from '../components/FolderPicker'
 
@@ -53,11 +54,29 @@ function ProviderIcon({ provider, className = 'w-5 h-5' }) {
   )
 }
 
+function CoverageBar({ label, value, total, color = 'bg-[#5B8A72]' }) {
+  const pct = total > 0 ? Math.round((value / total) * 100) : 0
+  return (
+    <div>
+      <div className="flex justify-between text-[13px] mb-1">
+        <span className="text-[#3D4A44] font-medium">{label}</span>
+        <span className="text-[#7A8580]">{value} / {total} ({pct}%)</span>
+      </div>
+      <div className="h-2 bg-[#E0E5DE] rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
+}
+
 export default function StorageScanPage() {
   const [orgId, setOrgId] = useState(null)
 
-  const [activeTab, setActiveTab] = useState('links')
+  const [activeTab, setActiveTab] = useState('overview')
   const [toast, setToast] = useState(null)
+
+  const [coverage, setCoverage] = useState(null)
+  const [coverageLoading, setCoverageLoading] = useState(false)
 
   const [links, setLinks] = useState([])
   const [linksLoading, setLinksLoading] = useState(false)
@@ -86,6 +105,11 @@ export default function StorageScanPage() {
   const [analyzeLoading, setAnalyzeLoading] = useState(false)
   const [analyzeStatus, setAnalyzeStatus] = useState(null)
 
+  const [orgScanFolder, setOrgScanFolder] = useState('/')
+  const [orgScanRunning, setOrgScanRunning] = useState(false)
+  const [orgScanResult, setOrgScanResult] = useState(null)
+  const [orgScanFolderPickerOpen, setOrgScanFolderPickerOpen] = useState(false)
+
   useEffect(() => {
     const fetchOrg = async () => {
       try {
@@ -102,6 +126,19 @@ export default function StorageScanPage() {
     setToast({ message, type })
     setTimeout(() => setToast(null), 3000)
   }, [])
+
+  const loadCoverage = useCallback(async () => {
+    if (!orgId) return
+    setCoverageLoading(true)
+    try {
+      const res = await axios.get(`/api/storage-scan/org/${orgId}/coverage`, getAuthHeaders())
+      setCoverage(res.data)
+    } catch (err) {
+      console.error('Failed to load coverage:', err)
+    } finally {
+      setCoverageLoading(false)
+    }
+  }, [orgId])
 
   const loadLinks = useCallback(async () => {
     if (!orgId) {
@@ -158,9 +195,11 @@ export default function StorageScanPage() {
 
   useEffect(() => {
     if (!orgId) return
+    if (activeTab === 'overview') loadCoverage()
     if (activeTab === 'links') loadLinks()
     if (activeTab === 'results') { loadBatches(); loadResults() }
-  }, [orgId, activeTab, loadLinks, loadBatches, loadResults])
+    if (activeTab === 'analyze') loadBatches()
+  }, [orgId, activeTab, loadLinks, loadBatches, loadResults, loadCoverage])
 
   useEffect(() => {
     if (activeTab === 'results') loadResults()
@@ -269,7 +308,7 @@ export default function StorageScanPage() {
       const res = await axios.post(`/api/storage-scan/org/${orgId}/bulk-approve`, {
         scan_batch_id: selectedBatch, min_confidence: 'HIGH'
       }, getAuthHeaders())
-      showToast(`Approved ${res.data?.approved_count || 0} results`)
+      showToast(`Approved ${res.data?.approved_count || res.data?.approved || 0} results`)
       loadResults()
     } catch (err) {
       showToast('Bulk approve failed', 'error')
@@ -304,6 +343,37 @@ export default function StorageScanPage() {
     }
   }
 
+  const handleAnalyzeAllUnanalyzed = async () => {
+    setAnalyzeLoading(true)
+    try {
+      const res = await axios.post(`/api/storage-scan/org/${orgId}/analyze-all-unanalyzed`, {}, getAuthHeaders())
+      setAnalyzeStatus(res.data)
+      showToast(`Queued ${res.data?.queued || 0} assets for analysis`)
+      loadCoverage()
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Analysis failed', 'error')
+    } finally {
+      setAnalyzeLoading(false)
+    }
+  }
+
+  const handleOrgWideScan = async () => {
+    setOrgScanRunning(true)
+    setOrgScanResult(null)
+    try {
+      const res = await axios.post(`/api/storage-scan/org/${orgId}/org-scan`, {
+        folder_path: orgScanFolder || '/'
+      }, getAuthHeaders())
+      setOrgScanResult(res.data)
+      showToast(`Scan complete: ${res.data.auto_linked} auto-linked, ${res.data.needs_review} need review`)
+      loadCoverage()
+    } catch (err) {
+      showToast(err.response?.data?.detail || 'Org-wide scan failed', 'error')
+    } finally {
+      setOrgScanRunning(false)
+    }
+  }
+
   const openEditLink = (link) => {
     setEditingLink(link)
     setLinkForm({
@@ -322,12 +392,14 @@ export default function StorageScanPage() {
   }
 
   const filteredResults = results.filter(r => {
-    if (confidenceFilter && r.confidence !== confidenceFilter) return false
+    if (confidenceFilter && r.match_confidence !== confidenceFilter) return false
     if (creatorFilter && r.creator_id !== parseInt(creatorFilter)) return false
     return true
   })
 
   const tabs = [
+    { key: 'overview', label: 'Overview', icon: ChartBarIcon },
+    { key: 'org-scan', label: 'Org-Wide Scan', icon: GlobeAltIcon },
     { key: 'links', label: 'Storage Links', icon: LinkIcon },
     { key: 'results', label: 'Scan Results', icon: MagnifyingGlassIcon },
     { key: 'analyze', label: 'Analyze', icon: SparklesIcon }
@@ -362,6 +434,194 @@ export default function StorageScanPage() {
             ))}
           </div>
         </div>
+
+        {activeTab === 'overview' && (
+          <div>
+            {coverageLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="flex items-center gap-3 text-[#7A8580]">
+                  <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                  <span>Loading coverage data...</span>
+                </div>
+              </div>
+            ) : coverage ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 text-center">
+                    <div className="text-3xl font-bold text-[#3D4A44]">{coverage.total_songs}</div>
+                    <div className="text-[13px] text-[#7A8580] mt-1">Total Songs</div>
+                  </div>
+                  <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 text-center">
+                    <div className="text-3xl font-bold text-[#5B8A72]">{coverage.songs_with_audio}</div>
+                    <div className="text-[13px] text-[#7A8580] mt-1">Audio Linked</div>
+                  </div>
+                  <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 text-center">
+                    <div className="text-3xl font-bold text-[#6B4FA0]">{coverage.songs_analyzed}</div>
+                    <div className="text-[13px] text-[#7A8580] mt-1">Analyzed</div>
+                  </div>
+                  <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 text-center">
+                    <div className="text-3xl font-bold text-[#C47068]">{coverage.songs_unlinked}</div>
+                    <div className="text-[13px] text-[#7A8580] mt-1">Unlinked</div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+                  <h2 className="text-lg font-semibold text-[#3D4A44] mb-4">Audio Coverage</h2>
+                  <div className="space-y-4">
+                    <CoverageBar label="Audio Linked" value={coverage.songs_with_audio} total={coverage.total_songs} />
+                    <CoverageBar label="AI Analyzed" value={coverage.songs_analyzed} total={coverage.total_songs} color="bg-[#6B4FA0]" />
+                    {coverage.songs_queued > 0 && (
+                      <CoverageBar label="Analysis In Progress" value={coverage.songs_queued} total={coverage.total_songs} color="bg-amber-500" />
+                    )}
+                    {coverage.songs_failed > 0 && (
+                      <CoverageBar label="Analysis Failed" value={coverage.songs_failed} total={coverage.total_songs} color="bg-[#C47068]" />
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+                  <h2 className="text-lg font-semibold text-[#3D4A44] mb-3">Quick Actions</h2>
+                  <div className="flex flex-wrap gap-3">
+                    {coverage.songs_unlinked > 0 && (
+                      <button
+                        onClick={() => setActiveTab('org-scan')}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-xl text-sm font-medium hover:bg-[#4A7A62] transition-colors"
+                      >
+                        <GlobeAltIcon className="w-4 h-4" />
+                        Run Org-Wide Scan ({coverage.songs_unlinked} unlinked)
+                      </button>
+                    )}
+                    {coverage.songs_with_audio > coverage.songs_analyzed && (
+                      <button
+                        onClick={handleAnalyzeAllUnanalyzed}
+                        disabled={analyzeLoading}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-[#6B4FA0] text-white rounded-xl text-sm font-medium hover:bg-[#5A3F8A] transition-colors disabled:opacity-50"
+                      >
+                        {analyzeLoading ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <SparklesIcon className="w-4 h-4" />}
+                        Analyze All Unanalyzed ({coverage.songs_with_audio - coverage.songs_analyzed})
+                      </button>
+                    )}
+                    <button
+                      onClick={loadCoverage}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-[#EEF1EC] text-[#3D4A44] rounded-xl text-sm font-medium hover:bg-[#D8DDD6] transition-colors"
+                    >
+                      <ArrowPathIcon className="w-4 h-4" />
+                      Refresh
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <ChartBarIcon className="w-12 h-12 text-[#7A8580] opacity-40 mb-4" />
+                <p className="text-[#7A8580] text-lg">No coverage data available</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'org-scan' && (
+          <div>
+            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6 mb-6">
+              <div className="flex items-center gap-3 mb-4">
+                <GlobeAltIcon className="w-6 h-6 text-[#5B8A72]" />
+                <h2 className="text-lg font-semibold text-[#3D4A44]">Org-Wide Dropbox Scan</h2>
+              </div>
+              <p className="text-[#7A8580] text-sm mb-6">
+                Scan your entire Dropbox (or a specific folder) to find audio files and automatically match them
+                to songs in your catalog. High-confidence matches are auto-linked and queued for AI analysis.
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Root Folder to Scan</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={orgScanFolder}
+                      onChange={(e) => setOrgScanFolder(e.target.value)}
+                      placeholder="/ (entire Dropbox)"
+                      className="flex-1 border border-[rgba(59,77,67,0.12)] rounded-xl px-3 py-2.5 text-sm bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent placeholder-[#7A8580]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setOrgScanFolderPickerOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-2.5 border border-[#5B8A72] text-[#5B8A72] rounded-xl text-sm font-medium hover:bg-[rgba(91,138,114,0.08)] transition-colors shrink-0"
+                    >
+                      <FolderOpenIcon className="w-4 h-4" />
+                      Browse
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleOrgWideScan}
+                  disabled={orgScanRunning}
+                  className="flex items-center gap-2 px-6 py-3 bg-[#5B8A72] text-white rounded-xl text-sm font-medium hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                >
+                  {orgScanRunning ? (
+                    <>
+                      <ArrowPathIcon className="w-5 h-5 animate-spin" />
+                      Scanning Dropbox...
+                    </>
+                  ) : (
+                    <>
+                      <MagnifyingGlassIcon className="w-5 h-5" />
+                      Start Org-Wide Scan
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {orgScanResult && (
+              <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+                <h3 className="text-lg font-semibold text-[#3D4A44] mb-4">Scan Results</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                  <div className="p-3 bg-[#F5F7F4] rounded-xl text-center">
+                    <div className="text-2xl font-bold text-[#3D4A44]">{orgScanResult.total_files_found}</div>
+                    <div className="text-[12px] text-[#7A8580]">Audio Files Found</div>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-xl text-center">
+                    <div className="text-2xl font-bold text-green-700">{orgScanResult.auto_linked}</div>
+                    <div className="text-[12px] text-green-600">Auto-Linked</div>
+                  </div>
+                  <div className="p-3 bg-amber-50 rounded-xl text-center">
+                    <div className="text-2xl font-bold text-amber-700">{orgScanResult.needs_review}</div>
+                    <div className="text-[12px] text-amber-600">Need Review</div>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-xl text-center">
+                    <div className="text-2xl font-bold text-gray-600">{orgScanResult.no_match}</div>
+                    <div className="text-[12px] text-gray-500">No Match</div>
+                  </div>
+                </div>
+                {orgScanResult.already_linked > 0 && (
+                  <p className="text-[13px] text-[#7A8580]">{orgScanResult.already_linked} files were already linked</p>
+                )}
+                {orgScanResult.analysis_queued > 0 && (
+                  <p className="text-[13px] text-[#5B8A72] mt-1">{orgScanResult.analysis_queued} assets queued for AI analysis</p>
+                )}
+                {orgScanResult.needs_review > 0 && (
+                  <button
+                    onClick={() => setActiveTab('results')}
+                    className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#EEF1EC] text-[#3D4A44] rounded-xl text-sm font-medium hover:bg-[#D8DDD6] transition-colors"
+                  >
+                    <MagnifyingGlassIcon className="w-4 h-4" />
+                    Review Pending Matches
+                  </button>
+                )}
+              </div>
+            )}
+
+            {!orgScanResult && !orgScanRunning && (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <GlobeAltIcon className="w-12 h-12 text-[#7A8580] opacity-40 mb-4" />
+                <p className="text-[#7A8580] text-lg">Ready to scan</p>
+                <p className="text-[#7A8580] text-sm mt-1">Choose a folder and start scanning to match audio files to your catalog</p>
+              </div>
+            )}
+          </div>
+        )}
 
         {activeTab === 'links' && (
           <div>
@@ -415,8 +675,8 @@ export default function StorageScanPage() {
                               <span className="rounded-full px-3 py-1 text-[13px] font-medium bg-[#EEF1EC] text-[#3D4A44]">
                                 {PROVIDER_LABELS[link.provider] || link.provider}
                               </span>
-                              {link.file_count != null && (
-                                <span className="text-[13px] text-[#7A8580]">{link.file_count} files</span>
+                              {link.last_scan_file_count != null && (
+                                <span className="text-[13px] text-[#7A8580]">{link.last_scan_file_count} files</span>
                               )}
                               <span className="text-[13px] text-[#7A8580]">
                                 Scanned: {formatDate(link.last_scanned_at)}
@@ -471,7 +731,7 @@ export default function StorageScanPage() {
                 >
                   <option value="">All Batches</option>
                   {batches.map(b => (
-                    <option key={b.id} value={b.id}>{formatDate(b.created_at)} — {b.total_files || 0} files</option>
+                    <option key={b.scan_batch_id} value={b.scan_batch_id}>{formatDate(b.created_at)} — {b.total || 0} files</option>
                   ))}
                 </select>
                 <select
@@ -517,7 +777,7 @@ export default function StorageScanPage() {
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <MagnifyingGlassIcon className="w-12 h-12 text-[#7A8580] opacity-40 mb-4" />
                 <p className="text-[#7A8580] text-lg">No scan results to review</p>
-                <p className="text-[#7A8580] text-sm mt-1">Run a scan from the Storage Links tab</p>
+                <p className="text-[#7A8580] text-sm mt-1">Run a scan from the Org-Wide Scan or Storage Links tab</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -528,30 +788,32 @@ export default function StorageScanPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <h3 className="text-[16px] font-semibold text-[#3D4A44] truncate">{result.file_name}</h3>
-                          {result.confidence && (
-                            <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-bold ${CONFIDENCE_COLORS[result.confidence] || CONFIDENCE_COLORS.NONE}`}>
-                              {result.confidence}
+                          {result.match_confidence && (
+                            <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-bold ${CONFIDENCE_COLORS[result.match_confidence] || CONFIDENCE_COLORS.NONE}`}>
+                              {result.match_confidence}
                             </span>
                           )}
                         </div>
                         <p className="text-[13px] text-[#7A8580] truncate">{result.file_path}</p>
                         <p className="text-[13px] text-[#7A8580]">{formatFileSize(result.file_size)}</p>
 
-                        {result.suggested_song_title && (
+                        {(result.matched_song_title || result.suggested_title) && (
                           <div className="mt-3 p-3 bg-[#F5F7F4] rounded-xl">
                             <p className="text-[13px] font-medium text-[#3D4A44]">
-                              Suggested: {result.suggested_song_title}
-                              {result.suggested_artist && <span className="text-[#7A8580]"> — {result.suggested_artist}</span>}
+                              Suggested: {result.matched_song_title || result.suggested_title}
+                              {(result.matched_song_artist || result.suggested_artist) && (
+                                <span className="text-[#7A8580]"> — {result.matched_song_artist || result.suggested_artist}</span>
+                              )}
                             </p>
                             {result.match_score != null && (
                               <div className="flex items-center gap-2 mt-1">
                                 <div className="flex-1 h-1.5 bg-[#E0E5DE] rounded-full overflow-hidden">
                                   <div
                                     className="h-full bg-[#5B8A72] rounded-full transition-all"
-                                    style={{ width: `${Math.min(result.match_score, 100)}%` }}
+                                    style={{ width: `${Math.min(result.match_score * 100, 100)}%` }}
                                   />
                                 </div>
-                                <span className="text-[12px] font-bold text-[#3D4A44]">{Math.round(result.match_score)}%</span>
+                                <span className="text-[12px] font-bold text-[#3D4A44]">{Math.round(result.match_score * 100)}%</span>
                               </div>
                             )}
                           </div>
@@ -560,8 +822,9 @@ export default function StorageScanPage() {
 
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <button
-                          onClick={() => handleApprove(result.id, result.suggested_song_id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#5B8A72] rounded-lg hover:bg-[#4A7A62] transition-colors"
+                          onClick={() => handleApprove(result.id, result.matched_song_id)}
+                          disabled={!result.matched_song_id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#5B8A72] rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
                         >
                           <CheckCircleIcon className="w-4 h-4" />
                           Approve
@@ -600,19 +863,9 @@ export default function StorageScanPage() {
                 Analyze linked audio files with AI to extract BPM, key, mood, and other metadata for your catalog.
               </p>
 
-              <div className="flex items-center gap-3 mb-6">
-                <select
-                  value={selectedBatch}
-                  onChange={(e) => setSelectedBatch(e.target.value)}
-                  className="border border-[rgba(59,77,67,0.12)] rounded-xl px-3 py-2 text-sm bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                >
-                  <option value="">Select Batch</option>
-                  {batches.map(b => (
-                    <option key={b.id} value={b.id}>{formatDate(b.created_at)} — {b.total_files || 0} files</option>
-                  ))}
-                </select>
+              <div className="flex flex-wrap items-center gap-3 mb-6">
                 <button
-                  onClick={handleAnalyzeLinked}
+                  onClick={handleAnalyzeAllUnanalyzed}
                   disabled={analyzeLoading}
                   className="flex items-center gap-2 px-5 py-2.5 bg-[#5B8A72] text-white rounded-xl text-sm font-medium hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
                 >
@@ -624,16 +877,40 @@ export default function StorageScanPage() {
                   ) : (
                     <>
                       <SparklesIcon className="w-4 h-4" />
-                      Analyze All
+                      Analyze All Unanalyzed
                     </>
                   )}
                 </button>
+
+                <div className="flex items-center gap-2 border-l border-[rgba(59,77,67,0.12)] pl-3">
+                  <select
+                    value={selectedBatch}
+                    onChange={(e) => setSelectedBatch(e.target.value)}
+                    className="border border-[rgba(59,77,67,0.12)] rounded-xl px-3 py-2 text-sm bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  >
+                    <option value="">Select Batch</option>
+                    {batches.map(b => (
+                      <option key={b.scan_batch_id} value={b.scan_batch_id}>{formatDate(b.created_at)} — {b.total || 0} files</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleAnalyzeLinked}
+                    disabled={analyzeLoading || !selectedBatch}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#EEF1EC] text-[#3D4A44] rounded-xl text-sm font-medium hover:bg-[#D8DDD6] transition-colors disabled:opacity-50"
+                  >
+                    <SparklesIcon className="w-4 h-4" />
+                    Analyze Batch
+                  </button>
+                </div>
               </div>
 
               {analyzeStatus && (
                 <div className="p-4 bg-[#F5F7F4] rounded-xl">
                   <h3 className="text-sm font-semibold text-[#3D4A44] mb-2">Analysis Status</h3>
                   {analyzeStatus.message && <p className="text-sm text-[#7A8580]">{analyzeStatus.message}</p>}
+                  {analyzeStatus.queued != null && (
+                    <p className="text-sm text-[#5B8A72]">{analyzeStatus.queued} assets queued for analysis</p>
+                  )}
                   {analyzeStatus.total != null && (
                     <div className="mt-2">
                       <div className="flex justify-between text-[13px] text-[#7A8580] mb-1">
@@ -659,7 +936,7 @@ export default function StorageScanPage() {
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <SparklesIcon className="w-12 h-12 text-[#7A8580] opacity-40 mb-4" />
                 <p className="text-[#7A8580] text-lg">Ready to analyze</p>
-                <p className="text-[#7A8580] text-sm mt-1">Select a batch and click Analyze All to start</p>
+                <p className="text-[#7A8580] text-sm mt-1">Click "Analyze All Unanalyzed" to process all linked audio</p>
               </div>
             )}
           </div>
@@ -777,6 +1054,17 @@ export default function StorageScanPage() {
         provider={linkForm.provider}
         orgId={orgId}
         initialPath={linkForm.folder_path}
+      />
+
+      <FolderPicker
+        isOpen={orgScanFolderPickerOpen}
+        onClose={() => setOrgScanFolderPickerOpen(false)}
+        onSelect={(path) => {
+          setOrgScanFolder(path)
+        }}
+        provider="DROPBOX"
+        orgId={orgId}
+        initialPath={orgScanFolder}
       />
 
       {showReassignModal && (
