@@ -93,6 +93,7 @@ export default function NewCatalogPage() {
   const ALL_COLUMNS = [
     { key: 'title', label: 'Song', sortable: true, required: true },
     { key: 'primary_artist', label: 'Artist', sortable: true },
+    { key: 'client_name', label: 'Client', sortable: true },
     { key: 'label', label: 'Label', sortable: true },
     { key: 'publishing_percentage', label: 'Pub %', sortable: true },
     { key: 'status_health_score', label: 'Health', sortable: true },
@@ -249,6 +250,7 @@ export default function NewCatalogPage() {
     const matchesSearch = !searchTerm || (
       song.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       song.primary_artist.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (song.client_name && song.client_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (song.project_title && song.project_title.toLowerCase().includes(searchTerm.toLowerCase()))
     )
     
@@ -1106,6 +1108,8 @@ export default function NewCatalogPage() {
                         )
                       case 'primary_artist':
                         return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.primary_artist}</td>
+                      case 'client_name':
+                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.client_name || '-'}</td>
                       case 'label':
                         return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.label || '-'}</td>
                       case 'publishing_percentage':
