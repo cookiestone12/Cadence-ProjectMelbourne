@@ -4,7 +4,7 @@ import {
   FunnelIcon, MagnifyingGlassIcon, PlusIcon, ArrowUpTrayIcon,
   CheckCircleIcon, XCircleIcon, MinusCircleIcon, LinkIcon, TrashIcon,
   SpeakerWaveIcon, ChevronDownIcon, ChevronUpIcon, ArrowPathIcon,
-  DocumentDuplicateIcon, AdjustmentsHorizontalIcon,
+  DocumentDuplicateIcon, AdjustmentsHorizontalIcon, XMarkIcon,
   ArrowUpIcon, ArrowDownIcon, ArrowsUpDownIcon
 } from '@heroicons/react/24/outline'
 import SongDetailModal from '../components/SongDetailModal'
@@ -127,19 +127,56 @@ export default function NewCatalogPage() {
   const [showColumnConfig, setShowColumnConfig] = useState(false)
   const columnConfigRef = useRef(null)
 
+  const [columnWidths, setColumnWidths] = useState(() => {
+    try {
+      const stored = localStorage.getItem('cadence_catalog_col_widths')
+      if (stored) return JSON.parse(stored)
+    } catch {}
+    return {}
+  })
+  const resizingRef = useRef(null)
+
   useEffect(() => {
     localStorage.setItem('cadence_catalog_columns', JSON.stringify(visibleColumns))
   }, [visibleColumns])
 
   useEffect(() => {
-    function handleClickOutside(e) {
-      if (columnConfigRef.current && !columnConfigRef.current.contains(e.target)) {
-        setShowColumnConfig(false)
-      }
+    if (Object.keys(columnWidths).length > 0) {
+      localStorage.setItem('cadence_catalog_col_widths', JSON.stringify(columnWidths))
+    } else {
+      localStorage.removeItem('cadence_catalog_col_widths')
     }
-    if (showColumnConfig) document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showColumnConfig])
+  }, [columnWidths])
+
+  const handleResizeStart = (e, colKey) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX
+    const th = e.target.closest('th')
+    const startWidth = th ? th.offsetWidth : 120
+    resizingRef.current = { colKey, startX, startWidth }
+
+    const handleMove = (moveEvent) => {
+      if (!resizingRef.current) return
+      const currentX = moveEvent.type === 'touchmove' ? moveEvent.touches[0].clientX : moveEvent.clientX
+      const diff = currentX - resizingRef.current.startX
+      const newWidth = Math.max(60, resizingRef.current.startWidth + diff)
+      setColumnWidths(prev => ({ ...prev, [resizingRef.current.colKey]: newWidth }))
+    }
+
+    const handleEnd = () => {
+      resizingRef.current = null
+      document.removeEventListener('mousemove', handleMove)
+      document.removeEventListener('mouseup', handleEnd)
+      document.removeEventListener('touchmove', handleMove)
+      document.removeEventListener('touchend', handleEnd)
+    }
+
+    document.addEventListener('mousemove', handleMove)
+    document.addEventListener('mouseup', handleEnd)
+    document.addEventListener('touchmove', handleMove, { passive: false })
+    document.addEventListener('touchend', handleEnd)
+  }
 
   const toggleColumn = (key) => {
     setVisibleColumns(prev => {
@@ -787,70 +824,77 @@ export default function NewCatalogPage() {
             </button>
 
             {showColumnConfig && (
-              <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl border border-[rgba(59,77,67,0.12)] shadow-xl z-50 overflow-hidden">
-                <div className="px-4 py-3 border-b border-[rgba(59,77,67,0.08)] flex items-center justify-between">
-                  <span className="text-sm font-semibold text-[#3D4A44]">Table Columns</span>
-                  <button
-                    onClick={() => setVisibleColumns(DEFAULT_VISIBLE)}
-                    className="text-xs text-[#5B8A72] hover:underline"
-                  >
-                    Reset
-                  </button>
-                </div>
-                <div className="max-h-80 overflow-y-auto py-1">
-                  {visibleColumns.map((key, idx) => {
-                    const col = ALL_COLUMNS.find(c => c.key === key)
-                    if (!col) return null
-                    return (
-                      <div
-                        key={key}
-                        className="flex items-center gap-1.5 px-3 py-2 hover:bg-[#F5F7F4] transition-colors"
-                      >
-                        <div className="flex flex-col flex-shrink-0">
-                          <button
-                            onClick={() => { if (idx > 0 && !col.required) moveColumn(idx, idx - 1) }}
-                            disabled={idx === 0 || col.required}
-                            className="p-0.5 text-[#B0BDB4] hover:text-[#5B8A72] disabled:opacity-30 disabled:cursor-default transition-colors"
-                          >
-                            <ChevronUpIcon className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => { if (idx < visibleColumns.length - 1 && !col.required) moveColumn(idx, idx + 1) }}
-                            disabled={idx === visibleColumns.length - 1 || col.required}
-                            className="p-0.5 text-[#B0BDB4] hover:text-[#5B8A72] disabled:opacity-30 disabled:cursor-default transition-colors"
-                          >
-                            <ChevronDownIcon className="w-3 h-3" />
-                          </button>
-                        </div>
-                        <span className="flex-1 text-sm text-[#3D4A44]">{col.label}</span>
-                        <button
-                          onClick={() => !col.required && toggleColumn(key)}
-                          disabled={col.required}
-                          className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0"
-                          style={{ backgroundColor: '#5B8A72', opacity: col.required ? 0.5 : 1 }}
-                        >
-                          <span className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm" style={{ transform: 'translateX(18px)' }} />
-                        </button>
-                      </div>
-                    )
-                  })}
-
-                  {ALL_COLUMNS.filter(c => !visibleColumns.includes(c.key)).map(col => (
-                    <div
-                      key={col.key}
-                      className="flex items-center gap-1.5 px-3 py-2 hover:bg-[#F5F7F4] transition-colors"
-                    >
-                      <div className="w-[18px] flex-shrink-0" />
-                      <span className="flex-1 text-sm text-[#7A8580]">{col.label}</span>
+              <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setShowColumnConfig(false)}>
+                <div className="bg-white w-full sm:w-80 sm:rounded-2xl rounded-t-2xl shadow-xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                  <div className="px-4 py-3 border-b border-[rgba(59,77,67,0.08)] flex items-center justify-between flex-shrink-0">
+                    <span className="text-sm font-semibold text-[#3D4A44]">Table Columns</span>
+                    <div className="flex items-center gap-3">
                       <button
-                        onClick={() => toggleColumn(col.key)}
-                        className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0"
-                        style={{ backgroundColor: '#D1D5DB' }}
+                        onClick={() => { setVisibleColumns(DEFAULT_VISIBLE); setColumnWidths({}) }}
+                        className="text-xs text-[#5B8A72] hover:underline"
                       >
-                        <span className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm" style={{ transform: 'translateX(3px)' }} />
+                        Reset
+                      </button>
+                      <button onClick={() => setShowColumnConfig(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
+                        <XMarkIcon className="w-5 h-5" />
                       </button>
                     </div>
-                  ))}
+                  </div>
+                  <div className="overflow-y-auto py-1 flex-1">
+                    {visibleColumns.map((key, idx) => {
+                      const col = ALL_COLUMNS.find(c => c.key === key)
+                      if (!col) return null
+                      return (
+                        <div
+                          key={key}
+                          className="flex items-center gap-1.5 px-3 py-2 hover:bg-[#F5F7F4] transition-colors"
+                        >
+                          <div className="flex flex-col flex-shrink-0">
+                            <button
+                              onClick={() => { if (idx > 0 && !col.required) moveColumn(idx, idx - 1) }}
+                              disabled={idx === 0 || col.required}
+                              className="p-0.5 text-[#B0BDB4] hover:text-[#5B8A72] disabled:opacity-30 disabled:cursor-default transition-colors"
+                            >
+                              <ChevronUpIcon className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => { if (idx < visibleColumns.length - 1 && !col.required) moveColumn(idx, idx + 1) }}
+                              disabled={idx === visibleColumns.length - 1 || col.required}
+                              className="p-0.5 text-[#B0BDB4] hover:text-[#5B8A72] disabled:opacity-30 disabled:cursor-default transition-colors"
+                            >
+                              <ChevronDownIcon className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <span className="flex-1 text-sm text-[#3D4A44]">{col.label}</span>
+                          <button
+                            onClick={() => !col.required && toggleColumn(key)}
+                            disabled={col.required}
+                            className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0"
+                            style={{ backgroundColor: '#5B8A72', opacity: col.required ? 0.5 : 1 }}
+                          >
+                            <span className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm" style={{ transform: 'translateX(18px)' }} />
+                          </button>
+                        </div>
+                      )
+                    })}
+
+                    {ALL_COLUMNS.filter(c => !visibleColumns.includes(c.key)).map(col => (
+                      <div
+                        key={col.key}
+                        className="flex items-center gap-1.5 px-3 py-2 hover:bg-[#F5F7F4] transition-colors"
+                      >
+                        <div className="w-[18px] flex-shrink-0" />
+                        <span className="flex-1 text-sm text-[#7A8580]">{col.label}</span>
+                        <button
+                          onClick={() => toggleColumn(col.key)}
+                          className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0"
+                          style={{ backgroundColor: '#D1D5DB' }}
+                        >
+                          <span className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm" style={{ transform: 'translateX(3px)' }} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -1041,7 +1085,7 @@ export default function NewCatalogPage() {
       
       <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px]">
+          <table className="w-full min-w-[700px]" style={{ tableLayout: Object.keys(columnWidths).length > 0 ? 'fixed' : 'auto' }}>
             <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
                 <th className="px-2 sm:px-3 py-3 text-center w-10">
@@ -1061,13 +1105,20 @@ export default function NewCatalogPage() {
                 {activeColumns.map(col => (
                   <th
                     key={col.key}
-                    className={`px-2 sm:px-4 py-3 ${col.align === 'center' ? 'text-center' : 'text-left'} text-xs font-semibold text-[#3D4A44] whitespace-nowrap ${col.sortable ? 'cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)]' : ''} transition-colors`}
+                    className={`relative px-2 sm:px-4 py-3 ${col.align === 'center' ? 'text-center' : 'text-left'} text-xs font-semibold text-[#3D4A44] whitespace-nowrap ${col.sortable ? 'cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)]' : ''} transition-colors`}
+                    style={columnWidths[col.key] ? { width: columnWidths[col.key], minWidth: columnWidths[col.key] } : undefined}
                     onClick={() => col.sortable && handleSort(col.key)}
                   >
                     <div className={`flex items-center ${col.align === 'center' ? 'justify-center' : ''} space-x-1`}>
                       <span>{col.label}</span>
                       {col.sortable && <SortArrow field={col.key} />}
                     </div>
+                    <div
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#5B8A72]/30 active:bg-[#5B8A72]/50 z-10"
+                      onMouseDown={(e) => handleResizeStart(e, col.key)}
+                      onTouchStart={(e) => handleResizeStart(e, col.key)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
                   </th>
                 ))}
                 {audioColumnsEnabled && (
@@ -1105,7 +1156,7 @@ export default function NewCatalogPage() {
                     switch (col.key) {
                       case 'title':
                         return (
-                          <td key={col.key} className="px-2 sm:px-4 py-3 max-w-[200px]">
+                          <td key={col.key} className="px-2 sm:px-4 py-3 overflow-hidden">
                             <div className="font-medium text-[#3D4A44] truncate">{song.title}</div>
                             {!visibleColumns.includes('project_title') && (
                               <div className="text-xs text-[#7A8580] truncate">{song.project_title || '-'}</div>
@@ -1113,11 +1164,11 @@ export default function NewCatalogPage() {
                           </td>
                         )
                       case 'primary_artist':
-                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] whitespace-nowrap">{song.primary_artist}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] overflow-hidden"><span className="block truncate">{song.primary_artist}</span></td>
                       case 'client_name':
-                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] whitespace-nowrap">{song.client_name || '-'}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] overflow-hidden"><span className="block truncate">{song.client_name || '-'}</span></td>
                       case 'label':
-                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] whitespace-nowrap">{song.label || '-'}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] overflow-hidden"><span className="block truncate">{song.label || '-'}</span></td>
                       case 'publishing_percentage':
                         return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] whitespace-nowrap">{song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}</td>
                       case 'status_health_score':
