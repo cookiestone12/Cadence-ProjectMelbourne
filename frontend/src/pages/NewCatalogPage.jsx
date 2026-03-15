@@ -149,15 +149,16 @@ export default function NewCatalogPage() {
   }, [columnWidths])
 
   const handleResizeStart = (e, colKey) => {
-    e.preventDefault()
     e.stopPropagation()
-    const startX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX
-    const th = e.target.closest('th')
+    const isTouch = e.type === 'touchstart'
+    const startX = isTouch ? e.touches[0].clientX : e.clientX
+    const th = e.currentTarget.parentElement
     const startWidth = th ? th.offsetWidth : 120
     resizingRef.current = { colKey, startX, startWidth }
 
     const handleMove = (moveEvent) => {
       if (!resizingRef.current) return
+      moveEvent.preventDefault()
       const currentX = moveEvent.type === 'touchmove' ? moveEvent.touches[0].clientX : moveEvent.clientX
       const diff = currentX - resizingRef.current.startX
       const newWidth = Math.max(60, resizingRef.current.startWidth + diff)
@@ -1085,7 +1086,7 @@ export default function NewCatalogPage() {
       
       <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px]" style={{ tableLayout: Object.keys(columnWidths).length > 0 ? 'fixed' : 'auto' }}>
+          <table className="w-full min-w-[700px]">
             <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
                 <th className="px-2 sm:px-3 py-3 text-center w-10">
@@ -1106,7 +1107,7 @@ export default function NewCatalogPage() {
                   <th
                     key={col.key}
                     className={`relative px-2 sm:px-4 py-3 ${col.align === 'center' ? 'text-center' : 'text-left'} text-xs font-semibold text-[#3D4A44] whitespace-nowrap ${col.sortable ? 'cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)]' : ''} transition-colors`}
-                    style={columnWidths[col.key] ? { width: columnWidths[col.key], minWidth: columnWidths[col.key] } : undefined}
+                    style={columnWidths[col.key] ? { width: columnWidths[col.key], minWidth: 60 } : undefined}
                     onClick={() => col.sortable && handleSort(col.key)}
                   >
                     <div className={`flex items-center ${col.align === 'center' ? 'justify-center' : ''} space-x-1`}>
