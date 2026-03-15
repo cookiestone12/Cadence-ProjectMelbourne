@@ -130,12 +130,19 @@ export default function NewCatalogPage() {
   const [columnWidths, setColumnWidths] = useState(() => {
     try {
       const stored = localStorage.getItem('cadence_catalog_col_widths')
-      if (stored) return JSON.parse(stored)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const cleaned = {}
+          for (const [k, v] of Object.entries(parsed)) {
+            if (typeof v === 'number' && v > 0 && isFinite(v)) cleaned[k] = v
+          }
+          return cleaned
+        }
+      }
     } catch {}
     return {}
   })
-  const resizingRef = useRef(null)
-
   useEffect(() => {
     localStorage.setItem('cadence_catalog_columns', JSON.stringify(visibleColumns))
   }, [visibleColumns])
@@ -149,34 +156,29 @@ export default function NewCatalogPage() {
   }, [columnWidths])
 
   const handleResizeStart = (e, colKey) => {
+    if (e.type === 'touchstart') return
+    e.preventDefault()
     e.stopPropagation()
-    const isTouch = e.type === 'touchstart'
-    const startX = isTouch ? e.touches[0].clientX : e.clientX
+    const startX = e.clientX
     const th = e.currentTarget.parentElement
-    const startWidth = th ? th.offsetWidth : 120
-    resizingRef.current = { colKey, startX, startWidth }
+    if (!th) return
+    const startWidth = th.offsetWidth
+    const savedColKey = colKey
 
     const handleMove = (moveEvent) => {
-      if (!resizingRef.current) return
       moveEvent.preventDefault()
-      const currentX = moveEvent.type === 'touchmove' ? moveEvent.touches[0].clientX : moveEvent.clientX
-      const diff = currentX - resizingRef.current.startX
-      const newWidth = Math.max(60, resizingRef.current.startWidth + diff)
-      setColumnWidths(prev => ({ ...prev, [resizingRef.current.colKey]: newWidth }))
+      const diff = moveEvent.clientX - startX
+      const newWidth = Math.max(60, startWidth + diff)
+      setColumnWidths(prev => ({ ...prev, [savedColKey]: newWidth }))
     }
 
     const handleEnd = () => {
-      resizingRef.current = null
       document.removeEventListener('mousemove', handleMove)
       document.removeEventListener('mouseup', handleEnd)
-      document.removeEventListener('touchmove', handleMove)
-      document.removeEventListener('touchend', handleEnd)
     }
 
     document.addEventListener('mousemove', handleMove)
     document.addEventListener('mouseup', handleEnd)
-    document.addEventListener('touchmove', handleMove, { passive: false })
-    document.addEventListener('touchend', handleEnd)
   }
 
   const toggleColumn = (key) => {
@@ -1115,9 +1117,8 @@ export default function NewCatalogPage() {
                       {col.sortable && <SortArrow field={col.key} />}
                     </div>
                     <div
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#5B8A72]/30 active:bg-[#5B8A72]/50 z-10"
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[#5B8A72]/30 active:bg-[#5B8A72]/50 z-10 hidden sm:block"
                       onMouseDown={(e) => handleResizeStart(e, col.key)}
-                      onTouchStart={(e) => handleResizeStart(e, col.key)}
                       onClick={(e) => e.stopPropagation()}
                     />
                   </th>
