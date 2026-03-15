@@ -230,11 +230,13 @@ export default function AssistantChat({ user }) {
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 relative">
             <img src="/cadence-assistant-logo.png" alt="Cadence" className="w-full h-full object-cover relative z-10" />
-            <div className="absolute inset-0 rounded-full z-20 pointer-events-none animate-[metalPulse_4s_ease-in-out_infinite]" />
+            <div className="absolute inset-0 rounded-full z-20 pointer-events-none" style={{ animation: 'metalPulse 5s cubic-bezier(0.45, 0, 0.55, 1) infinite' }} />
             <style>{`
               @keyframes metalPulse {
-                0%, 100% { opacity: 0; background: transparent; box-shadow: none; filter: none; }
-                40%, 60% { opacity: 1; background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.13) 50%, rgba(255,255,255,0.02) 100%); box-shadow: inset 0 0 8px rgba(255,255,255,0.12), 0 0 10px rgba(180,220,200,0.25), 0 0 20px rgba(91,138,114,0.15); }
+                0%, 100% { opacity: 0; background: transparent; box-shadow: none; }
+                15% { opacity: 0; }
+                45%, 55% { opacity: 1; background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.13) 50%, rgba(255,255,255,0.02) 100%); box-shadow: inset 0 0 8px rgba(255,255,255,0.12), 0 0 10px rgba(180,220,200,0.25), 0 0 20px rgba(91,138,114,0.15); }
+                85% { opacity: 0; }
               }
             `}</style>
           </div>
