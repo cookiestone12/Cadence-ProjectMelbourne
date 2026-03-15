@@ -481,14 +481,17 @@ def bulk_approve_high_confidence(
     ).all()
 
     approved = 0
+    created_asset_ids = []
     for result in results:
         try:
-            approve_scan_result(
+            approve_result = approve_scan_result(
                 org_id, result.id, result.matched_song_id, result.matched_work_id,
                 False, None, None, db,
             )
             approved += 1
+            if approve_result.get("audio_asset_id"):
+                created_asset_ids.append(approve_result["audio_asset_id"])
         except Exception as e:
             logger.warning(f"Failed to approve scan result {result.id}: {e}")
 
-    return {"approved": approved, "total_eligible": len(results)}
+    return {"approved": approved, "total_eligible": len(results), "created_asset_ids": created_asset_ids}

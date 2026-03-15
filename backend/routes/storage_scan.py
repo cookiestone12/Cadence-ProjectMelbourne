@@ -429,6 +429,33 @@ def bulk_approve(
         result = scan_service.bulk_approve_high_confidence(
             org_id, request.scan_batch_id, request.min_confidence, db,
         )
+
+        new_asset_ids = result.get("created_asset_ids", [])
+        if new_asset_ids:
+            import threading
+            from ..routes.audio import _run_analysis_worker
+
+            for asset_id in new_asset_ids:
+                existing_analysis = db.query(AudioAnalysis).filter(
+                    AudioAnalysis.audio_asset_id == asset_id,
+                ).first()
+                if not existing_analysis:
+                    analysis = AudioAnalysis(
+                        org_id=org_id,
+                        audio_asset_id=asset_id,
+                        status="QUEUED",
+                    )
+                    db.add(analysis)
+                    db.flush()
+                    db.commit()
+                    thread = threading.Thread(
+                        target=_run_analysis_worker,
+                        args=(analysis.id, asset_id, org_id),
+                        daemon=True,
+                    )
+                    thread.start()
+            result["analysis_queued"] = len(new_asset_ids)
+
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
