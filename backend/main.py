@@ -11,7 +11,7 @@ from .routes import (
     tenant_admin, creative_directory, registration_reports, audit_log, expenses,
     client_sharing, integrations, audio, brief_builder, royalty_processing,
     push, storage_scan, client_portal, account_merge, streaming_credits,
-    document_sharing, support
+    document_sharing, support, assistant
 )
 from .utils.logging_config import logger
 import os
@@ -148,6 +148,7 @@ app.include_router(streaming_credits.public_router)
 app.include_router(streaming_credits.admin_chart_router)
 app.include_router(document_sharing.router)
 app.include_router(support.router)
+app.include_router(assistant.router)
 
 uploads_dir = Path(__file__).parent / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)

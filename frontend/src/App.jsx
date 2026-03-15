@@ -64,6 +64,7 @@ import SharedWithMePage from './pages/SharedWithMePage'
 import SupportPage from './pages/SupportPage'
 import Sidebar from './components/Sidebar'
 import PullToRefresh from './components/PullToRefresh'
+import AssistantChat from './components/AssistantChat'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -221,6 +222,7 @@ function App() {
           </div>
           </PullToRefresh>
         </main>
+        <AssistantChat user={user} />
       </div>
     </Router>
   )
