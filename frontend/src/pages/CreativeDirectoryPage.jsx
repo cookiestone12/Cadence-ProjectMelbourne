@@ -557,7 +557,7 @@ export default function CreativeDirectoryPage() {
   }
 
   return (
-    <div className="p-4 sm:p-8">
+    <div className="p-4 sm:p-8 overflow-x-hidden">
       <div className="bg-gradient-to-r from-[#5B8A72] to-[#7A8580] rounded-2xl p-6 sm:p-8 mb-6 text-white">
         <div className="flex items-center gap-3 mb-2">
           <UserGroupIcon className="w-8 h-8" />
@@ -788,11 +788,11 @@ export default function CreativeDirectoryPage() {
           ))}
         </div>
         ) : (
-        <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] overflow-hidden">
-          <table className="w-full">
+        <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] overflow-x-hidden">
+          <table className="w-full table-fixed">
             <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
-                <th className="px-4 py-3 w-10">
+                <th className="px-2 sm:px-4 py-3 w-8 sm:w-10">
                   <input
                     type="checkbox"
                     checked={filteredContacts.length > 0 && selectedIds.size === filteredContacts.length}
@@ -800,18 +800,18 @@ export default function CreativeDirectoryPage() {
                     className="rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
                   />
                 </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44]">Name</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44]">Roles</th>
+                <th className="px-2 sm:px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] w-[30%] sm:w-auto">Name</th>
+                <th className="px-2 sm:px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] w-[35%] sm:w-auto">Roles</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] hidden lg:table-cell">PRO / IPI</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] hidden md:table-cell">Email</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-[#3D4A44] hidden xl:table-cell">Publisher</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold text-[#3D4A44]">Actions</th>
+                <th className="px-2 sm:px-4 py-3 text-right text-sm font-semibold text-[#3D4A44]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
               {filteredContacts.map(contact => (
                 <tr key={contact.id} className={`hover:bg-[#FAFBF9] transition-colors ${selectedIds.has(contact.id) ? 'bg-[rgba(91,138,114,0.06)]' : ''}`}>
-                  <td className="px-4 py-3">
+                  <td className="px-2 sm:px-4 py-3">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(contact.id)}
@@ -819,14 +819,14 @@ export default function CreativeDirectoryPage() {
                       className="rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
                     />
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="min-w-0">
-                      <p className="font-semibold text-[#3D4A44] truncate">{contact.display_name}</p>
+                  <td className="px-2 sm:px-4 py-3">
+                    <div className="min-w-0 overflow-hidden">
+                      <p className="font-semibold text-[#3D4A44] truncate text-sm">{contact.display_name}</p>
                       {contact.legal_name && <p className="text-xs text-[#7A8580] truncate">{contact.legal_name}</p>}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
+                  <td className="px-2 sm:px-4 py-3">
+                    <div className="flex flex-wrap gap-1 overflow-hidden">
                       {(contact.roles || []).map(role => (
                         <span key={role} className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${ROLE_COLORS[role] || 'bg-gray-100 text-gray-700'}`}>
                           {role}
@@ -847,15 +847,15 @@ export default function CreativeDirectoryPage() {
                   <td className="px-4 py-3 text-sm text-[#7A8580] hidden xl:table-cell truncate max-w-[160px]">
                     {contact.publisher_name || '-'}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1">
-                      <button onClick={() => openEdit(contact)} className="p-1.5 rounded-lg hover:bg-[#5B8A72]/10 text-[#7A8580] hover:text-[#5B8A72] transition-colors" title="Edit">
+                  <td className="px-2 sm:px-4 py-3">
+                    <div className="flex items-center justify-end gap-0.5 sm:gap-1">
+                      <button onClick={() => openEdit(contact)} className="p-1 sm:p-1.5 rounded-lg hover:bg-[#5B8A72]/10 text-[#7A8580] hover:text-[#5B8A72] transition-colors" title="Edit">
                         <PencilIcon className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(contact)} className="p-1.5 rounded-lg hover:bg-red-50 text-[#7A8580] hover:text-red-500 transition-colors" title="Delete">
+                      <button onClick={() => handleDelete(contact)} className="p-1 sm:p-1.5 rounded-lg hover:bg-red-50 text-[#7A8580] hover:text-red-500 transition-colors" title="Delete">
                         <TrashIcon className="w-4 h-4" />
                       </button>
-                      <button onClick={() => { setShareModalContact(contact); setShareResult(null) }} className="p-1.5 rounded-lg hover:bg-[#5B8A72]/10 text-[#7A8580] hover:text-[#5B8A72] transition-colors" title="Share Card">
+                      <button onClick={() => { setShareModalContact(contact); setShareResult(null) }} className="p-1 sm:p-1.5 rounded-lg hover:bg-[#5B8A72]/10 text-[#7A8580] hover:text-[#5B8A72] transition-colors" title="Share Card">
                         <EnvelopeIcon className="w-4 h-4" />
                       </button>
                       <button
@@ -875,7 +875,7 @@ export default function CreativeDirectoryPage() {
                             alert('Failed to download creative card PDF')
                           }
                         }}
-                        className="p-1.5 rounded-lg hover:bg-[#EEF1EC] text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+                        className="p-1 sm:p-1.5 rounded-lg hover:bg-[#EEF1EC] text-[#7A8580] hover:text-[#3D4A44] transition-colors hidden sm:inline-flex"
                         title="Download PDF"
                       >
                         <ArrowDownTrayIcon className="w-4 h-4" />
