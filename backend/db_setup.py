@@ -257,6 +257,17 @@ def ensure_schema_updates():
                 logger.info("Created registration_reports table")
             except Exception as e:
                 logger.warning(f"Could not create registration_reports table: {e}")
+        else:
+            rr_cols = {c['name'] for c in inspector.get_columns('registration_reports')}
+            for col_name, col_type in [('pdf_data', 'BYTEA'), ('pdf_mime', 'VARCHAR'), ('sent_at', 'TIMESTAMP'), ('sent_to', 'VARCHAR')]:
+                if col_name not in rr_cols:
+                    try:
+                        with engine.connect() as conn:
+                            conn.execute(text(f"ALTER TABLE registration_reports ADD COLUMN {col_name} {col_type}"))
+                            conn.commit()
+                        logger.info(f"Added {col_name} to registration_reports")
+                    except Exception as e:
+                        logger.warning(f"Could not add {col_name} to registration_reports: {e}")
 
 
 def _generate_access_code():

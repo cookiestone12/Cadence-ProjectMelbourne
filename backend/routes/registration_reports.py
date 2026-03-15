@@ -623,7 +623,40 @@ def send_registration_report_email(
         if not success:
             raise HTTPException(status_code=500, detail="Failed to send email")
 
-        return {"success": True, "message": f"Report sent to {to_email}"}
+        from ..models import RegistrationReport
+        now = datetime.utcnow()
+        stats = _compute_report_stats(items)
+        sent_report = RegistrationReport(
+            organization_id=org_id,
+            report_type=request.asset_type.upper(),
+            title=f"Sent to {to_name} — {request.asset_type.title()} ({now.strftime('%b %d, %Y')})",
+            status="SENT",
+            item_count=stats["total"],
+            outstanding_count=stats["outstanding"],
+            ready_count=stats["valid"],
+            needs_attention_count=stats["invalid"],
+            report_data=json.dumps(items),
+            pdf_data=pdf_bytes,
+            pdf_mime="application/pdf",
+            generated_at=now,
+            sent_at=now,
+            sent_to=to_email,
+            created_by_user_id=current_user.id,
+        )
+        db.add(sent_report)
+
+        from ..services.audit_service import log_action
+        db.flush()
+        log_action(
+            db, org_id, current_user.id,
+            "SEND_REGISTRATION_REPORT", "REGISTRATION_REPORT", sent_report.id,
+            sent_report.title,
+            {"recipient_email": to_email, "recipient_name": to_name, "item_count": item_count, "asset_type": request.asset_type}
+        )
+
+        db.commit()
+
+        return {"success": True, "message": f"Report sent to {to_email}", "report_id": sent_report.id}
     except HTTPException:
         raise
     except Exception as e:
@@ -791,17 +824,21 @@ def refresh_saved_report(
     report.ready_count = stats["valid"]
     report.needs_attention_count = stats["invalid"]
     report.generated_at = datetime.utcnow()
-    report.status = "GENERATED"
+    if report.status != "SENT":
+        report.status = "GENERATED"
     db.commit()
 
     return {
         "id": report.id,
         "title": report.title,
+        "status": report.status,
         "item_count": report.item_count,
         "outstanding_count": report.outstanding_count,
         "ready_count": report.ready_count,
         "needs_attention_count": report.needs_attention_count,
         "generated_at": report.generated_at.isoformat() if report.generated_at else None,
+        "sent_at": report.sent_at.isoformat() if report.sent_at else None,
+        "sent_to": report.sent_to,
         "items": json.loads(report.report_data) if report.report_data else [],
     }
 

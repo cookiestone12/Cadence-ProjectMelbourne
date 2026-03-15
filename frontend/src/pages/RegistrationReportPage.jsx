@@ -230,6 +230,9 @@ export default function RegistrationReportPage() {
       }
       const res = await axios.post(`/api/registration-reports/org/${orgId}/send-email`, payload)
       setSendResult({ success: true, message: res.data.message || 'Report sent successfully!' })
+      axios.get(`/api/registration-reports/org/${orgId}/saved`)
+        .then(r => setSavedReports(Array.isArray(r.data) ? r.data : []))
+        .catch(() => {})
     } catch (err) {
       setSendResult({ success: false, message: err.response?.data?.detail || 'Failed to send email' })
     } finally {
@@ -442,15 +445,70 @@ export default function RegistrationReportPage() {
         </div>
       </div>
 
-      {savedReports.length > 0 && !viewingSavedReport && (
+      {savedReports.filter(r => r.status === 'SENT').length > 0 && !viewingSavedReport && (
+        <div className="mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <PaperAirplaneIcon className="w-4 h-4 text-emerald-600" />
+            <h2 className="text-sm font-semibold text-[#3D4A44]">Submission History</h2>
+            <span className="text-xs text-[#7A8580]">({savedReports.filter(r => r.status === 'SENT').length})</span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+            {savedReports.filter(r => r.status === 'SENT').map(report => (
+              <div
+                key={report.id}
+                className="flex-shrink-0 w-64 bg-white rounded-xl border border-emerald-100 p-4 hover:shadow-md transition-shadow cursor-pointer group"
+                onClick={() => handleViewSavedReport(report)}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-[#3D4A44] truncate flex-1 mr-2">{report.title}</h3>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteSavedReport(report.id) }}
+                    className="p-1 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-50 transition-all"
+                  >
+                    <TrashIcon className="w-3.5 h-3.5 text-red-400 hover:text-red-600" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                    report.report_type === 'SONGS' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
+                  }`}>
+                    {report.report_type || 'SONGS'}
+                  </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700">
+                    SENT
+                  </span>
+                </div>
+                {report.sent_to && (
+                  <div className="flex items-center gap-1 mb-1 text-xs text-[#7A8580]">
+                    <EnvelopeIcon className="w-3 h-3" />
+                    <span className="truncate">{report.sent_to}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-xs text-[#7A8580]">
+                  <span>{report.item_count || 0} items</span>
+                  {report.outstanding_count > 0 && (
+                    <span className="text-red-500">{report.outstanding_count} outstanding</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 mt-2 text-[10px] text-[#B0BDB4]">
+                  <ClockIcon className="w-3 h-3" />
+                  {formatDate(report.sent_at || report.created_at)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {savedReports.filter(r => r.status !== 'SENT').length > 0 && !viewingSavedReport && (
         <div className="mb-6">
           <div className="flex items-center gap-2 mb-3">
             <BookmarkSolidIcon className="w-4 h-4 text-[#5B8A72]" />
             <h2 className="text-sm font-semibold text-[#3D4A44]">Saved Reports</h2>
-            <span className="text-xs text-[#7A8580]">({savedReports.length})</span>
+            <span className="text-xs text-[#7A8580]">({savedReports.filter(r => r.status !== 'SENT').length})</span>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
-            {savedReports.map(report => (
+            {savedReports.filter(r => r.status !== 'SENT').map(report => (
               <div
                 key={report.id}
                 className="flex-shrink-0 w-64 bg-white rounded-xl border border-[rgba(59,77,67,0.12)] p-4 hover:shadow-md transition-shadow cursor-pointer group"
@@ -471,9 +529,7 @@ export default function RegistrationReportPage() {
                   }`}>
                     {report.report_type || 'SONGS'}
                   </span>
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                    report.status === 'SENT' ? 'bg-emerald-50 text-emerald-700' : 'bg-[#5B8A72]/10 text-[#5B8A72]'
-                  }`}>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#5B8A72]/10 text-[#5B8A72]">
                     {report.status || 'GENERATED'}
                   </span>
                 </div>
@@ -496,14 +552,25 @@ export default function RegistrationReportPage() {
       {viewingSavedReport && (
         <div className="mb-4 bg-[#5B8A72]/5 border border-[#5B8A72]/15 rounded-xl px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <BookmarkSolidIcon className="w-5 h-5 text-[#5B8A72]" />
+            {viewingSavedReport.status === 'SENT' ? (
+              <PaperAirplaneIcon className="w-5 h-5 text-emerald-600" />
+            ) : (
+              <BookmarkSolidIcon className="w-5 h-5 text-[#5B8A72]" />
+            )}
             <div>
               <span className="text-sm font-medium text-[#3D4A44]">
-                Viewing saved report snapshot
+                {viewingSavedReport.status === 'SENT' ? 'Viewing sent submission' : 'Viewing saved report snapshot'}
               </span>
-              <span className="text-xs text-[#7A8580] ml-2">
-                Last generated: {formatDate(viewingSavedReport.generated_at)}
-              </span>
+              {viewingSavedReport.status === 'SENT' && viewingSavedReport.sent_to && (
+                <span className="text-xs text-emerald-700 ml-2">
+                  Sent to {viewingSavedReport.sent_to} on {formatDate(viewingSavedReport.sent_at)}
+                </span>
+              )}
+              {viewingSavedReport.status !== 'SENT' && (
+                <span className="text-xs text-[#7A8580] ml-2">
+                  Last generated: {formatDate(viewingSavedReport.generated_at)}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
