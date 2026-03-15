@@ -228,8 +228,15 @@ export default function AssistantChat({ user }) {
       }`}>
       <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-[#5B8A72] to-[#4A7A62] flex-shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
-            <img src="/cadence-assistant-logo.png" alt="Cadence" className="w-full h-full object-cover" />
+          <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 relative">
+            <img src="/cadence-assistant-logo.png" alt="Cadence" className="w-full h-full object-cover relative z-10" />
+            <div className="absolute inset-0 rounded-full z-20 pointer-events-none animate-[metalPulse_3s_ease-in-out_infinite]" />
+            <style>{`
+              @keyframes metalPulse {
+                0%, 100% { box-shadow: inset 0 0 6px rgba(255,255,255,0.05), 0 0 4px rgba(91,138,114,0.2); background: linear-gradient(135deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0) 100%); }
+                50% { box-shadow: inset 0 0 12px rgba(255,255,255,0.2), 0 0 10px rgba(91,138,114,0.5); background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0.05) 100%); }
+              }
+            `}</style>
           </div>
           <div>
             <h3 className="text-sm font-semibold text-white leading-tight">Cadence</h3>
