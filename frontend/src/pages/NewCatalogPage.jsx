@@ -727,7 +727,7 @@ export default function NewCatalogPage() {
       </div>
       
       <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-4 mb-3 sm:mb-0">
           <div className="flex-1 relative">
             <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7A8580]" />
             <input
@@ -738,16 +738,17 @@ export default function NewCatalogPage() {
               className="w-full pl-10 pr-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
             />
           </div>
-          
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+            className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg transition-colors text-sm ${
               hasActiveFilters 
                 ? 'bg-[#5B8A72] text-white' 
                 : 'bg-[#EEF1EC] text-[#3D4A44] hover:bg-[#E4E8E2]'
             }`}
           >
-            <FunnelIcon className="w-5 h-5" />
+            <FunnelIcon className="w-4 h-4 sm:w-5 sm:h-5" />
             <span>Filters</span>
             {hasActiveFilters && (
               <span className="bg-white text-[#5B8A72] px-2 py-0.5 rounded-full text-xs font-bold">
@@ -758,14 +759,14 @@ export default function NewCatalogPage() {
 
           <button
             onClick={() => setAudioColumnsEnabled(!audioColumnsEnabled)}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+            className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg transition-colors text-sm ${
               audioColumnsEnabled
                 ? 'bg-[#5B8A72] text-white'
                 : 'bg-[#EEF1EC] text-[#3D4A44] hover:bg-[#E4E8E2]'
             }`}
             title={audioColumnsEnabled ? 'Hide audio columns' : 'Show audio columns'}
           >
-            <SpeakerWaveIcon className="w-5 h-5" />
+            <SpeakerWaveIcon className="w-4 h-4 sm:w-5 sm:h-5" />
             <span>Audio</span>
             {audioDataLoading && (
               <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
@@ -775,14 +776,14 @@ export default function NewCatalogPage() {
           <div className="relative" ref={columnConfigRef}>
             <button
               onClick={() => setShowColumnConfig(!showColumnConfig)}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+              className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-lg transition-colors text-sm ${
                 showColumnConfig
                   ? 'bg-[#5B8A72] text-white'
                   : 'bg-[#EEF1EC] text-[#3D4A44] hover:bg-[#E4E8E2]'
               }`}
               title="Configure columns"
             >
-              <AdjustmentsHorizontalIcon className="w-5 h-5" />
+              <AdjustmentsHorizontalIcon className="w-4 h-4 sm:w-5 sm:h-5" />
               <span>Columns</span>
             </button>
 
@@ -1035,10 +1036,10 @@ export default function NewCatalogPage() {
       
       <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full min-w-[700px]">
             <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
-                <th className="px-3 py-3 text-center w-10">
+                <th className="px-2 sm:px-3 py-3 text-center w-10">
                   <input
                     type="checkbox"
                     checked={filteredSongs.length > 0 && filteredSongs.every(s => selectedSongIds.has(s.id))}
@@ -1055,7 +1056,7 @@ export default function NewCatalogPage() {
                 {activeColumns.map(col => (
                   <th
                     key={col.key}
-                    className={`px-4 py-3 ${col.align === 'center' ? 'text-center' : 'text-left'} text-xs font-semibold text-[#3D4A44] ${col.sortable ? 'cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)]' : ''} transition-colors`}
+                    className={`px-2 sm:px-4 py-3 ${col.align === 'center' ? 'text-center' : 'text-left'} text-xs font-semibold text-[#3D4A44] whitespace-nowrap ${col.sortable ? 'cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)]' : ''} transition-colors`}
                     onClick={() => col.sortable && handleSort(col.key)}
                   >
                     <div className={`flex items-center ${col.align === 'center' ? 'justify-center' : ''} space-x-1`}>
@@ -1085,7 +1086,7 @@ export default function NewCatalogPage() {
                     selectedSongIds.has(song.id) ? 'bg-[rgba(91,138,114,0.08)]' : ''
                   }`}
                 >
-                  <td className="px-3 py-3 text-center">
+                  <td className="px-2 sm:px-3 py-3 text-center">
                     <input
                       type="checkbox"
                       checked={selectedSongIds.has(song.id)}
@@ -1099,24 +1100,24 @@ export default function NewCatalogPage() {
                     switch (col.key) {
                       case 'title':
                         return (
-                          <td key={col.key} className="px-4 py-3">
-                            <div className="font-medium text-[#3D4A44]">{song.title}</div>
+                          <td key={col.key} className="px-2 sm:px-4 py-3 max-w-[200px]">
+                            <div className="font-medium text-[#3D4A44] truncate">{song.title}</div>
                             {!visibleColumns.includes('project_title') && (
-                              <div className="text-xs text-[#7A8580]">{song.project_title || '-'}</div>
+                              <div className="text-xs text-[#7A8580] truncate">{song.project_title || '-'}</div>
                             )}
                           </td>
                         )
                       case 'primary_artist':
-                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.primary_artist}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] whitespace-nowrap">{song.primary_artist}</td>
                       case 'client_name':
-                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.client_name || '-'}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] whitespace-nowrap">{song.client_name || '-'}</td>
                       case 'label':
-                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.label || '-'}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] whitespace-nowrap">{song.label || '-'}</td>
                       case 'publishing_percentage':
-                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] whitespace-nowrap">{song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}</td>
                       case 'status_health_score':
                         return (
-                          <td key={col.key} className="px-4 py-3">
+                          <td key={col.key} className="px-2 sm:px-4 py-3 min-w-[120px]">
                             <div className="flex items-center space-x-2">
                               <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden">
                                 <div className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594]" style={{ width: `${song.status_health_score || 0}%` }}></div>
@@ -1127,7 +1128,7 @@ export default function NewCatalogPage() {
                         )
                       case 'is_released':
                         return (
-                          <td key={col.key} className="px-4 py-3 text-center">
+                          <td key={col.key} className="px-2 sm:px-4 py-3 text-center">
                             <button
                               onClick={(e) => handleReleasedToggle(e, song)}
                               className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all mx-auto ${
@@ -1144,7 +1145,7 @@ export default function NewCatalogPage() {
                         )
                       case 'spotify_link':
                         return (
-                          <td key={col.key} className="px-4 py-3">
+                          <td key={col.key} className="px-2 sm:px-4 py-3 whitespace-nowrap">
                             {song.spotify_link ? (
                               <button onClick={(e) => openSpotifyLink(e, song.spotify_link)} className="flex items-center space-x-1 text-[#1DB954] hover:underline text-sm">
                                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -1163,19 +1164,19 @@ export default function NewCatalogPage() {
                           </td>
                         )
                       case 'has_contract_executed':
-                        return <td key={col.key} className="px-4 py-3">{getStatusIcon(song.has_contract_executed ? 'Yes' : 'No')}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3">{getStatusIcon(song.has_contract_executed ? 'Yes' : 'No')}</td>
                       case 'is_registered_with_pro':
-                        return <td key={col.key} className="px-4 py-3">{getStatusIcon(song.is_registered_with_pro ? 'Yes' : 'No')}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3">{getStatusIcon(song.is_registered_with_pro ? 'Yes' : 'No')}</td>
                       case 'isrc':
-                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.isrc || '-'}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] whitespace-nowrap">{song.isrc || '-'}</td>
                       case 'release_date':
-                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.release_date || '-'}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] whitespace-nowrap">{song.release_date || '-'}</td>
                       case 'project_title':
-                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.project_title || '-'}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580]">{song.project_title || '-'}</td>
                       case 'iswc':
-                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.iswc || '-'}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580] whitespace-nowrap">{song.iswc || '-'}</td>
                       default:
-                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song[col.key] || '-'}</td>
+                        return <td key={col.key} className="px-2 sm:px-4 py-3 text-sm text-[#7A8580]">{song[col.key] || '-'}</td>
                     }
                   })}
                   {audioColumnsEnabled && (() => {
