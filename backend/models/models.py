@@ -263,6 +263,9 @@ class CreativeContact(Base):
     representation_phone = Column(String, nullable=True)
     territory = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+    photo_url = Column(String, nullable=True)
+    photo_data = Column(LargeBinary, nullable=True)
+    photo_mime = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

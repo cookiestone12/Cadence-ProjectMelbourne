@@ -502,8 +502,8 @@ export default function RosterPage() {
             ))}
           </div>
           ) : (
-          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] overflow-hidden">
-            <table className="w-full">
+          <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] overflow-hidden overflow-x-auto">
+            <table className="w-full min-w-[640px]">
               <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
                 <tr>
                   {selectMode && <th className="px-4 py-3 w-10"></th>}

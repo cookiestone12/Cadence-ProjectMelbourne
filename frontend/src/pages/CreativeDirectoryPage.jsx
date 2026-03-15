@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
 import {
   UserGroupIcon, PlusIcon, MagnifyingGlassIcon, XMarkIcon,
   PencilIcon, TrashIcon, ArrowDownTrayIcon, ArrowPathIcon, LinkIcon, EnvelopeIcon,
-  CheckIcon, ClipboardDocumentIcon, UsersIcon
+  CheckIcon, ClipboardDocumentIcon, UsersIcon, CameraIcon
 } from '@heroicons/react/24/outline'
 import EmailSendModal from '../components/EmailSendModal'
 import ShareModal from '../components/ShareModal'
@@ -39,8 +39,10 @@ const emptyForm = {
   territory: '', notes: ''
 }
 
-function ContactFormModal({ isOpen, onClose, onSubmit, initialData, title, loading }) {
+function ContactFormModal({ isOpen, onClose, onSubmit, initialData, title, loading, onPhotoUpload }) {
   const [form, setForm] = useState({ ...emptyForm })
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const photoInputRef = useRef(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -69,6 +71,27 @@ function ContactFormModal({ isOpen, onClose, onSubmit, initialData, title, loadi
     }))
   }
 
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file || !initialData?.id) return
+    setPhotoUploading(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const token = localStorage.getItem('token')
+      const res = await axios.post(`/api/creative-directory/${initialData.id}/image`, fd, {
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+      })
+      if (onPhotoUpload) onPhotoUpload(initialData.id, res.data.photo_url)
+    } catch (err) {
+      console.error('Photo upload failed:', err)
+      alert(err.response?.data?.detail || 'Failed to upload photo')
+    } finally {
+      setPhotoUploading(false)
+      if (photoInputRef.current) photoInputRef.current.value = ''
+    }
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!form.display_name.trim()) return
@@ -87,6 +110,31 @@ function ContactFormModal({ isOpen, onClose, onSubmit, initialData, title, loadi
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {initialData?.id && (
+            <div className="flex items-center gap-4">
+              <div className="relative group">
+                {initialData.photo_url ? (
+                  <img src={initialData.photo_url} alt={initialData.display_name} className="w-16 h-16 rounded-full object-cover border-2 border-[rgba(59,77,67,0.12)]" />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-[#EEF1EC] flex items-center justify-center text-[#5B8A72] text-xl font-bold border-2 border-[rgba(59,77,67,0.12)]">
+                    {(initialData.display_name || '?')[0]?.toUpperCase()}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={photoUploading}
+                  className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-colors"
+                >
+                  <CameraIcon className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+                <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+              </div>
+              <div className="text-sm text-[#7A8580]">
+                {photoUploading ? 'Uploading...' : 'Click photo to change'}
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-[#3D4A44] mb-1">Display Name *</label>
@@ -406,6 +454,13 @@ export default function CreativeDirectoryPage() {
     }
   }
 
+  function handlePhotoUpload(contactId, photoUrl) {
+    setContacts(prev => prev.map(c => c.id === contactId ? { ...c, photo_url: photoUrl + '?t=' + Date.now() } : c))
+    if (editingContact?.id === contactId) {
+      setEditingContact(prev => ({ ...prev, photo_url: photoUrl + '?t=' + Date.now() }))
+    }
+  }
+
   async function handleDelete(contact) {
     if (!window.confirm(`Delete "${contact.display_name}" from your directory?`)) return
     try {
@@ -671,13 +726,20 @@ export default function CreativeDirectoryPage() {
           {filteredContacts.map(contact => (
             <div key={contact.id} className={`bg-white rounded-2xl border p-5 hover:shadow-md transition-shadow flex flex-col ${selectedIds.has(contact.id) ? 'border-[#5B8A72] ring-1 ring-[#5B8A72]/30' : 'border-[rgba(59,77,67,0.12)]'}`}>
               <div className="flex items-start justify-between mb-3">
-                <div className="flex items-start gap-2 flex-1 min-w-0">
+                <div className="flex items-start gap-3 flex-1 min-w-0">
                   <input
                     type="checkbox"
                     checked={selectedIds.has(contact.id)}
                     onChange={() => toggleSelect(contact.id)}
                     className="mt-1.5 rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
                   />
+                  {contact.photo_url ? (
+                    <img src={contact.photo_url} alt={contact.display_name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-[#EEF1EC] flex items-center justify-center text-[#5B8A72] font-bold flex-shrink-0">
+                      {(contact.display_name || '?')[0]?.toUpperCase()}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                   <h3 className="text-lg font-bold text-[#3D4A44] truncate">{contact.display_name}</h3>
                   {contact.legal_name && (
@@ -788,8 +850,8 @@ export default function CreativeDirectoryPage() {
           ))}
         </div>
         ) : (
-        <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] overflow-x-hidden">
-          <table className="w-full table-fixed">
+        <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] overflow-x-auto">
+          <table className="w-full min-w-[640px]">
             <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
                 <th className="px-2 sm:px-4 py-3 w-8 sm:w-10">
@@ -820,9 +882,18 @@ export default function CreativeDirectoryPage() {
                     />
                   </td>
                   <td className="px-2 sm:px-4 py-3">
-                    <div className="min-w-0 overflow-hidden">
-                      <p className="font-semibold text-[#3D4A44] truncate text-sm">{contact.display_name}</p>
-                      {contact.legal_name && <p className="text-xs text-[#7A8580] truncate">{contact.legal_name}</p>}
+                    <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                      {contact.photo_url ? (
+                        <img src={contact.photo_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-[#EEF1EC] flex items-center justify-center text-[#5B8A72] text-xs font-bold flex-shrink-0">
+                          {(contact.display_name || '?')[0]?.toUpperCase()}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-semibold text-[#3D4A44] truncate text-sm">{contact.display_name}</p>
+                        {contact.legal_name && <p className="text-xs text-[#7A8580] truncate">{contact.legal_name}</p>}
+                      </div>
                     </div>
                   </td>
                   <td className="px-2 sm:px-4 py-3">
@@ -931,6 +1002,7 @@ export default function CreativeDirectoryPage() {
         initialData={editingContact}
         title="Edit Contact"
         loading={saving}
+        onPhotoUpload={handlePhotoUpload}
       />
 
       <ShareToClientModal

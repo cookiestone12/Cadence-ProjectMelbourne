@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -7,6 +7,9 @@ from datetime import datetime
 import io
 from ..models import get_db, CreativeContact, Creator, OrganizationMember, User, Organization, SharedContactLink, ClientSharedContact
 from ..utils.auth import get_current_user
+
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 router = APIRouter(prefix="/api/creative-directory", tags=["creative-directory"])
 public_router = APIRouter(prefix="/api/public", tags=["public"])
@@ -81,6 +84,7 @@ def _contact_to_dict(contact: CreativeContact):
         "representation_phone": contact.representation_phone,
         "territory": contact.territory,
         "notes": contact.notes,
+        "photo_url": contact.photo_url,
         "created_at": contact.created_at.isoformat() if contact.created_at else None,
         "updated_at": contact.updated_at.isoformat() if contact.updated_at else None,
     }
@@ -202,6 +206,73 @@ def delete_creative_contact(
     db.delete(contact)
     db.commit()
     return {"message": "Creative contact deleted successfully"}
+
+
+@router.get("/{contact_id}/image")
+def serve_contact_image(
+    contact_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    contact = db.query(CreativeContact).filter(CreativeContact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    verify_org_access(current_user, contact.organization_id, db)
+
+    if contact.photo_data:
+        return Response(
+            content=contact.photo_data,
+            media_type=contact.photo_mime or "image/jpeg",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
+    raise HTTPException(status_code=404, detail="No image found")
+
+
+@router.post("/{contact_id}/image")
+async def upload_contact_image(
+    contact_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    contact = db.query(CreativeContact).filter(CreativeContact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    verify_org_access(current_user, contact.organization_id, db)
+
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid image type. Use JPEG, PNG, WebP, or GIF.")
+
+    content = await file.read()
+    if len(content) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail="Image too large. Maximum size is 5MB.")
+
+    contact.photo_data = content
+    contact.photo_mime = file.content_type
+    contact.photo_url = f"/api/creative-directory/{contact_id}/image"
+    db.commit()
+
+    return {"photo_url": contact.photo_url}
+
+
+@router.delete("/{contact_id}/image")
+def delete_contact_image(
+    contact_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    contact = db.query(CreativeContact).filter(CreativeContact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    verify_org_access(current_user, contact.organization_id, db)
+
+    contact.photo_data = None
+    contact.photo_mime = None
+    contact.photo_url = None
+    db.commit()
+
+    return {"message": "Photo removed"}
 
 
 @router.post("/org/{org_id}/from-creator/{creator_id}")

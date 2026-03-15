@@ -43,6 +43,22 @@ def ensure_schema_updates():
             conn.commit()
             logger.info("Added cover_art_data/cover_art_mime columns to releases")
 
+        if 'creative_contacts' in inspector.get_table_names():
+            cc_cols = [c['name'] for c in inspector.get_columns('creative_contacts')]
+            cc_added = []
+            if 'photo_url' not in cc_cols:
+                conn.execute(text("ALTER TABLE creative_contacts ADD COLUMN photo_url VARCHAR"))
+                cc_added.append('photo_url')
+            if 'photo_data' not in cc_cols:
+                conn.execute(text("ALTER TABLE creative_contacts ADD COLUMN photo_data BYTEA"))
+                cc_added.append('photo_data')
+            if 'photo_mime' not in cc_cols:
+                conn.execute(text("ALTER TABLE creative_contacts ADD COLUMN photo_mime VARCHAR"))
+                cc_added.append('photo_mime')
+            if cc_added:
+                conn.commit()
+                logger.info(f"Added {'/'.join(cc_added)} columns to creative_contacts")
+
         if 'song_contracts' in inspector.get_table_names():
             sc_cols = [c['name'] for c in inspector.get_columns('song_contracts')]
             if 'contract_id' not in sc_cols:
