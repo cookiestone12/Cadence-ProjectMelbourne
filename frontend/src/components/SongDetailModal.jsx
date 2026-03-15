@@ -945,21 +945,19 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                               </div>
                             </div>
                           ) : (
-                            <div key={credit.id} className="flex items-center justify-between p-2 bg-[#F5F7F4] rounded-[10px]">
-                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <Link
-                                  to={`/roster/${credit.creator_id}`}
-                                  onClick={onClose}
-                                  className="flex items-center gap-2 text-[#5B8A72] hover:text-[#7BA594]"
-                                >
-                                  <UserIcon className="w-4 h-4 flex-shrink-0" />
-                                  <span className="font-medium text-sm">{credit.creator_name || 'Unknown'}</span>
-                                </Link>
-                                <span className="text-xs text-[#7A8580]">({credit.role})</span>
-                                {credit.pub_share != null && <span className="text-xs text-[#5B8A72] bg-[rgba(91,138,114,0.1)] px-1.5 py-0.5 rounded">Pub {credit.pub_share}%</span>}
-                                {credit.master_share != null && <span className="text-xs text-[#5A8A9A] bg-[rgba(90,138,154,0.1)] px-1.5 py-0.5 rounded">Master {credit.master_share}%</span>}
-                              </div>
-                              <div className="flex items-center gap-1">
+                            <div key={credit.id} className="flex items-center gap-2 p-2 bg-[#F5F7F4] rounded-[10px]">
+                              <Link
+                                to={`/roster/${credit.creator_id}`}
+                                onClick={onClose}
+                                className="flex items-center gap-1.5 text-[#5B8A72] hover:text-[#7BA594] min-w-0"
+                              >
+                                <UserIcon className="w-4 h-4 flex-shrink-0" />
+                                <span className="font-medium text-sm truncate">{credit.creator_name || 'Unknown'}</span>
+                              </Link>
+                              <span className="text-xs text-[#7A8580] flex-shrink-0">({credit.role})</span>
+                              {credit.pub_share != null && <span className="text-xs text-[#5B8A72] bg-[rgba(91,138,114,0.1)] px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline">Pub {credit.pub_share}%</span>}
+                              {credit.master_share != null && <span className="text-xs text-[#5A8A9A] bg-[rgba(90,138,154,0.1)] px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline">Master {credit.master_share}%</span>}
+                              <div className="flex items-center gap-1 ml-auto flex-shrink-0">
                                 <button
                                   onClick={() => {
                                     setEditingCreditId(credit.id)
