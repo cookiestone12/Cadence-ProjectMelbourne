@@ -193,8 +193,17 @@ def list_files(org_id: int, path: str, db: Session) -> List[Dict[str, Any]]:
         logger.error(f"Dropbox SDK unexpected error: {type(e).__name__}: {e}")
         raise ValueError(f"Dropbox error: {type(e).__name__}. Please try again or reconnect your Dropbox account.")
 
+    all_entries = list(result.entries)
+    while result.has_more:
+        try:
+            result = dbx.files_list_folder_continue(result.cursor)
+            all_entries.extend(result.entries)
+        except Exception as e:
+            logger.warning(f"Dropbox pagination error: {e}")
+            break
+
     files = []
-    for entry in result.entries:
+    for entry in all_entries:
         item = {
             "name": entry.name,
             "path_display": entry.path_display,
