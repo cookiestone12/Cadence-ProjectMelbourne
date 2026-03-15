@@ -4,7 +4,7 @@ import {
   FunnelIcon, MagnifyingGlassIcon, PlusIcon, ArrowUpTrayIcon,
   CheckCircleIcon, XCircleIcon, MinusCircleIcon, LinkIcon, TrashIcon,
   SpeakerWaveIcon, ChevronDownIcon, ChevronUpIcon, ArrowPathIcon,
-  DocumentDuplicateIcon, AdjustmentsHorizontalIcon, Bars3Icon,
+  DocumentDuplicateIcon, AdjustmentsHorizontalIcon,
   ArrowUpIcon, ArrowDownIcon, ArrowsUpDownIcon
 } from '@heroicons/react/24/outline'
 import SongDetailModal from '../components/SongDetailModal'
@@ -125,7 +125,6 @@ export default function NewCatalogPage() {
     return DEFAULT_VISIBLE
   })
   const [showColumnConfig, setShowColumnConfig] = useState(false)
-  const [dragCol, setDragCol] = useState(null)
   const columnConfigRef = useRef(null)
 
   useEffect(() => {
@@ -805,18 +804,24 @@ export default function NewCatalogPage() {
                     return (
                       <div
                         key={key}
-                        draggable={!col.required}
-                        onDragStart={() => setDragCol(idx)}
-                        onDragOver={(e) => { e.preventDefault() }}
-                        onDrop={() => { if (dragCol !== null && dragCol !== idx) moveColumn(dragCol, idx); setDragCol(null) }}
-                        onDragEnd={() => setDragCol(null)}
-                        className={`flex items-center gap-2 px-4 py-2 hover:bg-[#F5F7F4] transition-colors ${dragCol === idx ? 'opacity-50' : ''}`}
+                        className="flex items-center gap-1.5 px-3 py-2 hover:bg-[#F5F7F4] transition-colors"
                       >
-                        {!col.required ? (
-                          <Bars3Icon className="w-3.5 h-3.5 text-[#B0BDB4] cursor-grab flex-shrink-0" />
-                        ) : (
-                          <div className="w-3.5 flex-shrink-0" />
-                        )}
+                        <div className="flex flex-col flex-shrink-0">
+                          <button
+                            onClick={() => { if (idx > 0 && !col.required) moveColumn(idx, idx - 1) }}
+                            disabled={idx === 0 || col.required}
+                            className="p-0.5 text-[#B0BDB4] hover:text-[#5B8A72] disabled:opacity-30 disabled:cursor-default transition-colors"
+                          >
+                            <ChevronUpIcon className="w-3 h-3" />
+                          </button>
+                          <button
+                            onClick={() => { if (idx < visibleColumns.length - 1 && !col.required) moveColumn(idx, idx + 1) }}
+                            disabled={idx === visibleColumns.length - 1 || col.required}
+                            className="p-0.5 text-[#B0BDB4] hover:text-[#5B8A72] disabled:opacity-30 disabled:cursor-default transition-colors"
+                          >
+                            <ChevronDownIcon className="w-3 h-3" />
+                          </button>
+                        </div>
                         <span className="flex-1 text-sm text-[#3D4A44]">{col.label}</span>
                         <button
                           onClick={() => !col.required && toggleColumn(key)}
@@ -833,9 +838,9 @@ export default function NewCatalogPage() {
                   {ALL_COLUMNS.filter(c => !visibleColumns.includes(c.key)).map(col => (
                     <div
                       key={col.key}
-                      className="flex items-center gap-2 px-4 py-2 hover:bg-[#F5F7F4] transition-colors"
+                      className="flex items-center gap-1.5 px-3 py-2 hover:bg-[#F5F7F4] transition-colors"
                     >
-                      <div className="w-3.5 flex-shrink-0" />
+                      <div className="w-[18px] flex-shrink-0" />
                       <span className="flex-1 text-sm text-[#7A8580]">{col.label}</span>
                       <button
                         onClick={() => toggleColumn(col.key)}
