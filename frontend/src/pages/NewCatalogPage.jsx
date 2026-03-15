@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { 
   FunnelIcon, MagnifyingGlassIcon, PlusIcon, ArrowUpTrayIcon,
   CheckCircleIcon, XCircleIcon, MinusCircleIcon, LinkIcon, TrashIcon,
   SpeakerWaveIcon, ChevronDownIcon, ChevronUpIcon, ArrowPathIcon,
-  DocumentDuplicateIcon
+  DocumentDuplicateIcon, AdjustmentsHorizontalIcon, Bars3Icon,
+  ArrowUpIcon, ArrowDownIcon, ArrowsUpDownIcon
 } from '@heroicons/react/24/outline'
 import SongDetailModal from '../components/SongDetailModal'
 import AddSongModal from '../components/AddSongModal'
@@ -88,7 +89,87 @@ export default function NewCatalogPage() {
     energetic: 'bg-orange-100 text-orange-800',
     calm: 'bg-teal-100 text-teal-800'
   }
-  
+
+  const ALL_COLUMNS = [
+    { key: 'title', label: 'Song', sortable: true, required: true },
+    { key: 'primary_artist', label: 'Artist', sortable: true },
+    { key: 'label', label: 'Label', sortable: true },
+    { key: 'publishing_percentage', label: 'Pub %', sortable: true },
+    { key: 'status_health_score', label: 'Health', sortable: true },
+    { key: 'is_released', label: 'Released', sortable: true, align: 'center' },
+    { key: 'spotify_link', label: 'Spotify', sortable: true },
+    { key: 'has_contract_executed', label: 'Contract', sortable: true },
+    { key: 'is_registered_with_pro', label: 'PRO', sortable: true },
+    { key: 'isrc', label: 'ISRC', sortable: true },
+    { key: 'release_date', label: 'Release Date', sortable: true },
+    { key: 'project_title', label: 'Project', sortable: true },
+    { key: 'iswc', label: 'ISWC', sortable: true },
+  ]
+
+  const DEFAULT_VISIBLE = ['title', 'primary_artist', 'label', 'publishing_percentage', 'status_health_score', 'is_released', 'spotify_link', 'has_contract_executed', 'is_registered_with_pro']
+
+  const [visibleColumns, setVisibleColumns] = useState(() => {
+    try {
+      const stored = localStorage.getItem('cadence_catalog_columns')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        const validKeys = ALL_COLUMNS.map(c => c.key)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const cleaned = [...new Set(parsed.filter(k => validKeys.includes(k)))]
+          if (!cleaned.includes('title')) cleaned.unshift('title')
+          if (cleaned.length > 0) return cleaned
+        }
+      }
+    } catch {}
+    return DEFAULT_VISIBLE
+  })
+  const [showColumnConfig, setShowColumnConfig] = useState(false)
+  const [dragCol, setDragCol] = useState(null)
+  const columnConfigRef = useRef(null)
+
+  useEffect(() => {
+    localStorage.setItem('cadence_catalog_columns', JSON.stringify(visibleColumns))
+  }, [visibleColumns])
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (columnConfigRef.current && !columnConfigRef.current.contains(e.target)) {
+        setShowColumnConfig(false)
+      }
+    }
+    if (showColumnConfig) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showColumnConfig])
+
+  const toggleColumn = (key) => {
+    setVisibleColumns(prev => {
+      if (prev.includes(key)) return prev.filter(k => k !== key)
+      return [...prev, key]
+    })
+  }
+
+  const moveColumn = (fromIdx, toIdx) => {
+    setVisibleColumns(prev => {
+      const updated = [...prev]
+      const [moved] = updated.splice(fromIdx, 1)
+      updated.splice(toIdx, 0, moved)
+      return updated
+    })
+  }
+
+  const activeColumns = visibleColumns
+    .map(key => ALL_COLUMNS.find(c => c.key === key))
+    .filter(Boolean)
+
+  const SortArrow = ({ field }) => {
+    if (sortField === field) {
+      return sortDirection === 'asc'
+        ? <ArrowUpIcon className="w-3.5 h-3.5 text-[#5B8A72]" />
+        : <ArrowDownIcon className="w-3.5 h-3.5 text-[#5B8A72]" />
+    }
+    return <ArrowsUpDownIcon className="w-3.5 h-3.5 text-[#B0BDB4]" />
+  }
+
   useEffect(() => {
     loadData()
   }, [filters])
@@ -688,6 +769,84 @@ export default function NewCatalogPage() {
               <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
             )}
           </button>
+
+          <div className="relative" ref={columnConfigRef}>
+            <button
+              onClick={() => setShowColumnConfig(!showColumnConfig)}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+                showColumnConfig
+                  ? 'bg-[#5B8A72] text-white'
+                  : 'bg-[#EEF1EC] text-[#3D4A44] hover:bg-[#E4E8E2]'
+              }`}
+              title="Configure columns"
+            >
+              <AdjustmentsHorizontalIcon className="w-5 h-5" />
+              <span>Columns</span>
+            </button>
+
+            {showColumnConfig && (
+              <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl border border-[rgba(59,77,67,0.12)] shadow-xl z-50 overflow-hidden">
+                <div className="px-4 py-3 border-b border-[rgba(59,77,67,0.08)] flex items-center justify-between">
+                  <span className="text-sm font-semibold text-[#3D4A44]">Table Columns</span>
+                  <button
+                    onClick={() => setVisibleColumns(DEFAULT_VISIBLE)}
+                    className="text-xs text-[#5B8A72] hover:underline"
+                  >
+                    Reset
+                  </button>
+                </div>
+                <div className="max-h-80 overflow-y-auto py-1">
+                  {visibleColumns.map((key, idx) => {
+                    const col = ALL_COLUMNS.find(c => c.key === key)
+                    if (!col) return null
+                    return (
+                      <div
+                        key={key}
+                        draggable={!col.required}
+                        onDragStart={() => setDragCol(idx)}
+                        onDragOver={(e) => { e.preventDefault() }}
+                        onDrop={() => { if (dragCol !== null && dragCol !== idx) moveColumn(dragCol, idx); setDragCol(null) }}
+                        onDragEnd={() => setDragCol(null)}
+                        className={`flex items-center gap-2 px-4 py-2 hover:bg-[#F5F7F4] transition-colors ${dragCol === idx ? 'opacity-50' : ''}`}
+                      >
+                        {!col.required ? (
+                          <Bars3Icon className="w-3.5 h-3.5 text-[#B0BDB4] cursor-grab flex-shrink-0" />
+                        ) : (
+                          <div className="w-3.5 flex-shrink-0" />
+                        )}
+                        <span className="flex-1 text-sm text-[#3D4A44]">{col.label}</span>
+                        <button
+                          onClick={() => !col.required && toggleColumn(key)}
+                          disabled={col.required}
+                          className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0"
+                          style={{ backgroundColor: '#5B8A72', opacity: col.required ? 0.5 : 1 }}
+                        >
+                          <span className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm" style={{ transform: 'translateX(18px)' }} />
+                        </button>
+                      </div>
+                    )
+                  })}
+
+                  {ALL_COLUMNS.filter(c => !visibleColumns.includes(c.key)).map(col => (
+                    <div
+                      key={col.key}
+                      className="flex items-center gap-2 px-4 py-2 hover:bg-[#F5F7F4] transition-colors"
+                    >
+                      <div className="w-3.5 flex-shrink-0" />
+                      <span className="flex-1 text-sm text-[#7A8580]">{col.label}</span>
+                      <button
+                        onClick={() => toggleColumn(col.key)}
+                        className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0"
+                        style={{ backgroundColor: '#D1D5DB' }}
+                      >
+                        <span className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm" style={{ transform: 'translateX(3px)' }} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         
         {showFilters && (
@@ -891,96 +1050,18 @@ export default function NewCatalogPage() {
                     className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
                   />
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('title')}>
-                  <div className="flex items-center space-x-1">
-                    <span>Song</span>
-                    {sortField === 'title' ? (
-                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    ) : (
-                      <span className="text-[#7A8580]">↕</span>
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('primary_artist')}>
-                  <div className="flex items-center space-x-1">
-                    <span>Artist</span>
-                    {sortField === 'primary_artist' ? (
-                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    ) : (
-                      <span className="text-[#7A8580]">↕</span>
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('label')}>
-                  <div className="flex items-center space-x-1">
-                    <span>Label</span>
-                    {sortField === 'label' ? (
-                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    ) : (
-                      <span className="text-[#7A8580]">↕</span>
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('publishing_percentage')}>
-                  <div className="flex items-center space-x-1">
-                    <span>Pub %</span>
-                    {sortField === 'publishing_percentage' ? (
-                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    ) : (
-                      <span className="text-[#7A8580]">↕</span>
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('status_health_score')}>
-                  <div className="flex items-center space-x-1">
-                    <span>Health</span>
-                    {sortField === 'status_health_score' ? (
-                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    ) : (
-                      <span className="text-[#7A8580]">↕</span>
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('is_released')}>
-                  <div className="flex items-center justify-center space-x-1">
-                    <span>Released</span>
-                    {sortField === 'is_released' ? (
-                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    ) : (
-                      <span className="text-[#7A8580]">↕</span>
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('spotify_link')}>
-                  <div className="flex items-center space-x-1">
-                    <span>Spotify</span>
-                    {sortField === 'spotify_link' ? (
-                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    ) : (
-                      <span className="text-[#7A8580]">↕</span>
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('has_contract_executed')}>
-                  <div className="flex items-center space-x-1">
-                    <span>Contract</span>
-                    {sortField === 'has_contract_executed' ? (
-                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    ) : (
-                      <span className="text-[#7A8580]">↕</span>
-                    )}
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)] transition-colors" onClick={() => handleSort('is_registered_with_pro')}>
-                  <div className="flex items-center space-x-1">
-                    <span>PRO</span>
-                    {sortField === 'is_registered_with_pro' ? (
-                      <span className="text-[#5B8A72]">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    ) : (
-                      <span className="text-[#7A8580]">↕</span>
-                    )}
-                  </div>
-                </th>
+                {activeColumns.map(col => (
+                  <th
+                    key={col.key}
+                    className={`px-4 py-3 ${col.align === 'center' ? 'text-center' : 'text-left'} text-xs font-semibold text-[#3D4A44] ${col.sortable ? 'cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)]' : ''} transition-colors`}
+                    onClick={() => col.sortable && handleSort(col.key)}
+                  >
+                    <div className={`flex items-center ${col.align === 'center' ? 'justify-center' : ''} space-x-1`}>
+                      <span>{col.label}</span>
+                      {col.sortable && <SortArrow field={col.key} />}
+                    </div>
+                  </th>
+                ))}
                 {audioColumnsEnabled && (
                   <>
                     <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Audio</th>
@@ -1011,76 +1092,88 @@ export default function NewCatalogPage() {
                       className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
                     />
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-[#3D4A44]">{song.title}</div>
-                    <div className="text-xs text-[#7A8580]">{song.project_title || '-'}</div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-[#7A8580]">
-                    {song.primary_artist}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-[#7A8580]">
-                    {song.label || '-'}
-                  </td>
-                  <td className="px-4 py-3 text-sm text-[#7A8580]">
-                    {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center space-x-2">
-                      <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594]"
-                          style={{ width: `${song.status_health_score || 0}%` }}
-                        ></div>
-                      </div>
-                      <span className="text-xs font-medium text-[#7A8580] w-10">
-                        {Math.round(song.status_health_score || 0)}%
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={(e) => handleReleasedToggle(e, song)}
-                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
-                        song.is_released 
-                          ? 'bg-[#5B8A72] border-[#5B8A72] text-white' 
-                          : 'border-[#7A8580] hover:border-[#5B8A72]'
-                      }`}
-                    >
-                      {song.is_released && (
-                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">
-                    {song.spotify_link ? (
-                      <button
-                        onClick={(e) => openSpotifyLink(e, song.spotify_link)}
-                        className="flex items-center space-x-1 text-[#1DB954] hover:underline text-sm"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
-                        </svg>
-                        <span>Open</span>
-                      </button>
-                    ) : song.is_released ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSpotifyModal({ open: true, song, link: '' })
-                        }}
-                        className="flex items-center space-x-1 text-[#7A8580] hover:text-[#5B8A72] text-sm"
-                      >
-                        <LinkIcon className="w-4 h-4" />
-                        <span>Add Link</span>
-                      </button>
-                    ) : (
-                      <span className="text-xs text-[#7A8580]">-</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">{getStatusIcon(song.has_contract_executed ? 'Yes' : 'No')}</td>
-                  <td className="px-4 py-3">{getStatusIcon(song.is_registered_with_pro ? 'Yes' : 'No')}</td>
+                  {activeColumns.map(col => {
+                    const cellAlign = col.align === 'center' ? 'text-center' : ''
+                    switch (col.key) {
+                      case 'title':
+                        return (
+                          <td key={col.key} className="px-4 py-3">
+                            <div className="font-medium text-[#3D4A44]">{song.title}</div>
+                            {!visibleColumns.includes('project_title') && (
+                              <div className="text-xs text-[#7A8580]">{song.project_title || '-'}</div>
+                            )}
+                          </td>
+                        )
+                      case 'primary_artist':
+                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.primary_artist}</td>
+                      case 'label':
+                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.label || '-'}</td>
+                      case 'publishing_percentage':
+                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}</td>
+                      case 'status_health_score':
+                        return (
+                          <td key={col.key} className="px-4 py-3">
+                            <div className="flex items-center space-x-2">
+                              <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden">
+                                <div className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594]" style={{ width: `${song.status_health_score || 0}%` }}></div>
+                              </div>
+                              <span className="text-xs font-medium text-[#7A8580] w-10">{Math.round(song.status_health_score || 0)}%</span>
+                            </div>
+                          </td>
+                        )
+                      case 'is_released':
+                        return (
+                          <td key={col.key} className="px-4 py-3 text-center">
+                            <button
+                              onClick={(e) => handleReleasedToggle(e, song)}
+                              className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all mx-auto ${
+                                song.is_released ? 'bg-[#5B8A72] border-[#5B8A72] text-white' : 'border-[#7A8580] hover:border-[#5B8A72]'
+                              }`}
+                            >
+                              {song.is_released && (
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </button>
+                          </td>
+                        )
+                      case 'spotify_link':
+                        return (
+                          <td key={col.key} className="px-4 py-3">
+                            {song.spotify_link ? (
+                              <button onClick={(e) => openSpotifyLink(e, song.spotify_link)} className="flex items-center space-x-1 text-[#1DB954] hover:underline text-sm">
+                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                  <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                                </svg>
+                                <span>Open</span>
+                              </button>
+                            ) : song.is_released ? (
+                              <button onClick={(e) => { e.stopPropagation(); setSpotifyModal({ open: true, song, link: '' }) }} className="flex items-center space-x-1 text-[#7A8580] hover:text-[#5B8A72] text-sm">
+                                <LinkIcon className="w-4 h-4" />
+                                <span>Add Link</span>
+                              </button>
+                            ) : (
+                              <span className="text-xs text-[#7A8580]">-</span>
+                            )}
+                          </td>
+                        )
+                      case 'has_contract_executed':
+                        return <td key={col.key} className="px-4 py-3">{getStatusIcon(song.has_contract_executed ? 'Yes' : 'No')}</td>
+                      case 'is_registered_with_pro':
+                        return <td key={col.key} className="px-4 py-3">{getStatusIcon(song.is_registered_with_pro ? 'Yes' : 'No')}</td>
+                      case 'isrc':
+                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.isrc || '-'}</td>
+                      case 'release_date':
+                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.release_date || '-'}</td>
+                      case 'project_title':
+                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.project_title || '-'}</td>
+                      case 'iswc':
+                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song.iswc || '-'}</td>
+                      default:
+                        return <td key={col.key} className="px-4 py-3 text-sm text-[#7A8580]">{song[col.key] || '-'}</td>
+                    }
+                  })}
                   {audioColumnsEnabled && (() => {
                     const songAudio = audioData[song.id] || []
                     const hasAudio = songAudio.length > 0
@@ -1143,7 +1236,7 @@ export default function NewCatalogPage() {
               
               {filteredSongs.length === 0 && (
                 <tr>
-                  <td colSpan={audioColumnsEnabled ? 16 : 11} className="px-6 py-12 text-center text-[#7A8580]">
+                  <td colSpan={activeColumns.length + (audioColumnsEnabled ? 7 : 2)} className="px-6 py-12 text-center text-[#7A8580]">
                     No songs found
                   </td>
                 </tr>
