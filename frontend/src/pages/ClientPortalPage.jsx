@@ -1888,7 +1888,7 @@ function AccessTab() {
   )
 }
 
-const DIR_ROLE_OPTIONS = ['Songwriter', 'Producer', 'Artist', 'Musician', 'Engineer', 'Featured Artist', 'Composer', 'Lyricist', 'Arranger', 'Manager', 'Lawyer', 'Publisher', 'A&R', 'Agent']
+const DIR_ROLE_OPTIONS = ['Songwriter', 'Producer', 'Artist', 'Musician', 'Engineer', 'Featured Artist', 'Composer', 'Lyricist', 'Arranger', 'Manager', 'A&R', 'Lawyer', 'Marketing', 'Accountant', 'Publisher', 'Agent']
 
 const DIR_ROLE_COLORS = {
   Songwriter: 'bg-blue-100 text-blue-700',
@@ -1904,7 +1904,9 @@ const DIR_ROLE_COLORS = {
   Lawyer: 'bg-slate-100 text-slate-700',
   Publisher: 'bg-cyan-100 text-cyan-700',
   'A&R': 'bg-violet-100 text-violet-700',
-  Agent: 'bg-amber-100 text-amber-700',
+  Marketing: 'bg-cyan-100 text-cyan-700',
+  Accountant: 'bg-amber-100 text-amber-700',
+  Agent: 'bg-lime-100 text-lime-700',
 }
 
 

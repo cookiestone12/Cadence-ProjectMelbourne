@@ -4,7 +4,7 @@ import axios from 'axios'
 import { PlusIcon, XMarkIcon, ArrowUpTrayIcon, UserPlusIcon, CameraIcon, TrashIcon, DocumentArrowDownIcon, CheckIcon } from '@heroicons/react/24/outline'
 import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
 
-const ROLE_OPTIONS = ['ARTIST', 'SONGWRITER', 'PRODUCER']
+const ROLE_OPTIONS = ['ARTIST', 'SONGWRITER', 'PRODUCER', 'MANAGER', 'A&R', 'LAWYER', 'MARKETING', 'ACCOUNTANT']
 const PRO_OPTIONS = ['ASCAP', 'BMI', 'PRS', 'SESAC', 'OTHER']
 
 export default function RosterPage() {

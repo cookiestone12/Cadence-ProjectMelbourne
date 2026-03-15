@@ -11,7 +11,7 @@ import ShareModal from '../components/ShareModal'
 import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
 
 const PRO_OPTIONS = ['BMI', 'ASCAP', 'SESAC', 'SOCAN', 'PRS', 'GEMA', 'SACEM', 'SIAE', 'JASRAC', 'Other']
-const ROLE_OPTIONS = ['Songwriter', 'Producer', 'Artist', 'Musician', 'Engineer', 'Featured Artist', 'Composer', 'Lyricist', 'Arranger']
+const ROLE_OPTIONS = ['Songwriter', 'Producer', 'Artist', 'Musician', 'Engineer', 'Featured Artist', 'Composer', 'Lyricist', 'Arranger', 'Manager', 'A&R', 'Lawyer', 'Marketing', 'Accountant']
 
 const ROLE_COLORS = {
   Songwriter: 'bg-blue-100 text-blue-700',
@@ -21,6 +21,11 @@ const ROLE_COLORS = {
   Engineer: 'bg-teal-100 text-teal-700',
   'Featured Artist': 'bg-pink-100 text-pink-700',
   Composer: 'bg-indigo-100 text-indigo-700',
+  Manager: 'bg-sky-100 text-sky-700',
+  'A&R': 'bg-fuchsia-100 text-fuchsia-700',
+  Lawyer: 'bg-slate-100 text-slate-700',
+  Marketing: 'bg-cyan-100 text-cyan-700',
+  Accountant: 'bg-amber-100 text-amber-700',
   Lyricist: 'bg-yellow-100 text-yellow-700',
   Arranger: 'bg-red-100 text-red-700',
 }
