@@ -48,7 +48,25 @@ def credits_overview(
 
     results = get_credits_overview(org_id, db, search=search, sort_by=sort_by)
 
-    if force_refresh or not results or all(r.get("total_estimated_streams", 0) == 0 for r in results):
+    needs_refresh = force_refresh or not results or all(r.get("total_estimated_streams", 0) == 0 for r in results)
+
+    if not needs_refresh and results:
+        from datetime import datetime, timedelta
+        for r in results:
+            last_computed = r.get("last_computed_at")
+            if not last_computed:
+                needs_refresh = True
+                break
+            try:
+                computed_dt = datetime.fromisoformat(last_computed)
+                if (datetime.utcnow() - computed_dt) > timedelta(hours=1):
+                    needs_refresh = True
+                    break
+            except (ValueError, TypeError):
+                needs_refresh = True
+                break
+
+    if needs_refresh:
         estimate_all_songs(org_id, db)
         compute_all_creators(org_id, db)
         results = get_credits_overview(org_id, db, search=search, sort_by=sort_by)

@@ -2,9 +2,24 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
+import threading
+import logging
 from ..models import get_db, SongCredit, SongDSPLink, Song, OrganizationMember, User, ClientShare
 from ..utils.auth import get_current_user
 from .client_sharing import has_shared_access
+
+logger = logging.getLogger("cadence")
+
+
+def _refresh_creator_credits_async(creator_id: int, org_id: int):
+    from ..models.database import SessionLocal
+    from ..services.credits_service import compute_creator_credits
+    try:
+        db = SessionLocal()
+        compute_creator_credits(creator_id, org_id, db)
+        db.close()
+    except Exception as e:
+        logger.warning(f"Background credits refresh failed for creator {creator_id}: {e}")
 
 router = APIRouter(prefix="/api/songs", tags=["credits"])
 
@@ -102,6 +117,12 @@ def create_credit(
     db.commit()
     db.refresh(credit)
     
+    threading.Thread(
+        target=_refresh_creator_credits_async,
+        args=(request.creator_id, song.organization_id),
+        daemon=True,
+    ).start()
+    
     return credit
 
 @router.patch("/{song_id}/credits/{credit_id}")
@@ -144,6 +165,12 @@ def update_credit(
     
     db.commit()
     db.refresh(credit)
+    
+    threading.Thread(
+        target=_refresh_creator_credits_async,
+        args=(credit.creator_id, song.organization_id),
+        daemon=True,
+    ).start()
     
     return {
         "id": credit.id,
@@ -188,8 +215,15 @@ def delete_credit(
     if not credit:
         raise HTTPException(status_code=404, detail="Credit not found")
     
+    creator_id = credit.creator_id
     db.delete(credit)
     db.commit()
+    
+    threading.Thread(
+        target=_refresh_creator_credits_async,
+        args=(creator_id, song.organization_id),
+        daemon=True,
+    ).start()
     
     return {"message": "Credit deleted"}
 
