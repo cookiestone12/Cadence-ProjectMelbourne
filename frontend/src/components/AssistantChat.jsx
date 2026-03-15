@@ -125,7 +125,6 @@ export default function AssistantChat({ user }) {
             role: m.role,
             content: m.content,
           })),
-          user_role: user?.role || 'MEMBER',
         }),
         signal: controller.signal,
       })
@@ -207,23 +206,26 @@ export default function AssistantChat({ user }) {
     setStreaming(false)
   }
 
-  if (!isOpen) {
-    return (
-      <button
-        onClick={handleOpen}
-        className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-gradient-to-br from-[#5B8A72] to-[#4A7A62] rounded-full shadow-lg hover:shadow-xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 group"
-        title="Ask Cadence Assistant"
-      >
-        <ChatBubbleLeftRightIcon className="w-6 h-6 text-white" />
-        {showPulse && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#C4956B] rounded-full animate-pulse" />
-        )}
-      </button>
-    )
-  }
-
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-6rem)] bg-white rounded-2xl shadow-2xl border border-[rgba(59,77,67,0.12)] flex flex-col overflow-hidden">
+    <>
+      {!isOpen && (
+        <button
+          onClick={handleOpen}
+          className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-gradient-to-br from-[#5B8A72] to-[#4A7A62] rounded-full shadow-lg hover:shadow-xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 group"
+          title="Ask Cadence Assistant"
+        >
+          <ChatBubbleLeftRightIcon className="w-6 h-6 text-white" />
+          {showPulse && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#C4956B] rounded-full animate-pulse" />
+          )}
+        </button>
+      )}
+
+      {isOpen && <div className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px] transition-opacity duration-200" onClick={() => setIsOpen(false)} />}
+
+      <div className={`fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[520px] max-h-[calc(100vh-6rem)] bg-white rounded-2xl shadow-2xl border border-[rgba(59,77,67,0.12)] flex flex-col overflow-hidden transition-all duration-300 ease-out origin-bottom-right ${
+        isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4 pointer-events-none'
+      }`}>
       <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-[#5B8A72] to-[#4A7A62] flex-shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
@@ -306,5 +308,6 @@ export default function AssistantChat({ user }) {
         </div>
       </div>
     </div>
+    </>
   )
 }
