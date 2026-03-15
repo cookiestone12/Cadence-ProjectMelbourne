@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
 import { XMarkIcon } from '@heroicons/react/24/outline'
+import useBodyScrollLock from '../hooks/useBodyScrollLock'
 
 const DollarOrNAInput = ({ value, onChange }) => {
   const isNA = value === 'N/A'
@@ -43,6 +44,7 @@ const DollarOrNAInput = ({ value, onChange }) => {
 }
 
 export default function AddSongModal({ onClose, onSuccess, organizationId }) {
+  useBodyScrollLock(true)
   const [creators, setCreators] = useState([])
   const [loadingCreators, setLoadingCreators] = useState(true)
   const [formData, setFormData] = useState({

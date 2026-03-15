@@ -4,8 +4,10 @@ import {
   XMarkIcon, PaperAirplaneIcon, UserGroupIcon,
   EnvelopeIcon, MagnifyingGlassIcon, CheckIcon
 } from '@heroicons/react/24/outline'
+import useBodyScrollLock from '../hooks/useBodyScrollLock'
 
 export default function ShareModal({ itemType, itemId, itemIds, itemName, onClose, orgId }) {
+  useBodyScrollLock(true)
   const [activeTab, setActiveTab] = useState('email')
   const [recipientEmails, setRecipientEmails] = useState('')
   const [message, setMessage] = useState('')

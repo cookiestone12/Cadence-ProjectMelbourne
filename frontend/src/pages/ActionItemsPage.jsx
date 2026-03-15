@@ -28,6 +28,7 @@ import {
   ChevronDownIcon
 } from '@heroicons/react/24/outline'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
+import useBodyScrollLock from '../hooks/useBodyScrollLock'
 
 const PRIORITY_OPTIONS = [
   { value: 1, label: 'High', color: '#C47068', bgColor: 'rgba(196, 112, 104, 0.15)' },
@@ -120,6 +121,7 @@ export default function ActionItemsPage() {
   const [summary, setSummary] = useState({ total_pending: 0, overdue: 0, due_this_week: 0, high_priority: 0, by_entity_type: {}, by_action_type: {} })
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
+  useBodyScrollLock(showAddForm)
   const [filterStatus, setFilterStatus] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
   const [filterCreator, setFilterCreator] = useState('')

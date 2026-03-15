@@ -10,8 +10,10 @@ import {
 } from '@heroicons/react/24/outline'
 
 import ShareModal from './ShareModal'
+import useBodyScrollLock from '../hooks/useBodyScrollLock'
 
 export default function SongDetailModal({ song, onClose, onSongUpdated }) {
+  useBodyScrollLock(!!song)
   const [activeTab, setActiveTab] = useState('overview')
   const [shareTarget, setShareTarget] = useState(null)
   const [songDetails, setSongDetails] = useState(null)

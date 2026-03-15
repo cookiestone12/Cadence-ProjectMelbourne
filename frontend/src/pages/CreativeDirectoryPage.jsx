@@ -9,6 +9,7 @@ import {
 import EmailSendModal from '../components/EmailSendModal'
 import ShareModal from '../components/ShareModal'
 import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
+import useBodyScrollLock from '../hooks/useBodyScrollLock'
 
 const PRO_OPTIONS = ['BMI', 'ASCAP', 'SESAC', 'SOCAN', 'PRS', 'GEMA', 'SACEM', 'SIAE', 'JASRAC', 'Other']
 const ROLE_OPTIONS = ['Songwriter', 'Producer', 'Artist', 'Musician', 'Engineer', 'Featured Artist', 'Composer', 'Lyricist', 'Arranger', 'Manager', 'A&R', 'Lawyer', 'Marketing', 'Accountant']
@@ -44,21 +45,11 @@ function ContactFormModal({ isOpen, onClose, onSubmit, initialData, title, loadi
   const [photoUploading, setPhotoUploading] = useState(false)
   const photoInputRef = useRef(null)
 
+  useBodyScrollLock(isOpen)
+
   useEffect(() => {
     if (isOpen) {
       setForm(initialData ? { ...emptyForm, ...initialData, roles: initialData.roles || [] } : { ...emptyForm })
-      document.body.style.overflow = 'hidden'
-      document.body.style.position = 'fixed'
-      document.body.style.width = '100%'
-      document.body.style.top = `-${window.scrollY}px`
-    }
-    return () => {
-      const scrollY = document.body.style.top
-      document.body.style.overflow = ''
-      document.body.style.position = ''
-      document.body.style.width = ''
-      document.body.style.top = ''
-      window.scrollTo(0, parseInt(scrollY || '0') * -1)
     }
   }, [isOpen, initialData])
 
@@ -101,7 +92,7 @@ function ContactFormModal({ isOpen, onClose, onSubmit, initialData, title, loadi
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-hidden" onTouchMove={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.12)]">
           <h2 className="text-xl font-bold text-[#3D4A44]">{title}</h2>
@@ -284,7 +275,7 @@ function ShareToClientModal({ isOpen, onClose, clientUsers, onShare, loading }) 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-hidden" onTouchMove={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.12)]">
           <h2 className="text-xl font-bold text-[#3D4A44]">Share to Client</h2>
