@@ -11,6 +11,7 @@ import {
   SignalIcon, BoltIcon, EnvelopeIcon, PaperAirplaneIcon
 } from '@heroicons/react/24/outline'
 import EmailSendModal from '../components/EmailSendModal'
+import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
 
 const READINESS_TOOLTIPS = {
   'UPC/EAN code': 'A Universal Product Code is required by all digital stores and streaming platforms to identify your release.',
@@ -86,6 +87,7 @@ export default function ReleasesPage() {
   const [dropboxConnected, setDropboxConnected] = useState(false)
   const [bulkMatches, setBulkMatches] = useState({})
   const [bulkAnalyzing, setBulkAnalyzing] = useState(false)
+  const [viewMode, setViewMode] = useState(() => getStoredViewMode('releases'))
   const [showDistributionModal, setShowDistributionModal] = useState(false)
   const [distributionSending, setDistributionSending] = useState(false)
   const [distributionResult, setDistributionResult] = useState(null)
@@ -554,6 +556,11 @@ export default function ReleasesPage() {
       (r.upc && r.upc.toLowerCase().includes(term))
     )
   })
+
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode)
+    setStoredViewMode('releases', mode)
+  }
 
   const hasActiveFilters = filters.status || filters.release_type
 
@@ -1679,6 +1686,7 @@ export default function ReleasesPage() {
             <FunnelIcon className="w-5 h-5" />
             <span>Filters</span>
           </button>
+          <ViewToggle viewMode={viewMode} onViewModeChange={handleViewModeChange} />
         </div>
 
         {showFilters && (
@@ -1724,60 +1732,129 @@ export default function ReleasesPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filteredReleases.map((release) => (
-          <div
-            key={release.id}
-            onClick={() => {
-              setSelectedRelease(release.id)
-              loadReleaseDetail(release.id)
-            }}
-            className="bg-[#FAFBF9] rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-all hover:translate-y-[-2px] overflow-hidden"
-          >
-            <div className="aspect-square bg-[#EEF1EC] flex items-center justify-center">
-              {(artworkUrls[release.id] || release.cover_art_url) ? (
-                <img src={artworkUrls[release.id] || ''} alt={release.title} className="w-full h-full object-cover" onError={(e) => e.target.style.display='none'} />
-              ) : (
-                <MusicalNoteIcon className="w-16 h-16 text-[#7A8580]" />
-              )}
-            </div>
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="font-semibold text-[#3D4A44] truncate flex-1">{release.title}</h3>
-              </div>
-              <p className="text-sm text-[#7A8580] truncate mb-2">{release.primary_artist || 'No artist'}</p>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[release.status] || STATUS_COLORS.DRAFT}`}>
-                    {release.status}
-                  </span>
-                  <span className="text-xs text-[#7A8580] bg-[#EEF1EC] px-2 py-0.5 rounded-full">
-                    {TYPE_LABELS[release.release_type] || release.release_type}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center justify-between mt-3 text-xs text-[#7A8580]">
-                <div className="flex items-center space-x-1">
-                  <MusicalNoteIcon className="w-3.5 h-3.5" />
-                  <span>{release.track_count || 0} tracks</span>
-                </div>
-                {release.release_date && (
-                  <div className="flex items-center space-x-1">
-                    <CalendarIcon className="w-3.5 h-3.5" />
-                    <span>{release.release_date}</span>
-                  </div>
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredReleases.map((release) => (
+            <div
+              key={release.id}
+              onClick={() => {
+                setSelectedRelease(release.id)
+                loadReleaseDetail(release.id)
+              }}
+              className="bg-[#FAFBF9] rounded-xl shadow-sm hover:shadow-md cursor-pointer transition-all hover:translate-y-[-2px] overflow-hidden"
+            >
+              <div className="aspect-square bg-[#EEF1EC] flex items-center justify-center">
+                {(artworkUrls[release.id] || release.cover_art_url) ? (
+                  <img src={artworkUrls[release.id] || ''} alt={release.title} className="w-full h-full object-cover" onError={(e) => e.target.style.display='none'} />
+                ) : (
+                  <MusicalNoteIcon className="w-16 h-16 text-[#7A8580]" />
                 )}
               </div>
+              <div className="p-4">
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="font-semibold text-[#3D4A44] truncate flex-1">{release.title}</h3>
+                </div>
+                <p className="text-sm text-[#7A8580] truncate mb-2">{release.primary_artist || 'No artist'}</p>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[release.status] || STATUS_COLORS.DRAFT}`}>
+                      {release.status}
+                    </span>
+                    <span className="text-xs text-[#7A8580] bg-[#EEF1EC] px-2 py-0.5 rounded-full">
+                      {TYPE_LABELS[release.release_type] || release.release_type}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mt-3 text-xs text-[#7A8580]">
+                  <div className="flex items-center space-x-1">
+                    <MusicalNoteIcon className="w-3.5 h-3.5" />
+                    <span>{release.track_count || 0} tracks</span>
+                  </div>
+                  {release.release_date && (
+                    <div className="flex items-center space-x-1">
+                      <CalendarIcon className="w-3.5 h-3.5" />
+                      <span>{release.release_date}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
 
-        {filteredReleases.length === 0 && (
-          <div className="col-span-full text-center py-12 text-[#7A8580]">
-            No releases found
+          {filteredReleases.length === 0 && (
+            <div className="col-span-full text-center py-12 text-[#7A8580]">
+              No releases found
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] w-12"></th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Artist</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Status</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Tracks</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">UPC</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Label</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Release Date</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+                {filteredReleases.map((release) => (
+                  <tr
+                    key={release.id}
+                    onClick={() => {
+                      setSelectedRelease(release.id)
+                      loadReleaseDetail(release.id)
+                    }}
+                    className="hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="w-10 h-10 bg-[#EEF1EC] rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                        {(artworkUrls[release.id] || release.cover_art_url) ? (
+                          <img src={artworkUrls[release.id] || ''} alt={release.title} className="w-10 h-10 object-cover rounded-lg" onError={(e) => e.target.style.display='none'} />
+                        ) : (
+                          <MusicalNoteIcon className="w-5 h-5 text-[#7A8580]" />
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-[#3D4A44]">{release.title}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">{release.primary_artist || '-'}</td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs text-[#7A8580] bg-[#EEF1EC] px-2 py-0.5 rounded-full">
+                        {TYPE_LABELS[release.release_type] || release.release_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[release.status] || STATUS_COLORS.DRAFT}`}>
+                        {release.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm text-[#7A8580]">{release.track_count || 0}</td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580] font-mono">{release.upc || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">{release.label || '-'}</td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">{release.release_date || '-'}</td>
+                  </tr>
+                ))}
+                {filteredReleases.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-12 text-center text-[#7A8580]">
+                      No releases found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
