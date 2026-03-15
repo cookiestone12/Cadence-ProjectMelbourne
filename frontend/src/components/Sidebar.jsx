@@ -22,7 +22,8 @@ import {
   SparklesIcon,
   CloudArrowUpIcon,
   StarIcon,
-  ShareIcon
+  ShareIcon,
+  LifebuoyIcon
 } from '@heroicons/react/24/outline'
 import NotificationBell from './NotificationBell'
 
@@ -59,6 +60,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
   
   const clientNavItems = [
     { path: '/client-portal', label: 'My Portal', icon: HomeIcon },
+    { path: '/support', label: 'Support', icon: LifebuoyIcon },
   ]
 
   const allNavItems = [
@@ -80,6 +82,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/reports', label: 'Reports', icon: ChartBarIcon },
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
     { path: '/shared-with-me', label: 'Shared With Me', icon: ShareIcon },
+    { path: '/support', label: 'Support', icon: LifebuoyIcon },
   ]
 
   const navItems = isClient ? clientNavItems : allNavItems.filter(item => {

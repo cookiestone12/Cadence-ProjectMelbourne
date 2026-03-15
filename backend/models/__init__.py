@@ -32,6 +32,7 @@ from .models import (
     AccountMergeRequest,
     SharedItem, SharedItemType, SharedItemStatus,
     AIUsageLog,
+    TicketCategory, TicketStatus, SupportTicket, SupportTicketAttachment,
 )
 
 __all__ = [
@@ -67,4 +68,5 @@ __all__ = [
     "AccountMergeRequest",
     "SharedItem", "SharedItemType", "SharedItemStatus",
     "AIUsageLog",
+    "TicketCategory", "TicketStatus", "SupportTicket", "SupportTicketAttachment",
 ]

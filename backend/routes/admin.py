@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import os
 import io
 import logging
-from ..models import get_db, User, Organization, OrganizationMember, AIUsageLog
+from ..models import get_db, User, Organization, OrganizationMember, AIUsageLog, SupportTicket, SupportTicketAttachment
 from ..utils.auth import get_current_super_admin, get_password_hash
 
 logger = logging.getLogger("cadence")
@@ -1000,3 +1000,120 @@ def download_cost_report(
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.get("/support-tickets")
+def list_all_support_tickets(
+    status: Optional[str] = None,
+    category: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+):
+    query = db.query(SupportTicket)
+
+    if status:
+        query = query.filter(SupportTicket.status == status)
+    if category:
+        query = query.filter(SupportTicket.category == category)
+
+    from sqlalchemy import case
+    status_order = case(
+        (SupportTicket.status == "OPEN", 0),
+        (SupportTicket.status == "IN_PROGRESS", 1),
+        (SupportTicket.status == "RESOLVED", 2),
+        (SupportTicket.status == "CLOSED", 3),
+        else_=4,
+    )
+    tickets = query.order_by(status_order, SupportTicket.created_at.desc()).all()
+
+    open_count = db.query(func.count(SupportTicket.id)).filter(SupportTicket.status == "OPEN").scalar() or 0
+    in_progress_count = db.query(func.count(SupportTicket.id)).filter(SupportTicket.status == "IN_PROGRESS").scalar() or 0
+
+    def ticket_to_admin_dict(t):
+        return {
+            "id": t.id,
+            "user_id": t.user_id,
+            "organization_id": t.organization_id,
+            "category": t.category,
+            "subject": t.subject,
+            "description": t.description,
+            "status": t.status,
+            "admin_notes": t.admin_notes,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+            "resolved_at": t.resolved_at.isoformat() if t.resolved_at else None,
+            "closed_at": t.closed_at.isoformat() if t.closed_at else None,
+            "user": {
+                "id": t.user.id,
+                "username": t.user.username,
+                "email": t.user.email,
+                "role": t.user.role,
+            } if t.user else None,
+            "organization": {
+                "id": t.organization.id,
+                "name": t.organization.name,
+            } if t.organization else None,
+            "attachments": [
+                {
+                    "id": a.id,
+                    "file_name": a.file_name,
+                    "mime_type": a.mime_type,
+                    "file_size": a.file_size,
+                    "url": f"/api/support/attachments/{a.id}",
+                }
+                for a in (t.attachments or [])
+            ],
+        }
+
+    return {
+        "tickets": [ticket_to_admin_dict(t) for t in tickets],
+        "total": len(tickets),
+        "open_count": open_count,
+        "in_progress_count": in_progress_count,
+    }
+
+
+@router.put("/support-tickets/{ticket_id}/status")
+def update_ticket_status(
+    ticket_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+):
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    new_status = data.get("status")
+    valid_statuses = {"OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"}
+    if new_status not in valid_statuses:
+        raise HTTPException(status_code=422, detail=f"Invalid status. Must be one of: {', '.join(sorted(valid_statuses))}")
+
+    ticket.status = new_status
+    now = datetime.utcnow()
+    if new_status == "RESOLVED":
+        ticket.resolved_at = now
+    elif new_status == "CLOSED":
+        ticket.closed_at = now
+
+    db.commit()
+    logger.info(f"Support ticket #{ticket_id} status updated to {new_status} by admin {current_user.username}")
+
+    return {"status": "ok", "ticket_id": ticket_id, "new_status": new_status}
+
+
+@router.put("/support-tickets/{ticket_id}/notes")
+def update_ticket_notes(
+    ticket_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+):
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    ticket.admin_notes = data.get("admin_notes", "")
+    db.commit()
+
+    return {"status": "ok", "ticket_id": ticket_id}

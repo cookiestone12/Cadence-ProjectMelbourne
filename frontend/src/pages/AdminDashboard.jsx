@@ -25,6 +25,8 @@ import {
   BoltIcon,
   GlobeAltIcon,
   BellAlertIcon,
+  LifebuoyIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline'
 
 export default function AdminDashboard() {
@@ -54,6 +56,13 @@ export default function AdminDashboard() {
   const [aiUsage, setAiUsage] = useState(null)
   const [aiUsageLoading, setAiUsageLoading] = useState(false)
   const [costReportLoading, setCostReportLoading] = useState(false)
+  const [supportTickets, setSupportTickets] = useState([])
+  const [supportLoading, setSupportLoading] = useState(false)
+  const [supportFilter, setSupportFilter] = useState('all')
+  const [selectedSupportTicket, setSelectedSupportTicket] = useState(null)
+  const [adminNotes, setAdminNotes] = useState('')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -101,11 +110,58 @@ export default function AdminDashboard() {
     }
   }
 
+  const loadSupportTickets = async () => {
+    setSupportLoading(true)
+    try {
+      const params = {}
+      if (supportFilter !== 'all') params.status = supportFilter
+      const res = await axios.get('/api/admin/support-tickets', { params })
+      setSupportTickets(res.data.tickets || [])
+    } catch (err) {
+      console.error('Failed to load support tickets:', err)
+    } finally {
+      setSupportLoading(false)
+    }
+  }
+
+  const handleUpdateTicketStatus = async (ticketId, newStatus) => {
+    setUpdatingStatus(true)
+    try {
+      await axios.put(`/api/admin/support-tickets/${ticketId}/status`, { status: newStatus })
+      loadSupportTickets()
+      if (selectedSupportTicket?.id === ticketId) {
+        setSelectedSupportTicket(prev => ({ ...prev, status: newStatus }))
+      }
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to update status')
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
+  const handleSaveAdminNotes = async (ticketId) => {
+    setSavingNotes(true)
+    try {
+      await axios.put(`/api/admin/support-tickets/${ticketId}/notes`, { admin_notes: adminNotes })
+      loadSupportTickets()
+      if (selectedSupportTicket?.id === ticketId) {
+        setSelectedSupportTicket(prev => ({ ...prev, admin_notes: adminNotes }))
+      }
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to save notes')
+    } finally {
+      setSavingNotes(false)
+    }
+  }
+
   useEffect(() => {
     if (activeTab === 'costs' && !aiUsage) {
       loadAiUsage()
     }
-  }, [activeTab])
+    if (activeTab === 'support') {
+      loadSupportTickets()
+    }
+  }, [activeTab, supportFilter])
 
   const handleDownloadCostReport = async () => {
     setCostReportLoading(true)
@@ -259,7 +315,7 @@ export default function AdminDashboard() {
 
       <div className="mb-6 border-b border-[rgba(59,77,67,0.08)] overflow-x-auto">
         <div className="flex space-x-4 sm:space-x-8 min-w-max">
-          {['overview', 'users', 'organizations', 'merge-requests', 'api-config', 'costs'].map((tab) => (
+          {['overview', 'users', 'organizations', 'merge-requests', 'api-config', 'costs', 'support'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -924,6 +980,25 @@ export default function AdminDashboard() {
           onRefresh={loadAiUsage}
           onDownloadReport={handleDownloadCostReport}
           costReportLoading={costReportLoading}
+        />
+      )}
+
+      {activeTab === 'support' && (
+        <SupportTicketsTab
+          tickets={supportTickets}
+          loading={supportLoading}
+          filter={supportFilter}
+          onFilterChange={setSupportFilter}
+          onRefresh={loadSupportTickets}
+          selectedTicket={selectedSupportTicket}
+          onSelectTicket={(ticket) => { setSelectedSupportTicket(ticket); setAdminNotes(ticket?.admin_notes || '') }}
+          onCloseTicket={() => setSelectedSupportTicket(null)}
+          onUpdateStatus={handleUpdateTicketStatus}
+          updatingStatus={updatingStatus}
+          adminNotes={adminNotes}
+          onAdminNotesChange={setAdminNotes}
+          onSaveNotes={handleSaveAdminNotes}
+          savingNotes={savingNotes}
         />
       )}
 
@@ -1598,6 +1673,238 @@ const FEATURE_LABELS = {
   brief_builder: 'Brief Builder',
   csv_mapping: 'CSV Column Mapping',
   royalty_pdf_parsing: 'Royalty PDF Parsing',
+}
+
+function SupportTicketsTab({ tickets, loading, filter, onFilterChange, onRefresh, selectedTicket, onSelectTicket, onCloseTicket, onUpdateStatus, updatingStatus, adminNotes, onAdminNotesChange, onSaveNotes, savingNotes }) {
+  const statusOptions = [
+    { value: 'all', label: 'All' },
+    { value: 'OPEN', label: 'Open', color: '#C47068' },
+    { value: 'IN_PROGRESS', label: 'In Progress', color: '#C4956B' },
+    { value: 'RESOLVED', label: 'Resolved', color: '#5B8A72' },
+    { value: 'CLOSED', label: 'Closed', color: '#7A8580' },
+  ]
+
+  const categoryLabels = { BUG_REPORT: 'Bug Report', FEATURE_REQUEST: 'Feature Request', GENERAL_SUPPORT: 'General Support' }
+  const categoryColors = { BUG_REPORT: '#C47068', FEATURE_REQUEST: '#5A8A9A', GENERAL_SUPPORT: '#5B8A72' }
+
+  const statusColors = { OPEN: '#C47068', IN_PROGRESS: '#C4956B', RESOLVED: '#5B8A72', CLOSED: '#7A8580' }
+  const statusLabels = { OPEN: 'Open', IN_PROGRESS: 'In Progress', RESOLVED: 'Resolved', CLOSED: 'Closed' }
+
+  const formatDate = (iso) => {
+    if (!iso) return ''
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+  }
+
+  const openCount = tickets.filter(t => t.status === 'OPEN').length
+  const inProgressCount = tickets.filter(t => t.status === 'IN_PROGRESS').length
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-4">
+          <h3 className="text-lg font-bold text-[#3D4A44]">Support Tickets</h3>
+          {openCount > 0 && (
+            <span className="px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#C4706818', color: '#C47068' }}>
+              {openCount} open
+            </span>
+          )}
+          {inProgressCount > 0 && (
+            <span className="px-2.5 py-1 rounded-full text-xs font-medium" style={{ backgroundColor: '#C4956B18', color: '#C4956B' }}>
+              {inProgressCount} in progress
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg overflow-hidden border border-[rgba(59,77,67,0.12)]">
+            {statusOptions.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => onFilterChange(opt.value)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                  filter === opt.value
+                    ? 'bg-[#5B8A72] text-white'
+                    : 'bg-white text-[#7A8580] hover:bg-[#F5F7F4]'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={onRefresh} className="p-2 hover:bg-[#F5F7F4] rounded-lg" title="Refresh">
+            <ArrowPathIcon className={`w-4 h-4 text-[#7A8580] ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <ArrowPathIcon className="w-6 h-6 text-[#7A8580] animate-spin" />
+        </div>
+      ) : tickets.length === 0 ? (
+        <div className="text-center py-16">
+          <LifebuoyIcon className="w-12 h-12 text-[#B0B5B2] mx-auto mb-3" />
+          <h3 className="text-lg font-semibold text-[#3D4A44] mb-1">No tickets</h3>
+          <p className="text-sm text-[#7A8580]">{filter !== 'all' ? `No ${statusLabels[filter]?.toLowerCase()} tickets found.` : 'No support tickets have been submitted yet.'}</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-[rgba(59,77,67,0.12)] overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-[#F5F7F4] border-b border-[rgba(59,77,67,0.08)]">
+                  <th className="text-left text-xs font-semibold text-[#7A8580] uppercase tracking-wider px-4 py-3">ID</th>
+                  <th className="text-left text-xs font-semibold text-[#7A8580] uppercase tracking-wider px-4 py-3">Subject</th>
+                  <th className="text-left text-xs font-semibold text-[#7A8580] uppercase tracking-wider px-4 py-3">Category</th>
+                  <th className="text-left text-xs font-semibold text-[#7A8580] uppercase tracking-wider px-4 py-3">User</th>
+                  <th className="text-left text-xs font-semibold text-[#7A8580] uppercase tracking-wider px-4 py-3">Org</th>
+                  <th className="text-left text-xs font-semibold text-[#7A8580] uppercase tracking-wider px-4 py-3">Status</th>
+                  <th className="text-left text-xs font-semibold text-[#7A8580] uppercase tracking-wider px-4 py-3">Created</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                {tickets.map(ticket => (
+                  <tr
+                    key={ticket.id}
+                    onClick={() => onSelectTicket(ticket)}
+                    className="hover:bg-[#F5F7F4]/50 cursor-pointer transition-colors"
+                  >
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">#{ticket.id}</td>
+                    <td className="px-4 py-3">
+                      <p className="text-sm font-medium text-[#3D4A44] truncate max-w-[250px]">{ticket.subject}</p>
+                      {ticket.attachments?.length > 0 && (
+                        <span className="text-xs text-[#7A8580]">{ticket.attachments.length} attachment{ticket.attachments.length > 1 ? 's' : ''}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                        style={{ backgroundColor: `${categoryColors[ticket.category] || '#5B8A72'}18`, color: categoryColors[ticket.category] || '#5B8A72' }}
+                      >
+                        {categoryLabels[ticket.category] || ticket.category}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#3D4A44]">{ticket.user?.username || 'Unknown'}</td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">{ticket.organization?.name || '-'}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: `${statusColors[ticket.status] || '#7A8580'}18`, color: statusColors[ticket.status] || '#7A8580' }}
+                      >
+                        {statusLabels[ticket.status] || ticket.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-[#7A8580] whitespace-nowrap">{formatDate(ticket.created_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {selectedTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onCloseTicket}>
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-auto shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-[rgba(59,77,67,0.08)]">
+              <div>
+                <h3 className="text-lg font-bold text-[#3D4A44]">Ticket #{selectedTicket.id}</h3>
+                <p className="text-xs text-[#7A8580]">by {selectedTicket.user?.username} {selectedTicket.organization ? `(${selectedTicket.organization.name})` : ''}</p>
+              </div>
+              <button onClick={onCloseTicket} className="p-1 hover:bg-[#F5F7F4] rounded-lg">
+                <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+              </button>
+            </div>
+            <div className="p-5 space-y-5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
+                  style={{ backgroundColor: `${statusColors[selectedTicket.status]}18`, color: statusColors[selectedTicket.status] }}
+                >
+                  {statusLabels[selectedTicket.status]}
+                </span>
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                  style={{ backgroundColor: `${categoryColors[selectedTicket.category] || '#5B8A72'}18`, color: categoryColors[selectedTicket.category] || '#5B8A72' }}
+                >
+                  {categoryLabels[selectedTicket.category] || selectedTicket.category}
+                </span>
+                <span className="text-xs text-[#7A8580] ml-auto">{formatDate(selectedTicket.created_at)}</span>
+              </div>
+
+              <div>
+                <h4 className="font-semibold text-[#3D4A44] mb-2">{selectedTicket.subject}</h4>
+                <div className="bg-[#F5F7F4] rounded-xl p-4">
+                  <p className="text-sm text-[#3D4A44] whitespace-pre-wrap">{selectedTicket.description}</p>
+                </div>
+              </div>
+
+              {selectedTicket.attachments?.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-[#3D4A44] mb-2">Attachments</p>
+                  <div className="flex flex-wrap gap-3">
+                    {selectedTicket.attachments.map(att => (
+                      <a key={att.id} href={att.url} target="_blank" rel="noreferrer" className="block">
+                        <img src={att.url} alt={att.file_name} className="w-40 h-40 object-cover rounded-xl border border-[rgba(59,77,67,0.12)] hover:border-[#5B8A72] transition-colors" />
+                        <p className="text-[10px] text-[#7A8580] mt-1 max-w-[160px] truncate">{att.file_name}</p>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <p className="text-sm font-medium text-[#3D4A44] mb-2">Update Status</p>
+                <div className="flex flex-wrap gap-2">
+                  {['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'].map(s => (
+                    <button
+                      key={s}
+                      onClick={() => onUpdateStatus(selectedTicket.id, s)}
+                      disabled={selectedTicket.status === s || updatingStatus}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                        selectedTicket.status === s
+                          ? 'text-white'
+                          : 'bg-[#F5F7F4] text-[#3D4A44] hover:bg-[#E8ECE6]'
+                      } disabled:opacity-50`}
+                      style={selectedTicket.status === s ? { backgroundColor: statusColors[s] } : {}}
+                    >
+                      {statusLabels[s]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-sm font-medium text-[#3D4A44] mb-2">Admin Notes</p>
+                <textarea
+                  value={adminNotes}
+                  onChange={e => onAdminNotesChange(e.target.value)}
+                  rows={3}
+                  placeholder="Internal notes about this ticket..."
+                  className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] placeholder-[#B0B5B2] focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/20 focus:border-[#5B8A72] resize-none"
+                />
+                <div className="flex justify-end mt-2">
+                  <button
+                    onClick={() => onSaveNotes(selectedTicket.id)}
+                    disabled={savingNotes}
+                    className="px-4 py-2 text-sm font-medium bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] disabled:opacity-50"
+                  >
+                    {savingNotes ? 'Saving...' : 'Save Notes'}
+                  </button>
+                </div>
+              </div>
+
+              {selectedTicket.resolved_at && (
+                <p className="text-xs text-[#5B8A72]">Resolved: {formatDate(selectedTicket.resolved_at)}</p>
+              )}
+              {selectedTicket.closed_at && (
+                <p className="text-xs text-[#7A8580]">Closed: {formatDate(selectedTicket.closed_at)}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function InfrastructureCostsTab({ aiUsage, aiUsageLoading, onRefresh, onDownloadReport, costReportLoading }) {

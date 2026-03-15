@@ -61,6 +61,7 @@ import ClientPortalPage from './pages/ClientPortalPage'
 import SharedContactsPage from './pages/SharedContactsPage'
 import SharedCreditsPage from './pages/SharedCreditsPage'
 import SharedWithMePage from './pages/SharedWithMePage'
+import SupportPage from './pages/SupportPage'
 import Sidebar from './components/Sidebar'
 import PullToRefresh from './components/PullToRefresh'
 
@@ -172,6 +173,7 @@ function App() {
             {user?.role === 'CLIENT' ? (
               <>
                 <Route path="/client-portal" element={<ClientPortalPage />} />
+                <Route path="/support" element={<SupportPage />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/guide" element={<UserGuidePage />} />
                 <Route path="*" element={<Navigate to="/client-portal" />} />
@@ -198,6 +200,7 @@ function App() {
                 <Route path="/credits" element={<CreditsPage />} />
                 <Route path="/storage-scan" element={<StorageScanPage />} />
                 <Route path="/shared-with-me" element={<SharedWithMePage />} />
+                <Route path="/support" element={<SupportPage />} />
                 <Route path="/client-portal" element={<ClientPortalPage />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/guide" element={<UserGuidePage />} />

@@ -2349,3 +2349,54 @@ class SharedItem(Base):
     organization = relationship("Organization", foreign_keys=[organization_id])
     shared_by_user = relationship("User", foreign_keys=[shared_by_user_id])
     shared_with_user = relationship("User", foreign_keys=[shared_with_user_id])
+
+
+class TicketCategory(str, enum.Enum):
+    BUG_REPORT = "BUG_REPORT"
+    FEATURE_REQUEST = "FEATURE_REQUEST"
+    GENERAL_SUPPORT = "GENERAL_SUPPORT"
+
+class TicketStatus(str, enum.Enum):
+    OPEN = "OPEN"
+    IN_PROGRESS = "IN_PROGRESS"
+    RESOLVED = "RESOLVED"
+    CLOSED = "CLOSED"
+
+class SupportTicket(Base):
+    __tablename__ = "support_tickets"
+    __table_args__ = (
+        Index('ix_support_tickets_user_id', 'user_id'),
+        Index('ix_support_tickets_org_id', 'organization_id'),
+        Index('ix_support_tickets_status', 'status'),
+        Index('ix_support_tickets_created_at', 'created_at'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    category = Column(String, nullable=False, default="GENERAL_SUPPORT")
+    subject = Column(String(500), nullable=False)
+    description = Column(Text, nullable=False)
+    status = Column(String, nullable=False, default="OPEN")
+    admin_notes = Column(Text, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
+    organization = relationship("Organization", foreign_keys=[organization_id])
+    attachments = relationship("SupportTicketAttachment", back_populates="ticket", cascade="all, delete-orphan")
+
+class SupportTicketAttachment(Base):
+    __tablename__ = "support_ticket_attachments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("support_tickets.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_path = Column(String, nullable=False)
+    file_name = Column(String, nullable=False)
+    mime_type = Column(String, nullable=True)
+    file_size = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    ticket = relationship("SupportTicket", back_populates="attachments")
