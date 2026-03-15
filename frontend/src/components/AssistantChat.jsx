@@ -92,7 +92,7 @@ export default function AssistantChat({ user }) {
     if (messages.length === 0) {
       setMessages([{
         role: 'assistant',
-        content: `Hi${user?.username ? ` ${user.username}` : ''}! I'm your Cadence assistant. Ask me anything about the app — I'll tell you exactly where to go and what to click.`
+        content: `Hi${user?.username ? ` ${user.username}` : ''}! I'm Cadence. Ask me anything about the app — I'll tell you exactly where to go and what to click.`
       }])
     }
   }
@@ -201,7 +201,7 @@ export default function AssistantChat({ user }) {
     }
     setMessages([{
       role: 'assistant',
-      content: `Hi${user?.username ? ` ${user.username}` : ''}! I'm your Cadence assistant. Ask me anything about the app — I'll tell you exactly where to go and what to click.`
+      content: `Hi${user?.username ? ` ${user.username}` : ''}! I'm Cadence. Ask me anything about the app — I'll tell you exactly where to go and what to click.`
     }])
     setStreaming(false)
   }
@@ -232,7 +232,7 @@ export default function AssistantChat({ user }) {
             <ChatBubbleLeftRightIcon className="w-4.5 h-4.5 text-white" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white leading-tight">Cadence Assistant</h3>
+            <h3 className="text-sm font-semibold text-white leading-tight">Cadence</h3>
             <p className="text-[10px] text-white/70">Ask me anything about the app</p>
           </div>
         </div>
