@@ -28,6 +28,19 @@ def verify_org_access(user: User, org_id: int, db: Session):
         raise HTTPException(status_code=403, detail="Not a member of this organization")
 
 
+def verify_org_admin(user: User, org_id: int, db: Session):
+    if user.is_super_admin:
+        return
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == user.id,
+        OrganizationMember.organization_id == org_id,
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member of this organization")
+    if membership.role not in ("admin", "owner"):
+        raise HTTPException(status_code=403, detail="Admin access required for this action")
+
+
 class CreatorStorageLinkCreate(BaseModel):
     creator_id: int
     provider: str = "DROPBOX"
@@ -330,6 +343,31 @@ def approve_result(
             org_id, result_id, request.song_id, request.work_id,
             request.create_new, request.new_title, request.new_artist, db,
         )
+
+        asset_id = result.get("audio_asset_id")
+        if asset_id:
+            existing_analysis = db.query(AudioAnalysis).filter(
+                AudioAnalysis.audio_asset_id == asset_id,
+            ).first()
+            if not existing_analysis:
+                analysis = AudioAnalysis(
+                    org_id=org_id,
+                    audio_asset_id=asset_id,
+                    status="QUEUED",
+                )
+                db.add(analysis)
+                db.commit()
+
+                import threading
+                from ..routes.audio import _run_analysis_worker
+                thread = threading.Thread(
+                    target=_run_analysis_worker,
+                    args=(analysis.id, asset_id, org_id),
+                    daemon=True,
+                )
+                thread.start()
+                result["analysis_queued"] = True
+
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -386,7 +424,7 @@ def bulk_approve(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    verify_org_access(current_user, org_id, db)
+    verify_org_admin(current_user, org_id, db)
     try:
         result = scan_service.bulk_approve_high_confidence(
             org_id, request.scan_batch_id, request.min_confidence, db,
@@ -470,6 +508,7 @@ def analyze_linked_songs(
 
 class OrgWideScanRequest(BaseModel):
     folder_path: str = "/"
+    auto_link_threshold: float = 0.85
 
 
 @router.post("/org/{org_id}/org-scan")
@@ -479,7 +518,9 @@ def org_wide_scan(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    verify_org_access(current_user, org_id, db)
+    verify_org_admin(current_user, org_id, db)
+
+    threshold = max(0.5, min(1.0, request.auto_link_threshold))
 
     integration = db.query(IntegrationAccount).filter(
         IntegrationAccount.org_id == org_id,
@@ -490,7 +531,7 @@ def org_wide_scan(
         raise HTTPException(status_code=400, detail="Dropbox is not connected. Please connect it first in Settings.")
 
     try:
-        result = scan_service.scan_org_wide(org_id, request.folder_path, db)
+        result = scan_service.scan_org_wide(org_id, request.folder_path, db, auto_link_threshold=threshold)
 
         queued_pairs = result.pop("queued_analysis_ids", [])
         if queued_pairs:
@@ -575,7 +616,7 @@ def analyze_all_unanalyzed(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    verify_org_access(current_user, org_id, db)
+    verify_org_admin(current_user, org_id, db)
     import threading
     from ..routes.audio import _run_analysis_worker
 
