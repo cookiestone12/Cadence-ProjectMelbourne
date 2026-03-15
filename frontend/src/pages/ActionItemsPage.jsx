@@ -875,24 +875,25 @@ export default function ActionItemsPage() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
+                  <div className="min-w-0">
                     <label className="block text-sm font-medium text-[#3D4A44] mb-1">Deadline</label>
                     <input
                       type="date"
                       value={newAction.deadline}
                       onChange={(e) => setNewAction({ ...newAction, deadline: e.target.value })}
-                      className="w-full px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      className="w-full min-w-0 px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent appearance-none"
+                      style={{ WebkitAppearance: 'none' }}
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Remind Before (days)</label>
+                  <div className="min-w-0">
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1 truncate">Remind Before (days)</label>
                     <input
                       type="number"
                       min="0"
                       value={newAction.reminder_days_before}
                       onChange={(e) => setNewAction({ ...newAction, reminder_days_before: parseInt(e.target.value) || 0 })}
-                      className="w-full px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                      className="w-full min-w-0 px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                     />
                   </div>
                 </div>
