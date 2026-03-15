@@ -230,11 +230,11 @@ export default function AssistantChat({ user }) {
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 relative">
             <img src="/cadence-assistant-logo.png" alt="Cadence" className="w-full h-full object-cover relative z-10" />
-            <div className="absolute inset-0 rounded-full z-20 pointer-events-none animate-[metalPulse_3s_ease-in-out_infinite]" />
+            <div className="absolute inset-0 rounded-full z-20 pointer-events-none animate-[metalPulse_4s_ease-in-out_infinite]" style={{ boxShadow: 'inset 0 0 8px rgba(255,255,255,0.15), 0 0 6px rgba(91,138,114,0.3)', background: 'linear-gradient(135deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.02) 100%)' }} />
             <style>{`
               @keyframes metalPulse {
-                0%, 100% { opacity: 0; box-shadow: none; background: transparent; }
-                50% { opacity: 1; box-shadow: inset 0 0 10px rgba(255,255,255,0.18), 0 0 8px rgba(91,138,114,0.4); background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.18) 50%, rgba(255,255,255,0.03) 100%); }
+                0%, 100% { opacity: 0; }
+                40%, 60% { opacity: 1; }
               }
             `}</style>
           </div>
