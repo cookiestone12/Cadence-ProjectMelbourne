@@ -45,6 +45,18 @@ function ContactFormModal({ isOpen, onClose, onSubmit, initialData, title, loadi
   useEffect(() => {
     if (isOpen) {
       setForm(initialData ? { ...emptyForm, ...initialData, roles: initialData.roles || [] } : { ...emptyForm })
+      document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.width = '100%'
+      document.body.style.top = `-${window.scrollY}px`
+    }
+    return () => {
+      const scrollY = document.body.style.top
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+      document.body.style.top = ''
+      window.scrollTo(0, parseInt(scrollY || '0') * -1)
     }
   }, [isOpen, initialData])
 
@@ -66,8 +78,8 @@ function ContactFormModal({ isOpen, onClose, onSubmit, initialData, title, loadi
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-hidden" onTouchMove={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.12)]">
           <h2 className="text-xl font-bold text-[#3D4A44]">{title}</h2>
           <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full text-[#7A8580] hover:text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors">
@@ -195,7 +207,21 @@ function ShareToClientModal({ isOpen, onClose, clientUsers, onShare, loading }) 
   const [selectedClients, setSelectedClients] = useState(new Set())
 
   useEffect(() => {
-    if (isOpen) setSelectedClients(new Set())
+    if (isOpen) {
+      setSelectedClients(new Set())
+      document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.width = '100%'
+      document.body.style.top = `-${window.scrollY}px`
+    }
+    return () => {
+      const scrollY = document.body.style.top
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+      document.body.style.top = ''
+      window.scrollTo(0, parseInt(scrollY || '0') * -1)
+    }
   }, [isOpen])
 
   function toggleClient(userId) {
@@ -210,8 +236,8 @@ function ShareToClientModal({ isOpen, onClose, clientUsers, onShare, loading }) 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-hidden" onTouchMove={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.12)]">
           <h2 className="text-xl font-bold text-[#3D4A44]">Share to Client</h2>
           <button onClick={onClose} className="w-9 h-9 flex items-center justify-center rounded-full text-[#7A8580] hover:text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors">
