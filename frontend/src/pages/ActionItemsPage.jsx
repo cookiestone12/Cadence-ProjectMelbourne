@@ -24,7 +24,8 @@ import {
   EnvelopeIcon,
   ArrowDownTrayIcon,
   UserIcon,
-  ArrowUpIcon
+  ArrowUpIcon,
+  ChevronDownIcon
 } from '@heroicons/react/24/outline'
 import { ExclamationCircleIcon } from '@heroicons/react/24/solid'
 
@@ -35,13 +36,16 @@ const PRIORITY_OPTIONS = [
 ]
 
 const ACTION_TYPES = [
+  'GENERAL',
+  'CUSTOM_DEADLINE',
+  'SEND_BULK_REGISTRATION',
+  'CLIENT_FOLLOWUP',
+  'REMINDER',
   'MISSING_ISRC',
   'MISSING_ISWC',
   'CONTRACT_PENDING',
   'PRO_INCOMPLETE',
   'DSP_REGISTRATION',
-  'CUSTOM_DEADLINE',
-  'GENERAL',
   'CONTRACT_EXPIRING',
   'RELEASE_INCOMPLETE',
   'UNMATCHED_ROYALTIES',
@@ -51,13 +55,16 @@ const ACTION_TYPES = [
 
 const formatActionType = (type) => {
   const labels = {
+    'GENERAL': 'General',
+    'CUSTOM_DEADLINE': 'Custom Deadline',
+    'SEND_BULK_REGISTRATION': 'Send Bulk Registration',
+    'CLIENT_FOLLOWUP': 'Client Follow-up',
+    'REMINDER': 'Reminder',
     'MISSING_ISRC': 'Missing ISRC',
     'MISSING_ISWC': 'Missing ISWC',
     'CONTRACT_PENDING': 'Contract Pending',
     'PRO_INCOMPLETE': 'PRO Incomplete',
     'DSP_REGISTRATION': 'DSP Registration',
-    'CUSTOM_DEADLINE': 'Custom Deadline',
-    'GENERAL': 'General',
     'CONTRACT_EXPIRING': 'Contract Expiring',
     'RELEASE_INCOMPLETE': 'Release Incomplete',
     'UNMATCHED_ROYALTIES': 'Unmatched Royalties',
@@ -818,198 +825,212 @@ export default function ActionItemsPage() {
         )}
 
         {showAddForm && (
-          <div className="bg-white rounded-[18px] border border-[#5B8A72] shadow-sm p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-semibold text-[#3D4A44]">New Task</h4>
-              <button onClick={() => setShowAddForm(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
-                <XMarkIcon className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Title *</label>
-                <input
-                  type="text"
-                  value={newAction.title}
-                  onChange={(e) => setNewAction({ ...newAction, title: e.target.value })}
-                  placeholder="e.g., Submit ISRC registration"
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                />
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowAddForm(false)}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(59,77,67,0.08)]">
+                <h4 className="text-lg font-semibold text-[#3D4A44]">New Task</h4>
+                <button onClick={() => setShowAddForm(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
+                  <XMarkIcon className="w-5 h-5" />
+                </button>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Type</label>
-                <select
-                  value={newAction.action_type}
-                  onChange={(e) => setNewAction({ ...newAction, action_type: e.target.value })}
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+              <div className="overflow-y-auto px-6 py-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Title *</label>
+                  <input
+                    type="text"
+                    value={newAction.title}
+                    onChange={(e) => setNewAction({ ...newAction, title: e.target.value })}
+                    placeholder="e.g., Follow up with client, Submit registration..."
+                    className="w-full px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Type</label>
+                    <select
+                      value={newAction.action_type}
+                      onChange={(e) => setNewAction({ ...newAction, action_type: e.target.value })}
+                      className="w-full px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    >
+                      {ACTION_TYPES.map(type => (
+                        <option key={type} value={type}>{formatActionType(type)}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Priority</label>
+                    <select
+                      value={newAction.priority}
+                      onChange={(e) => setNewAction({ ...newAction, priority: parseInt(e.target.value) })}
+                      className="w-full px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    >
+                      {PRIORITY_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Deadline</label>
+                    <input
+                      type="date"
+                      value={newAction.deadline}
+                      onChange={(e) => setNewAction({ ...newAction, deadline: e.target.value })}
+                      className="w-full px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Remind Before (days)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newAction.reminder_days_before}
+                      onChange={(e) => setNewAction({ ...newAction, reminder_days_before: parseInt(e.target.value) || 0 })}
+                      className="w-full px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Assign To</label>
+                  <select
+                    value={newAction.assigned_to_user_id}
+                    onChange={(e) => setNewAction(prev => ({...prev, assigned_to_user_id: e.target.value}))}
+                    className="w-full px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  >
+                    <option value="">Unassigned</option>
+                    {members.map(m => (
+                      <option key={m.user_id || m.id} value={m.user_id || m.id}>{m.username || m.email || m.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description</label>
+                  <textarea
+                    value={newAction.description}
+                    onChange={(e) => setNewAction({ ...newAction, description: e.target.value })}
+                    placeholder="Add details, instructions, or notes..."
+                    rows={3}
+                    className="w-full px-3 py-2.5 border border-[rgba(59,77,67,0.2)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent resize-none"
+                  />
+                </div>
+
+                <details className="group">
+                  <summary className="text-sm font-medium text-[#7A8580] cursor-pointer hover:text-[#5B8A72] transition-colors flex items-center gap-1.5">
+                    <ChevronDownIcon className="w-4 h-4 group-open:rotate-180 transition-transform" />
+                    Link to Entity (optional)
+                  </summary>
+                  <div className="mt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Module</label>
+                        <select
+                          value={newAction.entity_type}
+                          onChange={(e) => setNewAction({ ...newAction, entity_type: e.target.value })}
+                          className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        >
+                          {ENTITY_TYPE_OPTIONS.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Creator</label>
+                        <select
+                          value={newAction.creator_id}
+                          onChange={(e) => setNewAction({ ...newAction, creator_id: e.target.value })}
+                          className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        >
+                          <option value="">None</option>
+                          {creators.map(c => (
+                            <option key={c.id} value={c.id}>{c.display_name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Song</label>
+                        <select
+                          value={newAction.song_id}
+                          onChange={(e) => setNewAction({ ...newAction, song_id: e.target.value })}
+                          className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        >
+                          <option value="">None</option>
+                          {songs.map(s => (
+                            <option key={s.id} value={s.id}>{s.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Contract ID</label>
+                        <input
+                          type="number"
+                          value={newAction.contract_id}
+                          onChange={(e) => setNewAction({ ...newAction, contract_id: e.target.value })}
+                          placeholder="Optional"
+                          className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Work ID</label>
+                        <input
+                          type="number"
+                          value={newAction.work_id}
+                          onChange={(e) => setNewAction({ ...newAction, work_id: e.target.value })}
+                          placeholder="Optional"
+                          className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Release ID</label>
+                        <input
+                          type="number"
+                          value={newAction.release_id}
+                          onChange={(e) => setNewAction({ ...newAction, release_id: e.target.value })}
+                          placeholder="Optional"
+                          className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Placement ID</label>
+                        <input
+                          type="number"
+                          value={newAction.placement_id}
+                          onChange={(e) => setNewAction({ ...newAction, placement_id: e.target.value })}
+                          placeholder="Optional"
+                          className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              </div>
+
+              <div className="px-6 py-4 border-t border-[rgba(59,77,67,0.08)] flex justify-end gap-3">
+                <button
+                  onClick={() => setShowAddForm(false)}
+                  className="px-5 py-2.5 text-[#7A8580] hover:text-[#3D4A44] font-medium text-sm transition-colors"
                 >
-                  {ACTION_TYPES.map(type => (
-                    <option key={type} value={type}>{formatActionType(type)}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Priority</label>
-                <select
-                  value={newAction.priority}
-                  onChange={(e) => setNewAction({ ...newAction, priority: parseInt(e.target.value) })}
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddAction}
+                  disabled={saving || !newAction.title.trim()}
+                  className="px-5 py-2.5 bg-[#5B8A72] text-white rounded-xl font-medium text-sm hover:bg-[#4A7862] transition-colors disabled:opacity-50"
                 >
-                  {PRIORITY_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
+                  {saving ? 'Adding...' : 'Add Task'}
+                </button>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Entity Type</label>
-                <select
-                  value={newAction.entity_type}
-                  onChange={(e) => setNewAction({ ...newAction, entity_type: e.target.value })}
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                >
-                  {ENTITY_TYPE_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Deadline</label>
-                <input
-                  type="date"
-                  value={newAction.deadline}
-                  onChange={(e) => setNewAction({ ...newAction, deadline: e.target.value })}
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Remind Days Before</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={newAction.reminder_days_before}
-                  onChange={(e) => setNewAction({ ...newAction, reminder_days_before: parseInt(e.target.value) || 0 })}
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Creator (optional)</label>
-                <select
-                  value={newAction.creator_id}
-                  onChange={(e) => setNewAction({ ...newAction, creator_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                >
-                  <option value="">None</option>
-                  {creators.map(c => (
-                    <option key={c.id} value={c.id}>{c.display_name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Assign To</label>
-                <select
-                  value={newAction.assigned_to_user_id}
-                  onChange={(e) => setNewAction(prev => ({...prev, assigned_to_user_id: e.target.value}))}
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                >
-                  <option value="">Unassigned</option>
-                  {members.map(m => (
-                    <option key={m.user_id || m.id} value={m.user_id || m.id}>{m.username || m.email || m.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Song (optional)</label>
-                <select
-                  value={newAction.song_id}
-                  onChange={(e) => setNewAction({ ...newAction, song_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                >
-                  <option value="">None</option>
-                  {songs.map(s => (
-                    <option key={s.id} value={s.id}>{s.title}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Work ID (optional)</label>
-                <input
-                  type="number"
-                  value={newAction.work_id}
-                  onChange={(e) => setNewAction({ ...newAction, work_id: e.target.value })}
-                  placeholder="Work ID"
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Release ID (optional)</label>
-                <input
-                  type="number"
-                  value={newAction.release_id}
-                  onChange={(e) => setNewAction({ ...newAction, release_id: e.target.value })}
-                  placeholder="Release ID"
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Contract ID (optional)</label>
-                <input
-                  type="number"
-                  value={newAction.contract_id}
-                  onChange={(e) => setNewAction({ ...newAction, contract_id: e.target.value })}
-                  placeholder="Contract ID"
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Placement ID (optional)</label>
-                <input
-                  type="number"
-                  value={newAction.placement_id}
-                  onChange={(e) => setNewAction({ ...newAction, placement_id: e.target.value })}
-                  placeholder="Placement ID"
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                />
-              </div>
-
-              <div className="md:col-span-2 lg:col-span-3">
-                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Description</label>
-                <textarea
-                  value={newAction.description}
-                  onChange={(e) => setNewAction({ ...newAction, description: e.target.value })}
-                  placeholder="Optional details..."
-                  rows={2}
-                  className="w-full px-3 py-2 border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowAddForm(false)}
-                className="px-4 py-2 text-[#7A8580] hover:text-[#3D4A44] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddAction}
-                disabled={saving || !newAction.title.trim()}
-                className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7862] transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Adding...' : 'Add Task'}
-              </button>
             </div>
           </div>
         )}
