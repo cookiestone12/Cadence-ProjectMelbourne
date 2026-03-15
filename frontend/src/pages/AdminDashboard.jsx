@@ -1473,6 +1473,14 @@ const INFRASTRUCTURE_SERVICES = [
     color: '#5A8A9A',
     services: [
       {
+        name: 'Google Workspace',
+        tier: '$84/yr per mailbox',
+        baseCost: '$7/mo',
+        notes: 'Domain email hosting (communication@cadence-ci.com)',
+        features: ['Domain Email', 'Email Routing', 'Workspace Admin'],
+        scaling: { 10: '$7/mo', 100: '$7/mo', 1000: '$7/mo' },
+      },
+      {
         name: 'Resend',
         tier: 'Free tier (100 emails/day)',
         baseCost: '$0/mo',
@@ -1512,11 +1520,11 @@ const INFRASTRUCTURE_SERVICES = [
     services: [
       {
         name: 'Spotify Web API',
-        tier: 'Free tier',
-        baseCost: '$0/mo',
+        tier: 'Premium account (required)',
+        baseCost: '~$10.99/mo',
         notes: 'Playlist import, track search, release metadata lookup',
         features: ['Playlist Import', 'Track Search', 'Release Lookup'],
-        scaling: { 10: '$0/mo', 100: '$0/mo', 1000: '$0/mo' },
+        scaling: { 10: '~$10.99/mo', 100: '~$10.99/mo', 1000: '~$10.99/mo' },
       },
       {
         name: 'YouTube Data API',
@@ -1542,20 +1550,20 @@ const INFRASTRUCTURE_SERVICES = [
     color: '#5B8A72',
     services: [
       {
-        name: 'PostgreSQL (Replit)',
-        tier: 'Included with Replit plan',
+        name: 'PostgreSQL (Managed)',
+        tier: 'Included with hosting plan',
         baseCost: 'Included',
         notes: 'Primary database for all application data',
         features: ['Data Storage', 'Full-text Search', 'Indexing'],
-        scaling: { 10: 'Included', 100: 'Included', 1000: '$20-50/mo' },
+        scaling: { 10: 'Included', 100: 'Included', 1000: '$20-50/mo (dedicated)' },
       },
       {
-        name: 'Replit Hosting',
-        tier: 'Replit Deployments',
-        baseCost: 'Included',
+        name: 'Cloud Hosting',
+        tier: 'Managed Deployments',
+        baseCost: '~$25/mo',
         notes: 'Application hosting with auto-scaling',
         features: ['App Hosting', 'SSL', 'Custom Domain'],
-        scaling: { 10: 'Included', 100: 'Included', 1000: '$25-50/mo' },
+        scaling: { 10: '~$25/mo', 100: '~$25/mo', 1000: '$50-100/mo' },
       },
       {
         name: 'Domain (cadence-ci.com)',
@@ -1780,10 +1788,10 @@ function InfrastructureCostsTab({ aiUsage, aiUsageLoading, onRefresh, onDownload
       <div className="bg-[#5A8A9A]/10 rounded-xl p-6">
         <h3 className="font-semibold text-[#3D4A44] mb-2">Cost Summary</h3>
         <p className="text-sm text-[#7A8580]">
-          Cadence leverages free tiers for most external services. The primary variable cost is OpenAI API usage,
-          which scales with catalog processing activity. At current usage levels, total monthly infrastructure
-          cost is estimated under $50/mo. Most services (Spotify, YouTube, Last.fm, Dropbox, Web Push) remain
-          free regardless of scale.
+          Cadence's fixed monthly costs include Cloud Hosting (~$25/mo), Spotify Premium (~$10.99/mo), and Google Workspace ($7/mo).
+          The primary variable cost is OpenAI API usage, which scales with catalog processing activity. At current usage levels,
+          total monthly infrastructure cost is estimated around $44-50/mo. YouTube, Last.fm, Dropbox, and Web Push
+          remain free regardless of scale.
         </p>
       </div>
     </div>

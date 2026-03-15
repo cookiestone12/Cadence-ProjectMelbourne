@@ -30,6 +30,14 @@ INFRASTRUCTURE_SERVICES = [
         "category": "Email & Communications",
         "services": [
             {
+                "name": "Google Workspace",
+                "tier": "$84/yr per mailbox",
+                "base_cost": "$7/mo",
+                "usage_notes": "Domain email hosting (communication@cadence-ci.com)",
+                "features": ["Domain Email", "Email Routing", "Workspace Admin"],
+                "scaling": {"10": "$7/mo", "100": "$7/mo", "1000": "$7/mo"},
+            },
+            {
                 "name": "Resend",
                 "tier": "Free tier (100 emails/day)",
                 "base_cost": "$0/mo",
@@ -65,11 +73,11 @@ INFRASTRUCTURE_SERVICES = [
         "services": [
             {
                 "name": "Spotify Web API",
-                "tier": "Free tier",
-                "base_cost": "$0/mo",
+                "tier": "Premium account (required)",
+                "base_cost": "~$10.99/mo",
                 "usage_notes": "Playlist import, track search, release metadata lookup",
                 "features": ["Playlist Import", "Track Search", "Release Lookup"],
-                "scaling": {"10": "$0/mo", "100": "$0/mo", "1000": "$0/mo"},
+                "scaling": {"10": "~$10.99/mo", "100": "~$10.99/mo", "1000": "~$10.99/mo"},
             },
             {
                 "name": "YouTube Data API",
@@ -93,20 +101,20 @@ INFRASTRUCTURE_SERVICES = [
         "category": "Infrastructure",
         "services": [
             {
-                "name": "PostgreSQL (Replit)",
-                "tier": "Included with Replit plan",
+                "name": "PostgreSQL (Managed)",
+                "tier": "Included with hosting plan",
                 "base_cost": "Included",
                 "usage_notes": "Primary database for all application data",
                 "features": ["Data Storage", "Full-text Search", "Indexing"],
-                "scaling": {"10": "Included", "100": "Included", "1000": "$20-50/mo (external)"},
+                "scaling": {"10": "Included", "100": "Included", "1000": "$20-50/mo (dedicated)"},
             },
             {
-                "name": "Replit Hosting",
-                "tier": "Replit Deployments",
-                "base_cost": "Included",
+                "name": "Cloud Hosting",
+                "tier": "Managed Deployments",
+                "base_cost": "~$25/mo",
                 "usage_notes": "Application hosting with auto-scaling",
                 "features": ["App Hosting", "SSL", "Custom Domain"],
-                "scaling": {"10": "Included", "100": "Included", "1000": "$25-50/mo"},
+                "scaling": {"10": "~$25/mo", "100": "~$25/mo", "1000": "$50-100/mo"},
             },
             {
                 "name": "Domain (cadence-ci.com)",
@@ -202,7 +210,9 @@ def generate_cost_report_pdf(ai_usage_data: dict, platform_stats: dict) -> bytes
     logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "cadence-logo.png")
     try:
         if os.path.exists(logo_path):
-            logo = Image(logo_path, width=1.2 * inch, height=1.2 * inch)
+            logo_width = 2.5 * inch
+            logo_height = logo_width * (1080 / 1920)
+            logo = Image(logo_path, width=logo_width, height=logo_height)
             logo.hAlign = "LEFT"
             elements.append(logo)
             elements.append(Spacer(1, 6))
@@ -225,8 +235,8 @@ def generate_cost_report_pdf(ai_usage_data: dict, platform_stats: dict) -> bytes
     ))
     elements.append(Paragraph(
         f"Estimated total monthly infrastructure cost: <b>${total_monthly}</b>. "
-        f"The platform leverages free tiers for most external services, with AI (OpenAI) "
-        f"being the primary variable cost.",
+        f"Fixed monthly costs include Cloud Hosting, Google Workspace, and Spotify Premium. "
+        f"AI (OpenAI) is the primary variable cost, scaling with catalog processing activity.",
         body_style,
     ))
     elements.append(Spacer(1, 12))
@@ -424,8 +434,6 @@ def generate_cost_report_pdf(ai_usage_data: dict, platform_stats: dict) -> bytes
 
 def _estimate_total_monthly(ai_usage_data: dict) -> str:
     ai_cost = ai_usage_data["totals"]["total_cost_cents"] / 100.0
-    base_costs = 1.0
+    base_costs = 25.0 + 7.0 + 10.99 + 1.0
     total = ai_cost + base_costs
-    if total < 1:
-        return "<$1"
     return f"{total:.2f}"
