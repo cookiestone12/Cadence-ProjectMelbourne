@@ -56,7 +56,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Progressive Web App (PWA)**: Includes a web manifest, service worker for offline caching and push notifications.
 - **Modular Widget Dashboard**: Home page uses a widget-based architecture with customizable widgets (Stats, Placement Pipeline, Tasks, etc.) via drag-and-drop.
 - **Grid/List View Toggle**: Roster, Creative Directory, and Credits pages support toggling between card grid and table list views.
-- **Universal Document & Item Sharing**: Share documents, audio files, statements, and contact cards via email or directly to other Cadence accounts.
+- **Universal Document & Item Sharing**: Share documents, audio files, statements, catalog entries (songs), and contact cards via email or directly to other Cadence accounts. Recipients can view shared item details, download attached files (documents, statements), and import shared catalog entries or contacts directly into their own organization.
 - **Duplicate Catalog Entry**: Quick song duplication feature.
 - **Comprehensive Audit Logging**: Organization-scoped audit trail for critical actions, accessible via an Audit Log tab in Tenant Admin.
 

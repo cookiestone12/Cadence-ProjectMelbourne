@@ -6,7 +6,7 @@ import {
   MusicalNoteIcon, ChartBarIcon, DocumentTextIcon, LinkIcon,
   DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon, UserIcon,
   ScaleIcon, PencilSquareIcon, PlusIcon, SpeakerWaveIcon,
-  FolderIcon, FolderOpenIcon, ArrowLeftIcon, DocumentDuplicateIcon
+  FolderIcon, FolderOpenIcon, ArrowLeftIcon, DocumentDuplicateIcon, ShareIcon
 } from '@heroicons/react/24/outline'
 
 import ShareModal from './ShareModal'
@@ -757,6 +757,14 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
             <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               {!isEditing && (
                 <>
+                  <button
+                    onClick={() => setShareTarget({ type: 'SONG', id: song.id, name: `${songDetails?.title || song.title} - ${songDetails?.primary_artist || song.primary_artist}` })}
+                    className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
+                    title="Share this song"
+                  >
+                    <ShareIcon className="w-5 h-5" />
+                    <span className="hidden sm:inline">Share</span>
+                  </button>
                   <button
                     onClick={handleDuplicate}
                     disabled={duplicating}

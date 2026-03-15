@@ -105,6 +105,7 @@ export default function ShareModal({ itemType, itemId, itemIds, itemName, onClos
     AUDIO: 'Audio File',
     STATEMENT: 'Statement',
     CONTACT_CARD: 'Contact Card',
+    SONG: 'Catalog Entry',
   }
 
   return (
