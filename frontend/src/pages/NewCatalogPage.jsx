@@ -438,6 +438,7 @@ export default function NewCatalogPage() {
       setShowMergeModal(false)
       setMergeGroupSongs([])
       setMergePrimaryId(null)
+      setSelectedSongIds(new Set())
       setDuplicateGroups(prev =>
         prev.filter(group => {
           const groupIds = new Set(group.map(s => s.id))
