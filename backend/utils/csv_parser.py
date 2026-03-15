@@ -69,7 +69,21 @@ Respond ONLY with the JSON mapping object, no other text."""
         temperature=0.1,
         max_tokens=1000
     )
-    
+
+    try:
+        usage = response.usage
+        if usage:
+            from ..services.ai_usage import log_ai_usage_standalone
+            log_ai_usage_standalone(
+                feature="csv_mapping",
+                model="gpt-4o-mini",
+                input_tokens=usage.prompt_tokens or 0,
+                output_tokens=usage.completion_tokens or 0,
+            )
+    except Exception as ai_log_err:
+        import logging
+        logging.getLogger("cadence").warning(f"Failed to log AI usage for CSV mapping: {ai_log_err}")
+
     try:
         mapping_text = response.choices[0].message.content.strip()
         if mapping_text.startswith("```"):

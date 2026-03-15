@@ -60,6 +60,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Universal Document & Item Sharing**: Share documents, audio files, statements, catalog entries (songs), contacts, and contracts via email or directly to other Cadence accounts. Recipients can view shared item details (including full contract details with parties, assets, and attached documents), download attached files (documents, statements), and import shared catalog entries or contacts directly into their own organization.
 - **Duplicate Catalog Entry**: Quick song duplication feature.
 - **Comprehensive Audit Logging**: Organization-scoped audit trail for critical actions, accessible via an Audit Log tab in Tenant Admin.
+- **Infrastructure Cost Tracker**: Master Admin "costs" tab with categorized service cost cards (AI, Email, Storage, Music APIs, Infrastructure, Push), AI usage tracking via `AIUsageLog` table (instrumented across 5 OpenAI call sites), and downloadable branded PDF cost report with executive summary, per-service breakdown, and scaling projections.
 
 ## External Dependencies
 - **PostgreSQL**: Primary database.
@@ -83,3 +84,4 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Dropbox SDK**: Dropbox API client.
 - **Cryptography**: Token encryption/decryption.
 - **pywebpush**: Web Push notification library.
+- **ReportLab**: PDF generation for cost reports.

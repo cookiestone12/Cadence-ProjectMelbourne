@@ -1,11 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func, extract
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
-from ..models import get_db, User, Organization, OrganizationMember
+import io
+import logging
+from ..models import get_db, User, Organization, OrganizationMember, AIUsageLog
 from ..utils.auth import get_current_super_admin, get_password_hash
+
+logger = logging.getLogger("cadence")
 
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -774,3 +780,188 @@ def test_integration_connection(
     
     else:
         raise HTTPException(status_code=400, detail=f"Integration '{integration_id}' does not support testing")
+
+
+@router.get("/ai-usage")
+def get_ai_usage_stats(
+    months: int = 3,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+):
+    now = datetime.utcnow()
+    cutoff = now - timedelta(days=months * 30)
+
+    by_feature = (
+        db.query(
+            AIUsageLog.feature,
+            func.count(AIUsageLog.id).label("call_count"),
+            func.sum(AIUsageLog.input_tokens).label("total_input"),
+            func.sum(AIUsageLog.output_tokens).label("total_output"),
+            func.sum(AIUsageLog.total_tokens).label("total_tokens"),
+            func.sum(AIUsageLog.estimated_cost_cents).label("total_cost_cents"),
+        )
+        .filter(AIUsageLog.created_at >= cutoff)
+        .group_by(AIUsageLog.feature)
+        .all()
+    )
+
+    by_month = (
+        db.query(
+            extract("year", AIUsageLog.created_at).label("year"),
+            extract("month", AIUsageLog.created_at).label("month"),
+            func.count(AIUsageLog.id).label("call_count"),
+            func.sum(AIUsageLog.total_tokens).label("total_tokens"),
+            func.sum(AIUsageLog.estimated_cost_cents).label("total_cost_cents"),
+        )
+        .filter(AIUsageLog.created_at >= cutoff)
+        .group_by("year", "month")
+        .order_by("year", "month")
+        .all()
+    )
+
+    totals = (
+        db.query(
+            func.count(AIUsageLog.id).label("call_count"),
+            func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("total_tokens"),
+            func.coalesce(func.sum(AIUsageLog.estimated_cost_cents), 0).label("total_cost_cents"),
+        )
+        .filter(AIUsageLog.created_at >= cutoff)
+        .first()
+    )
+
+    current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    current_month = (
+        db.query(
+            func.count(AIUsageLog.id).label("call_count"),
+            func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("total_tokens"),
+            func.coalesce(func.sum(AIUsageLog.estimated_cost_cents), 0).label("total_cost_cents"),
+        )
+        .filter(AIUsageLog.created_at >= current_month_start)
+        .first()
+    )
+
+    recent = (
+        db.query(AIUsageLog)
+        .order_by(AIUsageLog.created_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    return {
+        "by_feature": [
+            {
+                "feature": r.feature,
+                "call_count": r.call_count,
+                "total_input_tokens": int(r.total_input or 0),
+                "total_output_tokens": int(r.total_output or 0),
+                "total_tokens": int(r.total_tokens or 0),
+                "total_cost_cents": int(r.total_cost_cents or 0),
+            }
+            for r in by_feature
+        ],
+        "by_month": [
+            {
+                "year": int(r.year),
+                "month": int(r.month),
+                "call_count": r.call_count,
+                "total_tokens": int(r.total_tokens or 0),
+                "total_cost_cents": int(r.total_cost_cents or 0),
+            }
+            for r in by_month
+        ],
+        "totals": {
+            "call_count": totals.call_count if totals else 0,
+            "total_tokens": int(totals.total_tokens) if totals else 0,
+            "total_cost_cents": int(totals.total_cost_cents) if totals else 0,
+        },
+        "current_month": {
+            "call_count": current_month.call_count if current_month else 0,
+            "total_tokens": int(current_month.total_tokens) if current_month else 0,
+            "total_cost_cents": int(current_month.total_cost_cents) if current_month else 0,
+        },
+        "recent_calls": [
+            {
+                "id": r.id,
+                "feature": r.feature,
+                "model": r.model,
+                "input_tokens": r.input_tokens,
+                "output_tokens": r.output_tokens,
+                "total_tokens": r.total_tokens,
+                "estimated_cost_cents": r.estimated_cost_cents,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in recent
+        ],
+    }
+
+
+@router.get("/cost-report")
+def download_cost_report(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+):
+    from ..services.cost_report import generate_cost_report_pdf
+
+    now = datetime.utcnow()
+    current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    ai_stats = (
+        db.query(
+            AIUsageLog.feature,
+            func.count(AIUsageLog.id).label("call_count"),
+            func.sum(AIUsageLog.total_tokens).label("total_tokens"),
+            func.sum(AIUsageLog.estimated_cost_cents).label("total_cost_cents"),
+        )
+        .filter(AIUsageLog.created_at >= current_month_start)
+        .group_by(AIUsageLog.feature)
+        .all()
+    )
+
+    ai_totals = (
+        db.query(
+            func.count(AIUsageLog.id).label("call_count"),
+            func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label("total_tokens"),
+            func.coalesce(func.sum(AIUsageLog.estimated_cost_cents), 0).label("total_cost_cents"),
+        )
+        .filter(AIUsageLog.created_at >= current_month_start)
+        .first()
+    )
+
+    total_orgs = db.query(Organization).count()
+    from ..models.models import Song, Creator
+    total_songs = db.query(Song).count()
+    total_creators = db.query(Creator).count()
+    total_users = db.query(User).count()
+
+    ai_usage_data = {
+        "by_feature": [
+            {
+                "feature": r.feature,
+                "call_count": r.call_count,
+                "total_tokens": int(r.total_tokens or 0),
+                "total_cost_cents": int(r.total_cost_cents or 0),
+            }
+            for r in ai_stats
+        ],
+        "totals": {
+            "call_count": ai_totals.call_count if ai_totals else 0,
+            "total_tokens": int(ai_totals.total_tokens) if ai_totals else 0,
+            "total_cost_cents": int(ai_totals.total_cost_cents) if ai_totals else 0,
+        },
+    }
+
+    platform_stats = {
+        "total_orgs": total_orgs,
+        "total_songs": total_songs,
+        "total_creators": total_creators,
+        "total_users": total_users,
+    }
+
+    pdf_bytes = generate_cost_report_pdf(ai_usage_data, platform_stats)
+
+    filename = f"cadence_cost_report_{now.strftime('%Y_%m_%d')}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

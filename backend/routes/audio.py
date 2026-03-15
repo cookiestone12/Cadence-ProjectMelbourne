@@ -588,6 +588,20 @@ Respond ONLY with valid JSON, no other text."""
                 response_format={"type": "json_object"},
             )
 
+            try:
+                usage = response.usage
+                if usage:
+                    from ..services.ai_usage import log_ai_usage_standalone
+                    log_ai_usage_standalone(
+                        feature="audio_analysis",
+                        model="gpt-4o-mini",
+                        input_tokens=usage.prompt_tokens or 0,
+                        output_tokens=usage.completion_tokens or 0,
+                        org_id=org_id,
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to log AI usage for audio analysis: {e}")
+
             import json
             result = json.loads(response.choices[0].message.content)
 

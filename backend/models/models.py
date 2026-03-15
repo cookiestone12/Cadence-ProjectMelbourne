@@ -2299,6 +2299,25 @@ class UnderwritingRun(Base):
     created_by = relationship("User")
 
 
+class AIUsageLog(Base):
+    __tablename__ = "ai_usage_logs"
+    __table_args__ = (
+        Index('ix_ai_usage_logs_org_id', 'org_id'),
+        Index('ix_ai_usage_logs_created_at', 'created_at'),
+        Index('ix_ai_usage_logs_feature', 'feature'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
+    feature = Column(String, nullable=False)
+    model = Column(String, nullable=False, default="gpt-4o-mini")
+    input_tokens = Column(Integer, default=0)
+    output_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    estimated_cost_cents = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class SharedItemType(str, enum.Enum):
     DOCUMENT = "DOCUMENT"
     CONTACT_CARD = "CONTACT_CARD"

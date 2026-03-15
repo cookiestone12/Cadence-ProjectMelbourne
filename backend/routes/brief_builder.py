@@ -73,6 +73,20 @@ Respond ONLY with valid JSON."""
                 response_format={"type": "json_object"},
             )
             parsed_criteria = json.loads(response.choices[0].message.content)
+
+            try:
+                usage = response.usage
+                if usage:
+                    from ..services.ai_usage import log_ai_usage_standalone
+                    log_ai_usage_standalone(
+                        feature="brief_builder",
+                        model="gpt-4o-mini",
+                        input_tokens=usage.prompt_tokens or 0,
+                        output_tokens=usage.completion_tokens or 0,
+                        org_id=org_id,
+                    )
+            except Exception as ai_log_err:
+                logger.warning(f"Failed to log AI usage for brief builder: {ai_log_err}")
         except Exception as e:
             logger.warning(f"OpenAI query parsing failed: {e}")
 

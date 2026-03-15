@@ -15,7 +15,16 @@ import {
   Cog6ToothIcon,
   CheckCircleIcon,
   ExclamationCircleIcon,
-  KeyIcon
+  KeyIcon,
+  CurrencyDollarIcon,
+  ArrowDownTrayIcon,
+  CpuChipIcon,
+  ServerIcon,
+  CloudIcon,
+  EnvelopeIcon,
+  BoltIcon,
+  GlobeAltIcon,
+  BellAlertIcon,
 } from '@heroicons/react/24/outline'
 
 export default function AdminDashboard() {
@@ -42,6 +51,9 @@ export default function AdminDashboard() {
   const [rejectingMerge, setRejectingMerge] = useState(null)
   const [rejectNotes, setRejectNotes] = useState('')
   const [mergeActionLoading, setMergeActionLoading] = useState(false)
+  const [aiUsage, setAiUsage] = useState(null)
+  const [aiUsageLoading, setAiUsageLoading] = useState(false)
+  const [costReportLoading, setCostReportLoading] = useState(false)
 
   useEffect(() => {
     loadData()
@@ -74,6 +86,44 @@ export default function AdminDashboard() {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadAiUsage = async () => {
+    setAiUsageLoading(true)
+    try {
+      const res = await axios.get('/api/admin/ai-usage')
+      setAiUsage(res.data)
+    } catch (err) {
+      console.error('Failed to load AI usage:', err)
+    } finally {
+      setAiUsageLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'costs' && !aiUsage) {
+      loadAiUsage()
+    }
+  }, [activeTab])
+
+  const handleDownloadCostReport = async () => {
+    setCostReportLoading(true)
+    try {
+      const res = await axios.get('/api/admin/cost-report', { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `cadence_cost_report_${new Date().toISOString().split('T')[0]}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      alert('Failed to generate cost report')
+      console.error(err)
+    } finally {
+      setCostReportLoading(false)
     }
   }
 
@@ -209,7 +259,7 @@ export default function AdminDashboard() {
 
       <div className="mb-6 border-b border-[rgba(59,77,67,0.08)] overflow-x-auto">
         <div className="flex space-x-4 sm:space-x-8 min-w-max">
-          {['overview', 'users', 'organizations', 'merge-requests', 'api-config'].map((tab) => (
+          {['overview', 'users', 'organizations', 'merge-requests', 'api-config', 'costs'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -867,6 +917,16 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {activeTab === 'costs' && (
+        <InfrastructureCostsTab
+          aiUsage={aiUsage}
+          aiUsageLoading={aiUsageLoading}
+          onRefresh={loadAiUsage}
+          onDownloadReport={handleDownloadCostReport}
+          costReportLoading={costReportLoading}
+        />
+      )}
+
       {showIntegrationModal && configuringIntegration && (
         <IntegrationModal
           integration={configuringIntegration}
@@ -1386,6 +1446,345 @@ function IntegrationModal({ integration, onClose, onSave }) {
             After adding secrets, restart the app for changes to take effect.
           </p>
         </div>
+      </div>
+    </div>
+  )
+}
+
+const INFRASTRUCTURE_SERVICES = [
+  {
+    category: 'AI & Intelligence',
+    icon: CpuChipIcon,
+    color: '#8B6EAE',
+    services: [
+      {
+        name: 'OpenAI (GPT-4o-mini)',
+        tier: 'Pay-per-use',
+        baseCost: '$0 base',
+        notes: '~$0.015/1K input, $0.060/1K output tokens',
+        features: ['Contract Parsing', 'Audio Analysis', 'Brief Builder', 'CSV Mapping', 'Royalty PDF Parsing'],
+        scaling: { 10: '$5-15/mo', 100: '$25-75/mo', 1000: '$150-500/mo' },
+      },
+    ],
+  },
+  {
+    category: 'Email & Communications',
+    icon: EnvelopeIcon,
+    color: '#5A8A9A',
+    services: [
+      {
+        name: 'Resend',
+        tier: 'Free tier (100 emails/day)',
+        baseCost: '$0/mo',
+        notes: 'Notifications, digests, sharing invitations, registration reports',
+        features: ['Transactional Email', 'Branded Templates', 'Digest Notifications'],
+        scaling: { 10: '$0/mo', 100: '$0-20/mo', 1000: '$20-50/mo' },
+      },
+    ],
+  },
+  {
+    category: 'Cloud Storage',
+    icon: CloudIcon,
+    color: '#5B9A6E',
+    services: [
+      {
+        name: 'Dropbox API',
+        tier: 'App access (free)',
+        baseCost: '$0/mo',
+        notes: 'Audio file linking, org-wide scanning, creator folder linking',
+        features: ['Audio File Linking', 'Org-wide Scan', 'Creator Storage'],
+        scaling: { 10: '$0/mo', 100: '$0/mo', 1000: '$0/mo' },
+      },
+      {
+        name: 'Google Drive API',
+        tier: 'Free tier',
+        baseCost: '$0/mo',
+        notes: 'Audio file browsing and linking',
+        features: ['File Browsing', 'Audio Linking'],
+        scaling: { 10: '$0/mo', 100: '$0/mo', 1000: '$0/mo' },
+      },
+    ],
+  },
+  {
+    category: 'Music APIs',
+    icon: MusicalNoteIcon,
+    color: '#C4956B',
+    services: [
+      {
+        name: 'Spotify Web API',
+        tier: 'Free tier',
+        baseCost: '$0/mo',
+        notes: 'Playlist import, track search, release metadata lookup',
+        features: ['Playlist Import', 'Track Search', 'Release Lookup'],
+        scaling: { 10: '$0/mo', 100: '$0/mo', 1000: '$0/mo' },
+      },
+      {
+        name: 'YouTube Data API',
+        tier: 'Free tier (10K units/day)',
+        baseCost: '$0/mo',
+        notes: 'Streaming credits chart data ingestion',
+        features: ['Chart Data'],
+        scaling: { 10: '$0/mo', 100: '$0/mo', 1000: '$0/mo' },
+      },
+      {
+        name: 'Last.fm API',
+        tier: 'Free tier',
+        baseCost: '$0/mo',
+        notes: 'Streaming credits and chart data',
+        features: ['Chart Data'],
+        scaling: { 10: '$0/mo', 100: '$0/mo', 1000: '$0/mo' },
+      },
+    ],
+  },
+  {
+    category: 'Infrastructure',
+    icon: ServerIcon,
+    color: '#5B8A72',
+    services: [
+      {
+        name: 'PostgreSQL (Replit)',
+        tier: 'Included with Replit plan',
+        baseCost: 'Included',
+        notes: 'Primary database for all application data',
+        features: ['Data Storage', 'Full-text Search', 'Indexing'],
+        scaling: { 10: 'Included', 100: 'Included', 1000: '$20-50/mo' },
+      },
+      {
+        name: 'Replit Hosting',
+        tier: 'Replit Deployments',
+        baseCost: 'Included',
+        notes: 'Application hosting with auto-scaling',
+        features: ['App Hosting', 'SSL', 'Custom Domain'],
+        scaling: { 10: 'Included', 100: 'Included', 1000: '$25-50/mo' },
+      },
+      {
+        name: 'Domain (cadence-ci.com)',
+        tier: 'Annual registration',
+        baseCost: '~$12/yr',
+        notes: 'Primary domain for the platform',
+        features: ['Custom Domain', 'Email Routing'],
+        scaling: { 10: '$12/yr', 100: '$12/yr', 1000: '$12/yr' },
+      },
+    ],
+  },
+  {
+    category: 'Push Notifications',
+    icon: BellAlertIcon,
+    color: '#C47068',
+    services: [
+      {
+        name: 'Web Push (VAPID)',
+        tier: 'Free (self-hosted)',
+        baseCost: '$0/mo',
+        notes: 'Browser push notifications via pywebpush',
+        features: ['Push Notifications', 'PWA Support'],
+        scaling: { 10: '$0/mo', 100: '$0/mo', 1000: '$0/mo' },
+      },
+    ],
+  },
+]
+
+const FEATURE_LABELS = {
+  contract_parsing: 'AI Contract Parsing',
+  audio_analysis: 'AI Audio Analysis',
+  brief_builder: 'Brief Builder',
+  csv_mapping: 'CSV Column Mapping',
+  royalty_pdf_parsing: 'Royalty PDF Parsing',
+}
+
+function InfrastructureCostsTab({ aiUsage, aiUsageLoading, onRefresh, onDownloadReport, costReportLoading }) {
+  const currentMonth = aiUsage?.current_month || { call_count: 0, total_tokens: 0, total_cost_cents: 0 }
+  const totals = aiUsage?.totals || { call_count: 0, total_tokens: 0, total_cost_cents: 0 }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[#3D4A44]">Infrastructure Costs</h2>
+          <p className="text-[#7A8580] text-sm mt-1">
+            Service costs, AI usage tracking, and scaling projections
+          </p>
+        </div>
+        <button
+          onClick={onDownloadReport}
+          disabled={costReportLoading}
+          className="flex items-center gap-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-xl hover:bg-[#4A7A62] transition-colors disabled:opacity-50 font-medium text-sm shadow-sm"
+        >
+          <ArrowDownTrayIcon className="w-4 h-4" />
+          {costReportLoading ? 'Generating...' : 'Download Cost Report'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-1.5 rounded-lg bg-[#8B6EAE]/20">
+              <BoltIcon className="w-4 h-4 text-[#8B6EAE]" />
+            </div>
+            <span className="text-xs text-[#7A8580] uppercase tracking-wider">AI Calls This Month</span>
+          </div>
+          <p className="text-2xl font-bold text-[#3D4A44]">{currentMonth.call_count.toLocaleString()}</p>
+        </div>
+        <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-1.5 rounded-lg bg-[#5A8A9A]/20">
+              <CpuChipIcon className="w-4 h-4 text-[#5A8A9A]" />
+            </div>
+            <span className="text-xs text-[#7A8580] uppercase tracking-wider">Tokens This Month</span>
+          </div>
+          <p className="text-2xl font-bold text-[#3D4A44]">{currentMonth.total_tokens.toLocaleString()}</p>
+        </div>
+        <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-1.5 rounded-lg bg-[#5B9A6E]/20">
+              <CurrencyDollarIcon className="w-4 h-4 text-[#5B9A6E]" />
+            </div>
+            <span className="text-xs text-[#7A8580] uppercase tracking-wider">AI Cost This Month</span>
+          </div>
+          <p className="text-2xl font-bold text-[#5B9A6E]">${(currentMonth.total_cost_cents / 100).toFixed(2)}</p>
+        </div>
+      </div>
+
+      {aiUsage?.by_feature && aiUsage.by_feature.length > 0 && (
+        <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-[#3D4A44]">AI Usage by Feature</h3>
+            <button
+              onClick={onRefresh}
+              disabled={aiUsageLoading}
+              className="text-xs text-[#5B8A72] hover:text-[#4A7A62] font-medium"
+            >
+              {aiUsageLoading ? 'Loading...' : 'Refresh'}
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[rgba(59,77,67,0.08)]">
+                  <th className="text-left py-2 text-[#7A8580] font-medium">Feature</th>
+                  <th className="text-right py-2 text-[#7A8580] font-medium">Calls</th>
+                  <th className="text-right py-2 text-[#7A8580] font-medium hidden sm:table-cell">Input Tokens</th>
+                  <th className="text-right py-2 text-[#7A8580] font-medium hidden sm:table-cell">Output Tokens</th>
+                  <th className="text-right py-2 text-[#7A8580] font-medium">Total Tokens</th>
+                  <th className="text-right py-2 text-[#7A8580] font-medium">Est. Cost</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aiUsage.by_feature.map((f) => (
+                  <tr key={f.feature} className="border-b border-[rgba(59,77,67,0.04)]">
+                    <td className="py-2.5 text-[#3D4A44] font-medium">{FEATURE_LABELS[f.feature] || f.feature}</td>
+                    <td className="py-2.5 text-right text-[#3D4A44]">{f.call_count}</td>
+                    <td className="py-2.5 text-right text-[#7A8580] hidden sm:table-cell">{f.total_input_tokens?.toLocaleString()}</td>
+                    <td className="py-2.5 text-right text-[#7A8580] hidden sm:table-cell">{f.total_output_tokens?.toLocaleString()}</td>
+                    <td className="py-2.5 text-right text-[#3D4A44]">{f.total_tokens.toLocaleString()}</td>
+                    <td className="py-2.5 text-right text-[#5B9A6E] font-medium">${(f.total_cost_cents / 100).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-[rgba(59,77,67,0.12)]">
+                  <td className="py-2.5 font-semibold text-[#3D4A44]">Total</td>
+                  <td className="py-2.5 text-right font-semibold text-[#3D4A44]">{totals.call_count}</td>
+                  <td className="py-2.5 hidden sm:table-cell"></td>
+                  <td className="py-2.5 hidden sm:table-cell"></td>
+                  <td className="py-2.5 text-right font-semibold text-[#3D4A44]">{totals.total_tokens.toLocaleString()}</td>
+                  <td className="py-2.5 text-right font-semibold text-[#5B9A6E]">${(totals.total_cost_cents / 100).toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {aiUsage?.recent_calls && aiUsage.recent_calls.length > 0 && (
+        <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+          <h3 className="font-semibold text-[#3D4A44] mb-4">Recent AI Calls</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[rgba(59,77,67,0.08)]">
+                  <th className="text-left py-2 text-[#7A8580] font-medium">Feature</th>
+                  <th className="text-right py-2 text-[#7A8580] font-medium">Tokens</th>
+                  <th className="text-right py-2 text-[#7A8580] font-medium">Cost</th>
+                  <th className="text-right py-2 text-[#7A8580] font-medium">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {aiUsage.recent_calls.slice(0, 10).map((call) => (
+                  <tr key={call.id} className="border-b border-[rgba(59,77,67,0.04)]">
+                    <td className="py-2 text-[#3D4A44]">{FEATURE_LABELS[call.feature] || call.feature}</td>
+                    <td className="py-2 text-right text-[#7A8580]">{call.total_tokens.toLocaleString()}</td>
+                    <td className="py-2 text-right text-[#5B9A6E]">${(call.estimated_cost_cents / 100).toFixed(3)}</td>
+                    <td className="py-2 text-right text-[#7A8580] text-xs">
+                      {call.created_at ? new Date(call.created_at).toLocaleString() : '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <h3 className="text-lg font-semibold text-[#3D4A44] mb-4">Service Cost Breakdown</h3>
+        <div className="space-y-6">
+          {INFRASTRUCTURE_SERVICES.map((cat) => {
+            const CatIcon = cat.icon
+            return (
+              <div key={cat.category}>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-1.5 rounded-lg" style={{ backgroundColor: `${cat.color}20` }}>
+                    <CatIcon className="w-5 h-5" style={{ color: cat.color }} />
+                  </div>
+                  <h4 className="font-semibold text-[#3D4A44]">{cat.category}</h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {cat.services.map((svc) => (
+                    <div key={svc.name} className="bg-[#FAFBF9] rounded-xl shadow-sm p-5">
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h5 className="font-semibold text-[#3D4A44] text-sm">{svc.name}</h5>
+                          <p className="text-xs text-[#7A8580] mt-0.5">{svc.tier}</p>
+                        </div>
+                        <span className="px-2 py-1 bg-[#5B9A6E]/10 text-[#5B9A6E] text-xs font-medium rounded-full">
+                          {svc.baseCost}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#7A8580] mb-3">{svc.notes}</p>
+                      <div className="flex flex-wrap gap-1.5 mb-3">
+                        {svc.features.map((f) => (
+                          <span key={f} className="px-2 py-0.5 bg-[#EEF1EC] text-[#3D4A44] text-[10px] rounded-md">{f}</span>
+                        ))}
+                      </div>
+                      <div className="border-t border-[rgba(59,77,67,0.06)] pt-3">
+                        <p className="text-[10px] text-[#7A8580] uppercase tracking-wider mb-1.5">Scaling Projections</p>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          {Object.entries(svc.scaling).map(([tier, cost]) => (
+                            <div key={tier}>
+                              <p className="text-[10px] text-[#7A8580]">{Number(tier).toLocaleString()} orgs</p>
+                              <p className="text-xs font-medium text-[#3D4A44]">{cost}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="bg-[#5A8A9A]/10 rounded-xl p-6">
+        <h3 className="font-semibold text-[#3D4A44] mb-2">Cost Summary</h3>
+        <p className="text-sm text-[#7A8580]">
+          Cadence leverages free tiers for most external services. The primary variable cost is OpenAI API usage,
+          which scales with catalog processing activity. At current usage levels, total monthly infrastructure
+          cost is estimated under $50/mo. Most services (Spotify, YouTube, Last.fm, Dropbox, Web Push) remain
+          free regardless of scale.
+        </p>
       </div>
     </div>
   )

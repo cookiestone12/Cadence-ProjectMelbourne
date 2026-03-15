@@ -355,6 +355,19 @@ Respond ONLY with valid JSON."""
             response_format={"type": "json_object"},
         )
 
+        try:
+            usage = response.usage
+            if usage:
+                from ..services.ai_usage import log_ai_usage_standalone
+                log_ai_usage_standalone(
+                    feature="royalty_pdf_parsing",
+                    model="gpt-4o-mini",
+                    input_tokens=usage.prompt_tokens or 0,
+                    output_tokens=usage.completion_tokens or 0,
+                )
+        except Exception as ai_log_err:
+            logger.warning(f"Failed to log AI usage for royalty PDF parsing: {ai_log_err}")
+
         result = json.loads(response.choices[0].message.content)
         headers = result.get("headers", [])
         raw_rows = result.get("rows", [])

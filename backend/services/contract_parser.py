@@ -119,6 +119,19 @@ IMPORTANT:
         max_tokens=2000
     )
 
+    try:
+        usage = response.usage
+        if usage:
+            from .ai_usage import log_ai_usage_standalone
+            log_ai_usage_standalone(
+                feature="contract_parsing",
+                model="gpt-4o-mini",
+                input_tokens=usage.prompt_tokens or 0,
+                output_tokens=usage.completion_tokens or 0,
+            )
+    except Exception as e:
+        logger.warning(f"Failed to log AI usage for contract parsing: {e}")
+
     response_text = response.choices[0].message.content.strip()
     if response_text.startswith("```"):
         response_text = response_text.split("```")[1]
