@@ -727,10 +727,10 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
               {editFeedback.message}
             </div>
           )}
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h2 className="text-[28px] font-semibold text-[#3D4A44] mb-2 leading-tight">{songDetails.title}</h2>
-              <p className="text-[17px] text-[#7A8580] mb-3">{songDetails.primary_artist}</p>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <h2 className="text-[20px] sm:text-[28px] font-semibold text-[#3D4A44] mb-2 leading-tight break-words">{songDetails.title}</h2>
+              <p className="text-[15px] sm:text-[17px] text-[#7A8580] mb-3">{songDetails.primary_artist}</p>
               <div className="flex flex-wrap gap-2">
                 {songDetails.is_released && (
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-medium bg-[rgba(91,154,110,0.15)] text-[#5B9A6E]">
@@ -754,24 +754,24 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               {!isEditing && (
                 <>
                   <button
                     onClick={handleDuplicate}
                     disabled={duplicating}
-                    className="flex items-center gap-1.5 px-4 py-2 text-[#5A8A9A] hover:bg-[rgba(90,138,154,0.08)] rounded-[12px] font-medium text-[14px] transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#5A8A9A] hover:bg-[rgba(90,138,154,0.08)] rounded-[12px] font-medium text-[14px] transition-colors disabled:opacity-50"
                     title="Duplicate this song"
                   >
                     <DocumentDuplicateIcon className="w-5 h-5" />
-                    <span>{duplicating ? 'Duplicating...' : 'Duplicate'}</span>
+                    <span className="hidden sm:inline">{duplicating ? 'Duplicating...' : 'Duplicate'}</span>
                   </button>
                   <button
                     onClick={startEditing}
-                    className="flex items-center gap-1.5 px-4 py-2 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
+                    className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
                   >
                     <PencilSquareIcon className="w-5 h-5" />
-                    <span>Edit</span>
+                    <span className="hidden sm:inline">Edit</span>
                   </button>
                 </>
               )}
@@ -832,7 +832,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   </button>
                 </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 space-y-4">
                   <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Basic Information</h3>
                   <div>
@@ -945,14 +945,14 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                               </div>
                             </div>
                           ) : (
-                            <div key={credit.id} className="flex items-center gap-2 p-2 bg-[#F5F7F4] rounded-[10px]">
+                            <div key={credit.id} className="flex flex-wrap items-center gap-1.5 sm:gap-2 p-2 bg-[#F5F7F4] rounded-[10px]">
                               <Link
                                 to={`/roster/${credit.creator_id}`}
                                 onClick={onClose}
                                 className="flex items-center gap-1.5 text-[#5B8A72] hover:text-[#7BA594] min-w-0"
                               >
                                 <UserIcon className="w-4 h-4 flex-shrink-0" />
-                                <span className="font-medium text-sm truncate">{credit.creator_name || 'Unknown'}</span>
+                                <span className="font-medium text-sm truncate max-w-[120px] sm:max-w-none">{credit.creator_name || 'Unknown'}</span>
                               </Link>
                               <span className="text-xs text-[#7A8580] flex-shrink-0">({credit.role})</span>
                               {credit.pub_share != null && <span className="text-xs text-[#5B8A72] bg-[rgba(91,138,114,0.1)] px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline">Pub {credit.pub_share}%</span>}
