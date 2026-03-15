@@ -135,11 +135,12 @@ INFRASTRUCTURE_SERVICES = [
 
 
 def generate_cost_report_pdf(ai_usage_data: dict, platform_stats: dict) -> bytes:
+    import os
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, Image
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -197,6 +198,16 @@ def generate_cost_report_pdf(ai_usage_data: dict, platform_stats: dict) -> bytes
     elements = []
 
     now = datetime.utcnow()
+
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "cadence-logo.png")
+    try:
+        if os.path.exists(logo_path):
+            logo = Image(logo_path, width=1.2 * inch, height=1.2 * inch)
+            logo.hAlign = "LEFT"
+            elements.append(logo)
+            elements.append(Spacer(1, 6))
+    except Exception as e:
+        logger.warning(f"Could not load logo for cost report: {e}")
 
     elements.append(Paragraph("Cadence — Catalog Intelligence", title_style))
     elements.append(Paragraph("Infrastructure Cost Report", subtitle_style))

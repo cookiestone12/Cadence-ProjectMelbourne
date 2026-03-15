@@ -895,6 +895,41 @@ def get_ai_usage_stats(
     }
 
 
+@router.post("/ai-usage/log")
+def record_ai_usage(
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+):
+    from ..services.ai_usage import log_ai_usage
+
+    required = ["feature", "model", "input_tokens", "output_tokens"]
+    for field in required:
+        if field not in data:
+            raise HTTPException(status_code=422, detail=f"Missing required field: {field}")
+
+    valid_features = {"contract_parsing", "audio_analysis", "brief_builder", "csv_mapping", "royalty_pdf_parsing"}
+    if data["feature"] not in valid_features:
+        raise HTTPException(status_code=422, detail=f"Invalid feature. Must be one of: {', '.join(sorted(valid_features))}")
+
+    try:
+        input_tokens = int(data["input_tokens"])
+        output_tokens = int(data["output_tokens"])
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail="input_tokens and output_tokens must be integers")
+
+    log_ai_usage(
+        db=db,
+        feature=data["feature"],
+        model=data["model"],
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        org_id=data.get("org_id"),
+    )
+
+    return {"status": "ok"}
+
+
 @router.get("/cost-report")
 def download_cost_report(
     db: Session = Depends(get_db),
