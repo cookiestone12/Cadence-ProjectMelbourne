@@ -63,7 +63,7 @@ def registration_report(
     works_summary: Optional[List[Dict[str, Any]]] = None,
     platform_url: str = "",
 ) -> str:
-    content = heading("Registration Report")
+    content = heading("Bulk Registration Report")
     content += paragraph(f"Hi {recipient_name}, here&#39;s the registration status report for <strong>{org_name}</strong>.")
     content += muted_text(f"Report generated: {report_date}")
 
@@ -105,7 +105,7 @@ def registration_report(
     if platform_url:
         content += button("View Full Report &rarr;", f"{platform_url}/registration-reports")
 
-    return wrap_email(content, subject=f"Registration Report - {org_name}", preheader=f"{registered}/{total_works} works registered", platform_url=platform_url)
+    return wrap_email(content, subject=f"Bulk Registration Report - {org_name}", preheader=f"{registered}/{total_works} works registered", platform_url=platform_url)
 
 
 def share_contact_card(

@@ -26,7 +26,7 @@ const sections = [
   { id: 'sync-hq', title: '12. Sync HQ' },
   { id: 'brief-builder', title: '13. Brief Builder' },
   { id: 'directory', title: '14. Creative Directory' },
-  { id: 'registration-reports', title: '15. Registration Reports' },
+  { id: 'registration-reports', title: '15. Bulk Registration' },
   { id: 'cloud-storage', title: '16. Cloud Storage Integration' },
   { id: 'storage-scan', title: '17. Storage Scan' },
   { id: 'audio-analysis', title: '18. Audio Analysis & Tagging' },
@@ -933,14 +933,14 @@ export default function UserGuidePage() {
         <Tip>Use the Directory to keep track of all collaborators you might need for sync placements, recording sessions, or contract negotiations. It's separate from the Creator Roster, which focuses on your signed artists and writers.</Tip>
 
         {/* ===== 15. REGISTRATION REPORTS ===== */}
-        <SectionHeading id="registration-reports">15. Registration Reports</SectionHeading>
+        <SectionHeading id="registration-reports">15. Bulk Registration</SectionHeading>
         <p className="text-sm text-[#7A8580] mb-3">
-          The Registration Reports module helps you manage PRO (Performing Rights Organization) registrations for your songs and works. Track which assets are registered, generate branded reports, and email them directly to your admin or PRO contacts.
+          The Bulk Registration module helps you manage PRO (Performing Rights Organization) registrations for your songs and works. Track which assets are registered, generate branded reports, and email them directly to your admin or PRO contacts.
         </p>
 
         <SubHeading>Registration Workflow</SubHeading>
         <StepList steps={[
-          'Navigate to Registration Reports from the sidebar.',
+          'Navigate to Bulk Registration from the sidebar.',
           'View your songs and works organized by creator, with their PRO registration status.',
           'Use the Outstanding/Registered filter tabs to focus on items needing registration.',
           'Select items using checkboxes to aggregate them into a report.',
@@ -1293,7 +1293,7 @@ export default function UserGuidePage() {
           <Tip>Keep the Action Items inbox clean by completing or updating tasks regularly. Use priority and due date to triage effectively.</Tip>
           <Tip>Run the Catalog Valuation tool quarterly to track your catalog's value growth and build a data-driven case for investment.</Tip>
           <Tip>Enable Email Digests in Settings to receive scheduled summaries of your action items. Set the priority threshold to "High & Above" to focus on critical tasks without inbox overload.</Tip>
-          <Tip>Run a monthly PRO registration check using the Registration Reports Outstanding filter to catch any unregistered songs.</Tip>
+          <Tip>Run a monthly PRO registration check using the Bulk Registration Outstanding filter to catch any unregistered songs.</Tip>
         </div>
 
         {/* ===== 23. GLOSSARY ===== */}
@@ -1335,7 +1335,7 @@ export default function UserGuidePage() {
             ['Publishing Rights', 'Rights to the underlying musical composition, including mechanical, performance, and sync rights.'],
             ['Recoupment', 'The process of recovering an advance paid to an artist or rights holder from subsequent royalty earnings.'],
             ['Recoupment Pool', 'The category of revenue from which an advance can be recouped: Master, Publishing, Both, or Custom.'],
-            ['Registration Report', 'A branded report listing songs and works for PRO registration, exportable as PDF or CSV and emailable to administrators.'],
+            ['Bulk Registration', 'A branded report listing songs and works for PRO registration, exportable as PDF or CSV and emailable to administrators.'],
             ['Release', 'A package of recordings (single, EP, album, compilation) delivered to streaming platforms and retailers.'],
             ['Reprocessing', 'The act of re-running the processing engine on a previously processed statement, creating reversal entries first to maintain audit integrity.'],
             ['Revenue Spine', 'The foundational song-by-period revenue table produced by the underwriting engine, showing net revenue for each song across each time period.'],

@@ -76,7 +76,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/brief-builder', label: 'Brief Builder', icon: SparklesIcon },
     { path: '/credits', label: 'Credits', icon: StarIcon },
     { path: '/storage-scan', label: 'Storage Scan', icon: CloudArrowUpIcon },
-    { path: '/registration-reports', label: 'Registration Reports', icon: DocumentTextIcon },
+    { path: '/registration-reports', label: 'Bulk Registration', icon: DocumentTextIcon },
     { path: '/reports', label: 'Reports', icon: ChartBarIcon },
     { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
     { path: '/shared-with-me', label: 'Shared With Me', icon: ShareIcon },

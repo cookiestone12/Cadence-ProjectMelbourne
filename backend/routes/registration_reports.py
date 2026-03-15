@@ -615,7 +615,7 @@ def send_registration_report_email(
 
         success = provider.send_email(
             to=to_email,
-            subject=f"PRO Registration Report — {org_name} ({item_count} {request.asset_type})",
+            subject=f"PRO Bulk Registration Report — {org_name} ({item_count} {request.asset_type})",
             html_body=html_body,
             attachments=[{"filename": filename, "content": pdf_b64}],
         )
@@ -687,7 +687,7 @@ def save_report(
     stats = _compute_report_stats(report_items)
 
     now = datetime.utcnow()
-    title = request.title or f"Registration Report — {request.asset_type.title()} ({now.strftime('%b %d, %Y')})"
+    title = request.title or f"Bulk Registration — {request.asset_type.title()} ({now.strftime('%b %d, %Y')})"
 
     report = RegistrationReport(
         organization_id=org_id,
@@ -882,7 +882,7 @@ def _generate_pdf(items, asset_type, org_name):
     header_cell_style = ParagraphStyle('HeaderCell', parent=styles['Normal'], fontSize=7, leading=9, textColor=colors.white)
 
     elements = []
-    elements.append(Paragraph(f"Registration Report — {asset_type.title()}", title_style))
+    elements.append(Paragraph(f"Bulk Registration — {asset_type.title()}", title_style))
     elements.append(Paragraph(f"{org_name} | Generated {datetime.utcnow().strftime('%B %d, %Y')}", subtitle_style))
 
     valid_count = sum(1 for item in items if item["is_valid"])

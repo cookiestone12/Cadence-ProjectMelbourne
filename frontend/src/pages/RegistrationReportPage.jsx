@@ -142,7 +142,7 @@ export default function RegistrationReportPage() {
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `Registration_Report_${assetType}.csv`)
+      link.setAttribute('download', `Bulk_Registration_${assetType}.csv`)
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -183,7 +183,7 @@ export default function RegistrationReportPage() {
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `Registration_Report_${assetType}.pdf`)
+      link.setAttribute('download', `Bulk_Registration_${assetType}.pdf`)
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -364,7 +364,7 @@ export default function RegistrationReportPage() {
           <div>
             <div className="flex items-center gap-3 mb-2">
               <DocumentTextIcon className="w-8 h-8" />
-              <h1 className="text-2xl sm:text-3xl font-bold">Registration Reports</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold">Bulk Registration</h1>
             </div>
             <p className="text-white/80 text-sm sm:text-base">
               {viewingSavedReport
@@ -645,7 +645,7 @@ export default function RegistrationReportPage() {
               ? `No ${assetType} have been marked as registered yet. Switch to "Outstanding" to see items awaiting registration.`
               : assetType === 'works'
               ? 'No works found. Works represent compositions (the songwriting/publishing side). Try switching to the Songs tab — your catalog recordings will appear there.'
-              : `Add songs to your catalog to track PRO registration. Once added, outstanding songs will appear here for you to select and generate registration reports.`}
+              : `Add songs to your catalog to track PRO registration. Once added, outstanding songs will appear here for you to select and generate bulk registration reports.`}
           </p>
           {assetType === 'works' && !viewingSavedReport && (
             <button
@@ -738,7 +738,7 @@ export default function RegistrationReportPage() {
                   type="text"
                   value={saveTitle}
                   onChange={e => setSaveTitle(e.target.value)}
-                  placeholder={`Registration Report — ${assetType.charAt(0).toUpperCase() + assetType.slice(1)}`}
+                  placeholder={`Bulk Registration — ${assetType.charAt(0).toUpperCase() + assetType.slice(1)}`}
                   className="w-full border border-[rgba(59,77,67,0.15)] rounded-xl px-3 py-2.5 text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-sm"
                 />
               </div>
@@ -780,7 +780,7 @@ export default function RegistrationReportPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
             <div className="flex items-center justify-between p-5 border-b border-[rgba(59,77,67,0.1)]">
               <div>
-                <h2 className="text-lg font-semibold text-[#3D4A44]">Send Registration Report</h2>
+                <h2 className="text-lg font-semibold text-[#3D4A44]">Send Bulk Registration Report</h2>
                 <p className="text-sm text-[#7A8580] mt-0.5">
                   {selectedCount > 0 ? `${selectedCount} item${selectedCount !== 1 ? 's' : ''} selected` : `All outstanding ${assetType}`}
                 </p>
