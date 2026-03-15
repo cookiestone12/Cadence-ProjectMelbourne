@@ -953,17 +953,15 @@ export default function CreativeDirectoryPage() {
         </>
       )}
 
-      <EmailSendModal
-        isOpen={!!shareModalContact}
-        onClose={() => { setShareModalContact(null); setShareResult(null) }}
-        onSend={handleShareCard}
-        title="Share Contact Card"
-        subtitle={shareModalContact ? `Share ${shareModalContact.display_name}'s creative card` : ''}
-        defaultSubject={shareModalContact ? `Creative Card: ${shareModalContact.display_name}` : ''}
-        defaultMessage={shareModalContact ? `Here is the creative contact card for ${shareModalContact.display_name}.` : ''}
-        sending={shareSending}
-        result={shareResult}
-      />
+      {shareModalContact && (
+        <ShareModal
+          itemType="CONTACT_CARD"
+          itemId={shareModalContact.id}
+          itemName={shareModalContact.display_name}
+          onClose={() => { setShareModalContact(null); setShareResult(null) }}
+          orgId={organizationId}
+        />
+      )}
 
       <EmailSendModal
         isOpen={bulkShareOpen}
