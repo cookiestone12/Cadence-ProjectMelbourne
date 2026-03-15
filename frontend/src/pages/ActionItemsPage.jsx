@@ -1071,8 +1071,8 @@ export default function ActionItemsPage() {
                         : ''
                   }`}
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start space-x-4 flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                    <div className="flex items-start space-x-4 flex-1 min-w-0">
                       <button
                         onClick={() => !isCompleted && handleCompleteAction(action.id)}
                         disabled={isCompleted}
@@ -1177,7 +1177,7 @@ export default function ActionItemsPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-1 ml-4">
+                    <div className="flex items-center space-x-1 sm:ml-4 ml-10 shrink-0">
                       {!isCompleted && (
                         <select
                           value={action.assigned_to_user_id || ''}
