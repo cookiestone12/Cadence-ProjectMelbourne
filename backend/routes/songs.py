@@ -704,6 +704,11 @@ def update_song(
     if 'release_date' in update_data:
         song.is_released = (song.release_date is not None)
     
+    from ..services.audit_service import log_action
+    changed_fields = list(update_data.keys())
+    log_action(db, song.organization_id, current_user.id, "UPDATE", "SONG", song.id, song.title,
+               details={"changed_fields": changed_fields})
+
     db.commit()
     db.refresh(song)
     

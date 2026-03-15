@@ -116,6 +116,11 @@ async def upload_contract(
     song.has_contract_executed = True
     song.has_contract_sent = True
     
+    db.flush()
+    from ..services.audit_service import log_action
+    log_action(db, song.organization_id, current_user.id, "UPLOAD", "CONTRACT", contract.id, file.filename,
+               details={"song_id": song_id, "song_title": song.title, "contract_type": contract_type})
+
     db.commit()
     db.refresh(contract)
     
@@ -217,6 +222,10 @@ def delete_contract(
         song.has_contract_executed = False
         song.has_contract_sent = False
     
+    from ..services.audit_service import log_action
+    log_action(db, contract.organization_id, current_user.id, "DELETE", "CONTRACT", contract.id, contract.file_name,
+               details={"song_id": contract.song_id})
+
     db.delete(contract)
     db.commit()
     

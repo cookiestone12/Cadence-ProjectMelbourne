@@ -807,6 +807,11 @@ async def upload_statement(
     statement.unmatched_transactions = unmatched_count
     statement.status = "PROCESSED" if unmatched_count == 0 else "PARTIALLY_MATCHED"
 
+    from ..services.audit_service import log_action
+    log_action(db, org_id, current_user.id, "UPLOAD", "STATEMENT", statement.id, source_name,
+               details={"file_name": file.filename, "source_type": source_type, "currency": currency,
+                        "total_transactions": statement.total_transactions, "creator_id": creator_id})
+
     db.commit()
     db.refresh(statement)
 
@@ -861,6 +866,9 @@ def delete_statement(
     db.query(RoyaltyTransaction).filter(
         RoyaltyTransaction.statement_id == statement_id
     ).delete(synchronize_session=False)
+
+    from ..services.audit_service import log_action
+    log_action(db, org_id, current_user.id, "DELETE", "STATEMENT", stmt.id, stmt.source_name)
 
     db.delete(stmt)
     db.commit()

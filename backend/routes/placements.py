@@ -473,6 +473,11 @@ def create_placement(
         created_by_user_id=current_user.id,
     )
     db.add(placement)
+    db.flush()
+
+    from ..services.audit_service import log_action
+    log_action(db, org_id, current_user.id, "CREATE", "PLACEMENT", placement.id, placement.title)
+
     db.commit()
     db.refresh(placement)
 
@@ -495,6 +500,10 @@ def update_placement(
     update_data = data.dict(exclude_unset=True)
     for key, value in update_data.items():
         setattr(placement, key, value)
+
+    from ..services.audit_service import log_action
+    log_action(db, placement.organization_id, current_user.id, "UPDATE", "PLACEMENT", placement.id, placement.title,
+               details={"changed_fields": list(update_data.keys())})
 
     db.commit()
     db.refresh(placement)
@@ -533,6 +542,10 @@ def transition_placement(
         placement.delivery_date = now.date()
     elif target_status == "AIRED" and not placement.air_date:
         placement.air_date = now.date()
+
+    from ..services.audit_service import log_action
+    log_action(db, placement.organization_id, current_user.id, "TRANSITION", "PLACEMENT", placement.id, placement.title,
+               details={"from_status": current_status, "to_status": target_status})
 
     if target_status == "PAID" and placement.license_fee and placement.license_fee > 0 and placement.song_id:
         from ..models import RoyaltyStatement, RoyaltyTransaction
@@ -589,6 +602,9 @@ def delete_placement(
         raise HTTPException(status_code=404, detail="Placement not found")
 
     verify_org_access(db, current_user, placement.organization_id)
+
+    from ..services.audit_service import log_action
+    log_action(db, placement.organization_id, current_user.id, "DELETE", "PLACEMENT", placement.id, placement.title)
 
     db.delete(placement)
     db.commit()

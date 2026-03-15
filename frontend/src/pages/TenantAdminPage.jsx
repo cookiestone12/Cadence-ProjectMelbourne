@@ -1070,6 +1070,10 @@ function AuditLogTab() {
           <option value="UPDATE">Update</option>
           <option value="DELETE">Delete</option>
           <option value="IMPORT">Import</option>
+          <option value="UPLOAD">Upload</option>
+          <option value="MERGE">Merge</option>
+          <option value="DUPLICATE">Duplicate</option>
+          <option value="TRANSITION">Transition</option>
         </select>
         <select
           value={filterEntity}
@@ -1081,6 +1085,7 @@ function AuditLogTab() {
           <option value="CREATOR">Creator</option>
           <option value="PLACEMENT">Placement</option>
           <option value="CONTRACT">Contract</option>
+          <option value="STATEMENT">Statement</option>
         </select>
         <select
           value={filterUserId}

@@ -480,6 +480,9 @@ def update_creator(
     if request.roster_export_fields is not None:
         creator.roster_export_fields = request.roster_export_fields
     
+    from ..services.audit_service import log_action
+    log_action(db, creator.organization_id, current_user.id, "UPDATE", "CREATOR", creator.id, creator.display_name)
+
     linked_contact = db.query(CreativeContact).filter(
         CreativeContact.creator_id == creator.id,
         CreativeContact.organization_id == creator.organization_id
