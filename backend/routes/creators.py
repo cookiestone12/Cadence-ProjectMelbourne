@@ -3,7 +3,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 from ..models import get_db, Creator, CreativeContact, CreatorContact, Organization, OrganizationMember, User, Song, SongCredit, WorkCredit, ClientShare
 from ..utils.auth import get_current_user
 from .client_sharing import has_shared_access
@@ -37,6 +37,7 @@ class CreatorResponse(BaseModel):
     youtube_url: Optional[str] = None
     instagram_url: Optional[str] = None
     twitter_url: Optional[str] = None
+    website_url: Optional[str] = None
     custom_links: Optional[List[dict]] = None
     roster_export_fields: Optional[List[str]] = None
     shared: Optional[bool] = None
@@ -60,6 +61,7 @@ class CreatorCreateRequest(BaseModel):
     youtube_url: Optional[str] = None
     instagram_url: Optional[str] = None
     twitter_url: Optional[str] = None
+    website_url: Optional[str] = None
     custom_links: Optional[List[dict]] = None
     roster_export_fields: Optional[List[str]] = None
 
@@ -80,6 +82,7 @@ class CreatorUpdateRequest(BaseModel):
     youtube_url: Optional[str] = None
     instagram_url: Optional[str] = None
     twitter_url: Optional[str] = None
+    website_url: Optional[str] = None
     custom_links: Optional[List[dict]] = None
     roster_export_fields: Optional[List[str]] = None
 
@@ -238,6 +241,7 @@ def get_organization_creators(
             "youtube_url": creator.youtube_url,
             "instagram_url": creator.instagram_url,
             "twitter_url": creator.twitter_url,
+            "website_url": creator.website_url,
             "custom_links": creator.custom_links or [],
             "roster_export_fields": creator.roster_export_fields or [],
         }
@@ -287,6 +291,7 @@ def create_creator(
         youtube_url=request.youtube_url,
         instagram_url=request.instagram_url,
         twitter_url=request.twitter_url,
+        website_url=request.website_url,
         custom_links=request.custom_links or [],
         roster_export_fields=request.roster_export_fields or [],
     )
@@ -414,6 +419,7 @@ def get_creator(
         "youtube_url": creator.youtube_url,
         "instagram_url": creator.instagram_url,
         "twitter_url": creator.twitter_url,
+        "website_url": creator.website_url,
         "custom_links": creator.custom_links or [],
         "roster_export_fields": creator.roster_export_fields or [],
         "is_shared": is_shared,
@@ -475,6 +481,8 @@ def update_creator(
         creator.instagram_url = request.instagram_url
     if request.twitter_url is not None:
         creator.twitter_url = request.twitter_url
+    if request.website_url is not None:
+        creator.website_url = request.website_url
     if request.custom_links is not None:
         creator.custom_links = request.custom_links
     if request.roster_export_fields is not None:
@@ -649,6 +657,7 @@ async def upload_creator_image(
 
 class RosterPDFRequest(BaseModel):
     creator_ids: List[int]
+    field_overrides: Optional[Dict[str, List[str]]] = None
 
 
 @router.post("/org/{org_id}/roster-pdf")
@@ -757,8 +766,12 @@ def _build_roster_pdf(creators, org_name, request):
 
     for idx, creator in enumerate(creators):
         card_elements = []
-        export_fields = creator.roster_export_fields or []
-        show_all = len(export_fields) == 0
+        if request.field_overrides and str(creator.id) in request.field_overrides:
+            export_fields = request.field_overrides[str(creator.id)]
+            show_all = False
+        else:
+            export_fields = creator.roster_export_fields or []
+            show_all = len(export_fields) == 0
 
         if idx > 0:
             card_elements.append(Spacer(1, 16))

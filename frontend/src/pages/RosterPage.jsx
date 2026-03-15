@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
-import { PlusIcon, XMarkIcon, ArrowUpTrayIcon, UserPlusIcon, CameraIcon, TrashIcon, DocumentArrowDownIcon, CheckIcon } from '@heroicons/react/24/outline'
+import { PlusIcon, XMarkIcon, ArrowUpTrayIcon, UserPlusIcon, CameraIcon, TrashIcon, DocumentArrowDownIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, LinkIcon, GlobeAltIcon } from '@heroicons/react/24/outline'
 import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
 
 const ROLE_OPTIONS = ['ARTIST', 'SONGWRITER', 'PRODUCER', 'MANAGER', 'A&R', 'LAWYER', 'MARKETING', 'ACCOUNTANT']
@@ -29,6 +29,9 @@ export default function RosterPage() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [selectMode, setSelectMode] = useState(false)
   const [exportingPDF, setExportingPDF] = useState(false)
+  const [showDeckModal, setShowDeckModal] = useState(false)
+  const [deckFieldOverrides, setDeckFieldOverrides] = useState({})
+  const [expandedDeckCreators, setExpandedDeckCreators] = useState(new Set())
   const [viewMode, setViewMode] = useState(() => getStoredViewMode('roster'))
 
   const handleViewModeChange = (mode) => {
@@ -53,12 +56,75 @@ export default function RosterPage() {
     }
   }
 
+  const LINK_FIELDS = [
+    { key: 'bio', label: 'Bio', category: 'info' },
+    { key: 'spotify_url', label: 'Spotify', category: 'dsp' },
+    { key: 'apple_music_url', label: 'Apple Music', category: 'dsp' },
+    { key: 'youtube_url', label: 'YouTube', category: 'social' },
+    { key: 'instagram_url', label: 'Instagram', category: 'social' },
+    { key: 'twitter_url', label: 'X / Twitter', category: 'social' },
+    { key: 'website_url', label: 'Website', category: 'social' },
+  ]
+
+  const openDeckModal = () => {
+    if (selectedIds.size === 0) return
+    const overrides = {}
+    const selected = creators.filter(c => selectedIds.has(c.id))
+    selected.forEach(c => {
+      const existing = c.roster_export_fields || []
+      if (existing.length > 0) {
+        overrides[String(c.id)] = [...existing]
+      } else {
+        const all = []
+        if (c.bio) all.push('bio')
+        LINK_FIELDS.filter(f => f.key !== 'bio').forEach(f => {
+          if (c[f.key]) all.push(f.key)
+        })
+        if (c.custom_links?.length > 0) all.push('custom_links')
+        overrides[String(c.id)] = all
+      }
+    })
+    setDeckFieldOverrides(overrides)
+    setExpandedDeckCreators(new Set())
+    setShowDeckModal(true)
+  }
+
+  const toggleDeckField = (creatorId, fieldKey) => {
+    setDeckFieldOverrides(prev => {
+      const fields = prev[String(creatorId)] || []
+      const updated = fields.includes(fieldKey)
+        ? fields.filter(f => f !== fieldKey)
+        : [...fields, fieldKey]
+      return { ...prev, [String(creatorId)]: updated }
+    })
+  }
+
+  const toggleAllDeckField = (fieldKey) => {
+    const selected = creators.filter(c => selectedIds.has(c.id))
+    const eligible = selected.filter(c => fieldKey === 'bio' ? c.bio : fieldKey === 'custom_links' ? c.custom_links?.length > 0 : c[fieldKey])
+    if (eligible.length === 0) return
+    const allHave = eligible.every(c => (deckFieldOverrides[String(c.id)] || []).includes(fieldKey))
+    setDeckFieldOverrides(prev => {
+      const updated = { ...prev }
+      eligible.forEach(c => {
+        const fields = updated[String(c.id)] || []
+        if (allHave) {
+          updated[String(c.id)] = fields.filter(f => f !== fieldKey)
+        } else if (!fields.includes(fieldKey)) {
+          updated[String(c.id)] = [...fields, fieldKey]
+        }
+      })
+      return updated
+    })
+  }
+
   const handleExportRosterPDF = async () => {
     if (selectedIds.size === 0) return
     setExportingPDF(true)
     try {
       const res = await axios.post(`/api/creators/org/${orgId}/roster-pdf`, {
-        creator_ids: Array.from(selectedIds)
+        creator_ids: Array.from(selectedIds),
+        field_overrides: deckFieldOverrides,
       }, { responseType: 'blob' })
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
       const a = document.createElement('a')
@@ -66,6 +132,7 @@ export default function RosterPage() {
       a.download = 'Roster_Brief.pdf'
       a.click()
       window.URL.revokeObjectURL(url)
+      setShowDeckModal(false)
     } catch (error) {
       console.error('Failed to export roster PDF:', error)
       alert('Failed to export roster PDF')
@@ -334,12 +401,12 @@ export default function RosterPage() {
                   {selectedIds.size === creators.length ? 'Deselect All' : 'Select All'}
                 </button>
                 <button
-                  onClick={handleExportRosterPDF}
-                  disabled={selectedIds.size === 0 || exportingPDF}
+                  onClick={openDeckModal}
+                  disabled={selectedIds.size === 0}
                   className="flex items-center gap-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-[14px]"
                 >
                   <DocumentArrowDownIcon className="w-5 h-5" />
-                  {exportingPDF ? 'Exporting...' : `Export PDF (${selectedIds.size})`}
+                  {`Roster Deck (${selectedIds.size})`}
                 </button>
                 <button
                   onClick={() => { setSelectMode(false); setSelectedIds(new Set()) }}
@@ -915,6 +982,218 @@ export default function RosterPage() {
                   )}
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeckModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={() => setShowDeckModal(false)}>
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[rgba(59,77,67,0.1)]">
+              <div>
+                <h2 className="text-lg font-bold text-[#3D4A44]">Configure Roster Deck</h2>
+                <p className="text-xs text-[#7A8580] mt-0.5">{selectedIds.size} creator{selectedIds.size !== 1 ? 's' : ''} selected — choose what to include for each</p>
+              </div>
+              <button onClick={() => setShowDeckModal(false)} className="p-2 rounded-xl hover:bg-[#F5F7F4] transition-colors">
+                <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+              </button>
+            </div>
+
+            <div className="px-6 py-3 border-b border-[rgba(59,77,67,0.06)] bg-[#FAFBF9]">
+              <p className="text-[11px] font-semibold text-[#7A8580] uppercase tracking-wider mb-2">Toggle all</p>
+              <div className="flex flex-wrap gap-2">
+                {[...LINK_FIELDS, { key: 'custom_links', label: 'Folder / Custom Links', category: 'folder' }].map(field => {
+                  const selected = creators.filter(c => selectedIds.has(c.id))
+                  const eligible = selected.filter(c => field.key === 'bio' ? c.bio : field.key === 'custom_links' ? c.custom_links?.length > 0 : c[field.key])
+                  const allOn = eligible.length > 0 && eligible.every(c => (deckFieldOverrides[String(c.id)] || []).includes(field.key))
+                  return (
+                    <button
+                      key={field.key}
+                      onClick={() => toggleAllDeckField(field.key)}
+                      disabled={eligible.length === 0}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                        allOn
+                          ? 'bg-[#5B8A72] text-white border-[#5B8A72]'
+                          : eligible.length === 0
+                            ? 'bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed'
+                            : 'bg-white text-[#3D4A44] border-[rgba(59,77,67,0.2)] hover:bg-[#EEF1EC]'
+                      }`}
+                    >
+                      {field.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
+              {creators.filter(c => selectedIds.has(c.id)).map(creator => {
+                const cid = String(creator.id)
+                const fields = deckFieldOverrides[cid] || []
+                const isExpanded = expandedDeckCreators.has(creator.id)
+                const availableLinks = LINK_FIELDS.filter(f => f.key === 'bio' ? creator.bio : creator[f.key])
+                const customLinks = creator.custom_links || []
+                const hasContent = availableLinks.length > 0 || customLinks.length > 0
+                return (
+                  <div key={creator.id} className="border border-[rgba(59,77,67,0.1)] rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setExpandedDeckCreators(prev => {
+                        const next = new Set(prev)
+                        next.has(creator.id) ? next.delete(creator.id) : next.add(creator.id)
+                        return next
+                      })}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#FAFBF9] transition-colors"
+                    >
+                      {creator.hero_image_url ? (
+                        <img src={creator.hero_image_url} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-[#5B8A72] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                          {(creator.display_name || '?').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0 text-left">
+                        <div className="text-sm font-semibold text-[#3D4A44] truncate">{creator.display_name}</div>
+                        <div className="text-[11px] text-[#7A8580]">
+                          {fields.length} field{fields.length !== 1 ? 's' : ''} selected
+                          {!hasContent && ' — no links or bio available'}
+                        </div>
+                      </div>
+                      {isExpanded ? (
+                        <ChevronUpIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                      ) : (
+                        <ChevronDownIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                      )}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="px-4 pb-4 space-y-3 border-t border-[rgba(59,77,67,0.06)]">
+                        {creator.bio && (
+                          <div className="mt-3">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Bio</span>
+                              <button
+                                onClick={() => toggleDeckField(creator.id, 'bio')}
+                                className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+                                style={{ backgroundColor: fields.includes('bio') ? '#5B8A72' : '#D1D5DB' }}
+                              >
+                                <span
+                                  className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm"
+                                  style={{ transform: fields.includes('bio') ? 'translateX(18px)' : 'translateX(3px)' }}
+                                />
+                              </button>
+                            </div>
+                            <p className="text-xs text-[#7A8580] leading-relaxed line-clamp-3">{creator.bio}</p>
+                          </div>
+                        )}
+
+                        {availableLinks.filter(f => f.key !== 'bio' && f.category === 'dsp').length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-[#7A8580] uppercase tracking-wider mb-2">DSP Links</p>
+                            <div className="space-y-1">
+                              {availableLinks.filter(f => f.category === 'dsp').map(field => (
+                                <div key={field.key} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-[#F5F7F4] transition-colors">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-sm text-[#3D4A44]">{field.label}</span>
+                                    <span className="text-[10px] text-[#B0BDB4] truncate max-w-[180px]">{creator[field.key]}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => toggleDeckField(creator.id, field.key)}
+                                    className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0"
+                                    style={{ backgroundColor: fields.includes(field.key) ? '#5B8A72' : '#D1D5DB' }}
+                                  >
+                                    <span
+                                      className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm"
+                                      style={{ transform: fields.includes(field.key) ? 'translateX(18px)' : 'translateX(3px)' }}
+                                    />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {availableLinks.filter(f => f.key !== 'bio' && f.category === 'social').length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-[#7A8580] uppercase tracking-wider mb-2">Social Links</p>
+                            <div className="space-y-1">
+                              {availableLinks.filter(f => f.category === 'social').map(field => (
+                                <div key={field.key} className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-[#F5F7F4] transition-colors">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-sm text-[#3D4A44]">{field.label}</span>
+                                    <span className="text-[10px] text-[#B0BDB4] truncate max-w-[180px]">{creator[field.key]}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => toggleDeckField(creator.id, field.key)}
+                                    className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0"
+                                    style={{ backgroundColor: fields.includes(field.key) ? '#5B8A72' : '#D1D5DB' }}
+                                  >
+                                    <span
+                                      className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm"
+                                      style={{ transform: fields.includes(field.key) ? 'translateX(18px)' : 'translateX(3px)' }}
+                                    />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {customLinks.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-[#7A8580] uppercase tracking-wider mb-2">Folder / Custom Links</p>
+                            <div className="flex items-center justify-between py-1.5 px-3 rounded-lg hover:bg-[#F5F7F4] transition-colors">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <LinkIcon className="w-3.5 h-3.5 text-[#7A8580]" />
+                                <span className="text-sm text-[#3D4A44]">{customLinks.length} custom link{customLinks.length !== 1 ? 's' : ''}</span>
+                                <span className="text-[10px] text-[#B0BDB4] truncate max-w-[180px]">
+                                  {customLinks.map(l => l.name || l.url).join(', ')}
+                                </span>
+                              </div>
+                              <button
+                                onClick={() => toggleDeckField(creator.id, 'custom_links')}
+                                className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0"
+                                style={{ backgroundColor: fields.includes('custom_links') ? '#5B8A72' : '#D1D5DB' }}
+                              >
+                                <span
+                                  className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm"
+                                  style={{ transform: fields.includes('custom_links') ? 'translateX(18px)' : 'translateX(3px)' }}
+                                />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {!hasContent && (
+                          <p className="text-xs text-[#B0BDB4] italic mt-3 px-3">No bio, social links, DSP links, or custom links available for this creator.</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="flex gap-3 px-6 py-4 border-t border-[rgba(59,77,67,0.1)]">
+              <button
+                onClick={() => setShowDeckModal(false)}
+                className="flex-1 px-4 py-3 border border-[rgba(59,77,67,0.2)] text-[#3D4A44] rounded-xl font-medium hover:bg-[#EEF1EC] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExportRosterPDF}
+                disabled={exportingPDF}
+                className="flex-1 px-4 py-3 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50"
+              >
+                <span className="flex items-center justify-center gap-2">
+                  <DocumentArrowDownIcon className="w-5 h-5" />
+                  {exportingPDF ? 'Generating...' : 'Export Roster Deck'}
+                </span>
+              </button>
             </div>
           </div>
         </div>

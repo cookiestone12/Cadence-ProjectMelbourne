@@ -36,7 +36,8 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Creative Directory**: Contact management system for industry collaborators.
 - **Creator Contact Roles**: Multi-contact assignment system for creators with specific roles.
 - **Unified Email System**: App-wide email infrastructure powered by Resend with branded HTML templates.
-- **Bulk Registration**: Operational PRO registration workflow for tracking and generating branded PDF reports.
+- **Bulk Registration**: Operational PRO registration workflow for tracking and generating branded PDF reports. Includes submission history tracking (sent_at/sent_to) and a Submission History section on the frontend.
+- **Roster Deck Configuration**: Pre-export configuration modal for selecting per-creator bio, social links, DSP links, and folder/custom links to include in the PDF roster deck. Supports bulk toggle-all and per-creator field_overrides sent to backend.
 - **Spotify Integration**: Integrates with Spotify API for playlist import, track search, and release metadata lookup.
 - **Cloud Storage Integration**: Multi-provider cloud storage integration (Dropbox, Google Drive) for linking audio files.
 - **AI Contract Parsing**: Uses OpenAI to extract key terms from PDF/DOCX contracts for auto-filling contract forms.
