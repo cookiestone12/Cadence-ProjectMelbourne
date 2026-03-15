@@ -228,8 +228,8 @@ export default function AssistantChat({ user }) {
       }`}>
       <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-[#5B8A72] to-[#4A7A62] flex-shrink-0">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-            <ChatBubbleLeftRightIcon className="w-4.5 h-4.5 text-white" />
+          <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+            <img src="/cadence-assistant-logo.png" alt="Cadence" className="w-full h-full object-cover" />
           </div>
           <div>
             <h3 className="text-sm font-semibold text-white leading-tight">Cadence</h3>
