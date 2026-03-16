@@ -60,6 +60,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [spotifyResults, setSpotifyResults] = useState([])
   const [spotifySearching, setSpotifySearching] = useState(false)
   const [spotifyLinking, setSpotifyLinking] = useState(null)
+  const [spotifyError, setSpotifyError] = useState(null)
   
   useEffect(() => {
     loadSongDetails()
@@ -390,6 +391,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   async function searchSpotify() {
     if (!spotifyQuery.trim()) return
     setSpotifySearching(true)
+    setSpotifyError(null)
     try {
       const token = localStorage.getItem('token')
       const response = await axios.post('/api/spotify/search', { query: spotifyQuery, limit: 5 }, {
@@ -399,6 +401,12 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     } catch (err) {
       console.error('Spotify search failed:', err)
       setSpotifyResults([])
+      const detail = err.response?.data?.detail
+      if (detail) {
+        setSpotifyError(detail)
+      } else {
+        setSpotifyError('Spotify search failed. Please try again.')
+      }
     } finally {
       setSpotifySearching(false)
     }
@@ -1927,7 +1935,12 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       </div>
                     )}
 
-                    {!spotifySearching && spotifyResults.length === 0 && spotifyQuery && (
+                    {spotifyError && (
+                      <div className="text-[13px] text-[#C47068] bg-[rgba(196,112,104,0.08)] border border-[rgba(196,112,104,0.15)] rounded-[10px] p-3 text-center">
+                        {spotifyError}
+                      </div>
+                    )}
+                    {!spotifySearching && !spotifyError && spotifyResults.length === 0 && spotifyQuery && (
                       <p className="text-[13px] text-[#7A8580] text-center py-2">No results yet. Press Search or Enter.</p>
                     )}
                   </div>

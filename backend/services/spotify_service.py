@@ -599,7 +599,7 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
 def search_tracks(query: str, limit: int = 10) -> List[Dict[str, Any]]:
     token = _get_access_token()
     if not token:
-        return []
+        raise SpotifyAuthError("No Spotify credentials available. Please connect the Spotify integration or set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET.")
 
     data = _spotify_get("search", token, {"q": query, "type": "track", "limit": limit})
     if not data or not data.get("tracks", {}).get("items"):

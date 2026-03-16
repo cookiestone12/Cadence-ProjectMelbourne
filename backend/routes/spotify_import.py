@@ -261,8 +261,11 @@ def search_spotify(
     data: SpotifySearchRequest,
     current_user: User = Depends(get_current_user)
 ):
-    results = spotify_service.search_tracks(data.query, data.limit or 10)
-    return {"results": results, "total": len(results)}
+    try:
+        results = spotify_service.search_tracks(data.query, data.limit or 10)
+        return {"results": results, "total": len(results)}
+    except (spotify_service.SpotifyForbiddenError, spotify_service.SpotifyAuthError) as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 class SpotifyLinkRequest(BaseModel):
