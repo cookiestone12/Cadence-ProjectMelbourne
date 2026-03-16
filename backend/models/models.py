@@ -1098,6 +1098,7 @@ class RightsSplit(Base):
 
     rights_type = Column(String, nullable=False, default="MASTER")
     share_percentage = Column(Float, nullable=False)
+    role = Column(String, nullable=True)
 
     notes = Column(Text, nullable=True)
 

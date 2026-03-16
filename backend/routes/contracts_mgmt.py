@@ -82,6 +82,7 @@ class SplitCreate(BaseModel):
     rights_holder_name: Optional[str] = None
     rights_type: str = "MASTER"
     share_percentage: float
+    role: Optional[str] = None
     notes: Optional[str] = None
     ipi: Optional[str] = None
     pro: Optional[str] = None
@@ -92,6 +93,7 @@ class SplitUpdate(BaseModel):
     rights_type: Optional[str] = None
     share_percentage: Optional[float] = None
     rights_holder_name: Optional[str] = None
+    role: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -200,6 +202,7 @@ def _contract_to_dict(contract: Contract, db: Session, include_details: bool = F
                     "rights_holder_name": holder_name,
                     "rights_type": s.rights_type,
                     "share_percentage": s.share_percentage,
+                    "role": s.role,
                     "notes": s.notes,
                     "created_at": s.created_at.isoformat() if s.created_at else None,
                     "updated_at": s.updated_at.isoformat() if s.updated_at else None,
@@ -327,6 +330,7 @@ def get_song_splits(
                 "rights_holder_name": h_name,
                 "rights_type": s.rights_type,
                 "share_percentage": s.share_percentage,
+                "role": s.role,
                 "notes": s.notes,
                 "contract_title": contract.title if contract else None,
                 "contract_id": contract.id if contract else None,
@@ -363,6 +367,7 @@ def get_song_splits(
                     "rights_holder_name": h_name,
                     "rights_type": s.rights_type,
                     "share_percentage": s.share_percentage,
+                    "role": s.role,
                     "notes": s.notes,
                     "contract_title": standalone_contract.title,
                     "contract_id": standalone_contract.id,
@@ -481,6 +486,7 @@ def add_song_split(
         rights_holder_name=holder_name,
         rights_type=data.rights_type,
         share_percentage=data.share_percentage,
+        role=data.role,
         notes=data.notes,
     )
     db.add(split)
@@ -492,6 +498,7 @@ def add_song_split(
         "rights_holder_name": holder_name,
         "rights_type": split.rights_type,
         "share_percentage": split.share_percentage,
+        "role": split.role,
         "ipi": holder_ipi,
         "message": "Split added successfully",
     }
@@ -560,6 +567,7 @@ def get_release_splits(
                 "rights_holder_name": h_name,
                 "rights_type": s.rights_type,
                 "share_percentage": s.share_percentage,
+                "role": s.role,
                 "notes": s.notes,
                 "contract_title": contract.title if contract else None,
                 "contract_id": contract.id if contract else None,
@@ -597,6 +605,7 @@ def get_release_splits(
                     "rights_holder_name": h_name,
                     "rights_type": s.rights_type,
                     "share_percentage": s.share_percentage,
+                    "role": s.role,
                     "notes": s.notes,
                     "contract_title": standalone_contract.title,
                     "contract_id": standalone_contract.id,
@@ -715,6 +724,7 @@ def add_release_split(
         rights_holder_name=holder_name,
         rights_type=data.rights_type,
         share_percentage=data.share_percentage,
+        role=data.role,
         notes=data.notes,
     )
     db.add(split)
@@ -726,6 +736,7 @@ def add_release_split(
         "rights_holder_name": holder_name,
         "rights_type": split.rights_type,
         "share_percentage": split.share_percentage,
+        "role": split.role,
         "ipi": holder_ipi,
         "message": "Split added successfully",
     }
@@ -1056,6 +1067,7 @@ def add_split(
         rights_holder_name=holder_name,
         rights_type=data.rights_type,
         share_percentage=data.share_percentage,
+        role=data.role,
         notes=data.notes,
     )
     db.add(split)
@@ -1114,6 +1126,8 @@ def update_split(
         split.share_percentage = data.share_percentage
     if data.rights_holder_name is not None:
         split.rights_holder_name = data.rights_holder_name
+    if data.role is not None:
+        split.role = data.role
     if data.notes is not None:
         split.notes = data.notes
 
@@ -1192,6 +1206,7 @@ def get_asset_rights(
                 "rights_holder_name": h_name,
                 "rights_type": s.rights_type,
                 "share_percentage": s.share_percentage,
+                "role": s.role,
                 "notes": s.notes,
             })
 

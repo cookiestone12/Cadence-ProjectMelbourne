@@ -97,6 +97,10 @@ def ensure_schema_updates():
                 conn.execute(text("ALTER TABLE rights_splits ADD COLUMN rights_holder_name VARCHAR"))
                 conn.commit()
                 logger.info("Added rights_holder_name column to rights_splits")
+            if 'role' not in rs_cols:
+                conn.execute(text("ALTER TABLE rights_splits ADD COLUMN role VARCHAR"))
+                conn.commit()
+                logger.info("Added role column to rights_splits")
             constraints = inspector.get_foreign_keys('rights_splits')
             for fk in constraints:
                 if 'rights_holder_id' in fk.get('constrained_columns', []):

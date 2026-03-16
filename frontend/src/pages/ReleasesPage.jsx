@@ -93,7 +93,7 @@ export default function ReleasesPage() {
   const [distributionSending, setDistributionSending] = useState(false)
   const [distributionResult, setDistributionResult] = useState(null)
   const [releaseSplits, setReleaseSplits] = useState([])
-  const [splitForm, setSplitForm] = useState({ rights_holder_name: '', rights_type: 'MASTER', share_percentage: '', contact_id: '', ipi: '', pro: '' })
+  const [splitForm, setSplitForm] = useState({ rights_holder_name: '', rights_type: 'MASTER', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '' })
   const [showSplitForm, setShowSplitForm] = useState(false)
   const [splitSearchQuery, setSplitSearchQuery] = useState('')
   const [directoryContacts, setDirectoryContacts] = useState([])
@@ -245,13 +245,14 @@ export default function ReleasesPage() {
         rights_holder_name: splitForm.rights_holder_name,
         rights_type: splitForm.rights_type,
         share_percentage: parseFloat(splitForm.share_percentage),
+        role: splitForm.role || '',
       }
       if (splitForm.contact_id) payload.contact_id = parseInt(splitForm.contact_id)
       if (splitForm.ipi) payload.ipi = splitForm.ipi
       if (splitForm.pro) payload.pro = splitForm.pro
       await axios.post(`/api/rights/release-splits/${selectedRelease}`, payload)
       loadReleaseSplits(selectedRelease)
-      setSplitForm({ rights_holder_name: '', rights_type: 'MASTER', share_percentage: '', contact_id: '', ipi: '', pro: '' })
+      setSplitForm({ rights_holder_name: '', rights_type: 'MASTER', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '' })
       setSplitSearchQuery('')
       setShowSplitForm(false)
     } catch (err) {
@@ -1629,13 +1630,33 @@ export default function ReleasesPage() {
                         className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
                       />
                     </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Role</label>
+                      <select
+                        value={splitForm.role}
+                        onChange={(e) => setSplitForm(prev => ({ ...prev, role: e.target.value }))}
+                        className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                      >
+                        <option value="">Select Role</option>
+                        <option value="Writer">Writer</option>
+                        <option value="Producer">Producer</option>
+                        <option value="Artist">Artist</option>
+                        <option value="Engineer">Engineer</option>
+                        <option value="Composer">Composer</option>
+                        <option value="Lyricist">Lyricist</option>
+                        <option value="Arranger">Arranger</option>
+                        <option value="Publisher">Publisher</option>
+                        <option value="Administrator">Administrator</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
                   </div>
                   <div className="flex justify-end space-x-2">
                     <button
                       type="button"
                       onClick={() => {
                         setShowSplitForm(false)
-                        setSplitForm({ rights_holder_name: '', rights_type: 'MASTER', share_percentage: '', contact_id: '', ipi: '', pro: '' })
+                        setSplitForm({ rights_holder_name: '', rights_type: 'MASTER', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '' })
                         setSplitSearchQuery('')
                       }}
                       className="px-3 py-1.5 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors"
@@ -1687,6 +1708,7 @@ export default function ReleasesPage() {
                                 <div className="flex items-center space-x-2 min-w-0">
                                   <UserGroupIcon className="w-3.5 h-3.5 text-[#7A8580] flex-shrink-0" />
                                   <span className="text-sm text-[#3D4A44] truncate">{s.rights_holder_name}</span>
+                                  {s.role && <span className="text-[11px] text-[#7A8580] bg-[#EEF1EC] px-1.5 py-0.5 rounded flex-shrink-0">{s.role}</span>}
                                 </div>
                                 <div className="flex items-center space-x-2 flex-shrink-0">
                                   <span className="text-sm font-medium text-[#3D4A44]">{s.share_percentage}%</span>

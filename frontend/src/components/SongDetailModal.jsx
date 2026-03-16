@@ -33,7 +33,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const fileInputRef = useRef(null)
   const [songSplits, setSongSplits] = useState([])
   const [showSplitForm, setShowSplitForm] = useState(false)
-  const [splitForm, setSplitForm] = useState({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '', contact_id: '', ipi: '', pro: '' })
+  const [splitForm, setSplitForm] = useState({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '' })
   const [splitSaving, setSplitSaving] = useState(false)
   const [splitCreators, setSplitCreators] = useState([])
   const [showAddClient, setShowAddClient] = useState(false)
@@ -166,7 +166,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       const payload = {
         rights_type: splitForm.rights_type,
         share_percentage: parseFloat(splitForm.share_percentage),
-        notes: splitForm.notes || ''
+        role: splitForm.role || ''
       }
       if (splitForm.rights_holder_id) {
         payload.rights_holder_id = parseInt(splitForm.rights_holder_id)
@@ -177,7 +177,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
         if (splitForm.pro) payload.pro = splitForm.pro
       }
       await axios.post(`/api/rights/song-splits/${song.id}`, payload)
-      setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '', contact_id: '', ipi: '', pro: '' })
+      setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '' })
       setSplitSearchQuery('')
       setShowSplitForm(false)
       loadSongSplits()
@@ -1690,19 +1690,29 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Notes</label>
-                        <input
-                          type="text"
-                          placeholder="Optional notes"
-                          value={splitForm.notes}
-                          onChange={(e) => setSplitForm(prev => ({ ...prev, notes: e.target.value }))}
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">Role</label>
+                        <select
+                          value={splitForm.role}
+                          onChange={(e) => setSplitForm(prev => ({ ...prev, role: e.target.value }))}
                           className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                        />
+                        >
+                          <option value="">Select Role</option>
+                          <option value="Writer">Writer</option>
+                          <option value="Producer">Producer</option>
+                          <option value="Artist">Artist</option>
+                          <option value="Engineer">Engineer</option>
+                          <option value="Composer">Composer</option>
+                          <option value="Lyricist">Lyricist</option>
+                          <option value="Arranger">Arranger</option>
+                          <option value="Publisher">Publisher</option>
+                          <option value="Administrator">Administrator</option>
+                          <option value="Other">Other</option>
+                        </select>
                       </div>
                     </div>
                     <div className="flex justify-end space-x-2">
                       <button
-                        onClick={() => { setShowSplitForm(false); setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '', contact_id: '', ipi: '', pro: '' }); setSplitSearchQuery('') }}
+                        onClick={() => { setShowSplitForm(false); setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '' }); setSplitSearchQuery('') }}
                         className="px-4 py-2 text-sm text-[#7A8580] border border-[rgba(59,77,67,0.12)] rounded-lg hover:bg-[#EEF1EC] transition-colors"
                       >
                         Cancel
@@ -1724,7 +1734,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       <span>Rights Holder</span>
                       <span>Rights Type</span>
                       <span>Share</span>
-                      <span>Notes</span>
+                      <span>Role</span>
                       <span></span>
                     </div>
                     {songSplits.map((split) => (
@@ -1745,7 +1755,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                           </div>
                           <span className="text-[14px] font-semibold text-[#3D4A44]">{split.share_percentage}%</span>
                         </div>
-                        <span className="text-[13px] text-[#7A8580] truncate">{split.notes || '-'}</span>
+                        <span className="text-[13px] text-[#7A8580] truncate">{split.role || '-'}</span>
                         <div className="flex justify-end">
                           <button onClick={() => handleDeleteSongSplit(split.id)} className="p-1 text-[#7A8580] hover:text-[#C47068] rounded transition-colors" title="Remove split">
                             <TrashIcon className="w-4 h-4" />
@@ -1797,7 +1807,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                             <span>Rights Holder</span>
                             <span>Rights Type</span>
                             <span>Share</span>
-                            <span>Notes</span>
+                            <span>Role</span>
                           </div>
                           {contractInfo.splits.map((split, sidx) => (
                             <div key={sidx} className="grid grid-cols-4 gap-4 px-3 py-3 bg-[#F5F7F4] rounded-[12px] items-center">
@@ -1817,7 +1827,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 </div>
                                 <span className="text-[14px] font-semibold text-[#3D4A44]">{split.share_percentage}%</span>
                               </div>
-                              <span className="text-[13px] text-[#7A8580] truncate">{split.notes || '-'}</span>
+                              <span className="text-[13px] text-[#7A8580] truncate">{split.role || '-'}</span>
                             </div>
                           ))}
                         </div>
