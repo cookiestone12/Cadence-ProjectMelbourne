@@ -13,7 +13,9 @@ FIELD_TO_CHECKLIST_MAP = {
     "is_paid": "PY-01",
 }
 
-NA_CAPABLE_FIELDS = {"is_paid", "is_invoiced", "is_registered_with_dsp"}
+NA_CAPABLE_FIELDS = {"is_paid", "is_invoiced", "is_registered_with_dsp",
+                     "has_contract_sent", "has_contract_executed",
+                     "is_registered_with_pro"}
 
 DSP_PLATFORM_TO_CHECKLIST_MAP = {
     "spotify": "DSP-03",
@@ -70,27 +72,24 @@ def sync_song_to_checklist(db: Session, song: Song):
         checklist_item = checklist_items[code]
         value = getattr(song, field, None)
         
-        if field in NA_CAPABLE_FIELDS:
-            str_val = str(value).strip() if value else ""
-            upper_val = str_val.upper()
-            if upper_val in ("N/A", "NA", "NOT_APPLICABLE"):
-                set_checklist_status(db, song.id, checklist_item.id, "NOT_APPLICABLE")
-            elif upper_val in ("YES", "TRUE", "1"):
-                set_checklist_status(db, song.id, checklist_item.id, "COMPLETED")
-            elif str_val and upper_val not in ("NO", "FALSE", "0", ""):
-                try:
-                    float(str_val)
-                    set_checklist_status(db, song.id, checklist_item.id, "COMPLETED")
-                except ValueError:
-                    set_checklist_status(db, song.id, checklist_item.id, "NOT_STARTED")
-            else:
-                set_checklist_status(db, song.id, checklist_item.id, "NOT_STARTED")
+        str_val = str(value).strip() if value else ""
+        upper_val = str_val.upper()
+
+        if upper_val in ("N/A", "NA", "NOT_APPLICABLE"):
+            set_checklist_status(db, song.id, checklist_item.id, "NOT_APPLICABLE")
         elif field in ("isrc", "iswc"):
-            completed = bool(value and str(value).strip())
+            completed = bool(value and str_val)
             set_checklist_status(db, song.id, checklist_item.id, "COMPLETED" if completed else "NOT_STARTED")
+        elif upper_val in ("YES", "TRUE", "1"):
+            set_checklist_status(db, song.id, checklist_item.id, "COMPLETED")
+        elif str_val and upper_val not in ("NO", "FALSE", "0", ""):
+            try:
+                float(str_val)
+                set_checklist_status(db, song.id, checklist_item.id, "COMPLETED")
+            except ValueError:
+                set_checklist_status(db, song.id, checklist_item.id, "NOT_STARTED")
         else:
-            completed = bool(value)
-            set_checklist_status(db, song.id, checklist_item.id, "COMPLETED" if completed else "NOT_STARTED")
+            set_checklist_status(db, song.id, checklist_item.id, "NOT_STARTED")
     
     dsp_links = db.query(SongDSPLink).filter(SongDSPLink.song_id == song.id).all()
     platforms_linked = {link.platform.lower() for link in dsp_links}
