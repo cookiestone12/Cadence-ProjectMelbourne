@@ -638,6 +638,9 @@ def create_song(
         )
         db.add(status)
     
+    from ..utils.health_sync import sync_song_to_checklist
+    sync_song_to_checklist(db, song)
+
     from ..services.audit_service import log_action
     log_action(db, org_id, current_user.id, "CREATE", "SONG", song.id, song.title)
     db.commit()
