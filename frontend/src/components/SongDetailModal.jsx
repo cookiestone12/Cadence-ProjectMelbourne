@@ -63,6 +63,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [spotifyError, setSpotifyError] = useState(null)
   
   useEffect(() => {
+    setActiveTab('overview')
     loadSongDetails()
     loadContracts()
     loadLinkedContracts()
