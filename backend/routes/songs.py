@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, validator
+from typing import Any, List, Optional
 from datetime import date
 from ..models import (
     get_db, Song, SongCredit, SongDSPLink, SongChecklistStatus,
@@ -182,26 +182,61 @@ class SongUpdateRequest(BaseModel):
     iswc: Optional[str] = None
     project_title: Optional[str] = None
     release_date: Optional[date] = None
-    has_contract_sent: Optional[str] = None
-    has_contract_executed: Optional[str] = None
-    is_registered_with_pro: Optional[str] = None
-    is_registered_with_dsp: Optional[str] = None
-    is_invoiced: Optional[str] = None
-    is_paid: Optional[str] = None
+    has_contract_sent: Optional[Any] = None
+    has_contract_executed: Optional[Any] = None
+    is_registered_with_pro: Optional[Any] = None
+    is_registered_with_dsp: Optional[Any] = None
+    is_invoiced: Optional[Any] = None
+    is_paid: Optional[Any] = None
     is_released: Optional[bool] = None
     spotify_link: Optional[str] = None
     label: Optional[str] = None
     publishing_percentage: Optional[float] = None
     master_percentage: Optional[float] = None
-    advance_amount: Optional[int] = None
-    soundexchange_registered: Optional[str] = None
-    mlc_registered: Optional[str] = None
+    advance_amount: Optional[Any] = None
+    soundexchange_registered: Optional[Any] = None
+    mlc_registered: Optional[Any] = None
     payment_status: Optional[str] = None
     contract_location: Optional[str] = None
     notes: Optional[str] = None
     media_url: Optional[str] = None
     audio_file_url: Optional[str] = None
     lyrics: Optional[str] = None
+
+    @validator('release_date', pre=True)
+    def parse_release_date(cls, v):
+        if v == '' or v is None:
+            return None
+        return v
+
+    @validator('advance_amount', pre=True)
+    def parse_advance_amount(cls, v):
+        if v is None or v == '' or v == 'N/A':
+            return None
+        try:
+            return int(float(str(v)))
+        except (ValueError, TypeError):
+            return None
+
+    @validator('is_registered_with_dsp', 'is_invoiced', 'is_paid', 'soundexchange_registered', 'mlc_registered', pre=True)
+    def coerce_to_str(cls, v):
+        if v is None:
+            return None
+        return str(v)
+
+    @validator('has_contract_sent', 'has_contract_executed', 'is_registered_with_pro', pre=True)
+    def coerce_bool_fields(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            low = v.lower()
+            if low in ('yes', 'true', '1'):
+                return True
+            if low in ('no', 'false', '0'):
+                return False
+        return v
 
 @router.get("/org/{org_id}", response_model=List[SongResponse])
 def get_organization_songs(
