@@ -211,6 +211,14 @@ export default function ReleasesPage() {
 
   async function handleCreateRelease(e) {
     e.preventDefault()
+    if (!createForm.title.trim()) {
+      const titleInput = e.target.querySelector('input[required]')
+      if (titleInput) {
+        titleInput.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        titleInput.focus()
+      }
+      return
+    }
     try {
       const payload = { ...createForm }
       if (payload.copyright_year) payload.copyright_year = parseInt(payload.copyright_year)
