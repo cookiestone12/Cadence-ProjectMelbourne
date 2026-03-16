@@ -8,7 +8,8 @@ import {
   ShieldCheckIcon, ClipboardDocumentCheckIcon, PhotoIcon,
   InformationCircleIcon, CheckIcon, LinkIcon, DocumentTextIcon,
   SpeakerWaveIcon, FolderIcon, FolderOpenIcon, ArrowRightIcon,
-  SignalIcon, BoltIcon, EnvelopeIcon, PaperAirplaneIcon
+  SignalIcon, BoltIcon, EnvelopeIcon, PaperAirplaneIcon,
+  ScaleIcon, UserGroupIcon
 } from '@heroicons/react/24/outline'
 import EmailSendModal from '../components/EmailSendModal'
 import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
@@ -91,6 +92,12 @@ export default function ReleasesPage() {
   const [showDistributionModal, setShowDistributionModal] = useState(false)
   const [distributionSending, setDistributionSending] = useState(false)
   const [distributionResult, setDistributionResult] = useState(null)
+  const [releaseSplits, setReleaseSplits] = useState([])
+  const [splitForm, setSplitForm] = useState({ rights_holder_name: '', rights_type: 'MASTER', share_percentage: '', contact_id: '', ipi: '', pro: '' })
+  const [showSplitForm, setShowSplitForm] = useState(false)
+  const [splitSearchQuery, setSplitSearchQuery] = useState('')
+  const [directoryContacts, setDirectoryContacts] = useState([])
+  const [splitSaving, setSplitSaving] = useState(false)
   const [createForm, setCreateForm] = useState({
     title: '',
     release_type: 'SINGLE',
@@ -172,6 +179,7 @@ export default function ReleasesPage() {
       setDetailData(response.data)
       loadReadiness(releaseId)
       loadReleaseAudio(releaseId)
+      loadReleaseSplits(releaseId)
       checkDropboxConnected()
       if (response.data.cover_art_url) {
         fetchArtworkBlob(releaseId).then(url => {
@@ -206,6 +214,59 @@ export default function ReleasesPage() {
       console.error('Failed to load release detail:', error)
     } finally {
       setDetailLoading(false)
+    }
+  }
+
+  async function loadReleaseSplits(releaseId) {
+    try {
+      const response = await axios.get(`/api/rights/release-splits/${releaseId}`)
+      setReleaseSplits(response.data.splits || [])
+    } catch (e) {
+      console.error('Failed to load release splits:', e)
+    }
+  }
+
+  async function loadDirectoryContacts() {
+    if (!organizationId || directoryContacts.length > 0) return
+    try {
+      const response = await axios.get(`/api/creative-directory/org/${organizationId}`)
+      setDirectoryContacts(response.data.contacts || [])
+    } catch (e) {
+      console.error('Failed to load directory contacts:', e)
+    }
+  }
+
+  async function handleAddReleaseSplit() {
+    if (!splitForm.rights_holder_name && !splitForm.contact_id) return
+    if (!splitForm.share_percentage) return
+    setSplitSaving(true)
+    try {
+      const payload = {
+        rights_holder_name: splitForm.rights_holder_name,
+        rights_type: splitForm.rights_type,
+        share_percentage: parseFloat(splitForm.share_percentage),
+      }
+      if (splitForm.contact_id) payload.contact_id = parseInt(splitForm.contact_id)
+      if (splitForm.ipi) payload.ipi = splitForm.ipi
+      if (splitForm.pro) payload.pro = splitForm.pro
+      await axios.post(`/api/rights/release-splits/${selectedRelease}`, payload)
+      loadReleaseSplits(selectedRelease)
+      setSplitForm({ rights_holder_name: '', rights_type: 'MASTER', share_percentage: '', contact_id: '', ipi: '', pro: '' })
+      setSplitSearchQuery('')
+      setShowSplitForm(false)
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to add split')
+    } finally {
+      setSplitSaving(false)
+    }
+  }
+
+  async function handleDeleteReleaseSplit(splitId) {
+    try {
+      await axios.delete(`/api/rights/song-splits/${splitId}`)
+      loadReleaseSplits(selectedRelease)
+    } catch (err) {
+      console.error('Failed to delete split:', err)
     }
   }
 
@@ -1462,6 +1523,189 @@ export default function ReleasesPage() {
                   <span className="text-sm">Export PDF</span>
                 </button>
               </div>
+            </div>
+
+            <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-2">
+                  <ScaleIcon className="w-5 h-5 text-[#5B8A72]" />
+                  <h2 className="text-lg font-semibold text-[#3D4A44]">Contacts & Splits</h2>
+                </div>
+                <button
+                  onClick={() => { setShowSplitForm(!showSplitForm); loadDirectoryContacts() }}
+                  className="flex items-center space-x-1 px-3 py-1.5 bg-[#5B8A72] text-white text-xs rounded-lg hover:bg-[#4A7A62] transition-colors"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                  <span>Add Split</span>
+                </button>
+              </div>
+
+              <p className="text-xs text-[#7A8580] mb-3">Internal rights tracking — not included in distribution exports.</p>
+
+              {showSplitForm && (
+                <div className="border border-[rgba(59,77,67,0.12)] rounded-lg p-4 mb-4 bg-white space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-[#3D4A44] mb-1">Contact / Rights Holder</label>
+                    <input
+                      type="text"
+                      placeholder="Search contacts..."
+                      value={splitSearchQuery}
+                      onChange={(e) => {
+                        setSplitSearchQuery(e.target.value)
+                        setSplitForm(prev => ({ ...prev, rights_holder_name: e.target.value, contact_id: '', ipi: '', pro: '' }))
+                      }}
+                      className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                    />
+                    {splitSearchQuery.trim().length > 0 && !splitForm.contact_id && (
+                      <div className="mt-1 border border-[rgba(59,77,67,0.12)] rounded-lg bg-white max-h-32 overflow-y-auto shadow-sm">
+                        {directoryContacts
+                          .filter(c => c.display_name?.toLowerCase().includes(splitSearchQuery.toLowerCase()))
+                          .slice(0, 8)
+                          .map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-[#EEF1EC] transition-colors text-[#3D4A44] flex justify-between items-center"
+                              onClick={() => {
+                                setSplitForm(prev => ({
+                                  ...prev,
+                                  rights_holder_name: c.display_name,
+                                  contact_id: String(c.id),
+                                  ipi: c.ipi || '',
+                                  pro: c.pro || '',
+                                }))
+                                setSplitSearchQuery(c.display_name)
+                              }}
+                            >
+                              <span>{c.display_name}</span>
+                              {c.ipi && <span className="text-xs text-[#7A8580]">IPI: {c.ipi}</span>}
+                            </button>
+                          ))}
+                        {directoryContacts.filter(c => c.display_name?.toLowerCase().includes(splitSearchQuery.toLowerCase())).length === 0 && (
+                          <button
+                            type="button"
+                            className="w-full text-left px-3 py-2 text-sm text-[#5B8A72] hover:bg-[#EEF1EC] transition-colors"
+                            onClick={() => {
+                              setSplitForm(prev => ({
+                                ...prev,
+                                rights_holder_name: splitSearchQuery,
+                                contact_id: '',
+                              }))
+                            }}
+                          >
+                            Use "{splitSearchQuery}" as new contact
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Rights Type</label>
+                      <select
+                        value={splitForm.rights_type}
+                        onChange={(e) => setSplitForm(prev => ({ ...prev, rights_type: e.target.value }))}
+                        className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                      >
+                        <option value="MASTER">Master</option>
+                        <option value="PUBLISHING">Publishing</option>
+                        <option value="PERFORMANCE">Performance</option>
+                        <option value="MECHANICAL">Mechanical</option>
+                        <option value="DISTRIBUTION">Distribution</option>
+                        <option value="SYNC">Sync</option>
+                        <option value="OTHER">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#3D4A44] mb-1">Share %</label>
+                      <input
+                        type="number"
+                        min="0.01"
+                        max="100"
+                        step="0.01"
+                        value={splitForm.share_percentage}
+                        onChange={(e) => setSplitForm(prev => ({ ...prev, share_percentage: e.target.value }))}
+                        placeholder="e.g. 50"
+                        className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSplitForm(false)
+                        setSplitForm({ rights_holder_name: '', rights_type: 'MASTER', share_percentage: '', contact_id: '', ipi: '', pro: '' })
+                        setSplitSearchQuery('')
+                      }}
+                      className="px-3 py-1.5 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddReleaseSplit}
+                      disabled={splitSaving || (!splitForm.rights_holder_name && !splitForm.contact_id) || !splitForm.share_percentage}
+                      className="px-4 py-1.5 bg-[#5B8A72] text-white text-sm rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                    >
+                      {splitSaving ? 'Saving...' : 'Add'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {releaseSplits.length === 0 ? (
+                <div className="text-center py-4 text-[#7A8580] text-sm">No splits added yet</div>
+              ) : (
+                <div className="space-y-2">
+                  {(() => {
+                    const grouped = {}
+                    releaseSplits.forEach(s => {
+                      const key = s.rights_type || 'OTHER'
+                      if (!grouped[key]) grouped[key] = []
+                      grouped[key].push(s)
+                    })
+                    return Object.entries(grouped).map(([type, splits]) => {
+                      const total = splits.reduce((acc, s) => acc + (s.share_percentage || 0), 0)
+                      return (
+                        <div key={type} className="border border-[rgba(59,77,67,0.08)] rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-[#3D4A44] uppercase tracking-wider">{type}</span>
+                            <span className={`text-xs font-medium ${total > 100 ? 'text-red-500' : total === 100 ? 'text-[#5B8A72]' : 'text-[#7A8580]'}`}>
+                              {total}%
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-[#EEF1EC] rounded-full mb-2 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${total > 100 ? 'bg-red-400' : 'bg-[#5B8A72]'}`}
+                              style={{ width: `${Math.min(total, 100)}%` }}
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            {splits.map(s => (
+                              <div key={s.id} className="flex items-center justify-between group">
+                                <div className="flex items-center space-x-2 min-w-0">
+                                  <UserGroupIcon className="w-3.5 h-3.5 text-[#7A8580] flex-shrink-0" />
+                                  <span className="text-sm text-[#3D4A44] truncate">{s.rights_holder_name}</span>
+                                </div>
+                                <div className="flex items-center space-x-2 flex-shrink-0">
+                                  <span className="text-sm font-medium text-[#3D4A44]">{s.share_percentage}%</span>
+                                  <button
+                                    onClick={() => handleDeleteReleaseSplit(s.id)}
+                                    className="text-[#7A8580] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                  >
+                                    <XMarkIcon className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })
+                  })()}
+                </div>
+              )}
             </div>
           </div>
         </div>

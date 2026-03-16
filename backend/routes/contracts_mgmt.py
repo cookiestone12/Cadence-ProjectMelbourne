@@ -520,6 +520,217 @@ def delete_song_split(
     return {"message": "Split deleted successfully"}
 
 
+@router.get("/release-splits/{release_id}")
+def get_release_splits(
+    release_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    release = db.query(Release).filter(Release.id == release_id).first()
+    if not release:
+        raise HTTPException(status_code=404, detail="Release not found")
+    verify_org_access(current_user, release.organization_id, db)
+
+    asset_links = db.query(ContractAsset).join(
+        Contract, Contract.id == ContractAsset.contract_id
+    ).filter(
+        ContractAsset.asset_type == "RELEASE",
+        ContractAsset.asset_id == release_id,
+        Contract.organization_id == release.organization_id,
+    ).all()
+
+    splits = []
+    seen_ids = set()
+    for ca in asset_links:
+        ca_splits = db.query(RightsSplit).filter(RightsSplit.contract_asset_id == ca.id).all()
+        contract = db.query(Contract).filter(Contract.id == ca.contract_id).first()
+        for s in ca_splits:
+            if s.id in seen_ids:
+                continue
+            seen_ids.add(s.id)
+            if s.rights_holder_id:
+                holder = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
+                h_name = holder.display_name if holder else (s.rights_holder_name or "Unknown")
+            else:
+                h_name = s.rights_holder_name or "Unknown"
+            splits.append({
+                "id": s.id,
+                "contract_asset_id": s.contract_asset_id,
+                "rights_holder_id": s.rights_holder_id,
+                "rights_holder_name": h_name,
+                "rights_type": s.rights_type,
+                "share_percentage": s.share_percentage,
+                "notes": s.notes,
+                "contract_title": contract.title if contract else None,
+                "contract_id": contract.id if contract else None,
+            })
+
+    standalone_contract = db.query(Contract).filter(
+        Contract.organization_id == release.organization_id,
+        Contract.title == f"Release Splits: {release.title}",
+        Contract.contract_type == "SPLIT_SHEET",
+    ).first()
+
+    if standalone_contract:
+        standalone_ca = db.query(ContractAsset).filter(
+            ContractAsset.contract_id == standalone_contract.id,
+            ContractAsset.asset_type == "RELEASE",
+            ContractAsset.asset_id == release_id,
+        ).first()
+        if standalone_ca:
+            standalone_splits = db.query(RightsSplit).filter(
+                RightsSplit.contract_asset_id == standalone_ca.id
+            ).all()
+            for s in standalone_splits:
+                if s.id in seen_ids:
+                    continue
+                seen_ids.add(s.id)
+                if s.rights_holder_id:
+                    holder = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
+                    h_name = holder.display_name if holder else (s.rights_holder_name or "Unknown")
+                else:
+                    h_name = s.rights_holder_name or "Unknown"
+                splits.append({
+                    "id": s.id,
+                    "contract_asset_id": s.contract_asset_id,
+                    "rights_holder_id": s.rights_holder_id,
+                    "rights_holder_name": h_name,
+                    "rights_type": s.rights_type,
+                    "share_percentage": s.share_percentage,
+                    "notes": s.notes,
+                    "contract_title": standalone_contract.title,
+                    "contract_id": standalone_contract.id,
+                    "is_standalone": True,
+                })
+
+    return {"splits": splits}
+
+
+@router.post("/release-splits/{release_id}")
+def add_release_split(
+    release_id: int,
+    data: SplitCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    release = db.query(Release).filter(Release.id == release_id).first()
+    if not release:
+        raise HTTPException(status_code=404, detail="Release not found")
+    verify_org_access(current_user, release.organization_id, db)
+
+    if not data.rights_holder_id and not data.rights_holder_name:
+        raise HTTPException(status_code=400, detail="Either rights_holder_id or rights_holder_name is required")
+
+    allowed_rights_types = {"MASTER", "PUBLISHING", "PERFORMANCE", "MECHANICAL", "DISTRIBUTION", "SYNC", "OTHER"}
+    if data.rights_type not in allowed_rights_types:
+        raise HTTPException(status_code=400, detail=f"Invalid rights type. Must be one of: {', '.join(sorted(allowed_rights_types))}")
+
+    if data.share_percentage <= 0 or data.share_percentage > 100:
+        raise HTTPException(status_code=400, detail="Share percentage must be between 0.01 and 100")
+
+    contract = db.query(Contract).filter(
+        Contract.organization_id == release.organization_id,
+        Contract.title == f"Release Splits: {release.title}",
+        Contract.contract_type == "SPLIT_SHEET",
+    ).first()
+
+    if not contract:
+        contract = Contract(
+            organization_id=release.organization_id,
+            title=f"Release Splits: {release.title}",
+            contract_type="SPLIT_SHEET",
+            status="ACTIVE",
+            created_by_user_id=current_user.id,
+        )
+        db.add(contract)
+        db.flush()
+
+    ca = db.query(ContractAsset).filter(
+        ContractAsset.contract_id == contract.id,
+        ContractAsset.asset_type == "RELEASE",
+        ContractAsset.asset_id == release_id,
+    ).first()
+
+    if not ca:
+        ca = ContractAsset(
+            contract_id=contract.id,
+            asset_type="RELEASE",
+            asset_id=release_id,
+        )
+        db.add(ca)
+        db.flush()
+
+    existing_total = db.query(func.coalesce(func.sum(RightsSplit.share_percentage), 0)).filter(
+        RightsSplit.contract_asset_id == ca.id,
+        RightsSplit.rights_type == data.rights_type,
+    ).scalar()
+
+    if existing_total + data.share_percentage > 100:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Total {data.rights_type} splits would exceed 100% (existing: {existing_total}%, new: {data.share_percentage}%)"
+        )
+
+    holder_name = data.rights_holder_name
+    holder_ipi = data.ipi
+    if data.rights_holder_id:
+        holder = db.query(Creator).filter(
+            Creator.id == data.rights_holder_id,
+            Creator.organization_id == release.organization_id,
+        ).first()
+        if not holder:
+            raise HTTPException(status_code=404, detail="Rights holder not found in this organization")
+        holder_name = holder_name or holder.display_name
+        if not holder_ipi:
+            holder_ipi = holder.primary_ipi
+    elif data.contact_id:
+        contact = db.query(CreativeContact).filter(
+            CreativeContact.id == data.contact_id,
+            CreativeContact.organization_id == release.organization_id,
+        ).first()
+        if contact:
+            holder_name = holder_name or contact.display_name
+            if not holder_ipi:
+                holder_ipi = contact.ipi
+
+    if not data.rights_holder_id and not data.contact_id and holder_name:
+        existing_contact = db.query(CreativeContact).filter(
+            CreativeContact.organization_id == release.organization_id,
+            func.lower(CreativeContact.display_name) == holder_name.lower(),
+        ).first()
+        if not existing_contact:
+            new_contact = CreativeContact(
+                organization_id=release.organization_id,
+                display_name=holder_name,
+                ipi=holder_ipi,
+                pro=data.pro,
+                roles=["Collaborator"],
+            )
+            db.add(new_contact)
+            db.flush()
+
+    split = RightsSplit(
+        contract_asset_id=ca.id,
+        rights_holder_id=data.rights_holder_id,
+        rights_holder_name=holder_name,
+        rights_type=data.rights_type,
+        share_percentage=data.share_percentage,
+        notes=data.notes,
+    )
+    db.add(split)
+    db.commit()
+    db.refresh(split)
+
+    return {
+        "id": split.id,
+        "rights_holder_name": holder_name,
+        "rights_type": split.rights_type,
+        "share_percentage": split.share_percentage,
+        "ipi": holder_ipi,
+        "message": "Split added successfully",
+    }
+
+
 @router.get("/contracts/org/{org_id}")
 def list_contracts(
     org_id: int,
