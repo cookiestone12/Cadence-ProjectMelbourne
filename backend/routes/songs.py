@@ -709,6 +709,12 @@ def update_song(
     log_action(db, song.organization_id, current_user.id, "UPDATE", "SONG", song.id, song.title,
                details={"changed_fields": changed_fields})
 
+    health_fields = {"isrc", "iswc", "has_contract_sent", "has_contract_executed",
+                     "is_registered_with_pro", "is_registered_with_dsp", "is_invoiced", "is_paid"}
+    if health_fields & set(changed_fields):
+        from ..utils.health_sync import sync_song_to_checklist
+        sync_song_to_checklist(db, song)
+
     db.commit()
     db.refresh(song)
     

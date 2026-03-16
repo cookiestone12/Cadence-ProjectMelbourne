@@ -253,6 +253,10 @@ def create_dsp_link(
         url=request.url
     )
     db.add(dsp_link)
+
+    from ..utils.health_sync import sync_song_to_checklist
+    sync_song_to_checklist(db, song)
+
     db.commit()
     db.refresh(dsp_link)
     
@@ -287,6 +291,11 @@ def delete_dsp_link(
         raise HTTPException(status_code=404, detail="DSP link not found")
     
     db.delete(dsp_link)
+    db.flush()
+
+    from ..utils.health_sync import sync_song_to_checklist
+    sync_song_to_checklist(db, song)
+
     db.commit()
     
     return {"message": "DSP link deleted"}
