@@ -3,8 +3,11 @@ import os
 import requests
 from typing import Dict, Any, List, Optional
 
-SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
-SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
+def _get_spotify_client_id():
+    return os.getenv("SPOTIFY_CLIENT_ID")
+
+def _get_spotify_client_secret():
+    return os.getenv("SPOTIFY_CLIENT_SECRET")
 
 
 def _get_replit_connector_header() -> Optional[str]:
@@ -100,13 +103,15 @@ def _refresh_spotify_token(refresh_token: str, client_id: str) -> Optional[str]:
 
 
 def _get_client_credentials_token() -> Optional[str]:
-    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
+    client_id = _get_spotify_client_id()
+    client_secret = _get_spotify_client_secret()
+    if not client_id or not client_secret:
         return None
     try:
         resp = requests.post(
             "https://accounts.spotify.com/api/token",
             data={"grant_type": "client_credentials"},
-            auth=(SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET),
+            auth=(client_id, client_secret),
             timeout=10,
         )
         resp.raise_for_status()
@@ -118,14 +123,14 @@ def _get_client_credentials_token() -> Optional[str]:
 def _get_access_token() -> Optional[str]:
     import logging
     logger = logging.getLogger("cadence")
-    cc_token = _get_client_credentials_token()
-    if cc_token:
-        logger.info("Spotify: Using client credentials token")
-        return cc_token
     connector_token = _get_replit_access_token()
     if connector_token:
         logger.info("Spotify: Using Replit connector token")
         return connector_token
+    cc_token = _get_client_credentials_token()
+    if cc_token:
+        logger.info("Spotify: Using client credentials token")
+        return cc_token
     logger.warning("Spotify: No access token available from any source")
     return None
 
