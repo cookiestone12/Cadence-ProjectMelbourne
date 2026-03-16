@@ -714,8 +714,9 @@ export default function CreatorDetailPage() {
       }
       
       const response = await axios.post(`/api/songs/org/${organizationId}`, payload)
+      const newSongData = response.data
       
-      await axios.post(`/api/songs/${response.data.id}/credits`, {
+      await axios.post(`/api/songs/${newSongData.id}/credits`, {
         creator_id: parseInt(id),
         role: newSong.credit_role || 'ARTIST',
         share_percentage: newSong.publishing_percentage ? parseFloat(newSong.publishing_percentage) : 100
@@ -738,6 +739,8 @@ export default function CreatorDetailPage() {
         notes: '',
         credit_role: 'ARTIST'
       })
+
+      setSelectedSongForDetail(newSongData)
     } catch (error) {
       console.error('Failed to add song:', error)
       alert(error.response?.data?.detail || 'Failed to add song')

@@ -23,14 +23,17 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [uploading, setUploading] = useState(false)
   const [rightsData, setRightsData] = useState([])
   const [rightsLoading, setRightsLoading] = useState(false)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editForm, setEditForm] = useState({})
+  const [editingField, setEditingField] = useState(null)
+  const [editValue, setEditValue] = useState('')
   const [saving, setSaving] = useState(false)
   const [editFeedback, setEditFeedback] = useState(null)
+  const [directoryContacts, setDirectoryContacts] = useState([])
+  const [splitSearchQuery, setSplitSearchQuery] = useState('')
+  const [showSplitSearch, setShowSplitSearch] = useState(false)
   const fileInputRef = useRef(null)
   const [songSplits, setSongSplits] = useState([])
   const [showSplitForm, setShowSplitForm] = useState(false)
-  const [splitForm, setSplitForm] = useState({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '' })
+  const [splitForm, setSplitForm] = useState({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '', contact_id: '', ipi: '', pro: '' })
   const [splitSaving, setSplitSaving] = useState(false)
   const [splitCreators, setSplitCreators] = useState([])
   const [showAddClient, setShowAddClient] = useState(false)
@@ -65,6 +68,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     loadRightsData()
     loadSongSplits()
     loadSplitCreators()
+    loadDirectoryContacts()
   }, [song.id])
 
   useEffect(() => {
@@ -166,9 +170,13 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
         payload.rights_holder_id = parseInt(splitForm.rights_holder_id)
       } else {
         payload.rights_holder_name = splitForm.rights_holder_name
+        if (splitForm.contact_id) payload.contact_id = parseInt(splitForm.contact_id)
+        if (splitForm.ipi) payload.ipi = splitForm.ipi
+        if (splitForm.pro) payload.pro = splitForm.pro
       }
       await axios.post(`/api/rights/song-splits/${song.id}`, payload)
-      setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '' })
+      setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '', contact_id: '', ipi: '', pro: '' })
+      setSplitSearchQuery('')
       setShowSplitForm(false)
       loadSongSplits()
       loadRightsData()
@@ -290,116 +298,93 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     }
   }
 
-  function startEditing() {
-    setEditForm({
-      title: songDetails.title || '',
-      primary_artist: songDetails.primary_artist || '',
-      isrc: songDetails.isrc || '',
-      iswc: songDetails.iswc || '',
-      project_title: songDetails.project_title || '',
-      label: songDetails.label || '',
-      release_date: songDetails.release_date || '',
-      recording_code: songDetails.recording_code || '',
-      notes: songDetails.notes || '',
-      media_url: songDetails.media_url || '',
-      publishing_percentage: songDetails.publishing_percentage ?? '',
-      master_percentage: songDetails.master_percentage ?? '',
-      advance_amount: songDetails.advance_amount ?? '',
-      contract_location: songDetails.contract_location || '',
-      payment_status: songDetails.payment_status || 'PENDING',
-      is_paid: (() => { const s = String(songDetails.is_paid ?? '').toLowerCase(); if (s === 'true') return 'Yes'; if (s === 'false') return 'No'; return songDetails.is_paid || 'N/A' })(),
-      is_invoiced: (() => { if (songDetails.is_invoiced == null) return 'N/A'; const s = String(songDetails.is_invoiced).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || s === 'false' || s === 'no' || s === '') return ''; return String(songDetails.is_invoiced) })(),
-      is_registered_with_dsp: (() => { if (songDetails.is_registered_with_dsp == null) return 'N/A'; const s = String(songDetails.is_registered_with_dsp).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || s === 'false' || s === 'no' || s === '') return ''; return String(songDetails.is_registered_with_dsp) })(),
-      has_contract_sent: (() => { const v = songDetails.has_contract_sent; if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || v === true) return 'Yes'; if (s === 'false' || s === 'no' || v === false) return 'No'; return 'N/A' })(),
-      has_contract_executed: (() => { const v = songDetails.has_contract_executed; if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || v === true) return 'Yes'; if (s === 'false' || s === 'no' || v === false) return 'No'; return 'N/A' })(),
-      is_registered_with_pro: (() => { const v = songDetails.is_registered_with_pro; if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || v === true) return 'Yes'; if (s === 'false' || s === 'no' || v === false) return 'No'; return 'N/A' })(),
-      soundexchange_registered: (() => { const v = songDetails.soundexchange_registered; if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || v === true) return 'Yes'; if (s === 'false' || s === 'no' || v === false) return 'No'; return 'N/A' })(),
-      mlc_registered: (() => { const v = songDetails.mlc_registered; if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || v === true) return 'Yes'; if (s === 'false' || s === 'no' || v === false) return 'No'; return 'N/A' })(),
-    })
-    setIsEditing(true)
-    setEditFeedback(null)
+  function startInlineEdit(field, currentValue) {
+    setEditingField(field)
+    setEditValue(currentValue ?? '')
   }
 
-  function cancelEditing() {
-    setIsEditing(false)
-    setEditForm({})
-    setEditFeedback(null)
-  }
+  async function saveInlineEdit(field, value) {
+    if (saving) return
+    if (editingField !== field) return
 
-  async function saveEdits() {
+    if (field === 'title' && !value?.trim()) {
+      setEditFeedback({ type: 'error', message: 'Title cannot be empty' })
+      setTimeout(() => setEditFeedback(null), 2000)
+      return
+    }
+
+    setEditingField(null)
+    const payload = {}
+
+    const numericFields = ['publishing_percentage', 'master_percentage']
+    const intFields = ['advance_amount']
+
+    if (numericFields.includes(field)) {
+      const parsed = value === '' ? null : parseFloat(value)
+      if (parsed !== null && !Number.isFinite(parsed)) return
+      if (parsed === (songDetails[field] ?? null)) return
+      payload[field] = parsed
+    } else if (intFields.includes(field)) {
+      const parsed = value === '' ? null : parseInt(value, 10)
+      if (parsed !== null && !Number.isFinite(parsed)) return
+      if (parsed === (songDetails[field] ?? null)) return
+      payload[field] = parsed
+    } else {
+      const current = songDetails[field] || ''
+      if (value === current) return
+      payload[field] = value || null
+    }
+
     setSaving(true)
-    setEditFeedback(null)
     try {
       const token = localStorage.getItem('token')
-      const payload = {}
-      if (editForm.title !== (songDetails.title || '')) payload.title = editForm.title
-      if (editForm.primary_artist !== (songDetails.primary_artist || '')) payload.primary_artist = editForm.primary_artist
-      if (editForm.isrc !== (songDetails.isrc || '')) payload.isrc = editForm.isrc || null
-      if (editForm.iswc !== (songDetails.iswc || '')) payload.iswc = editForm.iswc || null
-      if (editForm.project_title !== (songDetails.project_title || '')) payload.project_title = editForm.project_title || null
-      if (editForm.label !== (songDetails.label || '')) payload.label = editForm.label || null
-      if (editForm.release_date !== (songDetails.release_date || '')) payload.release_date = editForm.release_date || null
-      if (editForm.recording_code !== (songDetails.recording_code || '')) payload.recording_code = editForm.recording_code || null
-      if (editForm.notes !== (songDetails.notes || '')) payload.notes = editForm.notes || null
-      if (editForm.media_url !== (songDetails.media_url || '')) payload.media_url = editForm.media_url || null
-      if (editForm.contract_location !== (songDetails.contract_location || '')) payload.contract_location = editForm.contract_location || null
-      if (editForm.payment_status !== (songDetails.payment_status || 'PENDING')) payload.payment_status = editForm.payment_status
-
-      const pubPct = editForm.publishing_percentage === '' ? null : parseFloat(editForm.publishing_percentage)
-      if (pubPct !== (songDetails.publishing_percentage ?? null)) payload.publishing_percentage = pubPct
-
-      const masterPct = editForm.master_percentage === '' ? null : parseFloat(editForm.master_percentage)
-      if (masterPct !== (songDetails.master_percentage ?? null)) payload.master_percentage = masterPct
-
-      const advAmt = editForm.advance_amount === '' ? null : parseInt(editForm.advance_amount, 10)
-      if (advAmt !== (songDetails.advance_amount ?? null)) payload.advance_amount = advAmt
-
-      if (editForm.is_paid !== (songDetails.is_paid || 'N/A')) payload.is_paid = editForm.is_paid
-      if (editForm.is_invoiced !== (songDetails.is_invoiced || 'N/A')) payload.is_invoiced = editForm.is_invoiced
-      if (editForm.is_registered_with_dsp !== (songDetails.is_registered_with_dsp || 'N/A')) payload.is_registered_with_dsp = editForm.is_registered_with_dsp
-
-      const statusNorm = (v) => { if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na' || s === '') return 'N/A'; if (s === 'true' || s === 'yes') return 'Yes'; if (s === 'false' || s === 'no') return 'No'; return 'N/A' }
-      if (editForm.has_contract_sent !== statusNorm(songDetails.has_contract_sent)) payload.has_contract_sent = editForm.has_contract_sent
-      if (editForm.has_contract_executed !== statusNorm(songDetails.has_contract_executed)) payload.has_contract_executed = editForm.has_contract_executed
-      if (editForm.is_registered_with_pro !== statusNorm(songDetails.is_registered_with_pro)) payload.is_registered_with_pro = editForm.is_registered_with_pro
-      if (editForm.soundexchange_registered !== statusNorm(songDetails.soundexchange_registered)) payload.soundexchange_registered = editForm.soundexchange_registered
-      if (editForm.mlc_registered !== statusNorm(songDetails.mlc_registered)) payload.mlc_registered = editForm.mlc_registered
-
-      if (Object.keys(payload).length === 0) {
-        setIsEditing(false)
-        return
-      }
-
-      if (!payload.title && !songDetails.title) {
-        setEditFeedback({ type: 'error', message: 'Title is required' })
-        setSaving(false)
-        return
-      }
-      if (payload.title === '') {
-        setEditFeedback({ type: 'error', message: 'Title cannot be empty' })
-        setSaving(false)
-        return
-      }
-
       await axios.patch(`/api/songs/${songDetails.id}`, payload, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
-
       await loadSongDetails()
-      setIsEditing(false)
-      setEditFeedback({ type: 'success', message: 'Song updated successfully' })
       if (onSongUpdated) onSongUpdated()
-      setTimeout(() => setEditFeedback(null), 3000)
+      setEditFeedback({ type: 'success', message: 'Saved' })
+      setTimeout(() => setEditFeedback(null), 1500)
     } catch (error) {
-      console.error('Failed to update song:', error)
-      setEditFeedback({ type: 'error', message: error.response?.data?.detail || 'Failed to update song' })
+      console.error('Failed to update:', error)
+      setEditFeedback({ type: 'error', message: error.response?.data?.detail || 'Failed to save' })
+      setTimeout(() => setEditFeedback(null), 3000)
     } finally {
       setSaving(false)
     }
   }
 
-  function handleEditChange(field, value) {
-    setEditForm(prev => ({ ...prev, [field]: value }))
+  async function saveStatusField(field, value) {
+    setSaving(true)
+    try {
+      const token = localStorage.getItem('token')
+      await axios.patch(`/api/songs/${songDetails.id}`, { [field]: value }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      await loadSongDetails()
+      if (onSongUpdated) onSongUpdated()
+    } catch (error) {
+      console.error('Failed to update:', error)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function cycleStatusValue(field) {
+    const statusNorm = (v) => { if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes') return 'Yes'; if (s === 'false' || s === 'no') return 'No'; return 'N/A' }
+    const current = statusNorm(songDetails[field])
+    const next = current === 'N/A' ? 'Yes' : current === 'Yes' ? 'No' : 'N/A'
+    saveStatusField(field, next)
+  }
+
+  async function loadDirectoryContacts() {
+    try {
+      const orgResponse = await axios.get('/api/organizations/current')
+      const res = await axios.get(`/api/creative-directory/org/${orgResponse.data.id}`)
+      setDirectoryContacts(res.data.contacts || [])
+    } catch (e) {
+      console.error('Failed to load directory contacts:', e)
+    }
   }
 
   async function searchSpotify() {
@@ -769,34 +754,23 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
               </div>
             </div>
             <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-              {!isEditing && (
-                <>
-                  <button
-                    onClick={() => setShareTarget({ type: 'SONG', id: song.id, name: `${songDetails?.title || song.title} - ${songDetails?.primary_artist || song.primary_artist}` })}
-                    className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
-                    title="Share this song"
-                  >
-                    <ShareIcon className="w-5 h-5" />
-                    <span className="hidden sm:inline">Share</span>
-                  </button>
-                  <button
-                    onClick={handleDuplicate}
-                    disabled={duplicating}
-                    className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#5A8A9A] hover:bg-[rgba(90,138,154,0.08)] rounded-[12px] font-medium text-[14px] transition-colors disabled:opacity-50"
-                    title="Duplicate this song"
-                  >
-                    <DocumentDuplicateIcon className="w-5 h-5" />
-                    <span className="hidden sm:inline">{duplicating ? 'Duplicating...' : 'Duplicate'}</span>
-                  </button>
-                  <button
-                    onClick={startEditing}
-                    className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
-                  >
-                    <PencilSquareIcon className="w-5 h-5" />
-                    <span className="hidden sm:inline">Edit</span>
-                  </button>
-                </>
-              )}
+              <button
+                onClick={() => setShareTarget({ type: 'SONG', id: song.id, name: `${songDetails?.title || song.title} - ${songDetails?.primary_artist || song.primary_artist}` })}
+                className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
+                title="Share this song"
+              >
+                <ShareIcon className="w-5 h-5" />
+                <span className="hidden sm:inline">Share</span>
+              </button>
+              <button
+                onClick={handleDuplicate}
+                disabled={duplicating}
+                className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#5A8A9A] hover:bg-[rgba(90,138,154,0.08)] rounded-[12px] font-medium text-[14px] transition-colors disabled:opacity-50"
+                title="Duplicate this song"
+              >
+                <DocumentDuplicateIcon className="w-5 h-5" />
+                <span className="hidden sm:inline">{duplicating ? 'Duplicating...' : 'Duplicate'}</span>
+              </button>
               <button
                 onClick={onClose}
                 className="text-[#7A8580] hover:text-[#3D4A44] transition-colors"
@@ -836,51 +810,45 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
         <div className="flex-1 overflow-y-auto p-6 bg-[#F5F7F4]">
           {activeTab === 'overview' && (
             <div className="space-y-6">
-              {isEditing && (
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    onClick={cancelEditing}
-                    disabled={saving}
-                    className="px-4 py-2 text-[#7A8580] hover:text-[#3D4A44] font-medium text-[14px] rounded-[12px] hover:bg-white transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={saveEdits}
-                    disabled={saving}
-                    className="px-5 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-[12px] font-medium text-[14px] hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all disabled:opacity-50"
-                  >
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </div>
-              )}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 space-y-4">
                   <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Basic Information</h3>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Title</label>
-                    {isEditing ? (
+                    {editingField === 'title' ? (
                       <input
                         type="text"
-                        value={editForm.title}
-                        onChange={(e) => handleEditChange('title', e.target.value)}
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('title', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('title', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.title}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('title', songDetails.title)}>
+                        <span>{songDetails.title || 'Untitled'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Primary Artist</label>
-                    {isEditing ? (
+                    {editingField === 'primary_artist' ? (
                       <input
                         type="text"
-                        value={editForm.primary_artist}
-                        onChange={(e) => handleEditChange('primary_artist', e.target.value)}
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('primary_artist', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('primary_artist', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.primary_artist}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('primary_artist', songDetails.primary_artist)}>
+                        <span>{songDetails.primary_artist || 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div className="col-span-full">
@@ -1124,65 +1092,94 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Project/Album</label>
-                    {isEditing ? (
+                    {editingField === 'project_title' ? (
                       <input
                         type="text"
-                        value={editForm.project_title}
-                        onChange={(e) => handleEditChange('project_title', e.target.value)}
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('project_title', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('project_title', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.project_title || 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('project_title', songDetails.project_title)}>
+                        <span>{songDetails.project_title || 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Label</label>
-                    {isEditing ? (
+                    {editingField === 'label' ? (
                       <input
                         type="text"
-                        value={editForm.label}
-                        onChange={(e) => handleEditChange('label', e.target.value)}
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('label', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('label', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.label || 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('label', songDetails.label)}>
+                        <span>{songDetails.label || 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Release Date</label>
-                    {isEditing ? (
+                    {editingField === 'release_date' ? (
                       <input
                         type="date"
-                        value={editForm.release_date}
-                        onChange={(e) => handleEditChange('release_date', e.target.value)}
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('release_date', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('release_date', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.release_date || 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('release_date', songDetails.release_date)}>
+                        <span>{songDetails.release_date || 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Media URL</label>
-                    {isEditing ? (
+                    {editingField === 'media_url' ? (
                       <input
                         type="url"
-                        value={editForm.media_url}
-                        onChange={(e) => handleEditChange('media_url', e.target.value)}
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('media_url', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('media_url', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         placeholder="https://..."
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : songDetails.media_url ? (
-                      <a 
-                        href={songDetails.media_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center space-x-2 text-[#5B8A72] hover:text-[#7BA594] mt-1"
-                      >
-                        <PlayIcon className="w-5 h-5" />
-                        <span>Listen / Download</span>
-                      </a>
+                      <div className="group flex items-center gap-2">
+                        <a 
+                          href={songDetails.media_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center space-x-2 text-[#5B8A72] hover:text-[#7BA594] mt-1"
+                        >
+                          <PlayIcon className="w-5 h-5" />
+                          <span>Listen / Download</span>
+                        </a>
+                        <button onClick={() => startInlineEdit('media_url', songDetails.media_url)} className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580]" />
+                        </button>
+                      </div>
                     ) : (
-                      <p className="text-[#7A8580]">N/A</p>
+                      <p className="group flex items-center gap-1.5 text-[#7A8580] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('media_url', '')}>
+                        <span>N/A</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                 </div>
@@ -1191,43 +1188,61 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Metadata</h3>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">ISRC</label>
-                    {isEditing ? (
+                    {editingField === 'isrc' ? (
                       <input
                         type="text"
-                        value={editForm.isrc}
-                        onChange={(e) => handleEditChange('isrc', e.target.value)}
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('isrc', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('isrc', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         placeholder="e.g. USRC17607839"
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] font-mono focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44] font-mono">{songDetails.isrc || 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] font-mono cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('isrc', songDetails.isrc)}>
+                        <span>{songDetails.isrc || 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">ISWC</label>
-                    {isEditing ? (
+                    {editingField === 'iswc' ? (
                       <input
                         type="text"
-                        value={editForm.iswc}
-                        onChange={(e) => handleEditChange('iswc', e.target.value)}
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('iswc', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('iswc', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         placeholder="e.g. T-345246800-1"
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] font-mono focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44] font-mono">{songDetails.iswc || 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] font-mono cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('iswc', songDetails.iswc)}>
+                        <span>{songDetails.iswc || 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Recording Code</label>
-                    {isEditing ? (
+                    {editingField === 'recording_code' ? (
                       <input
                         type="text"
-                        value={editForm.recording_code}
-                        onChange={(e) => handleEditChange('recording_code', e.target.value)}
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('recording_code', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('recording_code', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] font-mono focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44] font-mono">{songDetails.recording_code || 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] font-mono cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('recording_code', songDetails.recording_code)}>
+                        <span>{songDetails.recording_code || 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
@@ -1246,69 +1261,95 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Publishing %</label>
-                    {isEditing ? (
+                    {editingField === 'publishing_percentage' ? (
                       <input
                         type="number"
+                        autoFocus
                         min="0"
                         max="100"
                         step="0.01"
-                        value={editForm.publishing_percentage}
-                        onChange={(e) => handleEditChange('publishing_percentage', e.target.value)}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('publishing_percentage', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('publishing_percentage', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.publishing_percentage != null ? `${songDetails.publishing_percentage}%` : 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('publishing_percentage', songDetails.publishing_percentage ?? '')}>
+                        <span>{songDetails.publishing_percentage != null ? `${songDetails.publishing_percentage}%` : 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Master %</label>
-                    {isEditing ? (
+                    {editingField === 'master_percentage' ? (
                       <input
                         type="number"
+                        autoFocus
                         min="0"
                         max="100"
                         step="0.01"
-                        value={editForm.master_percentage}
-                        onChange={(e) => handleEditChange('master_percentage', e.target.value)}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('master_percentage', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('master_percentage', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.master_percentage != null ? `${songDetails.master_percentage}%` : 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('master_percentage', songDetails.master_percentage ?? '')}>
+                        <span>{songDetails.master_percentage != null ? `${songDetails.master_percentage}%` : 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Advance Amount ($)</label>
-                    {isEditing ? (
+                    {editingField === 'advance_amount' ? (
                       <input
                         type="number"
+                        autoFocus
                         min="0"
-                        value={editForm.advance_amount}
-                        onChange={(e) => handleEditChange('advance_amount', e.target.value)}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('advance_amount', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('advance_amount', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.advance_amount != null ? `$${songDetails.advance_amount.toLocaleString()}` : 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('advance_amount', songDetails.advance_amount ?? '')}>
+                        <span>{songDetails.advance_amount != null ? `$${songDetails.advance_amount.toLocaleString()}` : 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Contract Location</label>
-                    {isEditing ? (
+                    {editingField === 'contract_location' ? (
                       <input
                         type="text"
-                        value={editForm.contract_location}
-                        onChange={(e) => handleEditChange('contract_location', e.target.value)}
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onBlur={() => saveInlineEdit('contract_location', editValue)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('contract_location', editValue); if (e.key === 'Escape') setEditingField(null) }}
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
                       />
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.contract_location || 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('contract_location', songDetails.contract_location)}>
+                        <span>{songDetails.contract_location || 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Payment Status</label>
-                    {isEditing ? (
+                    {editingField === 'payment_status' ? (
                       <select
-                        value={editForm.payment_status}
-                        onChange={(e) => handleEditChange('payment_status', e.target.value)}
+                        autoFocus
+                        value={editValue}
+                        onChange={(e) => { setEditValue(e.target.value); saveInlineEdit('payment_status', e.target.value) }}
+                        onBlur={() => setEditingField(null)}
                         className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
                       >
                         <option value="PENDING">Pending</option>
@@ -1317,86 +1358,74 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                         <option value="OVERDUE">Overdue</option>
                       </select>
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.payment_status || 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('payment_status', songDetails.payment_status || 'PENDING')}>
+                        <span>{songDetails.payment_status || 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Paid</label>
-                    {isEditing ? (
-                      <select
-                        value={editForm.is_paid}
-                        onChange={(e) => handleEditChange('is_paid', e.target.value)}
-                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
-                      >
-                        <option value="N/A">N/A</option>
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
-                      </select>
-                    ) : (
-                      <p className="text-[#3D4A44]">{songDetails.is_paid || 'N/A'}</p>
-                    )}
+                    <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => cycleStatusValue('is_paid')}>
+                      <span>{(() => { const v = songDetails.is_paid; if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'true' || s === 'yes') return 'Yes'; if (s === 'false' || s === 'no') return 'No'; return v || 'N/A' })()}</span>
+                      <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                    </p>
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Advance</label>
-                    {isEditing ? (
+                    {editingField === 'is_invoiced' ? (
                       <DollarOrNAInput
-                        value={editForm.is_invoiced}
-                        onChange={(val) => handleEditChange('is_invoiced', val)}
+                        value={editValue}
+                        onChange={(val) => { saveInlineEdit('is_invoiced', val) }}
                       />
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.is_invoiced || 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('is_invoiced', songDetails.is_invoiced)}>
+                        <span>{songDetails.is_invoiced || 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Fee</label>
-                    {isEditing ? (
+                    {editingField === 'is_registered_with_dsp' ? (
                       <DollarOrNAInput
-                        value={editForm.is_registered_with_dsp}
-                        onChange={(val) => handleEditChange('is_registered_with_dsp', val)}
+                        value={editValue}
+                        onChange={(val) => { saveInlineEdit('is_registered_with_dsp', val) }}
                       />
                     ) : (
-                      <p className="text-[#3D4A44]">{songDetails.is_registered_with_dsp || 'N/A'}</p>
+                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('is_registered_with_dsp', songDetails.is_registered_with_dsp)}>
+                        <span>{songDetails.is_registered_with_dsp || 'N/A'}</span>
+                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </p>
                     )}
                   </div>
                 </div>
                 
                 <div className="col-span-2 bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
                   <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-2">Notes</h3>
-                  {isEditing ? (
+                  {editingField === 'notes' ? (
                     <textarea
-                      value={editForm.notes}
-                      onChange={(e) => handleEditChange('notes', e.target.value)}
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => saveInlineEdit('notes', editValue)}
                       rows={4}
                       placeholder="Add notes about this song..."
                       className="w-full px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent resize-y"
                     />
                   ) : songDetails.notes ? (
-                    <div className="bg-[rgba(196,149,107,0.08)] border border-[rgba(196,149,107,0.15)] rounded-[12px] p-4">
+                    <div className="group bg-[rgba(196,149,107,0.08)] border border-[rgba(196,149,107,0.15)] rounded-[12px] p-4 cursor-pointer hover:border-[rgba(196,149,107,0.3)] transition-colors" onClick={() => startInlineEdit('notes', songDetails.notes)}>
                       <p className="text-[15px] text-[#3D4A44] whitespace-pre-wrap">{songDetails.notes}</p>
+                      <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity mt-2" />
                     </div>
                   ) : (
-                    <p className="text-[#7A8580] text-[15px]">No notes added</p>
+                    <p className="group flex items-center gap-1.5 text-[#7A8580] text-[15px] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('notes', '')}>
+                      <span>No notes added</span>
+                      <PencilSquareIcon className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                    </p>
                   )}
                 </div>
               </div>
-              {isEditing && (
-                <div className="flex items-center justify-end gap-3">
-                  <button
-                    onClick={cancelEditing}
-                    disabled={saving}
-                    className="px-4 py-2 text-[#7A8580] hover:text-[#3D4A44] font-medium text-[14px] rounded-[12px] hover:bg-white transition-colors disabled:opacity-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={saveEdits}
-                    disabled={saving}
-                    className="px-5 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-[12px] font-medium text-[14px] hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all disabled:opacity-50"
-                  >
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </div>
-              )}
             </div>
           )}
           
@@ -1432,7 +1461,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                         <label className="block text-xs font-medium text-[#7A8580] mb-1">Rights Holder</label>
                         <select
                           value={splitForm.rights_holder_id}
-                          onChange={(e) => setSplitForm(prev => ({ ...prev, rights_holder_id: e.target.value, rights_holder_name: e.target.value ? '' : prev.rights_holder_name }))}
+                          onChange={(e) => setSplitForm(prev => ({ ...prev, rights_holder_id: e.target.value, rights_holder_name: e.target.value ? '' : prev.rights_holder_name, contact_id: '', ipi: '', pro: '' }))}
                           className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
                         >
                           <option value="">Select from roster...</option>
@@ -1441,13 +1470,58 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                           ))}
                         </select>
                         {!splitForm.rights_holder_id && (
-                          <input
-                            type="text"
-                            placeholder="Or type external contributor name"
-                            value={splitForm.rights_holder_name}
-                            onChange={(e) => setSplitForm(prev => ({ ...prev, rights_holder_name: e.target.value }))}
-                            className="w-full mt-2 border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                          />
+                          <div className="mt-2 relative">
+                            <input
+                              type="text"
+                              placeholder="Or search directory / type new name"
+                              value={splitSearchQuery || splitForm.rights_holder_name}
+                              onChange={(e) => {
+                                const val = e.target.value
+                                setSplitSearchQuery(val)
+                                setSplitForm(prev => ({ ...prev, rights_holder_name: val, contact_id: '', ipi: '', pro: '' }))
+                                setShowSplitSearch(val.length > 0)
+                              }}
+                              onFocus={() => { if (splitSearchQuery || splitForm.rights_holder_name) setShowSplitSearch(true) }}
+                              className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                            />
+                            {showSplitSearch && (splitSearchQuery || splitForm.rights_holder_name) && (
+                              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[rgba(59,77,67,0.12)] rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                                {directoryContacts
+                                  .filter(c => c.display_name?.toLowerCase().includes((splitSearchQuery || splitForm.rights_holder_name).toLowerCase()))
+                                  .map(contact => (
+                                    <button
+                                      key={contact.id}
+                                      type="button"
+                                      className="w-full text-left px-3 py-2 text-sm hover:bg-[rgba(91,138,114,0.08)] transition-colors flex items-center justify-between"
+                                      onClick={() => {
+                                        setSplitForm(prev => ({
+                                          ...prev,
+                                          rights_holder_name: contact.display_name,
+                                          contact_id: String(contact.id),
+                                          ipi: contact.ipi || '',
+                                          pro: contact.pro || ''
+                                        }))
+                                        setSplitSearchQuery('')
+                                        setShowSplitSearch(false)
+                                      }}
+                                    >
+                                      <span className="text-[#3D4A44]">{contact.display_name}</span>
+                                      {contact.ipi && <span className="text-[11px] text-[#7A8580]">IPI: {contact.ipi}</span>}
+                                    </button>
+                                  ))
+                                }
+                                {directoryContacts.filter(c => c.display_name?.toLowerCase().includes((splitSearchQuery || splitForm.rights_holder_name).toLowerCase())).length === 0 && (
+                                  <div className="px-3 py-2 text-xs text-[#7A8580]">No matches — will create new contact</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {splitForm.contact_id && (
+                          <div className="mt-1 flex items-center gap-2">
+                            <span className="text-[11px] text-[#5B8A72] bg-[rgba(91,138,114,0.1)] px-2 py-0.5 rounded">Linked to directory</span>
+                            {splitForm.ipi && <span className="text-[11px] text-[#7A8580]">IPI: {splitForm.ipi}</span>}
+                          </div>
                         )}
                       </div>
                       <div>
@@ -1492,7 +1566,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                     </div>
                     <div className="flex justify-end space-x-2">
                       <button
-                        onClick={() => { setShowSplitForm(false); setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '' }) }}
+                        onClick={() => { setShowSplitForm(false); setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', notes: '', contact_id: '', ipi: '', pro: '' }); setSplitSearchQuery('') }}
                         className="px-4 py-2 text-sm text-[#7A8580] border border-[rgba(59,77,67,0.12)] rounded-lg hover:bg-[#EEF1EC] transition-colors"
                       >
                         Cancel
@@ -1667,19 +1741,12 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       { label: 'SoundExchange Registered', field: 'soundexchange_registered' },
                       { label: 'MLC Registered', field: 'mlc_registered' },
                     ].map(({ label, field }) => (
-                      <div key={field} className="flex items-center justify-between">
+                      <div key={field} className="group flex items-center justify-between cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-2 -mx-2 py-1 transition-colors" onClick={() => cycleStatusValue(field)}>
                         <span className="text-[15px] text-[#3D4A44]">{label}</span>
-                        {isEditing ? (
-                          <select
-                            value={editForm[field]}
-                            onChange={(e) => handleEditChange(field, e.target.value)}
-                            className="px-3 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg text-[13px] text-[#3D4A44] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
-                          >
-                            <option value="N/A">N/A</option>
-                            <option value="Yes">Yes</option>
-                            <option value="No">No</option>
-                          </select>
-                        ) : getStatusIcon(songDetails[field])}
+                        <div className="flex items-center gap-1.5">
+                          {getStatusIcon(songDetails[field])}
+                          <PencilSquareIcon className="w-3 h-3 text-[#7A8580] opacity-0 group-hover:opacity-40" />
+                        </div>
                       </div>
                     ))}
                     <div className="flex items-center justify-between">

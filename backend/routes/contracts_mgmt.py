@@ -8,7 +8,7 @@ from datetime import date, datetime
 import io
 from ..models import (
     get_db, Contract, ContractParty, ContractAsset, ContractDocument, RightsSplit,
-    Song, Work, Release, Creator, OrganizationMember, User, AudioAsset
+    Song, Work, Release, Creator, OrganizationMember, User, AudioAsset, CreativeContact
 )
 from ..utils.auth import get_current_user
 from ..services.contract_parser import parse_contract_document
@@ -83,6 +83,9 @@ class SplitCreate(BaseModel):
     rights_type: str = "MASTER"
     share_percentage: float
     notes: Optional[str] = None
+    ipi: Optional[str] = None
+    pro: Optional[str] = None
+    contact_id: Optional[int] = None
 
 
 class SplitUpdate(BaseModel):
@@ -435,6 +438,7 @@ def add_song_split(
         )
 
     holder_name = data.rights_holder_name
+    holder_ipi = data.ipi
     if data.rights_holder_id:
         holder = db.query(Creator).filter(
             Creator.id == data.rights_holder_id,
@@ -443,6 +447,33 @@ def add_song_split(
         if not holder:
             raise HTTPException(status_code=404, detail="Rights holder not found in this organization")
         holder_name = holder_name or holder.display_name
+        if not holder_ipi:
+            holder_ipi = holder.primary_ipi
+    elif data.contact_id:
+        contact = db.query(CreativeContact).filter(
+            CreativeContact.id == data.contact_id,
+            CreativeContact.organization_id == song.organization_id,
+        ).first()
+        if contact:
+            holder_name = holder_name or contact.display_name
+            if not holder_ipi:
+                holder_ipi = contact.ipi
+
+    if not data.rights_holder_id and not data.contact_id and holder_name:
+        existing_contact = db.query(CreativeContact).filter(
+            CreativeContact.organization_id == song.organization_id,
+            func.lower(CreativeContact.display_name) == holder_name.lower(),
+        ).first()
+        if not existing_contact:
+            new_contact = CreativeContact(
+                organization_id=song.organization_id,
+                display_name=holder_name,
+                ipi=holder_ipi,
+                pro=data.pro,
+                roles=["Collaborator"],
+            )
+            db.add(new_contact)
+            db.flush()
 
     split = RightsSplit(
         contract_asset_id=ca.id,
@@ -461,6 +492,7 @@ def add_song_split(
         "rights_holder_name": holder_name,
         "rights_type": split.rights_type,
         "share_percentage": split.share_percentage,
+        "ipi": holder_ipi,
         "message": "Split added successfully",
     }
 
