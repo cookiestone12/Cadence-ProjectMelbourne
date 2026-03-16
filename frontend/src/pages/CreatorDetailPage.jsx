@@ -9,6 +9,68 @@ import PlatformIcon from '../components/PlatformIcon'
 import SocialCard from '../components/SocialCard'
 import SongDetailModal from '../components/SongDetailModal'
 
+const DollarOrNAInput = ({ value, onChange, placeholder = "Amount" }) => {
+  const isNA = value === 'N/A'
+  const displayVal = (value === 'true' || value === true) ? '' : (value === 'false' || value === false) ? '' : value
+  return (
+    <div className="flex items-center gap-1" style={{ minWidth: '120px' }}>
+      {isNA ? (
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-[#F5F7F4] text-[#7A8580] hover:bg-[#EEF1EC] transition-colors w-full text-center"
+        >
+          N/A
+        </button>
+      ) : (
+        <div className="flex items-center gap-1 w-full">
+          <div className="relative flex-1">
+            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#7A8580] text-sm font-medium">$</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={displayVal}
+              onChange={(e) => onChange(e.target.value)}
+              className="w-full pl-6 pr-2 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-1 focus:ring-[#5B8A72]"
+              placeholder={placeholder}
+              style={{ minWidth: '80px' }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => onChange('N/A')}
+            className="px-2 py-2 text-xs font-medium text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#F5F7F4] rounded-lg transition-colors whitespace-nowrap border border-transparent hover:border-[rgba(0,0,0,0.1)]"
+            title="Set to N/A"
+          >
+            N/A
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const PlacementStatusBadge = ({ status }) => {
+  const colors = {
+    'Paid': { bg: 'rgba(52, 199, 89, 0.15)', color: '#5B9A6E' },
+    'Invoiced': { bg: 'rgba(0, 122, 255, 0.15)', color: '#5A8A9A' },
+    'Contracted': { bg: 'rgba(160, 32, 240, 0.15)', color: '#5B8A72' },
+    'Contract Sent': { bg: 'rgba(88, 86, 214, 0.15)', color: '#6B9A84' },
+    'Released - Awaiting Contract': { bg: 'rgba(255, 149, 0, 0.15)', color: '#C4956B' },
+    'In Pipeline': { bg: 'rgba(0, 0, 0, 0.05)', color: '#7A8580' }
+  }
+  const style = colors[status] || colors['In Pipeline']
+  return (
+    <span 
+      className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
+      style={{ background: style.bg, color: style.color }}
+    >
+      {status}
+    </span>
+  )
+}
+
 export default function CreatorDetailPage() {
   const { id } = useParams()
   const location = useLocation()
@@ -835,68 +897,6 @@ export default function CreatorDetailPage() {
     }
   }
 
-  const DollarOrNAInput = ({ value, onChange }) => {
-    const isNA = value === 'N/A'
-    const displayVal = (value === 'true' || value === true) ? '' : (value === 'false' || value === false) ? '' : value
-    return (
-      <div className="flex items-center gap-1" style={{ minWidth: '120px' }}>
-        {isNA ? (
-          <button
-            type="button"
-            onClick={() => onChange('')}
-            className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-[#F5F7F4] text-[#7A8580] hover:bg-[#EEF1EC] transition-colors w-full text-center"
-          >
-            N/A
-          </button>
-        ) : (
-          <div className="flex items-center gap-1 w-full">
-            <div className="relative flex-1">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#7A8580] text-sm font-medium">$</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={displayVal}
-                onChange={(e) => onChange(e.target.value)}
-                className="w-full pl-6 pr-2 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-1 focus:ring-[#5B8A72]"
-                placeholder="Amount"
-                style={{ minWidth: '80px' }}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => onChange('N/A')}
-              className="px-2 py-2 text-xs font-medium text-[#7A8580] hover:text-[#5B8A72] hover:bg-[#F5F7F4] rounded-lg transition-colors whitespace-nowrap border border-transparent hover:border-[rgba(0,0,0,0.1)]"
-              title="Set to N/A"
-            >
-              N/A
-            </button>
-          </div>
-        )}
-      </div>
-    )
-  }
-  
-  const PlacementStatusBadge = ({ status }) => {
-    const colors = {
-      'Paid': { bg: 'rgba(52, 199, 89, 0.15)', color: '#5B9A6E' },
-      'Invoiced': { bg: 'rgba(0, 122, 255, 0.15)', color: '#5A8A9A' },
-      'Contracted': { bg: 'rgba(160, 32, 240, 0.15)', color: '#5B8A72' },
-      'Contract Sent': { bg: 'rgba(88, 86, 214, 0.15)', color: '#6B9A84' },
-      'Released - Awaiting Contract': { bg: 'rgba(255, 149, 0, 0.15)', color: '#C4956B' },
-      'In Pipeline': { bg: 'rgba(0, 0, 0, 0.05)', color: '#7A8580' }
-    }
-    const style = colors[status] || colors['In Pipeline']
-    return (
-      <span 
-        className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
-        style={{ background: style.bg, color: style.color }}
-      >
-        {status}
-      </span>
-    )
-  }
-  
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full bg-[#F5F7F4]">
