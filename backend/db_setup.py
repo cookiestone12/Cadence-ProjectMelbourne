@@ -179,7 +179,7 @@ def ensure_schema_updates():
             ("ix_placements_updated_at", "placements", "updated_at"),
         ]
         existing_indexes = {idx['name'] for idx in inspector.get_indexes('songs')}
-        for tbl in ['song_credits', 'creators', 'placements', 'work_credits', 'works', 'organization_members', 'song_dsp_links']:
+        for tbl in ['song_credits', 'creators', 'placements', 'work_credits', 'works', 'organization_members', 'song_dsp_links', 'stream_estimates']:
             if tbl in inspector.get_table_names():
                 existing_indexes.update(idx['name'] for idx in inspector.get_indexes(tbl))
 
@@ -194,6 +194,16 @@ def ensure_schema_updates():
                     logger.info(f"Created performance index {idx_name}")
                 except Exception as e:
                     logger.warning(f"Could not create index {idx_name}: {e}")
+
+        if 'stream_estimates' in inspector.get_table_names():
+            composite_idx = "ix_stream_estimates_song_org_date"
+            if composite_idx not in existing_indexes:
+                try:
+                    conn.execute(text(f"CREATE INDEX IF NOT EXISTS {composite_idx} ON stream_estimates(song_id, organization_id, period_date)"))
+                    conn.commit()
+                    logger.info(f"Created composite index {composite_idx}")
+                except Exception as e:
+                    logger.warning(f"Could not create composite index: {e}")
 
         om_cols = [c['name'] for c in inspector.get_columns('organization_members')]
         if 'client_access_scope' not in om_cols:

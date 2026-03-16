@@ -79,23 +79,22 @@ export default function CreditsPage() {
       if (!currentOrgId) { setLoading(false); return }
       setOrgId(currentOrgId)
       setOrgName(currentOrgName)
-      try {
-        const allRes = await axios.get(`/api/streaming-credits/org/${currentOrgId}/overview`, { params: { sort_by: 'streams' } })
-        setAllCreators(allRes.data?.creators || [])
-      } catch {}
     } catch (error) {
       console.error('Failed to load org:', error)
       setLoading(false)
     }
   }
 
-  async function fetchCredits() {
+  async function fetchCredits(forceRefresh = false) {
     setLoading(true)
     try {
       const params = { sort_by: sortBy }
       if (debouncedSearch) params.search = debouncedSearch
+      if (forceRefresh) params.force_refresh = true
       const res = await axios.get(`/api/streaming-credits/org/${orgId}/overview`, { params })
-      setCreators(res.data?.creators || [])
+      const data = res.data?.creators || []
+      setCreators(data)
+      setAllCreators(prev => prev.length === 0 ? data : prev)
     } catch (error) {
       console.error('Failed to load credits:', error)
     } finally {
@@ -203,7 +202,7 @@ export default function CreditsPage() {
             )}
           </div>
           <button
-            onClick={() => orgId && fetchCredits()}
+            onClick={() => orgId && fetchCredits(true)}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-[#5B8A72] bg-[#5B8A72]/10 hover:bg-[#5B8A72]/20 rounded-xl transition-colors"
           >
             <ArrowPathIcon className="w-4 h-4" />

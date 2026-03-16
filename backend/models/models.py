@@ -2223,6 +2223,7 @@ class StreamEstimate(Base):
     __table_args__ = (
         Index('ix_stream_estimates_song_org', 'song_id', 'organization_id'),
         Index('ix_stream_estimates_song_platform_date', 'song_id', 'platform', 'period_date'),
+        Index('ix_stream_estimates_song_org_date', 'song_id', 'organization_id', 'period_date'),
     )
 
     id = Column(Integer, primary_key=True, index=True)
