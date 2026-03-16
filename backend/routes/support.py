@@ -40,7 +40,6 @@ def _ticket_to_dict(ticket: SupportTicket, include_admin_notes: bool = False):
             "id": ticket.user.id,
             "username": ticket.user.username,
             "email": ticket.user.email,
-            "role": ticket.user.role,
         } if ticket.user else None,
         "organization": {
             "id": ticket.organization.id,

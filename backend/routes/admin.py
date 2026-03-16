@@ -1047,7 +1047,6 @@ def list_all_support_tickets(
                 "id": t.user.id,
                 "username": t.user.username,
                 "email": t.user.email,
-                "role": t.user.role,
             } if t.user else None,
             "organization": {
                 "id": t.organization.id,

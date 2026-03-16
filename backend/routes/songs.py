@@ -182,9 +182,9 @@ class SongUpdateRequest(BaseModel):
     iswc: Optional[str] = None
     project_title: Optional[str] = None
     release_date: Optional[date] = None
-    has_contract_sent: Optional[bool] = None
-    has_contract_executed: Optional[bool] = None
-    is_registered_with_pro: Optional[bool] = None
+    has_contract_sent: Optional[str] = None
+    has_contract_executed: Optional[str] = None
+    is_registered_with_pro: Optional[str] = None
     is_registered_with_dsp: Optional[str] = None
     is_invoiced: Optional[str] = None
     is_paid: Optional[str] = None
@@ -697,6 +697,20 @@ def update_song(
             raise HTTPException(status_code=403, detail="Not authorized to access this song")
     
     update_data = request.dict(exclude_unset=True)
+
+    bool_fields = {"has_contract_sent", "has_contract_executed", "is_registered_with_pro"}
+    for key in bool_fields:
+        if key in update_data:
+            v = update_data[key]
+            if isinstance(v, str):
+                low = v.lower()
+                if low in ("yes", "true"):
+                    update_data[key] = True
+                elif low in ("no", "false"):
+                    update_data[key] = False
+                else:
+                    update_data[key] = None
+
     for key, value in update_data.items():
         setattr(song, key, value)
     
@@ -710,7 +724,8 @@ def update_song(
                details={"changed_fields": changed_fields})
 
     health_fields = {"isrc", "iswc", "has_contract_sent", "has_contract_executed",
-                     "is_registered_with_pro", "is_registered_with_dsp", "is_invoiced", "is_paid"}
+                     "is_registered_with_pro", "is_registered_with_dsp", "is_invoiced", "is_paid",
+                     "soundexchange_registered", "mlc_registered"}
     if health_fields & set(changed_fields):
         from ..utils.health_sync import sync_song_to_checklist
         sync_song_to_checklist(db, song)

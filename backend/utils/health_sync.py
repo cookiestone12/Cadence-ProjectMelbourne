@@ -11,11 +11,14 @@ FIELD_TO_CHECKLIST_MAP = {
     "is_registered_with_pro": "SY-01",
     "is_registered_with_dsp": "DSP-01",
     "is_paid": "PY-01",
+    "soundexchange_registered": "SY-02",
+    "mlc_registered": "SY-03",
 }
 
 NA_CAPABLE_FIELDS = {"is_paid", "is_invoiced", "is_registered_with_dsp",
                      "has_contract_sent", "has_contract_executed",
-                     "is_registered_with_pro"}
+                     "is_registered_with_pro", "soundexchange_registered",
+                     "mlc_registered"}
 
 DSP_PLATFORM_TO_CHECKLIST_MAP = {
     "spotify": "DSP-03",
@@ -71,7 +74,15 @@ def sync_song_to_checklist(db: Session, song: Song):
             
         checklist_item = checklist_items[code]
         value = getattr(song, field, None)
-        
+
+        if value is None and field in NA_CAPABLE_FIELDS:
+            set_checklist_status(db, song.id, checklist_item.id, "NOT_APPLICABLE")
+            continue
+
+        if isinstance(value, bool):
+            set_checklist_status(db, song.id, checklist_item.id, "COMPLETED" if value else "NOT_STARTED")
+            continue
+
         str_val = str(value).strip() if value else ""
         upper_val = str_val.upper()
 

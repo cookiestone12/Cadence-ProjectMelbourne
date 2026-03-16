@@ -310,6 +310,11 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       is_paid: (() => { const s = String(songDetails.is_paid ?? '').toLowerCase(); if (s === 'true') return 'Yes'; if (s === 'false') return 'No'; return songDetails.is_paid || 'N/A' })(),
       is_invoiced: (() => { if (songDetails.is_invoiced == null) return 'N/A'; const s = String(songDetails.is_invoiced).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || s === 'false' || s === 'no' || s === '') return ''; return String(songDetails.is_invoiced) })(),
       is_registered_with_dsp: (() => { if (songDetails.is_registered_with_dsp == null) return 'N/A'; const s = String(songDetails.is_registered_with_dsp).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || s === 'false' || s === 'no' || s === '') return ''; return String(songDetails.is_registered_with_dsp) })(),
+      has_contract_sent: (() => { const v = songDetails.has_contract_sent; if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || v === true) return 'Yes'; if (s === 'false' || s === 'no' || v === false) return 'No'; return 'N/A' })(),
+      has_contract_executed: (() => { const v = songDetails.has_contract_executed; if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || v === true) return 'Yes'; if (s === 'false' || s === 'no' || v === false) return 'No'; return 'N/A' })(),
+      is_registered_with_pro: (() => { const v = songDetails.is_registered_with_pro; if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || v === true) return 'Yes'; if (s === 'false' || s === 'no' || v === false) return 'No'; return 'N/A' })(),
+      soundexchange_registered: (() => { const v = songDetails.soundexchange_registered; if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || v === true) return 'Yes'; if (s === 'false' || s === 'no' || v === false) return 'No'; return 'N/A' })(),
+      mlc_registered: (() => { const v = songDetails.mlc_registered; if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na') return 'N/A'; if (s === 'true' || s === 'yes' || v === true) return 'Yes'; if (s === 'false' || s === 'no' || v === false) return 'No'; return 'N/A' })(),
     })
     setIsEditing(true)
     setEditFeedback(null)
@@ -352,6 +357,13 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       if (editForm.is_paid !== (songDetails.is_paid || 'N/A')) payload.is_paid = editForm.is_paid
       if (editForm.is_invoiced !== (songDetails.is_invoiced || 'N/A')) payload.is_invoiced = editForm.is_invoiced
       if (editForm.is_registered_with_dsp !== (songDetails.is_registered_with_dsp || 'N/A')) payload.is_registered_with_dsp = editForm.is_registered_with_dsp
+
+      const statusNorm = (v) => { if (v == null) return 'N/A'; const s = String(v).toLowerCase(); if (s === 'n/a' || s === 'na' || s === '') return 'N/A'; if (s === 'true' || s === 'yes') return 'Yes'; if (s === 'false' || s === 'no') return 'No'; return 'N/A' }
+      if (editForm.has_contract_sent !== statusNorm(songDetails.has_contract_sent)) payload.has_contract_sent = editForm.has_contract_sent
+      if (editForm.has_contract_executed !== statusNorm(songDetails.has_contract_executed)) payload.has_contract_executed = editForm.has_contract_executed
+      if (editForm.is_registered_with_pro !== statusNorm(songDetails.is_registered_with_pro)) payload.is_registered_with_pro = editForm.is_registered_with_pro
+      if (editForm.soundexchange_registered !== statusNorm(songDetails.soundexchange_registered)) payload.soundexchange_registered = editForm.soundexchange_registered
+      if (editForm.mlc_registered !== statusNorm(songDetails.mlc_registered)) payload.mlc_registered = editForm.mlc_registered
 
       if (Object.keys(payload).length === 0) {
         setIsEditing(false)
@@ -1648,29 +1660,31 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                 <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
                   <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Status Checklist</h3>
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] text-[#3D4A44]">Contract Executed</span>
-                      {getStatusIcon(songDetails.has_contract_executed)}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] text-[#3D4A44]">Contract Location</span>
-                      <span className="text-[15px] font-medium text-[#3D4A44]">{songDetails.contract_location || 'N/A'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] text-[#3D4A44]">PRO Registered</span>
-                      {getStatusIcon(songDetails.is_registered_with_pro)}
-                    </div>
+                    {[
+                      { label: 'Contract Sent', field: 'has_contract_sent' },
+                      { label: 'Contract Executed', field: 'has_contract_executed' },
+                      { label: 'PRO Registered', field: 'is_registered_with_pro' },
+                      { label: 'SoundExchange Registered', field: 'soundexchange_registered' },
+                      { label: 'MLC Registered', field: 'mlc_registered' },
+                    ].map(({ label, field }) => (
+                      <div key={field} className="flex items-center justify-between">
+                        <span className="text-[15px] text-[#3D4A44]">{label}</span>
+                        {isEditing ? (
+                          <select
+                            value={editForm[field]}
+                            onChange={(e) => handleEditChange(field, e.target.value)}
+                            className="px-3 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg text-[13px] text-[#3D4A44] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
+                          >
+                            <option value="N/A">N/A</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                          </select>
+                        ) : getStatusIcon(songDetails[field])}
+                      </div>
+                    ))}
                     <div className="flex items-center justify-between">
                       <span className="text-[15px] text-[#3D4A44]">Fee</span>
                       {getStatusIcon(songDetails.is_registered_with_dsp)}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] text-[#3D4A44]">SoundExchange Registered</span>
-                      {getStatusIcon(songDetails.soundexchange_registered)}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] text-[#3D4A44]">MLC Registered</span>
-                      {getStatusIcon(songDetails.mlc_registered)}
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-[15px] text-[#3D4A44]">Paid</span>
