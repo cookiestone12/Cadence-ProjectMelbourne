@@ -43,14 +43,14 @@ const DollarOrNAInput = ({ value, onChange }) => {
   )
 }
 
-export default function AddSongModal({ onClose, onSuccess, organizationId }) {
+export default function AddSongModal({ onClose, onSuccess, organizationId, defaultCreatorId, defaultPrimaryArtist }) {
   useBodyScrollLock(true)
   const [creators, setCreators] = useState([])
   const [loadingCreators, setLoadingCreators] = useState(true)
   const [formData, setFormData] = useState({
     title: '',
-    primary_artist: '',
-    creator_id: '',
+    primary_artist: defaultPrimaryArtist || '',
+    creator_id: defaultCreatorId ? String(defaultCreatorId) : '',
     creator_role: 'Writer',
     creator_split: '100',
     isrc: '',

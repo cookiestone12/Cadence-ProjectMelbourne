@@ -8,6 +8,7 @@ import CreatorAccountingEnhanced from '../components/CreatorAccountingEnhanced'
 import PlatformIcon from '../components/PlatformIcon'
 import SocialCard from '../components/SocialCard'
 import SongDetailModal from '../components/SongDetailModal'
+import AddSongModal from '../components/AddSongModal'
 
 const DollarOrNAInput = ({ value, onChange, placeholder = "Amount" }) => {
   const isNA = value === 'N/A'
@@ -2651,197 +2652,15 @@ export default function CreatorDetailPage() {
       )}
 
       {showAddSongModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-[18px] w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-[rgba(59,77,67,0.12)]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#EEF1EC] flex items-center justify-center">
-                    <MusicalNoteIcon className="w-5 h-5 text-[#5B8A72]" />
-                  </div>
-                  <h2 className="text-[22px] font-semibold text-[#3D4A44]">Add New Song</h2>
-                </div>
-                <button
-                  onClick={() => setShowAddSongModal(false)}
-                  className="p-2 hover:bg-[#EEF1EC] rounded-lg transition-colors"
-                >
-                  <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
-                </button>
-              </div>
-              <p className="text-[15px] text-[#7A8580] mt-2">Add a song to {creator?.display_name}'s catalog</p>
-            </div>
-            
-            <form onSubmit={handleAddSong} className="p-6 space-y-4">
-              <div>
-                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">
-                  Song Title <span className="text-[#C47068]">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={newSong.title}
-                  onChange={(e) => setNewSong({...newSong, title: e.target.value})}
-                  required
-                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                  placeholder="Enter song title"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">
-                    Primary Artist
-                  </label>
-                  <input
-                    type="text"
-                    value={newSong.primary_artist}
-                    onChange={(e) => setNewSong({...newSong, primary_artist: e.target.value})}
-                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                    placeholder={creator?.display_name || "Artist name"}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">
-                    Client Role
-                  </label>
-                  <select
-                    value={newSong.credit_role}
-                    onChange={(e) => setNewSong({...newSong, credit_role: e.target.value})}
-                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
-                  >
-                    {ROLE_OPTIONS.map(r => (
-                      <option key={r} value={r}>{r.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\bArtist\b/, 'Artist')}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">ISRC</label>
-                  <input
-                    type="text"
-                    value={newSong.isrc}
-                    onChange={(e) => setNewSong({...newSong, isrc: e.target.value})}
-                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                    placeholder="XX-XXX-00-00000"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">ISWC</label>
-                  <input
-                    type="text"
-                    value={newSong.iswc}
-                    onChange={(e) => setNewSong({...newSong, iswc: e.target.value})}
-                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                    placeholder="T-000000000-0"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Project/Album</label>
-                  <input
-                    type="text"
-                    value={newSong.project_title}
-                    onChange={(e) => setNewSong({...newSong, project_title: e.target.value})}
-                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                    placeholder="Album name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Release Date</label>
-                  <input
-                    type="date"
-                    value={newSong.release_date}
-                    onChange={(e) => setNewSong({...newSong, release_date: e.target.value})}
-                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Label</label>
-                <input
-                  type="text"
-                  value={newSong.label}
-                  onChange={(e) => setNewSong({...newSong, label: e.target.value})}
-                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                  placeholder="Record label"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Pub %</label>
-                  <input
-                    type="number"
-                    value={newSong.publishing_percentage}
-                    onChange={(e) => setNewSong({...newSong, publishing_percentage: e.target.value})}
-                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                    placeholder="0-100"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Master %</label>
-                  <input
-                    type="number"
-                    value={newSong.master_percentage}
-                    onChange={(e) => setNewSong({...newSong, master_percentage: e.target.value})}
-                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                    placeholder="0-100"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Advance</label>
-                  <input
-                    type="number"
-                    value={newSong.advance_amount}
-                    onChange={(e) => setNewSong({...newSong, advance_amount: e.target.value})}
-                    className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                    placeholder="$"
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[15px] font-medium text-[#3D4A44] mb-2">Notes</label>
-                <textarea
-                  value={newSong.notes}
-                  onChange={(e) => setNewSong({...newSong, notes: e.target.value})}
-                  className="w-full px-4 py-3 border border-[rgba(59,77,67,0.2)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent resize-none"
-                  placeholder="Additional notes..."
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowAddSongModal(false)}
-                  className="flex-1 px-4 py-3 border border-[rgba(59,77,67,0.2)] text-[#3D4A44] rounded-xl font-medium hover:bg-[#EEF1EC] transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={addingSong || !newSong.title.trim()}
-                  className="flex-1 px-4 py-3 bg-[#5B8A72] text-white rounded-xl font-medium hover:bg-[#4A7862] transition-colors disabled:opacity-50"
-                >
-                  {addingSong ? 'Adding...' : 'Add Song'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <AddSongModal
+          organizationId={organizationId}
+          defaultCreatorId={parseInt(id)}
+          defaultPrimaryArtist={creator?.display_name || ''}
+          onClose={() => setShowAddSongModal(false)}
+          onSuccess={() => {
+            loadSongs(organizationId)
+          }}
+        />
       )}
 
       {showEditCreatorModal && (
