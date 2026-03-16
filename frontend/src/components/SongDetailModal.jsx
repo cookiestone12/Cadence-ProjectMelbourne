@@ -6,7 +6,8 @@ import {
   MusicalNoteIcon, ChartBarIcon, DocumentTextIcon, LinkIcon,
   DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon, UserIcon,
   ScaleIcon, PencilSquareIcon, PlusIcon, SpeakerWaveIcon,
-  FolderIcon, FolderOpenIcon, ArrowLeftIcon, DocumentDuplicateIcon, ShareIcon
+  FolderIcon, FolderOpenIcon, ArrowLeftIcon, DocumentDuplicateIcon, ShareIcon,
+  ArrowTopRightOnSquareIcon
 } from '@heroicons/react/24/outline'
 
 import ShareModal from './ShareModal'
@@ -61,9 +62,13 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [spotifySearching, setSpotifySearching] = useState(false)
   const [spotifyLinking, setSpotifyLinking] = useState(null)
   const [spotifyError, setSpotifyError] = useState(null)
+  const [streamingData, setStreamingData] = useState(null)
+  const [streamingLoading, setStreamingLoading] = useState(false)
+  const streamingRequestRef = useRef(null)
   
   useEffect(() => {
     setActiveTab('overview')
+    setStreamingData(null)
     loadSongDetails()
     loadContracts()
     loadLinkedContracts()
@@ -78,7 +83,34 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       loadAudioAssets()
       checkDropboxStatus()
     }
+    if (activeTab === 'streaming') {
+      loadStreamingData()
+    }
   }, [activeTab, song.id])
+
+  async function loadStreamingData() {
+    const requestId = Date.now()
+    streamingRequestRef.current = requestId
+    setStreamingLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get(`/api/songs/${song.id}/streaming`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (streamingRequestRef.current === requestId) {
+        setStreamingData(response.data)
+      }
+    } catch (error) {
+      console.error('Failed to load streaming data:', error)
+      if (streamingRequestRef.current === requestId) {
+        setStreamingData(null)
+      }
+    } finally {
+      if (streamingRequestRef.current === requestId) {
+        setStreamingLoading(false)
+      }
+    }
+  }
   
   async function loadSongDetails() {
     try {
@@ -1842,10 +1874,134 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
           )}
           
           {activeTab === 'streaming' && (
-            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
-              <div className="text-center text-[#7A8580] py-12">
-                Streaming metrics and valuation data will be displayed here
-              </div>
+            <div className="space-y-4">
+              {streamingLoading ? (
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#3D4A44]"></div>
+                    <span className="ml-3 text-[#7A8580]">Calculating streaming estimates...</span>
+                  </div>
+                </div>
+              ) : streamingData ? (
+                <>
+                  <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-[17px] font-semibold text-[#3D4A44]">Total Estimated Streams</h3>
+                      {streamingData.last_updated && (
+                        <span className="text-[12px] text-[#7A8580]">Updated {streamingData.last_updated}</span>
+                      )}
+                    </div>
+                    {streamingData.total_streams > 0 ? (
+                      <div>
+                        <p className="text-[36px] font-bold text-[#3D4A44] tracking-tight">
+                          {streamingData.total_streams.toLocaleString()}
+                        </p>
+                        {streamingData.riaa_equivalents && (streamingData.riaa_equivalents.single_units > 0 || streamingData.riaa_equivalents.album_units > 0) && (
+                          <div className="flex items-center gap-3 mt-2">
+                            {streamingData.riaa_equivalents.single_units > 0 && (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-[#EEF1EC] text-[#3D4A44]">
+                                {streamingData.riaa_equivalents.single_units.toLocaleString()} single units
+                              </span>
+                            )}
+                            {streamingData.riaa_equivalents.album_units > 0 && (
+                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-medium bg-[#E8EDE6] text-[#3D4A44]">
+                                {streamingData.riaa_equivalents.album_units.toLocaleString()} album units
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="py-6">
+                        <p className="text-[#7A8580] text-[15px]">No streaming estimates available yet.</p>
+                        <p className="text-[#9BA8A0] text-[13px] mt-1">
+                          {streamingData.has_spotify_link
+                            ? 'Estimates will be calculated once the Spotify API connection is active.'
+                            : 'Link this song to Spotify in the Links tab to generate streaming estimates.'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                    <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Platform Breakdown</h3>
+                    {streamingData.platforms && Object.values(streamingData.platforms).some(p => p.streams > 0) ? (
+                      <div className="space-y-3">
+                        {Object.entries(streamingData.platforms)
+                          .sort(([,a], [,b]) => b.streams - a.streams)
+                          .map(([key, platform]) => {
+                            const maxStreams = Math.max(...Object.values(streamingData.platforms).map(p => p.streams), 1)
+                            const barWidth = platform.streams > 0 ? Math.max((platform.streams / maxStreams) * 100, 4) : 0
+                            return (
+                              <div key={key} className="flex items-center gap-3">
+                                <div className="w-[110px] flex-shrink-0">
+                                  <span className="text-[13px] font-medium text-[#3D4A44]">{platform.name}</span>
+                                </div>
+                                <div className="flex-1 h-[28px] bg-[#F5F7F4] rounded-full overflow-hidden relative">
+                                  {platform.streams > 0 && (
+                                    <div
+                                      className="h-full rounded-full transition-all duration-500"
+                                      style={{ width: `${barWidth}%`, backgroundColor: platform.color }}
+                                    />
+                                  )}
+                                </div>
+                                <div className="w-[90px] text-right flex-shrink-0">
+                                  <span className="text-[13px] font-medium text-[#3D4A44]">
+                                    {platform.streams > 0 ? platform.streams.toLocaleString() : '-'}
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        {streamingData.confidence > 0 && (
+                          <div className="mt-3 pt-3 border-t border-[#EEF1EC]">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[12px] text-[#9BA8A0]">Confidence:</span>
+                              <div className="flex-1 h-1.5 bg-[#F5F7F4] rounded-full max-w-[120px]">
+                                <div
+                                  className="h-full bg-[#6B8F71] rounded-full"
+                                  style={{ width: `${Math.round(streamingData.confidence * 100)}%` }}
+                                />
+                              </div>
+                              <span className="text-[12px] text-[#9BA8A0]">{Math.round(streamingData.confidence * 100)}%</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[#7A8580] text-[14px] py-4">No platform data available.</p>
+                    )}
+                  </div>
+
+                  <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                    <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">DSP Links</h3>
+                    {streamingData.dsp_links && streamingData.dsp_links.length > 0 ? (
+                      <div className="space-y-2">
+                        {streamingData.dsp_links.map((link) => (
+                          <a
+                            key={link.id}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between p-3 bg-[#F5F7F4] rounded-[12px] hover:bg-[#EEF1EC] transition-colors"
+                          >
+                            <span className="text-[14px] font-medium text-[#3D4A44]">{link.platform}</span>
+                            <ArrowTopRightOnSquareIcon className="w-4 h-4 text-[#7A8580]" />
+                          </a>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[#7A8580] text-[14px]">No DSP links found. Link this song in the Links tab.</p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                  <div className="text-center text-[#7A8580] py-12">
+                    Unable to load streaming data.
+                  </div>
+                </div>
+              )}
             </div>
           )}
           

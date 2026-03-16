@@ -437,6 +437,83 @@ def get_song(
         ]
     }
 
+@router.get("/{song_id}/streaming")
+def get_song_streaming(
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == song.organization_id
+    ).first()
+    if not membership and not getattr(current_user, 'is_super_admin', False):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    from ..services.stream_estimator import estimate_streams_for_song, get_song_stream_summary, PLATFORM_DISPLAY
+
+    import logging
+    logger = logging.getLogger("cadence")
+    try:
+        estimate_result = estimate_streams_for_song(song.id, song.organization_id, db)
+    except Exception as e:
+        logger.debug(f"Stream estimation failed for song {song.id}: {e}")
+        estimate_result = {"total_estimated_streams": 0, "platform_breakdown": {}, "riaa_equivalents": {}}
+
+    summary = get_song_stream_summary(song.id, song.organization_id, db)
+
+    platform_breakdown = estimate_result.get("platform_breakdown", {})
+
+    platforms = {}
+    for platform_key, display_info in PLATFORM_DISPLAY.items():
+        est = platform_breakdown.get(platform_key, {})
+        summ = summary.get("platforms", {}).get(platform_key, {})
+        streams = 0
+        if isinstance(summ, dict):
+            streams = summ.get("streams", 0)
+        elif isinstance(summ, (int, float)):
+            streams = int(summ)
+        if streams == 0 and isinstance(est, dict):
+            streams = int(est.get("estimated_streams", 0))
+        method = None
+        confidence = 0
+        if isinstance(est, dict):
+            method = est.get("method")
+            confidence = est.get("confidence", 0)
+        platforms[platform_key] = {
+            "name": display_info["name"],
+            "color": display_info["color"],
+            "streams": streams,
+            "method": method,
+            "confidence": confidence,
+        }
+
+    total_streams = estimate_result.get("total_estimated_streams", 0)
+    if total_streams == 0:
+        total_streams = summary.get("total_streams", 0)
+    if total_streams == 0:
+        total_streams = sum(p["streams"] for p in platforms.values())
+
+    dsp_links = db.query(SongDSPLink).filter(SongDSPLink.song_id == song.id).all()
+
+    return {
+        "song_id": song.id,
+        "title": song.title,
+        "primary_artist": song.primary_artist,
+        "total_streams": total_streams,
+        "confidence": summary.get("confidence", 0),
+        "last_updated": summary.get("last_updated") or estimate_result.get("computed_at"),
+        "riaa_equivalents": summary.get("riaa_equivalents") or estimate_result.get("riaa_equivalents", {}),
+        "platforms": platforms,
+        "dsp_links": [{"id": l.id, "platform": l.platform, "url": l.url} for l in dsp_links],
+        "has_spotify_link": bool(song.spotify_link or any(l.platform == "SPOTIFY" for l in dsp_links)),
+    }
+
+
 class BulkDeleteRequest(BaseModel):
     song_ids: List[int]
 
