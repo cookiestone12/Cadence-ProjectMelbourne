@@ -786,7 +786,6 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
             {[
               { id: 'overview', label: 'Overview', icon: MusicalNoteIcon },
               { id: 'rights', label: 'Rights & Splits', icon: ScaleIcon },
-              { id: 'placement', label: 'Placement Status', icon: DocumentTextIcon },
               { id: 'streaming', label: 'Streaming & Valuation', icon: ChartBarIcon },
               { id: 'links', label: 'Credits & Links', icon: LinkIcon },
               { id: 'audio', label: 'Audio', icon: SpeakerWaveIcon }
@@ -1425,6 +1424,134 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                     </p>
                   )}
                 </div>
+
+                <div className="col-span-2 bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                  <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Status Checklist</h3>
+                  <div className="space-y-3">
+                    {[
+                      { label: 'Contract Sent', field: 'has_contract_sent' },
+                      { label: 'Contract Executed', field: 'has_contract_executed' },
+                      { label: 'PRO Registered', field: 'is_registered_with_pro' },
+                      { label: 'SoundExchange Registered', field: 'soundexchange_registered' },
+                      { label: 'MLC Registered', field: 'mlc_registered' },
+                    ].map(({ label, field }) => (
+                      <div key={field} className="group flex items-center justify-between cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-2 -mx-2 py-1 transition-colors" onClick={() => cycleStatusValue(field)}>
+                        <span className="text-[15px] text-[#3D4A44]">{label}</span>
+                        <div className="flex items-center gap-1.5">
+                          {getStatusIcon(songDetails[field])}
+                          <PencilSquareIcon className="w-3 h-3 text-[#7A8580] opacity-0 group-hover:opacity-40" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="col-span-2 bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-[17px] font-semibold text-[#3D4A44]">Contracts & Agreements</h3>
+                    <div>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleContractUpload}
+                        accept=".pdf"
+                        className="hidden"
+                      />
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                        className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-[12px] font-medium text-[14px] hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all disabled:opacity-50"
+                      >
+                        <DocumentArrowUpIcon className="w-5 h-5" />
+                        <span>{uploading ? 'Uploading...' : 'Upload Contract'}</span>
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {linkedContracts.length > 0 && (
+                    <div className="mb-4">
+                      <h4 className="text-[13px] font-semibold text-[#7A8580] uppercase tracking-wide mb-2">Linked Contracts</h4>
+                      <div className="space-y-2">
+                        {linkedContracts.map((lc) => (
+                          <div key={lc.id} className="flex items-center justify-between p-4 bg-[#F5F7F4] rounded-[12px] border border-[rgba(59,77,67,0.08)]">
+                            <div className="flex items-center space-x-3">
+                              <DocumentTextIcon className="w-8 h-8 text-[#5B8A72]" />
+                              <div>
+                                <p className="font-medium text-[#3D4A44]">{lc.title}</p>
+                                <p className="text-[13px] text-[#7A8580]">
+                                  {lc.contract_type || 'Contract'}
+                                  {lc.reference_number ? ` \u2022 ${lc.reference_number}` : ''}
+                                  {lc.status ? ` \u2022 ${lc.status}` : ''}
+                                </p>
+                                {(lc.start_date || lc.end_date) && (
+                                  <p className="text-[12px] text-[#7A8580]">
+                                    {lc.start_date ? new Date(lc.start_date).toLocaleDateString() : ''}
+                                    {lc.start_date && lc.end_date ? ' \u2013 ' : ''}
+                                    {lc.end_date ? new Date(lc.end_date).toLocaleDateString() : ''}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {contracts.length > 0 || linkedContracts.length === 0 ? (
+                    <>
+                      {contracts.length > 0 && linkedContracts.length > 0 && (
+                        <h4 className="text-[13px] font-semibold text-[#7A8580] uppercase tracking-wide mb-2">Uploaded Documents</h4>
+                      )}
+                      {contracts.length > 0 ? (
+                        <div className="space-y-2">
+                          {contracts.map((contract) => (
+                            <div key={contract.id} className="flex items-center justify-between p-4 bg-[#F5F7F4] rounded-[12px] border border-[rgba(59,77,67,0.08)]">
+                              <div className="flex items-center space-x-3">
+                                <DocumentTextIcon className="w-8 h-8 text-[#5B8A72]" />
+                                <div>
+                                  <p className="font-medium text-[#3D4A44]">{contract.file_name}</p>
+                                  <p className="text-[13px] text-[#7A8580]">
+                                    {contract.contract_type || 'Contract'} \u2022 {new Date(contract.created_at).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <button
+                                  onClick={() => setShareTarget({ type: 'DOCUMENT', id: contract.id, name: contract.file_name })}
+                                  className="p-2 text-[#7A8580] hover:text-[#5A8A9A] hover:bg-[rgba(90,138,154,0.1)] rounded-[8px] transition-colors"
+                                  title="Share"
+                                >
+                                  <LinkIcon className="w-5 h-5" />
+                                </button>
+                                <button
+                                  onClick={() => downloadContract(contract.id)}
+                                  className="p-2 text-[#7A8580] hover:text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-[8px] transition-colors"
+                                  title="Download"
+                                >
+                                  <ArrowDownTrayIcon className="w-5 h-5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteContract(contract.id)}
+                                  className="p-2 text-[#7A8580] hover:text-[#C47068] hover:bg-[rgba(196,112,104,0.1)] rounded-[8px] transition-colors"
+                                  title="Delete"
+                                >
+                                  <TrashIcon className="w-5 h-5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 bg-[#F5F7F4] rounded-[12px] border-2 border-dashed border-[rgba(59,77,67,0.08)]">
+                          <DocumentTextIcon className="w-10 h-10 text-[#7A8580] mx-auto mb-2" />
+                          <p className="text-[#3D4A44] text-sm">No contracts uploaded yet</p>
+                          <p className="text-[12px] text-[#7A8580]">Upload a PDF to attach it to this song</p>
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+                </div>
               </div>
             </div>
           )}
@@ -1692,195 +1819,6 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   ))}
                 </div>
               )}
-            </div>
-          )}
-          
-          {activeTab === 'placement' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
-                  <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Ownership</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-[13px] font-medium text-[#7A8580]">Publishing %</label>
-                      <p className="text-[28px] font-semibold text-[#3D4A44]">
-                        {songDetails.publishing_percentage 
-                          ? `${Math.min(songDetails.publishing_percentage, 100).toFixed(2)}%`
-                          : 'N/A'
-                        }
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-[13px] font-medium text-[#7A8580]">Master %</label>
-                      <p className="text-[28px] font-semibold text-[#3D4A44]">
-                        {songDetails.master_percentage 
-                          ? `${Math.min(songDetails.master_percentage, 100).toFixed(2)}%`
-                          : 'N/A'
-                        }
-                      </p>
-                    </div>
-                    <div>
-                      <label className="text-[13px] font-medium text-[#7A8580]">Advance</label>
-                      <p className="text-[28px] font-semibold text-[#3D4A44]">
-                        {songDetails.advance_amount 
-                          ? `$${songDetails.advance_amount.toLocaleString()}`
-                          : 'N/A'
-                        }
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
-                  <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Status Checklist</h3>
-                  <div className="space-y-3">
-                    {[
-                      { label: 'Contract Sent', field: 'has_contract_sent' },
-                      { label: 'Contract Executed', field: 'has_contract_executed' },
-                      { label: 'PRO Registered', field: 'is_registered_with_pro' },
-                      { label: 'SoundExchange Registered', field: 'soundexchange_registered' },
-                      { label: 'MLC Registered', field: 'mlc_registered' },
-                    ].map(({ label, field }) => (
-                      <div key={field} className="group flex items-center justify-between cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-2 -mx-2 py-1 transition-colors" onClick={() => cycleStatusValue(field)}>
-                        <span className="text-[15px] text-[#3D4A44]">{label}</span>
-                        <div className="flex items-center gap-1.5">
-                          {getStatusIcon(songDetails[field])}
-                          <PencilSquareIcon className="w-3 h-3 text-[#7A8580] opacity-0 group-hover:opacity-40" />
-                        </div>
-                      </div>
-                    ))}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] text-[#3D4A44]">Fee</span>
-                      {getStatusIcon(songDetails.is_registered_with_dsp)}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] text-[#3D4A44]">Paid</span>
-                      {getStatusIcon(songDetails.is_paid)}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] text-[#3D4A44]">Advance</span>
-                      {getStatusIcon(songDetails.is_invoiced)}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] text-[#3D4A44]">Payment Status</span>
-                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-[13px] font-medium ${
-                        songDetails.payment_status === 'PAID' 
-                          ? 'bg-[rgba(91,154,110,0.15)] text-[#5B9A6E]' 
-                          : 'bg-[rgba(0,0,0,0.05)] text-[#7A8580]'
-                      }`}>
-                        {songDetails.payment_status || 'N/A'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[17px] font-semibold text-[#3D4A44]">Contracts & Agreements</h3>
-                  <div>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleContractUpload}
-                      accept=".pdf"
-                      className="hidden"
-                    />
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-[12px] font-medium text-[15px] hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all disabled:opacity-50"
-                    >
-                      <DocumentArrowUpIcon className="w-5 h-5" />
-                      <span>{uploading ? 'Uploading...' : 'Upload Contract'}</span>
-                    </button>
-                  </div>
-                </div>
-                
-                {linkedContracts.length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="text-[13px] font-semibold text-[#7A8580] uppercase tracking-wide mb-2">Linked Contracts</h4>
-                    <div className="space-y-2">
-                      {linkedContracts.map((lc) => (
-                        <div key={lc.id} className="flex items-center justify-between p-4 bg-[#F5F7F4] rounded-[12px] border border-[rgba(59,77,67,0.08)]">
-                          <div className="flex items-center space-x-3">
-                            <DocumentTextIcon className="w-8 h-8 text-[#5B8A72]" />
-                            <div>
-                              <p className="font-medium text-[#3D4A44]">{lc.title}</p>
-                              <p className="text-[13px] text-[#7A8580]">
-                                {lc.contract_type || 'Contract'}
-                                {lc.reference_number ? ` • ${lc.reference_number}` : ''}
-                                {lc.status ? ` • ${lc.status}` : ''}
-                              </p>
-                              {(lc.start_date || lc.end_date) && (
-                                <p className="text-[12px] text-[#7A8580]">
-                                  {lc.start_date ? new Date(lc.start_date).toLocaleDateString() : ''}
-                                  {lc.start_date && lc.end_date ? ' – ' : ''}
-                                  {lc.end_date ? new Date(lc.end_date).toLocaleDateString() : ''}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {contracts.length > 0 || linkedContracts.length === 0 ? (
-                  <>
-                    {contracts.length > 0 && linkedContracts.length > 0 && (
-                      <h4 className="text-[13px] font-semibold text-[#7A8580] uppercase tracking-wide mb-2">Uploaded Documents</h4>
-                    )}
-                    {contracts.length > 0 ? (
-                      <div className="space-y-2">
-                        {contracts.map((contract) => (
-                          <div key={contract.id} className="flex items-center justify-between p-4 bg-[#F5F7F4] rounded-[12px] border border-[rgba(59,77,67,0.08)]">
-                            <div className="flex items-center space-x-3">
-                              <DocumentTextIcon className="w-8 h-8 text-[#5B8A72]" />
-                              <div>
-                                <p className="font-medium text-[#3D4A44]">{contract.file_name}</p>
-                                <p className="text-[13px] text-[#7A8580]">
-                                  {contract.contract_type || 'Contract'} • {new Date(contract.created_at).toLocaleDateString()}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => setShareTarget({ type: 'DOCUMENT', id: contract.id, name: contract.file_name })}
-                                className="p-2 text-[#7A8580] hover:text-[#5A8A9A] hover:bg-[rgba(90,138,154,0.1)] rounded-[8px] transition-colors"
-                                title="Share"
-                              >
-                                <LinkIcon className="w-5 h-5" />
-                              </button>
-                              <button
-                                onClick={() => downloadContract(contract.id)}
-                                className="p-2 text-[#7A8580] hover:text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-[8px] transition-colors"
-                                title="Download"
-                              >
-                                <ArrowDownTrayIcon className="w-5 h-5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteContract(contract.id)}
-                                className="p-2 text-[#7A8580] hover:text-[#C47068] hover:bg-[rgba(196,112,104,0.1)] rounded-[8px] transition-colors"
-                                title="Delete"
-                              >
-                                <TrashIcon className="w-5 h-5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 bg-[#F5F7F4] rounded-[12px] border-2 border-dashed border-[rgba(59,77,67,0.08)]">
-                        <DocumentTextIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3" />
-                        <p className="text-[#3D4A44]">No contracts uploaded yet</p>
-                        <p className="text-[13px] text-[#7A8580]">Upload a PDF to attach it to this song</p>
-                      </div>
-                    )}
-                  </>
-                ) : null}
-              </div>
             </div>
           )}
           
