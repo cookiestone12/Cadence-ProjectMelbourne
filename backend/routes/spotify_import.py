@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
-from ..models import get_db, Song, Creator, SongCredit, SongDSPLink, OrganizationMember, User
+from ..models import get_db, Song, Creator, SongCredit, SongDSPLink, OrganizationMember, User, ChecklistItem, SongChecklistStatus
 from ..utils.auth import get_current_user
 from ..services import spotify_service
 
@@ -192,6 +192,15 @@ def import_playlist_tracks(
         db.add(song)
         db.flush()
 
+        checklist_items = db.query(ChecklistItem).all()
+        for item in checklist_items:
+            cl_status = SongChecklistStatus(
+                song_id=song.id,
+                checklist_item_id=item.id,
+                status="NOT_STARTED"
+            )
+            db.add(cl_status)
+
         if track_data.spotify_url:
             dsp_link = SongDSPLink(
                 song_id=song.id,
@@ -199,6 +208,9 @@ def import_playlist_tracks(
                 url=track_data.spotify_url,
             )
             db.add(dsp_link)
+
+        from ..utils.health_sync import sync_song_to_checklist
+        sync_song_to_checklist(db, song)
 
         credited_creator_ids = set()
 

@@ -318,7 +318,7 @@ async def import_csv(
                 recording_code=row_data.get("recording_code"),
                 notes=row_data.get("notes"),
                 is_released=(release_date is not None),
-                status_health_score=calculate_health_score(row_data)
+                status_health_score=0.0
             )
             db.add(song)
             db.flush()
@@ -331,6 +331,9 @@ async def import_csv(
                     status=status
                 )
                 db.add(checklist_status)
+            
+            from ..utils.health_sync import sync_song_to_checklist
+            sync_song_to_checklist(db, song)
             
             if creator:
                 credit = SongCredit(

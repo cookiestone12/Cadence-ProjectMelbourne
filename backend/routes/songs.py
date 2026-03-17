@@ -1113,6 +1113,9 @@ def duplicate_song(
         )
         db.add(status)
 
+    from ..utils.health_sync import sync_song_to_checklist
+    sync_song_to_checklist(db, new_song)
+
     from ..services.audit_service import log_action
     log_action(db, source.organization_id, current_user.id, "DUPLICATE", "SONG", new_song.id, new_song.title)
     db.commit()

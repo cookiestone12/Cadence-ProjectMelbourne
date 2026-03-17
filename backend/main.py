@@ -34,6 +34,21 @@ def startup_event():
     except Exception as e:
         logging.getLogger("cadence").warning(f"Email scheduler failed to start: {e}")
 
+    import threading
+    def _bulk_health_sync():
+        try:
+            from .models.database import SessionLocal
+            from .utils.health_sync import sync_all_songs
+            db = SessionLocal()
+            try:
+                count = sync_all_songs(db)
+                logging.getLogger("cadence").info(f"Startup health score sync: {count} songs synced")
+            finally:
+                db.close()
+        except Exception as e:
+            logging.getLogger("cadence").warning(f"Startup health sync failed: {e}")
+    threading.Thread(target=_bulk_health_sync, daemon=True).start()
+
 
 @app.on_event("shutdown")
 def shutdown_event():

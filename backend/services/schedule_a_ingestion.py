@@ -324,6 +324,9 @@ def ingest_schedule_a(
                     if iswc:
                         existing_song.iswc = iswc
                     
+                    from backend.utils.health_sync import sync_song_to_checklist
+                    sync_song_to_checklist(db, existing_song)
+                    
                     song = existing_song
                     result.songs_updated += 1
                 else:
@@ -362,6 +365,9 @@ def ingest_schedule_a(
                             status="NOT_STARTED"
                         )
                         db.add(status)
+                    
+                    from backend.utils.health_sync import sync_song_to_checklist
+                    sync_song_to_checklist(db, song)
                     
                     result.songs_created += 1
                 
