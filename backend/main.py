@@ -34,6 +34,15 @@ def startup_event():
     except Exception as e:
         logging.getLogger("cadence").warning(f"Email scheduler failed to start: {e}")
 
+    import threading
+    def _deferred_setup():
+        try:
+            from .db_setup import main as run_db_setup
+            run_db_setup()
+        except Exception as e:
+            logging.getLogger("cadence").warning(f"Deferred db setup failed: {e}")
+    threading.Thread(target=_deferred_setup, daemon=True).start()
+
 
 
 @app.on_event("shutdown")
