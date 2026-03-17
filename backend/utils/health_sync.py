@@ -45,24 +45,18 @@ def set_checklist_status(db: Session, song_id: int, checklist_item_id: int, stat
         db.add(new_status)
 
 def recalculate_health_score(db: Session, song: Song):
-    na_statuses = db.query(SongChecklistStatus).filter(
-        SongChecklistStatus.song_id == song.id,
-        SongChecklistStatus.status == "NOT_APPLICABLE"
-    ).all()
-    na_item_ids = {s.checklist_item_id for s in na_statuses}
-
     all_items = db.query(ChecklistItem).all()
-    total_weight = sum(item.weight for item in all_items if item.id not in na_item_ids) or 1
+    total_weight = sum(item.weight for item in all_items) or 1
     
-    completed_weight = db.query(func.sum(ChecklistItem.weight)).join(
+    acknowledged_weight = db.query(func.sum(ChecklistItem.weight)).join(
         SongChecklistStatus,
         ChecklistItem.id == SongChecklistStatus.checklist_item_id
     ).filter(
         SongChecklistStatus.song_id == song.id,
-        SongChecklistStatus.status == "COMPLETED"
+        SongChecklistStatus.status.in_(["COMPLETED", "NOT_APPLICABLE"])
     ).scalar() or 0
     
-    health_score = (completed_weight / total_weight) * 100
+    health_score = (acknowledged_weight / total_weight) * 100
     song.status_health_score = round(min(health_score, 100.0), 2)
 
 def sync_song_to_checklist(db: Session, song: Song):
