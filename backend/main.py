@@ -38,11 +38,20 @@ def startup_event():
     def _bulk_health_sync():
         try:
             from .models.database import SessionLocal
-            from .utils.health_sync import sync_all_songs
+            from .models.models import Song
+            from .utils.health_sync import sync_song_to_checklist
             db = SessionLocal()
             try:
-                count = sync_all_songs(db)
-                logging.getLogger("cadence").info(f"Startup health score sync: {count} songs synced")
+                stale_songs = db.query(Song).filter(
+                    (Song.status_health_score == None) | (Song.status_health_score == 0.0)
+                ).all()
+                if not stale_songs:
+                    logging.getLogger("cadence").info("Startup health sync: no stale songs found")
+                    return
+                for song in stale_songs:
+                    sync_song_to_checklist(db, song)
+                db.commit()
+                logging.getLogger("cadence").info(f"Startup health score sync: {len(stale_songs)} stale songs synced")
             finally:
                 db.close()
         except Exception as e:
