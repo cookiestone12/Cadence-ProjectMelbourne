@@ -62,17 +62,17 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
     master_percentage: '',
     advance_amount: '',
     recording_code: '',
-    master_paid: 'N/A',
-    soundexchange_registered: 'N/A',
+    master_paid: '',
+    soundexchange_registered: '',
     payment_status: 'PENDING',
     contract_location: '',
     notes: '',
     media_url: '',
     has_contract_executed: false,
     is_registered_with_pro: false,
-    is_registered_with_dsp: 'N/A',
-    is_paid: 'N/A',
-    is_invoiced: 'N/A'
+    is_registered_with_dsp: '',
+    is_paid: '',
+    is_invoiced: ''
   })
   
   const [loading, setLoading] = useState(false)
@@ -129,17 +129,17 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
         master_percentage: formData.master_percentage ? parseFloat(formData.master_percentage) : null,
         advance_amount: formData.advance_amount ? parseFloat(formData.advance_amount) * 100 : null,
         recording_code: formData.recording_code || null,
-        master_paid: formData.master_paid,
-        soundexchange_registered: formData.soundexchange_registered,
+        master_paid: formData.master_paid || null,
+        soundexchange_registered: formData.soundexchange_registered || null,
         payment_status: formData.payment_status,
         contract_location: formData.contract_location || null,
         notes: formData.notes || null,
         media_url: formData.media_url || null,
         has_contract_executed: formData.has_contract_executed,
         is_registered_with_pro: formData.is_registered_with_pro,
-        is_registered_with_dsp: formData.is_registered_with_dsp,
-        is_paid: formData.is_paid,
-        is_invoiced: formData.is_invoiced
+        is_registered_with_dsp: formData.is_registered_with_dsp || null,
+        is_paid: formData.is_paid || null,
+        is_invoiced: formData.is_invoiced || null
       }
       
       const songResponse = await axios.post(`/api/songs/org/${organizationId}`, payload, {
@@ -401,6 +401,7 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
                   onChange={(e) => handleChange('master_paid', e.target.value)}
                   className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
                 >
+                  <option value="">—</option>
                   <option value="Yes">Yes</option>
                   <option value="No">No</option>
                   <option value="N/A">N/A</option>
@@ -414,6 +415,7 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
                   onChange={(e) => handleChange('soundexchange_registered', e.target.value)}
                   className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
                 >
+                  <option value="">—</option>
                   <option value="Yes">Yes</option>
                   <option value="No">No</option>
                   <option value="N/A">N/A</option>
@@ -505,9 +507,10 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
                   onChange={(e) => handleChange('is_paid', e.target.value)}
                   className="w-full px-3 py-2 border border-[rgba(59,77,67,0.08)] rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#5B8A72]"
                 >
-                  <option value="N/A">N/A</option>
+                  <option value="">—</option>
                   <option value="Yes">Yes</option>
                   <option value="No">No</option>
+                  <option value="N/A">N/A</option>
                 </select>
               </div>
               <div>

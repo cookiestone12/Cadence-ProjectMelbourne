@@ -70,7 +70,7 @@ def sync_song_to_checklist(db: Session, song: Song):
         value = getattr(song, field, None)
 
         if value is None and field in NA_CAPABLE_FIELDS:
-            set_checklist_status(db, song.id, checklist_item.id, "NOT_APPLICABLE")
+            set_checklist_status(db, song.id, checklist_item.id, "NOT_STARTED")
             continue
 
         if isinstance(value, bool):
