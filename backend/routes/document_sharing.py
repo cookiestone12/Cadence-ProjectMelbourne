@@ -100,6 +100,8 @@ def _build_attachment(db: Session, item_type: str, item_id: int, org_id: int):
             with open(doc.file_path, "rb") as f:
                 content = base64.b64encode(f.read()).decode("utf-8")
             return [{"filename": doc.file_name, "content": content, "type": doc.mime_type or "application/octet-stream"}]
+    elif item_type == "AUDIO":
+        pass
     elif item_type == "STATEMENT":
         stmt = db.query(RoyaltyStatement).filter(RoyaltyStatement.id == item_id, RoyaltyStatement.organization_id == org_id).first()
         if stmt and stmt.file_path and Path(stmt.file_path).exists():
@@ -186,7 +188,7 @@ def share_to_account(
     for uid in recipient_ids:
         if uid == current_user.id:
             continue
-        recipient = db.query(User).filter(User.id == uid).first()
+        recipient = db.query(User).filter(User.id == uid, User.is_active == True).first()
         if not recipient:
             continue
 

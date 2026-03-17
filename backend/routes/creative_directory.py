@@ -935,7 +935,7 @@ def share_contacts_to_accounts(
         for uid in recipient_ids:
             if uid == current_user.id:
                 continue
-            recipient = db.query(User).filter(User.id == uid).first()
+            recipient = db.query(User).filter(User.id == uid, User.is_active == True).first()
             if not recipient:
                 continue
 
