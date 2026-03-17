@@ -367,12 +367,18 @@ def get_creator(
         Song.organization_id == creator.organization_id
     ).scalar() or 0
     
-    avg_health = db.query(func.avg(Song.status_health_score)).join(
+    creator_songs = db.query(Song).join(
         SongCredit, Song.id == SongCredit.song_id
     ).filter(
         SongCredit.creator_id == creator.id,
         Song.organization_id == creator.organization_id
-    ).scalar() or 0.0
+    ).all()
+    try:
+        from ..utils.health_sync import ensure_songs_health
+        ensure_songs_health(db, creator_songs)
+    except Exception:
+        pass
+    avg_health = sum(s.status_health_score or 0 for s in creator_songs) / len(creator_songs) if creator_songs else 0.0
     
     placement_count = db.query(func.count(Song.id)).join(
         SongCredit, Song.id == SongCredit.song_id

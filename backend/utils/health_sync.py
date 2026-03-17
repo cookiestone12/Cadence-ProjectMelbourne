@@ -114,6 +114,50 @@ def sync_song_to_checklist(db: Session, song: Song):
     
     recalculate_health_score(db, song)
 
+def ensure_song_health(db: Session, song: Song):
+    if song.status_health_score and song.status_health_score > 0:
+        return
+    has_status = db.query(SongChecklistStatus).filter(
+        SongChecklistStatus.song_id == song.id
+    ).first()
+    if not has_status:
+        items = db.query(ChecklistItem).all()
+        if not items:
+            return
+        for item in items:
+            db.add(SongChecklistStatus(
+                song_id=song.id,
+                checklist_item_id=item.id,
+                status="NOT_STARTED"
+            ))
+        db.flush()
+    sync_song_to_checklist(db, song)
+
+
+def ensure_songs_health(db: Session, songs: list):
+    stale = [s for s in songs if not s.status_health_score or s.status_health_score == 0]
+    if not stale:
+        return
+    stale_ids = [s.id for s in stale]
+    existing_song_ids = {r[0] for r in db.query(SongChecklistStatus.song_id).filter(
+        SongChecklistStatus.song_id.in_(stale_ids)
+    ).distinct().all()}
+    items = db.query(ChecklistItem).all()
+    if not items:
+        return
+    for song in stale:
+        if song.id not in existing_song_ids:
+            for item in items:
+                db.add(SongChecklistStatus(
+                    song_id=song.id,
+                    checklist_item_id=item.id,
+                    status="NOT_STARTED"
+                ))
+            db.flush()
+        sync_song_to_checklist(db, song)
+    db.commit()
+
+
 def sync_organization_songs(db: Session, organization_id: int):
     songs = db.query(Song).filter(Song.organization_id == organization_id).all()
     synced_count = 0
