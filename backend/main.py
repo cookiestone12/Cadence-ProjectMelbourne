@@ -68,6 +68,7 @@ def startup_event():
                         {"code": "DSP-03", "category": "DSP", "description": "Spotify link verified", "weight": 5},
                         {"code": "SY-01", "category": "SYNC", "description": "Registered with PRO", "weight": 10},
                         {"code": "SY-02", "category": "SYNC", "description": "Publisher notified", "weight": 5},
+                        {"code": "SY-03", "category": "SYNC", "description": "MLC registered", "weight": 5},
                         {"code": "PY-01", "category": "PAYMENT", "description": "Payment received", "weight": 20},
                     ]
                     for item_data in CHECKLIST_SEED:
@@ -76,13 +77,18 @@ def startup_event():
                     log.info(f"Health sync thread: seeded {len(CHECKLIST_SEED)} checklist items")
                 else:
                     log.info(f"Health sync thread: {existing_count} checklist items exist")
+                    missing_items = [
+                        {"code": "SY-03", "category": "SYNC", "description": "MLC registered", "weight": 5},
+                    ]
+                    for item_data in missing_items:
+                        exists = db.query(ChecklistItem).filter(ChecklistItem.code == item_data["code"]).first()
+                        if not exists:
+                            db.add(ChecklistItem(**item_data))
+                            log.info(f"Health sync thread: added missing checklist item {item_data['code']}")
+                    db.commit()
 
-                stale_ids = [r[0] for r in db.query(Song.id).filter(
-                    (Song.status_health_score == None) | (Song.status_health_score == 0.0)
-                ).all()]
-                log.info(f"Health sync thread: {len(stale_ids)} stale songs found")
-                if not stale_ids:
-                    return
+                stale_ids = [r[0] for r in db.query(Song.id).all()]
+                log.info(f"Health sync thread: {len(stale_ids)} songs to sync")
 
                 all_items = db.query(ChecklistItem).all()
                 from .utils.health_sync import sync_song_to_checklist

@@ -109,8 +109,6 @@ def sync_song_to_checklist(db: Session, song: Song):
     recalculate_health_score(db, song)
 
 def ensure_song_health(db: Session, song: Song):
-    if song.status_health_score and song.status_health_score > 0:
-        return
     has_status = db.query(SongChecklistStatus).filter(
         SongChecklistStatus.song_id == song.id
     ).first()
@@ -129,17 +127,16 @@ def ensure_song_health(db: Session, song: Song):
 
 
 def ensure_songs_health(db: Session, songs: list):
-    stale = [s for s in songs if not s.status_health_score or s.status_health_score == 0]
-    if not stale:
+    if not songs:
         return
-    stale_ids = [s.id for s in stale]
+    song_ids = [s.id for s in songs]
     existing_song_ids = {r[0] for r in db.query(SongChecklistStatus.song_id).filter(
-        SongChecklistStatus.song_id.in_(stale_ids)
+        SongChecklistStatus.song_id.in_(song_ids)
     ).distinct().all()}
     items = db.query(ChecklistItem).all()
     if not items:
         return
-    for song in stale:
+    for song in songs:
         if song.id not in existing_song_ids:
             for item in items:
                 db.add(SongChecklistStatus(
