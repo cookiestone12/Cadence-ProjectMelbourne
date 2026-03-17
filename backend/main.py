@@ -43,15 +43,19 @@ def startup_event():
             from .models.database import engine, SessionLocal
             from .models.models import ChecklistItem, Song, SongChecklistStatus, Base
             from sqlalchemy import inspect, text
-            log.info("Health sync thread: starting")
-            inspector = inspect(engine)
-            existing_tables = set(inspector.get_table_names())
-            for tbl in [ChecklistItem.__table__, SongChecklistStatus.__table__]:
-                if tbl.name not in existing_tables:
-                    tbl.create(engine, checkfirst=True)
-                    log.info(f"Health sync thread: created table {tbl.name}")
             db = SessionLocal()
             try:
+                acquired = db.execute(text("SELECT pg_try_advisory_lock(42)")).scalar()
+                if not acquired:
+                    log.info("Health sync thread: another worker is running sync, skipping")
+                    return
+                log.info("Health sync thread: starting (lock acquired)")
+                inspector = inspect(engine)
+                existing_tables = set(inspector.get_table_names())
+                for tbl in [ChecklistItem.__table__, SongChecklistStatus.__table__]:
+                    if tbl.name not in existing_tables:
+                        tbl.create(engine, checkfirst=True)
+                        log.info(f"Health sync thread: created table {tbl.name}")
                 existing_count = db.query(ChecklistItem).count()
                 if existing_count == 0:
                     CHECKLIST_SEED = [
@@ -87,8 +91,13 @@ def startup_event():
                             log.info(f"Health sync thread: added missing checklist item {item_data['code']}")
                     db.commit()
 
-                stale_ids = [r[0] for r in db.query(Song.id).all()]
-                log.info(f"Health sync thread: {len(stale_ids)} songs to sync")
+                stale_ids = [r[0] for r in db.query(Song.id).filter(
+                    (Song.status_health_score == None) | (Song.status_health_score == 0.0)
+                ).all()]
+                log.info(f"Health sync thread: {len(stale_ids)} stale songs found")
+                if not stale_ids:
+                    log.info("Health sync thread: no stale songs, done")
+                    return
 
                 all_items = db.query(ChecklistItem).all()
                 from .utils.health_sync import sync_song_to_checklist
@@ -113,6 +122,11 @@ def startup_event():
                     log.info(f"Health sync thread: batch {i//batch_size + 1} done ({len(songs)} songs)")
                 log.info(f"Health sync thread: completed {len(stale_ids)} songs")
             finally:
+                try:
+                    db.execute(text("SELECT pg_advisory_unlock(42)"))
+                    db.commit()
+                except Exception:
+                    pass
                 db.close()
         except Exception:
             tb = traceback.format_exc()
