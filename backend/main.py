@@ -34,28 +34,21 @@ def startup_event():
     except Exception as e:
         logging.getLogger("cadence").warning(f"Email scheduler failed to start: {e}")
 
-    import threading
-    def _deferred_health_sync():
-        import traceback
-        import sys
+    def _seed_checklist():
         log = logging.getLogger("cadence")
         try:
-            from .models.database import engine, SessionLocal
-            from .models.models import ChecklistItem, Song, SongChecklistStatus, Base
-            from sqlalchemy import inspect, text
+            from .models.database import SessionLocal
+            from .models.models import ChecklistItem, SongChecklistStatus
+            from .models.database import engine
+            from sqlalchemy import inspect
+            inspector = inspect(engine)
+            existing_tables = set(inspector.get_table_names())
+            for tbl in [ChecklistItem.__table__, SongChecklistStatus.__table__]:
+                if tbl.name not in existing_tables:
+                    tbl.create(engine, checkfirst=True)
+                    log.info(f"Created table {tbl.name}")
             db = SessionLocal()
             try:
-                acquired = db.execute(text("SELECT pg_try_advisory_lock(42)")).scalar()
-                if not acquired:
-                    log.info("Health sync thread: another worker is running sync, skipping")
-                    return
-                log.info("Health sync thread: starting (lock acquired)")
-                inspector = inspect(engine)
-                existing_tables = set(inspector.get_table_names())
-                for tbl in [ChecklistItem.__table__, SongChecklistStatus.__table__]:
-                    if tbl.name not in existing_tables:
-                        tbl.create(engine, checkfirst=True)
-                        log.info(f"Health sync thread: created table {tbl.name}")
                 existing_count = db.query(ChecklistItem).count()
                 if existing_count == 0:
                     CHECKLIST_SEED = [
@@ -78,9 +71,8 @@ def startup_event():
                     for item_data in CHECKLIST_SEED:
                         db.add(ChecklistItem(**item_data))
                     db.commit()
-                    log.info(f"Health sync thread: seeded {len(CHECKLIST_SEED)} checklist items")
+                    log.info(f"Seeded {len(CHECKLIST_SEED)} checklist items")
                 else:
-                    log.info(f"Health sync thread: {existing_count} checklist items exist")
                     missing_items = [
                         {"code": "SY-03", "category": "SYNC", "description": "MLC registered", "weight": 5},
                     ]
@@ -88,51 +80,14 @@ def startup_event():
                         exists = db.query(ChecklistItem).filter(ChecklistItem.code == item_data["code"]).first()
                         if not exists:
                             db.add(ChecklistItem(**item_data))
-                            log.info(f"Health sync thread: added missing checklist item {item_data['code']}")
+                            log.info(f"Added missing checklist item {item_data['code']}")
                     db.commit()
-
-                stale_ids = [r[0] for r in db.query(Song.id).filter(
-                    (Song.status_health_score == None) | (Song.status_health_score == 0.0)
-                ).all()]
-                log.info(f"Health sync thread: {len(stale_ids)} stale songs found")
-                if not stale_ids:
-                    log.info("Health sync thread: no stale songs, done")
-                    return
-
-                all_items = db.query(ChecklistItem).all()
-                from .utils.health_sync import sync_song_to_checklist
-                batch_size = 50
-                for i in range(0, len(stale_ids), batch_size):
-                    batch_ids = stale_ids[i:i + batch_size]
-                    songs = db.query(Song).filter(Song.id.in_(batch_ids)).all()
-                    existing_song_ids = {r[0] for r in db.query(SongChecklistStatus.song_id).filter(
-                        SongChecklistStatus.song_id.in_(batch_ids)
-                    ).distinct().all()}
-                    for song in songs:
-                        if song.id not in existing_song_ids:
-                            for item in all_items:
-                                db.add(SongChecklistStatus(
-                                    song_id=song.id,
-                                    checklist_item_id=item.id,
-                                    status="NOT_STARTED"
-                                ))
-                            db.flush()
-                        sync_song_to_checklist(db, song)
-                    db.commit()
-                    log.info(f"Health sync thread: batch {i//batch_size + 1} done ({len(songs)} songs)")
-                log.info(f"Health sync thread: completed {len(stale_ids)} songs")
             finally:
-                try:
-                    db.execute(text("SELECT pg_advisory_unlock(42)"))
-                    db.commit()
-                except Exception:
-                    pass
                 db.close()
         except Exception:
-            tb = traceback.format_exc()
-            log.error(f"Health sync thread FAILED:\n{tb}")
-            print(f"Health sync thread FAILED:\n{tb}", file=sys.stderr, flush=True)
-    threading.Thread(target=_deferred_health_sync, daemon=True).start()
+            log.error(f"Checklist seed failed: {traceback.format_exc()}")
+    import traceback
+    _seed_checklist()
 
 
 

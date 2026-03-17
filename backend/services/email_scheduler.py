@@ -190,7 +190,7 @@ def start_scheduler():
         hours=4,
         id="chart_ingestion_check",
         replace_existing=True,
-        next_run_time=datetime.now(),
+        next_run_time=datetime.now() + timedelta(minutes=5),
     )
     _scheduler.start()
     logger.info("Email digest scheduler started (15-minute interval)")
