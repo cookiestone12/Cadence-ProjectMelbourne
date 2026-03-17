@@ -58,16 +58,12 @@ def _static(path):
 
 async def app(scope, receive, send):
     if scope["type"] == "lifespan":
-        _loaded.wait(timeout=60)
-        if _real_app is not None:
-            await _real_app(scope, receive, send)
-        else:
-            msg = await receive()
-            if msg["type"] == "lifespan.startup":
-                await send({"type": "lifespan.startup.complete"})
-            msg = await receive()
-            if msg["type"] == "lifespan.shutdown":
-                await send({"type": "lifespan.shutdown.complete"})
+        msg = await receive()
+        if msg["type"] == "lifespan.startup":
+            await send({"type": "lifespan.startup.complete"})
+        msg = await receive()
+        if msg["type"] == "lifespan.shutdown":
+            await send({"type": "lifespan.shutdown.complete"})
         return
 
     if scope["type"] != "http":

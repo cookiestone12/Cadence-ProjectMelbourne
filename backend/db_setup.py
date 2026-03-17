@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.models import Base, engine
 from backend.models.database import SessionLocal
-from backend.models.models import User
+from backend.models.models import User, ChecklistItem, Song, SongChecklistStatus
 from backend.utils.logging_config import logger
 
 
@@ -364,6 +364,75 @@ def seed_super_admin():
         db.close()
 
 
+CHECKLIST_ITEMS_SEED = [
+    {"code": "AD-01", "category": "ADMIN", "description": "Contract sent to placement partner", "weight": 10},
+    {"code": "AD-02", "category": "ADMIN", "description": "Contract executed/signed", "weight": 15},
+    {"code": "AD-03", "category": "ADMIN", "description": "Invoice submitted", "weight": 10},
+    {"code": "LG-01", "category": "LEGAL", "description": "Rights clearance completed", "weight": 15},
+    {"code": "LG-02", "category": "LEGAL", "description": "Publishing splits confirmed", "weight": 10},
+    {"code": "MD-01", "category": "METADATA", "description": "ISRC assigned", "weight": 5},
+    {"code": "MD-02", "category": "METADATA", "description": "ISWC assigned", "weight": 5},
+    {"code": "MD-03", "category": "METADATA", "description": "Credits finalized", "weight": 5},
+    {"code": "DSP-01", "category": "DSP", "description": "Registered with DSPs", "weight": 10},
+    {"code": "DSP-02", "category": "DSP", "description": "Apple Music link verified", "weight": 5},
+    {"code": "DSP-03", "category": "DSP", "description": "Spotify link verified", "weight": 5},
+    {"code": "SY-01", "category": "SYNC", "description": "Registered with PRO", "weight": 10},
+    {"code": "SY-02", "category": "SYNC", "description": "Publisher notified", "weight": 5},
+    {"code": "PY-01", "category": "PAYMENT", "description": "Payment received", "weight": 20},
+]
+
+
+def seed_checklist_items():
+    db = SessionLocal()
+    try:
+        existing_codes = {item.code for item in db.query(ChecklistItem).all()}
+        added = 0
+        for item_data in CHECKLIST_ITEMS_SEED:
+            if item_data["code"] not in existing_codes:
+                db.add(ChecklistItem(**item_data))
+                added += 1
+        if added:
+            db.commit()
+            logger.info(f"Seeded {added} checklist items")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Checklist item seeding error: {e}")
+    finally:
+        db.close()
+
+
+def sync_stale_health_scores():
+    db = SessionLocal()
+    try:
+        stale_songs = db.query(Song).filter(
+            (Song.status_health_score == None) | (Song.status_health_score == 0.0)
+        ).all()
+        if not stale_songs:
+            return
+        from backend.utils.health_sync import sync_song_to_checklist
+        for song in stale_songs:
+            has_statuses = db.query(SongChecklistStatus).filter(
+                SongChecklistStatus.song_id == song.id
+            ).first()
+            if not has_statuses:
+                checklist_items = db.query(ChecklistItem).all()
+                for item in checklist_items:
+                    db.add(SongChecklistStatus(
+                        song_id=song.id,
+                        checklist_item_id=item.id,
+                        status="NOT_STARTED"
+                    ))
+                db.flush()
+            sync_song_to_checklist(db, song)
+        db.commit()
+        logger.info(f"Synced health scores for {len(stale_songs)} stale songs")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Health score sync error: {e}")
+    finally:
+        db.close()
+
+
 def main():
     logger.info("Starting database setup...")
     try:
@@ -390,6 +459,8 @@ def main():
         logger.warning(f"Schema update check: {e}")
 
     seed_super_admin()
+    seed_checklist_items()
+    sync_stale_health_scores()
     logger.info("Database setup complete")
 
 
