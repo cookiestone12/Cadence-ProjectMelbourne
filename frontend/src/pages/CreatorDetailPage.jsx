@@ -870,21 +870,21 @@ export default function CreatorDetailPage() {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(52, 199, 89, 0.15)', color: '#5B9A6E' }}>
           <CheckCircleIcon className="w-3 h-3" />
-          {label || 'Yes'}
+          {label ? `${label}` : 'Yes'}
         </span>
       )
     } else if (value === false || strVal === 'no' || strVal === 'false') {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(255, 59, 48, 0.15)', color: '#C47068' }}>
           <XCircleIcon className="w-3 h-3" />
-          {label || 'No'}
+          {label ? `${label}` : 'No'}
         </span>
       )
     } else if (strVal === 'n/a' || strVal === '' || value === null || value === undefined) {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(0, 0, 0, 0.05)', color: '#7A8580' }}>
           <MinusCircleIcon className="w-3 h-3" />
-          N/A
+          {label ? `${label}: N/A` : 'N/A'}
         </span>
       )
     } else {
@@ -892,7 +892,7 @@ export default function CreatorDetailPage() {
       return (
         <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium" style={{ background: 'rgba(52, 199, 89, 0.15)', color: '#5B9A6E' }}>
           <CheckCircleIcon className="w-3 h-3" />
-          {isNaN(num) ? 'Yes' : `$${num.toLocaleString()}`}
+          {label ? `${label}: ` : ''}{isNaN(num) ? 'Yes' : `$${num.toLocaleString()}`}
         </span>
       )
     }
