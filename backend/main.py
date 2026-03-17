@@ -35,13 +35,80 @@ def startup_event():
         logging.getLogger("cadence").warning(f"Email scheduler failed to start: {e}")
 
     import threading
-    def _deferred_setup():
+    def _deferred_health_sync():
+        log = logging.getLogger("cadence")
         try:
-            from .db_setup import main as run_db_setup
-            run_db_setup()
+            from .models.database import engine, SessionLocal
+            from .models.models import ChecklistItem, Song, SongChecklistStatus
+            from sqlalchemy import inspect
+            inspector = inspect(engine)
+            existing_tables = inspector.get_table_names()
+            tables_to_create = []
+            if "checklist_items" not in existing_tables:
+                tables_to_create.append(ChecklistItem.__table__)
+            if "song_checklist_statuses" not in existing_tables:
+                tables_to_create.append(SongChecklistStatus.__table__)
+            if tables_to_create:
+                from .models.models import Base
+                Base.metadata.create_all(engine, tables=tables_to_create)
+                log.info(f"Created missing tables: {[t.name for t in tables_to_create]}")
+            db = SessionLocal()
+            try:
+                existing_codes = {item.code for item in db.query(ChecklistItem).all()}
+                CHECKLIST_SEED = [
+                    {"code": "AD-01", "category": "ADMIN", "description": "Contract sent to placement partner", "weight": 10},
+                    {"code": "AD-02", "category": "ADMIN", "description": "Contract executed/signed", "weight": 15},
+                    {"code": "AD-03", "category": "ADMIN", "description": "Invoice submitted", "weight": 10},
+                    {"code": "LG-01", "category": "LEGAL", "description": "Rights clearance completed", "weight": 15},
+                    {"code": "LG-02", "category": "LEGAL", "description": "Publishing splits confirmed", "weight": 10},
+                    {"code": "MD-01", "category": "METADATA", "description": "ISRC assigned", "weight": 5},
+                    {"code": "MD-02", "category": "METADATA", "description": "ISWC assigned", "weight": 5},
+                    {"code": "MD-03", "category": "METADATA", "description": "Credits finalized", "weight": 5},
+                    {"code": "DSP-01", "category": "DSP", "description": "Registered with DSPs", "weight": 10},
+                    {"code": "DSP-02", "category": "DSP", "description": "Apple Music link verified", "weight": 5},
+                    {"code": "DSP-03", "category": "DSP", "description": "Spotify link verified", "weight": 5},
+                    {"code": "SY-01", "category": "SYNC", "description": "Registered with PRO", "weight": 10},
+                    {"code": "SY-02", "category": "SYNC", "description": "Publisher notified", "weight": 5},
+                    {"code": "PY-01", "category": "PAYMENT", "description": "Payment received", "weight": 20},
+                ]
+                added = 0
+                for item_data in CHECKLIST_SEED:
+                    if item_data["code"] not in existing_codes:
+                        db.add(ChecklistItem(**item_data))
+                        added += 1
+                if added:
+                    db.commit()
+                    log.info(f"Seeded {added} checklist items")
+
+                stale_songs = db.query(Song).filter(
+                    (Song.status_health_score == None) | (Song.status_health_score == 0.0)
+                ).all()
+                if not stale_songs:
+                    log.info("Health sync: no stale songs")
+                    return
+
+                from .utils.health_sync import sync_song_to_checklist
+                all_items = db.query(ChecklistItem).all()
+                for song in stale_songs:
+                    has_statuses = db.query(SongChecklistStatus).filter(
+                        SongChecklistStatus.song_id == song.id
+                    ).first()
+                    if not has_statuses:
+                        for item in all_items:
+                            db.add(SongChecklistStatus(
+                                song_id=song.id,
+                                checklist_item_id=item.id,
+                                status="NOT_STARTED"
+                            ))
+                        db.flush()
+                    sync_song_to_checklist(db, song)
+                db.commit()
+                log.info(f"Health sync: {len(stale_songs)} songs updated")
+            finally:
+                db.close()
         except Exception as e:
-            logging.getLogger("cadence").warning(f"Deferred db setup failed: {e}")
-    threading.Thread(target=_deferred_setup, daemon=True).start()
+            logging.getLogger("cadence").warning(f"Health sync failed: {e}")
+    threading.Thread(target=_deferred_health_sync, daemon=True).start()
 
 
 
