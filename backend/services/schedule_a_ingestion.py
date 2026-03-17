@@ -75,17 +75,21 @@ def parse_yes_no(value) -> bool:
     return value_str in ['YES', 'Y', 'TRUE', '1', 'X', 'DONE', 'COMPLETED']
 
 
-def parse_yes_no_na(value) -> str:
-    """Parse Yes/No/N/A values as string."""
+def parse_yes_no_na(value):
+    """Parse Yes/No/N/A values as string. Returns None for missing values."""
     if value is None:
-        return 'N/A'
+        return None
     value_str = str(value).strip().upper()
+    if not value_str:
+        return None
     if value_str in ['YES', 'Y', 'TRUE', '1', 'X', 'DONE', 'COMPLETED']:
         return 'Yes'
     elif value_str in ['NO', 'N', 'FALSE', '0']:
         return 'No'
-    else:
+    elif value_str in ['N/A', 'NA', 'NOT APPLICABLE']:
         return 'N/A'
+    else:
+        return None
 
 
 def parse_date(value) -> Optional[date]:
@@ -268,12 +272,12 @@ def ingest_schedule_a(
                 contract_location = str(contract_location).strip() if contract_location else None
                 
                 is_registered_with_pro = parse_yes_no(get_cell_value(row, column_map['bmi_registration']))
-                is_registered_with_dsp = parse_yes_no(get_cell_value(row, column_map['kobalt_registration']))
+                is_registered_with_dsp = parse_yes_no_na(get_cell_value(row, column_map['kobalt_registration']))
                 soundexchange_registered = parse_yes_no_na(get_cell_value(row, column_map['soundexchange']))
                 
-                is_paid = parse_yes_no(get_cell_value(row, column_map['payment_received']))
+                is_paid = parse_yes_no_na(get_cell_value(row, column_map['payment_received']))
                 release_date = parse_date(get_cell_value(row, column_map['release_date']))
-                is_invoiced = parse_yes_no(get_cell_value(row, column_map['invoice_sent']))
+                is_invoiced = parse_yes_no_na(get_cell_value(row, column_map['invoice_sent']))
                 
                 notes_1 = get_cell_value(row, column_map['notes'])
                 notes_2 = get_cell_value(row, column_map['notes_2'])
@@ -286,14 +290,14 @@ def ingest_schedule_a(
                 iswc = get_cell_value(row, column_map['iswc'])
                 iswc = str(iswc).strip() if iswc else None
                 
-                if is_paid:
+                if is_paid == 'Yes':
                     payment_status = 'PAID'
-                elif is_invoiced:
+                elif is_invoiced == 'Yes':
                     payment_status = 'INVOICED'
                 else:
                     payment_status = 'PENDING'
                 
-                master_paid = 'Yes' if is_paid else 'No'
+                master_paid = 'Yes' if is_paid == 'Yes' else None
                 
                 existing_song = db.query(Song).filter(
                     Song.organization_id == organization.id,

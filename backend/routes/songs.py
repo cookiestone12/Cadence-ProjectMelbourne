@@ -734,9 +734,9 @@ def create_song(
         media_url=request.media_url,
         has_contract_executed=request.has_contract_executed or False,
         is_registered_with_pro=request.is_registered_with_pro or False,
-        is_registered_with_dsp=request.is_registered_with_dsp or "No",
-        is_invoiced=request.is_invoiced or "No",
-        is_paid=request.is_paid or "No"
+        is_registered_with_dsp=request.is_registered_with_dsp,
+        is_invoiced=request.is_invoiced,
+        is_paid=request.is_paid
     )
     db.add(song)
     db.flush()
