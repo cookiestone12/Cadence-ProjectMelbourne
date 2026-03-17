@@ -92,6 +92,23 @@ def _resolve_item_name(db: Session, item_type: str, item_id: int, fallback_name:
     return f"Item #{item_id}"
 
 
+def _build_attachment(db: Session, item_type: str, item_id: int, org_id: int):
+    import base64
+    if item_type == "DOCUMENT":
+        doc = db.query(ContractDocument).filter(ContractDocument.id == item_id, ContractDocument.organization_id == org_id).first()
+        if doc and doc.file_path and Path(doc.file_path).exists():
+            with open(doc.file_path, "rb") as f:
+                content = base64.b64encode(f.read()).decode("utf-8")
+            return [{"filename": doc.file_name, "content": content, "type": doc.mime_type or "application/octet-stream"}]
+    elif item_type == "STATEMENT":
+        stmt = db.query(RoyaltyStatement).filter(RoyaltyStatement.id == item_id, RoyaltyStatement.organization_id == org_id).first()
+        if stmt and stmt.file_path and Path(stmt.file_path).exists():
+            with open(stmt.file_path, "rb") as f:
+                content = base64.b64encode(f.read()).decode("utf-8")
+            return [{"filename": stmt.file_name or "statement", "content": content, "type": "application/octet-stream"}]
+    return None
+
+
 @router.post("/email")
 def share_via_email(
     request: ShareViaEmailRequest,
@@ -113,6 +130,8 @@ def share_via_email(
         message=request.message or "",
     )
 
+    attachments = _build_attachment(db, request.item_type, request.item_id, org_id)
+
     provider = get_email_provider()
     type_label = request.item_type.replace("_", " ").title()
     sent_count = 0
@@ -122,6 +141,7 @@ def share_via_email(
             to=email,
             subject=f"{type_label} Shared: {item_name}",
             html_body=html_body,
+            attachments=attachments,
         )
         if success:
             sent_count += 1
@@ -292,6 +312,23 @@ def revoke_share(
     item.status = "REVOKED"
     db.commit()
     return {"success": True, "message": "Share revoked"}
+
+
+@router.post("/{share_id}/dismiss")
+def dismiss_share(
+    share_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = db.query(SharedItem).filter(SharedItem.id == share_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Shared item not found")
+    if item.shared_with_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the recipient can dismiss a share")
+
+    item.status = "DISMISSED"
+    db.commit()
+    return {"success": True, "message": "Share dismissed"}
 
 
 @router.get("/users/search")

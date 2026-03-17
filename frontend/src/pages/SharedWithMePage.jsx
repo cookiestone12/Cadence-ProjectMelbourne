@@ -92,6 +92,16 @@ export default function SharedWithMePage() {
     }
   }
 
+  async function handleDismiss(shareId) {
+    try {
+      await axios.post(`/api/sharing/${shareId}/dismiss`)
+      setItems(prev => prev.filter(i => i.id !== shareId))
+    } catch (error) {
+      console.error('Failed to dismiss:', error)
+      alert('Failed to dismiss share')
+    }
+  }
+
   async function handleImport(shareId) {
     if (importing[shareId]) return
     setImporting(prev => ({ ...prev, [shareId]: true }))
@@ -436,6 +446,15 @@ export default function SharedWithMePage() {
                                 <span className="hidden sm:inline">Added</span>
                               </span>
                             )}
+
+                            <button
+                              onClick={() => handleDismiss(item.id)}
+                              className="flex items-center gap-1 text-xs text-[#7A8580] hover:text-[#C47068] hover:bg-red-50 px-2.5 py-1.5 rounded-lg transition-colors"
+                              title="Dismiss"
+                            >
+                              <XMarkIcon className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Dismiss</span>
+                            </button>
                           </>
                         )}
                         {activeTab === 'sent' && item.status === 'ACTIVE' && (

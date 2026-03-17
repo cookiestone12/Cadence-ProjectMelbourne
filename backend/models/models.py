@@ -2331,6 +2331,7 @@ class SharedItemType(str, enum.Enum):
 class SharedItemStatus(str, enum.Enum):
     ACTIVE = "ACTIVE"
     REVOKED = "REVOKED"
+    DISMISSED = "DISMISSED"
 
 class SharedItem(Base):
     __tablename__ = "shared_items"

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import io
-from ..models import get_db, CreativeContact, Creator, OrganizationMember, User, Organization, SharedContactLink, ClientSharedContact
+from ..models import get_db, CreativeContact, Creator, OrganizationMember, User, Organization, SharedContactLink, ClientSharedContact, SharedItem
 from ..utils.auth import get_current_user
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
@@ -895,3 +895,76 @@ def get_client_shares(
         })
 
     return {"shares": result, "total": len(result)}
+
+
+class ShareToAccountsRequest(BaseModel):
+    contact_ids: List[int]
+    recipient_user_ids: Optional[List[int]] = []
+    recipient_emails: Optional[List[str]] = []
+    message: Optional[str] = ""
+
+
+@router.post("/org/{org_id}/share-to-accounts")
+def share_contacts_to_accounts(
+    org_id: int,
+    data: ShareToAccountsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+
+    contacts = db.query(CreativeContact).filter(
+        CreativeContact.id.in_(data.contact_ids),
+        CreativeContact.organization_id == org_id,
+    ).all()
+    if not contacts:
+        raise HTTPException(status_code=404, detail="No contacts found")
+
+    recipient_ids = list(data.recipient_user_ids or [])
+    if data.recipient_emails:
+        for email in data.recipient_emails:
+            user = db.query(User).filter(User.email == email, User.is_active == True).first()
+            if user and user.id not in recipient_ids and user.id != current_user.id:
+                recipient_ids.append(user.id)
+
+    if not recipient_ids:
+        raise HTTPException(status_code=400, detail="No valid recipients found")
+
+    shared_count = 0
+    for contact in contacts:
+        for uid in recipient_ids:
+            if uid == current_user.id:
+                continue
+            recipient = db.query(User).filter(User.id == uid).first()
+            if not recipient:
+                continue
+
+            existing = db.query(SharedItem).filter(
+                SharedItem.item_type == "CONTACT_CARD",
+                SharedItem.item_id == contact.id,
+                SharedItem.shared_with_user_id == uid,
+                SharedItem.status == "ACTIVE",
+            ).first()
+            if existing:
+                continue
+
+            recipient_membership = db.query(OrganizationMember).filter(
+                OrganizationMember.user_id == uid
+            ).first()
+
+            shared_item = SharedItem(
+                organization_id=org_id,
+                item_type="CONTACT_CARD",
+                item_id=contact.id,
+                item_name=contact.display_name,
+                shared_by_user_id=current_user.id,
+                shared_with_user_id=uid,
+                shared_with_org_id=recipient_membership.organization_id if recipient_membership else None,
+                message=data.message,
+                status="ACTIVE",
+            )
+            db.add(shared_item)
+            shared_count += 1
+
+    db.commit()
+    return {"success": True, "shared_count": shared_count}
