@@ -357,7 +357,7 @@ def export_schedule_a_csv(
     
     # Add metadata as comment rows at the end (prefixed with # for CSV compatibility)
     writer.writerow([])
-    writer.writerow(["# RYTHM CATALOG INTELLIGENCE - SCHEDULE A"])
+    writer.writerow(["# CADENCE CATALOG INTELLIGENCE - SCHEDULE A"])
     writer.writerow([f"# Creator: {data['creator']['display_name']}"])
     writer.writerow([f"# Legal Name: {data['creator'].get('legal_name') or 'N/A'}"])
     writer.writerow([f"# Organization: {data['organization']['name']}"])
@@ -452,14 +452,14 @@ def export_schedule_a_pdf(
     elements = []
     
     # Header with logo
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo-medium.png')
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'cadence-logo.png')
     if os.path.exists(logo_path):
-        logo = Image(logo_path, width=1.5*inch, height=1.2*inch)
+        logo = Image(logo_path, width=2.0*inch, height=1.125*inch)
         logo.hAlign = 'CENTER'
         elements.append(logo)
         elements.append(Spacer(1, 6))
     
-    elements.append(Paragraph("RYTHM CATALOG INTELLIGENCE", title_style))
+    elements.append(Paragraph("CADENCE CATALOG INTELLIGENCE", title_style))
     elements.append(Paragraph("Schedule A - Catalog of Compositions", subtitle_style))
     elements.append(Spacer(1, 12))
     
@@ -689,14 +689,14 @@ def export_simplified_schedule_a_pdf(
 
     elements = []
 
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo-medium.png')
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'cadence-logo.png')
     if os.path.exists(logo_path):
-        logo = Image(logo_path, width=1.5*inch, height=1.2*inch)
+        logo = Image(logo_path, width=2.0*inch, height=1.125*inch)
         logo.hAlign = 'CENTER'
         elements.append(logo)
         elements.append(Spacer(1, 4))
 
-    elements.append(Paragraph("RYTHM CATALOG INTELLIGENCE", title_style))
+    elements.append(Paragraph("CADENCE CATALOG INTELLIGENCE", title_style))
     elements.append(Paragraph("Schedule A", subtitle_style))
 
     creator_name = data['creator']['display_name']

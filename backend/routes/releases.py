@@ -656,9 +656,9 @@ def export_release_pdf(release_id: int, db: Session = Depends(get_db), current_u
 
     elements = []
 
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'frontend', 'public', 'cadence-logo.png')
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'cadence-logo.png')
     if os.path.exists(logo_path):
-        logo = Image(logo_path, width=1.2*inch, height=1.2*inch)
+        logo = Image(logo_path, width=2.0*inch, height=1.125*inch)
         logo.hAlign = 'LEFT'
         elements.append(logo)
         elements.append(Spacer(1, 6))

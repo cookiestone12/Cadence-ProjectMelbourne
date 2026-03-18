@@ -718,9 +718,9 @@ def _generate_sync_report_pdf(placements, summary, client_name, status, date_fro
 
     elements = []
 
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'logo-medium.png')
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'cadence-logo.png')
     if os.path.exists(logo_path):
-        logo = Image(logo_path, width=1.5 * inch, height=1.2 * inch)
+        logo = Image(logo_path, width=2.0 * inch, height=1.125 * inch)
         logo.hAlign = 'CENTER'
         elements.append(logo)
         elements.append(Spacer(1, 6))
