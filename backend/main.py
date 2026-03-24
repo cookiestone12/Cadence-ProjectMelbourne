@@ -89,6 +89,40 @@ def startup_event():
     import traceback
     _seed_checklist()
 
+    def _backfill_publishing_percentages():
+        log = logging.getLogger("cadence")
+        try:
+            from .models.database import SessionLocal
+            from .models.models import Song, RightsSplit, ContractAsset
+            from sqlalchemy import func as sqlfunc
+            db = SessionLocal()
+            try:
+                song_pub_totals = db.query(
+                    ContractAsset.asset_id,
+                    sqlfunc.sum(RightsSplit.share_percentage)
+                ).join(
+                    RightsSplit, RightsSplit.contract_asset_id == ContractAsset.id
+                ).filter(
+                    ContractAsset.asset_type == "SONG",
+                    RightsSplit.rights_type == "PUBLISHING",
+                ).group_by(ContractAsset.asset_id).all()
+
+                updated = 0
+                for song_id, total_pub in song_pub_totals:
+                    song = db.query(Song).filter(Song.id == song_id).first()
+                    if song and song.publishing_percentage != float(total_pub):
+                        song.publishing_percentage = float(total_pub)
+                        updated += 1
+
+                if updated > 0:
+                    db.commit()
+                    log.info(f"Backfilled publishing_percentage for {updated} songs")
+            finally:
+                db.close()
+        except Exception:
+            log.error(f"Publishing percentage backfill failed: {traceback.format_exc()}")
+    _backfill_publishing_percentages()
+
 
 
 @app.on_event("shutdown")
