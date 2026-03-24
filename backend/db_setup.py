@@ -7,8 +7,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.models import Base, engine
 from backend.models.database import SessionLocal
-from backend.models.models import User, ChecklistItem, Song, SongChecklistStatus
+from backend.models.models import User, ChecklistItem, Song, SongChecklistStatus, RightsSplit, ContractAsset
 from backend.utils.logging_config import logger
+from sqlalchemy import func
 
 
 def _validate_sql_identifier(name: str) -> str:
@@ -461,7 +462,38 @@ def main():
     seed_super_admin()
     seed_checklist_items()
     sync_stale_health_scores()
+    backfill_publishing_percentages()
     logger.info("Database setup complete")
+
+
+def backfill_publishing_percentages():
+    db = SessionLocal()
+    try:
+        song_pub_totals = db.query(
+            ContractAsset.asset_id,
+            func.sum(RightsSplit.share_percentage)
+        ).join(
+            RightsSplit, RightsSplit.contract_asset_id == ContractAsset.id
+        ).filter(
+            ContractAsset.asset_type == "SONG",
+            RightsSplit.rights_type == "PUBLISHING",
+        ).group_by(ContractAsset.asset_id).all()
+
+        updated = 0
+        for song_id, total_pub in song_pub_totals:
+            song = db.query(Song).filter(Song.id == song_id).first()
+            if song and song.publishing_percentage != float(total_pub):
+                song.publishing_percentage = float(total_pub)
+                updated += 1
+
+        if updated > 0:
+            db.commit()
+            logger.info(f"Backfilled publishing_percentage for {updated} songs")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Publishing percentage backfill: {e}")
+    finally:
+        db.close()
 
 
 if __name__ == "__main__":
