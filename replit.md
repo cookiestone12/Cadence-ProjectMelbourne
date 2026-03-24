@@ -21,7 +21,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Authentication**: JWT for token-based authentication and bcrypt for password hashing, supporting Master Admin and case-insensitive username login.
 - **Database Schema**: Manages Organizations, Users, Creators, Songs, Works, Releases, Contracts, Placements, and Royalty data.
 - **Rights & Contract Tracking**: Supports deal-level contracts with parties, territories, advances, and asset-to-contract linking. Per-asset rights splits are validated to 100%.
-- **Health Score System**: Dynamically calculates song health based on weighted checklist completion.
+- **Health Score System**: Dynamically calculates song health based on weighted checklist completion (10 items, 90 total weight).
 - **Catalog Valuation Tool**: Employs a weighted average of Streaming Multiple, Revenue Multiple, Market Comparables, and a Black Box Algorithm. Includes an institutional-grade Underwriting Engine for statement-driven valuations with exponential decay analytics, concentration metrics, DCF projections, and multiplier valuation bands.
 - **API Security**: Enforces JWT authentication, user-organization membership, and organization-scoped queries.
 - **AI-Powered Data Ingestion**: Uses OpenAI for intelligent column mapping during bulk CSV import and for parsing PDF/Word Schedule A documents.

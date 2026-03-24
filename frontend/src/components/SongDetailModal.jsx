@@ -1491,10 +1491,8 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Status Checklist</h3>
                   <div className="space-y-3">
                     {[
-                      { label: 'Contract Sent', field: 'has_contract_sent' },
                       { label: 'Contract Executed', field: 'has_contract_executed' },
                       { label: 'PRO Registered', field: 'is_registered_with_pro' },
-                      { label: 'SoundExchange Registered', field: 'soundexchange_registered' },
                       { label: 'MLC Registered', field: 'mlc_registered' },
                     ].map(({ label, field }) => (
                       <div key={field} className="group flex items-center justify-between cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-2 -mx-2 py-1 transition-colors" onClick={() => cycleStatusValue(field)}>

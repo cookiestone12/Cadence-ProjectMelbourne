@@ -49,22 +49,32 @@ def startup_event():
                     log.info(f"Created table {tbl.name}")
             db = SessionLocal()
             try:
+                REMOVED_CODES = ["AD-01", "LG-01", "DSP-01", "DSP-02", "SY-02"]
+                removed_items = db.query(ChecklistItem).filter(
+                    ChecklistItem.code.in_(REMOVED_CODES)
+                ).all()
+                if removed_items:
+                    from ..models.models import SongChecklistStatus as SCS
+                    removed_ids = [item.id for item in removed_items]
+                    db.query(SCS).filter(
+                        SCS.checklist_item_id.in_(removed_ids)
+                    ).delete(synchronize_session=False)
+                    for item in removed_items:
+                        db.delete(item)
+                    db.commit()
+                    log.info(f"Removed {len(removed_items)} deprecated checklist items")
+
                 existing_count = db.query(ChecklistItem).count()
                 if existing_count == 0:
                     CHECKLIST_SEED = [
-                        {"code": "AD-01", "category": "ADMIN", "description": "Contract sent to placement partner", "weight": 10},
                         {"code": "AD-02", "category": "ADMIN", "description": "Contract executed/signed", "weight": 15},
                         {"code": "AD-03", "category": "ADMIN", "description": "Invoice submitted", "weight": 10},
-                        {"code": "LG-01", "category": "LEGAL", "description": "Rights clearance completed", "weight": 15},
                         {"code": "LG-02", "category": "LEGAL", "description": "Publishing splits confirmed", "weight": 10},
                         {"code": "MD-01", "category": "METADATA", "description": "ISRC assigned", "weight": 5},
                         {"code": "MD-02", "category": "METADATA", "description": "ISWC assigned", "weight": 5},
                         {"code": "MD-03", "category": "METADATA", "description": "Credits finalized", "weight": 5},
-                        {"code": "DSP-01", "category": "DSP", "description": "Registered with DSPs", "weight": 10},
-                        {"code": "DSP-02", "category": "DSP", "description": "Apple Music link verified", "weight": 5},
                         {"code": "DSP-03", "category": "DSP", "description": "Spotify link verified", "weight": 5},
                         {"code": "SY-01", "category": "SYNC", "description": "Registered with PRO", "weight": 10},
-                        {"code": "SY-02", "category": "SYNC", "description": "Publisher notified", "weight": 5},
                         {"code": "SY-03", "category": "SYNC", "description": "MLC registered", "weight": 5},
                         {"code": "PY-01", "category": "PAYMENT", "description": "Payment received", "weight": 20},
                     ]
@@ -88,6 +98,25 @@ def startup_event():
             log.error(f"Checklist seed failed: {traceback.format_exc()}")
     import traceback
     _seed_checklist()
+
+    def _resync_all_health_scores():
+        log = logging.getLogger("cadence")
+        try:
+            from .models.database import SessionLocal
+            from .utils.health_sync import sync_song_to_checklist
+            from .models.models import Song
+            db = SessionLocal()
+            try:
+                songs = db.query(Song).all()
+                for song in songs:
+                    sync_song_to_checklist(db, song)
+                db.commit()
+                log.info(f"Resynced health scores for {len(songs)} songs")
+            finally:
+                db.close()
+        except Exception:
+            log.error(f"Health score resync failed: {traceback.format_exc()}")
+    _resync_all_health_scores()
 
     def _backfill_publishing_percentages():
         log = logging.getLogger("cadence")

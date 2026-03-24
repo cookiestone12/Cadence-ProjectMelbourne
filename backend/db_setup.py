@@ -366,26 +366,37 @@ def seed_super_admin():
 
 
 CHECKLIST_ITEMS_SEED = [
-    {"code": "AD-01", "category": "ADMIN", "description": "Contract sent to placement partner", "weight": 10},
     {"code": "AD-02", "category": "ADMIN", "description": "Contract executed/signed", "weight": 15},
     {"code": "AD-03", "category": "ADMIN", "description": "Invoice submitted", "weight": 10},
-    {"code": "LG-01", "category": "LEGAL", "description": "Rights clearance completed", "weight": 15},
     {"code": "LG-02", "category": "LEGAL", "description": "Publishing splits confirmed", "weight": 10},
     {"code": "MD-01", "category": "METADATA", "description": "ISRC assigned", "weight": 5},
     {"code": "MD-02", "category": "METADATA", "description": "ISWC assigned", "weight": 5},
     {"code": "MD-03", "category": "METADATA", "description": "Credits finalized", "weight": 5},
-    {"code": "DSP-01", "category": "DSP", "description": "Registered with DSPs", "weight": 10},
-    {"code": "DSP-02", "category": "DSP", "description": "Apple Music link verified", "weight": 5},
     {"code": "DSP-03", "category": "DSP", "description": "Spotify link verified", "weight": 5},
     {"code": "SY-01", "category": "SYNC", "description": "Registered with PRO", "weight": 10},
-    {"code": "SY-02", "category": "SYNC", "description": "Publisher notified", "weight": 5},
+    {"code": "SY-03", "category": "SYNC", "description": "MLC registered", "weight": 5},
     {"code": "PY-01", "category": "PAYMENT", "description": "Payment received", "weight": 20},
 ]
+
+REMOVED_CHECKLIST_CODES = ["AD-01", "LG-01", "DSP-01", "DSP-02", "SY-02"]
 
 
 def seed_checklist_items():
     db = SessionLocal()
     try:
+        removed_items = db.query(ChecklistItem).filter(
+            ChecklistItem.code.in_(REMOVED_CHECKLIST_CODES)
+        ).all()
+        if removed_items:
+            removed_ids = [item.id for item in removed_items]
+            db.query(SongChecklistStatus).filter(
+                SongChecklistStatus.checklist_item_id.in_(removed_ids)
+            ).delete(synchronize_session=False)
+            for item in removed_items:
+                db.delete(item)
+            db.commit()
+            logger.info(f"Removed {len(removed_items)} deprecated checklist items and their statuses")
+
         existing_codes = {item.code for item in db.query(ChecklistItem).all()}
         added = 0
         for item_data in CHECKLIST_ITEMS_SEED:

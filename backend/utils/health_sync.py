@@ -5,24 +5,20 @@ from ..models.models import Song, SongChecklistStatus, ChecklistItem, SongDSPLin
 FIELD_TO_CHECKLIST_MAP = {
     "isrc": "MD-01",
     "iswc": "MD-02",
-    "has_contract_sent": "AD-01",
     "has_contract_executed": "AD-02",
     "is_invoiced": "AD-03",
     "is_registered_with_pro": "SY-01",
-    "is_registered_with_dsp": "DSP-01",
     "is_paid": "PY-01",
-    "soundexchange_registered": "SY-02",
     "mlc_registered": "SY-03",
 }
 
-NA_CAPABLE_FIELDS = {"is_paid", "is_invoiced", "is_registered_with_dsp",
-                     "has_contract_sent", "has_contract_executed",
-                     "is_registered_with_pro", "soundexchange_registered",
+NA_CAPABLE_FIELDS = {"is_paid", "is_invoiced",
+                     "has_contract_executed",
+                     "is_registered_with_pro",
                      "mlc_registered"}
 
 DSP_PLATFORM_TO_CHECKLIST_MAP = {
     "spotify": "DSP-03",
-    "apple_music": "DSP-02",
 }
 
 def get_checklist_item_by_code(db: Session, code: str) -> ChecklistItem:
