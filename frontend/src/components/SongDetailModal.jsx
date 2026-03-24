@@ -1670,6 +1670,20 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                             </button>
                           )}
                           {showSplitSearch && (splitSearchQuery || splitForm.rights_holder_name) && (() => {
+                            const splitRoleOptions = ['Writer', 'Producer', 'Artist', 'Engineer', 'Composer', 'Lyricist', 'Arranger', 'Publisher', 'Administrator']
+                            const mapToSplitRole = (roles) => {
+                              if (!roles || !roles.length) return ''
+                              for (const r of roles) {
+                                const match = splitRoleOptions.find(o => o.toLowerCase() === (r || '').toLowerCase())
+                                if (match) return match
+                              }
+                              const partialMap = { 'songwriter': 'Writer', 'writing': 'Writer', 'producing': 'Producer', 'vocalist': 'Artist', 'singer': 'Artist', 'mixing': 'Engineer', 'mastering': 'Engineer', 'composition': 'Composer', 'lyrics': 'Lyricist', 'arrangement': 'Arranger', 'admin': 'Administrator', 'publishing': 'Publisher' }
+                              for (const r of roles) {
+                                const key = (r || '').toLowerCase()
+                                if (partialMap[key]) return partialMap[key]
+                              }
+                              return ''
+                            }
                             const q = (splitSearchQuery || splitForm.rights_holder_name).toLowerCase()
                             const rosterMatches = splitCreators.filter(c => c.display_name?.toLowerCase().includes(q))
                             const dirMatches = directoryContacts.filter(c => c.display_name?.toLowerCase().includes(q) && !rosterMatches.some(r => c.creator_id && c.creator_id === r.id))
@@ -1687,13 +1701,15 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                           type="button"
                                           className="w-full text-left px-3 py-2 text-sm hover:bg-[rgba(91,138,114,0.08)] transition-colors flex items-center justify-between gap-2"
                                           onClick={() => {
+                                            const derivedRole = mapToSplitRole(linked?.roles || creator.roles)
                                             setSplitForm(prev => ({
                                               ...prev,
                                               rights_holder_id: String(creator.id),
                                               rights_holder_name: creator.display_name,
                                               contact_id: linked ? String(linked.id) : '',
                                               ipi: linked?.ipi || creator.primary_ipi || '',
-                                              pro: linked?.pro || creator.primary_pro || ''
+                                              pro: linked?.pro || creator.primary_pro || '',
+                                              role: prev.role || derivedRole
                                             }))
                                             setSplitSearchQuery('')
                                             setShowSplitSearch(false)
@@ -1718,13 +1734,15 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                         type="button"
                                         className="w-full text-left px-3 py-2 text-sm hover:bg-[rgba(91,138,114,0.08)] transition-colors flex items-center justify-between gap-2"
                                         onClick={() => {
+                                          const derivedRole = mapToSplitRole(contact.roles)
                                           setSplitForm(prev => ({
                                             ...prev,
                                             rights_holder_id: '',
                                             rights_holder_name: contact.display_name,
                                             contact_id: String(contact.id),
                                             ipi: contact.ipi || '',
-                                            pro: contact.pro || ''
+                                            pro: contact.pro || '',
+                                            role: prev.role || derivedRole
                                           }))
                                           setSplitSearchQuery('')
                                           setShowSplitSearch(false)
