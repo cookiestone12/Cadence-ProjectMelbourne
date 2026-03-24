@@ -5,10 +5,13 @@ from typing import List, Optional, Dict, Any
 from datetime import date
 import csv
 import io
+import logging
 
 from ..models import get_db, Song, SongCredit, Creator, OrganizationMember, User, SongChecklistStatus, ChecklistItem
 from ..utils.auth import get_current_user
 from ..utils.csv_parser import parse_csv_with_ai, apply_mapping_to_rows, validate_mapped_data, infer_mapping_from_data
+
+logger = logging.getLogger("cadence")
 
 try:
     import openpyxl
@@ -351,7 +354,12 @@ async def import_csv(
     for invalid in validation["invalid_rows"]:
         errors.append(f"Row {invalid['row_index'] + 1}: {', '.join(invalid['errors'])}")
     
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"CSV import commit failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save imported songs: {str(e)}")
     
     return ImportResult(
         songs_created=songs_created,

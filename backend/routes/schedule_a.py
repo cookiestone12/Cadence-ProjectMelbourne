@@ -5,6 +5,7 @@ from sqlalchemy import and_
 from openpyxl import load_workbook
 import csv
 import io
+import logging
 from datetime import datetime, date
 from typing import Optional
 from ..models import (
@@ -12,6 +13,8 @@ from ..models import (
 )
 from ..utils.auth import get_current_user
 from .client_sharing import has_shared_access
+
+logger = logging.getLogger("cadence")
 
 router = APIRouter(prefix="/api/schedule-a", tags=["schedule-a"])
 
@@ -77,6 +80,7 @@ async def upload_schedule_a(
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Schedule A upload failed for org {org_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
 
