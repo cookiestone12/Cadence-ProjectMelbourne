@@ -145,16 +145,11 @@ def get_organization_creators(
     
     creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
     
-    all_shares_for_org = db.query(ClientShare).filter(
-        ClientShare.recipient_org_id == org_id
+    shared_shares = db.query(ClientShare).filter(
+        ClientShare.recipient_org_id == org_id,
+        ClientShare.status == "ACCEPTED"
     ).all()
-    logger.info(f"[ROSTER DEBUG] org_id={org_id}, local_creators={len(creators)}, all_shares_for_org={len(all_shares_for_org)}")
-    for s in all_shares_for_org:
-        logger.info(f"[ROSTER DEBUG]   share id={s.id} creator_id={s.creator_id} primary_org={s.primary_org_id} recipient_org={s.recipient_org_id} status={s.status}")
-
-    shared_shares = [s for s in all_shares_for_org if s.status == "ACCEPTED"]
     shared_creator_ids = [s.creator_id for s in shared_shares]
-    logger.info(f"[ROSTER DEBUG] accepted_shares={len(shared_shares)}, shared_creator_ids={shared_creator_ids}")
     shared_creators = []
     if shared_creator_ids:
         own_ids = {c.id for c in creators}
@@ -162,7 +157,6 @@ def get_organization_creators(
             Creator.id.in_(shared_creator_ids),
             ~Creator.id.in_(own_ids) if own_ids else True
         ).all()
-        logger.info(f"[ROSTER DEBUG] shared_creators_loaded={len(shared_creators)}, names={[c.display_name for c in shared_creators]}")
     
     all_creators = creators + shared_creators
     shared_id_set = set(shared_creator_ids)
@@ -176,39 +170,25 @@ def get_organization_creators(
             shared_org_names[s.creator_id] = org_name_map.get(s.primary_org_id)
     
     creator_ids = [creator.id for creator in all_creators]
-    
-    creator_org_map = {c.id: c.organization_id for c in all_creators}
-
-    local_creator_ids = [c.id for c in creators]
-    shared_creator_ids_in_list = [c.id for c in shared_creators]
 
     count_map = {}
-    if local_creator_ids:
-        local_counts = db.query(SongCredit.creator_id, func.count(SongCredit.id)).join(
+    if creator_ids:
+        all_counts = db.query(SongCredit.creator_id, func.count(SongCredit.id)).join(
             Song, Song.id == SongCredit.song_id
         ).filter(
-            SongCredit.creator_id.in_(local_creator_ids),
-            Song.organization_id == org_id
+            SongCredit.creator_id.in_(creator_ids)
         ).group_by(SongCredit.creator_id).all()
-        for cid, cnt in local_counts:
+        for cid, cnt in all_counts:
             count_map[cid] = cnt
 
-    if shared_creator_ids_in_list:
-        for sc in shared_creators:
-            sc_count = db.query(func.count(SongCredit.id)).join(
-                Song, Song.id == SongCredit.song_id
-            ).filter(
-                SongCredit.creator_id == sc.id,
-                Song.organization_id == sc.organization_id
-            ).scalar() or 0
-            count_map[sc.id] = sc_count
-    
-    avgs = db.query(SongCredit.creator_id, func.avg(Song.status_health_score)).join(
-        Song, Song.id == SongCredit.song_id
-    ).filter(
-        SongCredit.creator_id.in_(creator_ids)
-    ).group_by(SongCredit.creator_id).all()
-    avg_map = {cid: float(avg) if avg else 0.0 for cid, avg in avgs}
+    avg_map = {}
+    if creator_ids:
+        avgs = db.query(SongCredit.creator_id, func.avg(Song.status_health_score)).join(
+            Song, Song.id == SongCredit.song_id
+        ).filter(
+            SongCredit.creator_id.in_(creator_ids)
+        ).group_by(SongCredit.creator_id).all()
+        avg_map = {cid: float(avg) if avg else 0.0 for cid, avg in avgs}
     
     shared_names = {c.display_name.strip().lower() for c in shared_creators} if shared_creators else set()
 
