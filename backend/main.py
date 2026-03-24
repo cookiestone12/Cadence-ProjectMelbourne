@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -28,14 +28,6 @@ app = FastAPI(title="Cadence Catalog Intelligence API")
 
 @app.on_event("startup")
 def startup_event():
-    log = logging.getLogger("cadence")
-
-    try:
-        from .services.email_scheduler import start_scheduler
-        start_scheduler()
-    except Exception as e:
-        log.warning(f"Email scheduler failed to start: {e}")
-
     import threading
     threading.Thread(target=_deferred_startup_tasks, daemon=True).start()
 
@@ -43,6 +35,12 @@ def startup_event():
 def _deferred_startup_tasks():
     import traceback
     log = logging.getLogger("cadence")
+
+    try:
+        from .services.email_scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        log.warning(f"Email scheduler failed to start: {e}")
 
     checklist_changed = _seed_checklist(log, traceback)
 
@@ -224,7 +222,10 @@ class LoggingMiddleware:
 app.add_middleware(LoggingMiddleware)
 
 @app.get("/")
-async def serve_root():
+async def serve_root(request: Request):
+    accept = request.headers.get("accept", "")
+    if "text/html" not in accept:
+        return JSONResponse({"status": "healthy", "service": "Cadence Catalog Intelligence"})
     frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
     index_file = frontend_dist / "index.html"
     if index_file.exists():

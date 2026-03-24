@@ -10,4 +10,4 @@ accesslog = "-"
 errorlog = "-"
 loglevel = os.getenv("LOG_LEVEL", "info")
 graceful_timeout = 30
-preload_app = False
+preload_app = True
