@@ -31,6 +31,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [directoryContacts, setDirectoryContacts] = useState([])
   const [splitSearchQuery, setSplitSearchQuery] = useState('')
   const [showSplitSearch, setShowSplitSearch] = useState(false)
+  const splitSearchRef = useRef(null)
   const fileInputRef = useRef(null)
   const [songSplits, setSongSplits] = useState([])
   const [showSplitForm, setShowSplitForm] = useState(false)
@@ -77,6 +78,16 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     loadSplitCreators()
     loadDirectoryContacts()
   }, [song.id])
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (splitSearchRef.current && !splitSearchRef.current.contains(e.target)) {
+        setShowSplitSearch(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   useEffect(() => {
     if (activeTab === 'audio') {
@@ -202,18 +213,20 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       }
       if (splitForm.rights_holder_id) {
         payload.rights_holder_id = parseInt(splitForm.rights_holder_id)
+        payload.rights_holder_name = splitForm.rights_holder_name
       } else {
         payload.rights_holder_name = splitForm.rights_holder_name
         if (splitForm.contact_id) payload.contact_id = parseInt(splitForm.contact_id)
-        if (splitForm.ipi) payload.ipi = splitForm.ipi
-        if (splitForm.pro) payload.pro = splitForm.pro
       }
+      if (splitForm.ipi) payload.ipi = splitForm.ipi
+      if (splitForm.pro) payload.pro = splitForm.pro
       await axios.post(`/api/rights/song-splits/${song.id}`, payload)
       setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '' })
       setSplitSearchQuery('')
       setShowSplitForm(false)
       loadSongSplits()
       loadRightsData()
+      loadDirectoryContacts()
     } catch (error) {
       console.error('Failed to add split:', error)
       alert(error.response?.data?.detail || 'Failed to add split')
@@ -1627,68 +1640,125 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-[#7A8580] mb-1">Rights Holder</label>
-                        <select
-                          value={splitForm.rights_holder_id}
-                          onChange={(e) => setSplitForm(prev => ({ ...prev, rights_holder_id: e.target.value, rights_holder_name: e.target.value ? '' : prev.rights_holder_name, contact_id: '', ipi: '', pro: '' }))}
-                          className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                        >
-                          <option value="">Select from roster...</option>
-                          {splitCreators.map(c => (
-                            <option key={c.id} value={c.id}>{c.display_name}</option>
-                          ))}
-                        </select>
-                        {!splitForm.rights_holder_id && (
-                          <div className="mt-2 relative">
-                            <input
-                              type="text"
-                              placeholder="Or search directory / type new name"
-                              value={splitSearchQuery || splitForm.rights_holder_name}
-                              onChange={(e) => {
-                                const val = e.target.value
-                                setSplitSearchQuery(val)
-                                setSplitForm(prev => ({ ...prev, rights_holder_name: val, contact_id: '', ipi: '', pro: '' }))
-                                setShowSplitSearch(val.length > 0)
+                        <div className="relative" ref={splitSearchRef}>
+                          <input
+                            type="text"
+                            placeholder="Search roster, directory, or type new name..."
+                            value={splitSearchQuery || splitForm.rights_holder_name}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setSplitSearchQuery(val)
+                              setSplitForm(prev => ({ ...prev, rights_holder_id: '', rights_holder_name: val, contact_id: '', ipi: '', pro: '' }))
+                              setShowSplitSearch(val.length > 0)
+                            }}
+                            onFocus={() => {
+                              const q = splitSearchQuery || splitForm.rights_holder_name
+                              if (q) setShowSplitSearch(true)
+                            }}
+                            className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                          />
+                          {splitForm.rights_holder_name && !showSplitSearch && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSplitSearchQuery('')
+                                setSplitForm(prev => ({ ...prev, rights_holder_id: '', rights_holder_name: '', contact_id: '', ipi: '', pro: '' }))
                               }}
-                              onFocus={() => { if (splitSearchQuery || splitForm.rights_holder_name) setShowSplitSearch(true) }}
-                              className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                            />
-                            {showSplitSearch && (splitSearchQuery || splitForm.rights_holder_name) && (
-                              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[rgba(59,77,67,0.12)] rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                                {directoryContacts
-                                  .filter(c => c.display_name?.toLowerCase().includes((splitSearchQuery || splitForm.rights_holder_name).toLowerCase()))
-                                  .map(contact => (
-                                    <button
-                                      key={contact.id}
-                                      type="button"
-                                      className="w-full text-left px-3 py-2 text-sm hover:bg-[rgba(91,138,114,0.08)] transition-colors flex items-center justify-between"
-                                      onClick={() => {
-                                        setSplitForm(prev => ({
-                                          ...prev,
-                                          rights_holder_name: contact.display_name,
-                                          contact_id: String(contact.id),
-                                          ipi: contact.ipi || '',
-                                          pro: contact.pro || ''
-                                        }))
-                                        setSplitSearchQuery('')
-                                        setShowSplitSearch(false)
-                                      }}
-                                    >
-                                      <span className="text-[#3D4A44]">{contact.display_name}</span>
-                                      {contact.ipi && <span className="text-[11px] text-[#7A8580]">IPI: {contact.ipi}</span>}
-                                    </button>
-                                  ))
-                                }
-                                {directoryContacts.filter(c => c.display_name?.toLowerCase().includes((splitSearchQuery || splitForm.rights_holder_name).toLowerCase())).length === 0 && (
-                                  <div className="px-3 py-2 text-xs text-[#7A8580]">No matches — will create new contact</div>
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#7A8580] hover:text-[#3D4A44] transition-colors"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          )}
+                          {showSplitSearch && (splitSearchQuery || splitForm.rights_holder_name) && (() => {
+                            const q = (splitSearchQuery || splitForm.rights_holder_name).toLowerCase()
+                            const rosterMatches = splitCreators.filter(c => c.display_name?.toLowerCase().includes(q))
+                            const dirMatches = directoryContacts.filter(c => c.display_name?.toLowerCase().includes(q) && !rosterMatches.some(r => c.creator_id && c.creator_id === r.id))
+                            const hasResults = rosterMatches.length > 0 || dirMatches.length > 0
+                            return (
+                              <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-[rgba(59,77,67,0.12)] rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                                {rosterMatches.length > 0 && (
+                                  <>
+                                    <div className="px-3 py-1.5 text-[10px] font-semibold text-[#7A8580] uppercase tracking-wider bg-[#F5F7F4] border-b border-[rgba(59,77,67,0.08)]">Roster</div>
+                                    {rosterMatches.map(creator => {
+                                      const linked = directoryContacts.find(c => c.creator_id === creator.id)
+                                      return (
+                                        <button
+                                          key={`roster-${creator.id}`}
+                                          type="button"
+                                          className="w-full text-left px-3 py-2 text-sm hover:bg-[rgba(91,138,114,0.08)] transition-colors flex items-center justify-between gap-2"
+                                          onClick={() => {
+                                            setSplitForm(prev => ({
+                                              ...prev,
+                                              rights_holder_id: String(creator.id),
+                                              rights_holder_name: creator.display_name,
+                                              contact_id: linked ? String(linked.id) : '',
+                                              ipi: linked?.ipi || creator.primary_ipi || '',
+                                              pro: linked?.pro || creator.primary_pro || ''
+                                            }))
+                                            setSplitSearchQuery('')
+                                            setShowSplitSearch(false)
+                                          }}
+                                        >
+                                          <span className="text-[#3D4A44] truncate">{creator.display_name}</span>
+                                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                                            {(creator.primary_ipi || linked?.ipi) && <span className="text-[10px] text-[#7A8580]">IPI: {creator.primary_ipi || linked?.ipi}</span>}
+                                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-[rgba(91,138,114,0.12)] text-[#5B8A72] font-medium">Roster</span>
+                                          </div>
+                                        </button>
+                                      )
+                                    })}
+                                  </>
+                                )}
+                                {dirMatches.length > 0 && (
+                                  <>
+                                    <div className="px-3 py-1.5 text-[10px] font-semibold text-[#7A8580] uppercase tracking-wider bg-[#F5F7F4] border-b border-[rgba(59,77,67,0.08)]">Directory</div>
+                                    {dirMatches.map(contact => (
+                                      <button
+                                        key={`dir-${contact.id}`}
+                                        type="button"
+                                        className="w-full text-left px-3 py-2 text-sm hover:bg-[rgba(91,138,114,0.08)] transition-colors flex items-center justify-between gap-2"
+                                        onClick={() => {
+                                          setSplitForm(prev => ({
+                                            ...prev,
+                                            rights_holder_id: '',
+                                            rights_holder_name: contact.display_name,
+                                            contact_id: String(contact.id),
+                                            ipi: contact.ipi || '',
+                                            pro: contact.pro || ''
+                                          }))
+                                          setSplitSearchQuery('')
+                                          setShowSplitSearch(false)
+                                        }}
+                                      >
+                                        <span className="text-[#3D4A44] truncate">{contact.display_name}</span>
+                                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                                          {contact.ipi && <span className="text-[10px] text-[#7A8580]">IPI: {contact.ipi}</span>}
+                                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-[rgba(178,154,101,0.15)] text-[#8B7355] font-medium">Directory</span>
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </>
+                                )}
+                                {!hasResults && (
+                                  <div className="px-3 py-2.5 text-xs text-[#7A8580] flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                                    No matches — a new directory contact will be created
+                                  </div>
                                 )}
                               </div>
+                            )
+                          })()}
+                        </div>
+                        {(splitForm.rights_holder_id || splitForm.contact_id) && (
+                          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                            {splitForm.rights_holder_id && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(91,138,114,0.1)] text-[#5B8A72] font-medium">Roster Creator</span>
                             )}
-                          </div>
-                        )}
-                        {splitForm.contact_id && (
-                          <div className="mt-1 flex items-center gap-2">
-                            <span className="text-[11px] text-[#5B8A72] bg-[rgba(91,138,114,0.1)] px-2 py-0.5 rounded">Linked to directory</span>
-                            {splitForm.ipi && <span className="text-[11px] text-[#7A8580]">IPI: {splitForm.ipi}</span>}
+                            {splitForm.contact_id && !splitForm.rights_holder_id && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-[rgba(178,154,101,0.12)] text-[#8B7355] font-medium">Directory Contact</span>
+                            )}
+                            {splitForm.ipi && <span className="text-[10px] text-[#7A8580]">IPI: {splitForm.ipi}</span>}
+                            {splitForm.pro && <span className="text-[10px] text-[#7A8580]">PRO: {splitForm.pro}</span>}
                           </div>
                         )}
                       </div>

@@ -444,6 +444,7 @@ def add_song_split(
 
     holder_name = data.rights_holder_name
     holder_ipi = data.ipi
+    holder_pro = data.pro
     if data.rights_holder_id:
         holder = db.query(Creator).filter(
             Creator.id == data.rights_holder_id,
@@ -454,6 +455,28 @@ def add_song_split(
         holder_name = holder_name or holder.display_name
         if not holder_ipi:
             holder_ipi = holder.primary_ipi
+        if not holder_pro:
+            holder_pro = holder.primary_pro
+        existing_contact = db.query(CreativeContact).filter(
+            CreativeContact.organization_id == song.organization_id,
+            CreativeContact.creator_id == holder.id,
+        ).first()
+        if not existing_contact:
+            new_contact = CreativeContact(
+                organization_id=song.organization_id,
+                creator_id=holder.id,
+                display_name=holder.display_name,
+                legal_name=holder.legal_name,
+                email=holder.email,
+                phone=holder.phone,
+                pro=holder.primary_pro,
+                ipi=holder.primary_ipi,
+                publisher_name=holder.publisher_name,
+                roles=holder.roles or [],
+                territory=holder.primary_territory,
+            )
+            db.add(new_contact)
+            db.flush()
     elif data.contact_id:
         contact = db.query(CreativeContact).filter(
             CreativeContact.id == data.contact_id,
@@ -463,6 +486,8 @@ def add_song_split(
             holder_name = holder_name or contact.display_name
             if not holder_ipi:
                 holder_ipi = contact.ipi
+            if not holder_pro:
+                holder_pro = contact.pro
 
     if not data.rights_holder_id and not data.contact_id and holder_name:
         existing_contact = db.query(CreativeContact).filter(
@@ -474,7 +499,7 @@ def add_song_split(
                 organization_id=song.organization_id,
                 display_name=holder_name,
                 ipi=holder_ipi,
-                pro=data.pro,
+                pro=holder_pro,
                 roles=["Collaborator"],
             )
             db.add(new_contact)
