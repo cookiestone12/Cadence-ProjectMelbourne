@@ -915,7 +915,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 <UserIcon className="w-4 h-4 text-[#5B8A72]" />
                                 <span className="font-medium text-sm text-[#3D4A44]">{credit.creator_name || 'Unknown'}</span>
                               </div>
-                              <div className="grid grid-cols-3 gap-2">
+                              <div className="space-y-2 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-2">
                                 <div>
                                   <label className="text-[11px] text-[#7A8580]">Role</label>
                                   <select
@@ -1882,7 +1882,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
 
                 {songSplits.length > 0 ? (
                   <div className="space-y-2">
-                    <div className="grid grid-cols-5 gap-4 px-3 py-2 text-[12px] font-medium text-[#7A8580] uppercase tracking-wider">
+                    <div className="hidden sm:grid grid-cols-5 gap-4 px-3 py-2 text-[12px] font-medium text-[#7A8580] uppercase tracking-wider">
                       <span>Rights Holder</span>
                       <span>Rights Type</span>
                       <span>Share</span>
@@ -1890,9 +1890,25 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       <span></span>
                     </div>
                     {songSplits.map((split) => (
-                      <div key={split.id} className="grid grid-cols-5 gap-4 px-3 py-3 bg-[#F5F7F4] rounded-[12px] items-center">
-                        <span className="font-medium text-[#3D4A44] text-[14px]">{split.rights_holder_name}</span>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-medium w-fit ${
+                      <div key={split.id} className="flex flex-col sm:grid sm:grid-cols-5 gap-2 sm:gap-4 px-3 py-3 bg-[#F5F7F4] rounded-[12px]">
+                        <div className="flex items-center justify-between sm:contents">
+                          <span className="font-medium text-[#3D4A44] text-[14px]">{split.rights_holder_name}</span>
+                          <div className="flex items-center gap-2 sm:hidden">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                              split.rights_type === 'MASTER' ? 'bg-purple-50 text-purple-600' :
+                              split.rights_type === 'PUBLISHING' ? 'bg-blue-50 text-blue-600' :
+                              split.rights_type === 'PERFORMANCE' ? 'bg-amber-50 text-amber-600' :
+                              split.rights_type === 'MECHANICAL' ? 'bg-indigo-50 text-indigo-600' :
+                              'bg-gray-50 text-gray-600'
+                            }`}>
+                              {split.rights_type}
+                            </span>
+                            <button onClick={() => handleDeleteSongSplit(split.id)} className="p-1 text-[#7A8580] hover:text-[#C47068] rounded transition-colors" title="Remove split">
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                        <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-medium w-fit ${
                           split.rights_type === 'MASTER' ? 'bg-purple-50 text-purple-600' :
                           split.rights_type === 'PUBLISHING' ? 'bg-blue-50 text-blue-600' :
                           split.rights_type === 'PERFORMANCE' ? 'bg-amber-50 text-amber-600' :
@@ -1901,17 +1917,19 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                         }`}>
                           {split.rights_type}
                         </span>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden max-w-[80px]">
-                            <div className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full" style={{ width: `${Math.min(split.share_percentage, 100)}%` }}></div>
+                        <div className="flex items-center justify-between sm:contents">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden max-w-[80px]">
+                              <div className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full" style={{ width: `${Math.min(split.share_percentage, 100)}%` }}></div>
+                            </div>
+                            <span className="text-[14px] font-semibold text-[#3D4A44]">{split.share_percentage}%</span>
                           </div>
-                          <span className="text-[14px] font-semibold text-[#3D4A44]">{split.share_percentage}%</span>
-                        </div>
-                        <span className="text-[13px] text-[#7A8580] truncate">{split.role || '-'}</span>
-                        <div className="flex justify-end">
-                          <button onClick={() => handleDeleteSongSplit(split.id)} className="p-1 text-[#7A8580] hover:text-[#C47068] rounded transition-colors" title="Remove split">
-                            <TrashIcon className="w-4 h-4" />
-                          </button>
+                          <span className="text-[13px] text-[#7A8580] truncate">{split.role || '-'}</span>
+                          <div className="hidden sm:flex justify-end">
+                            <button onClick={() => handleDeleteSongSplit(split.id)} className="p-1 text-[#7A8580] hover:text-[#C47068] rounded transition-colors" title="Remove split">
+                              <TrashIcon className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1955,16 +1973,27 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                       </div>
                       {contractInfo.splits && contractInfo.splits.length > 0 ? (
                         <div className="space-y-2">
-                          <div className="grid grid-cols-4 gap-4 px-3 py-2 text-[12px] font-medium text-[#7A8580] uppercase tracking-wider">
+                          <div className="hidden sm:grid grid-cols-4 gap-4 px-3 py-2 text-[12px] font-medium text-[#7A8580] uppercase tracking-wider">
                             <span>Rights Holder</span>
                             <span>Rights Type</span>
                             <span>Share</span>
                             <span>Role</span>
                           </div>
                           {contractInfo.splits.map((split, sidx) => (
-                            <div key={sidx} className="grid grid-cols-4 gap-4 px-3 py-3 bg-[#F5F7F4] rounded-[12px] items-center">
-                              <span className="font-medium text-[#3D4A44] text-[14px]">{split.rights_holder_name}</span>
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-medium w-fit ${
+                            <div key={sidx} className="flex flex-col sm:grid sm:grid-cols-4 gap-1.5 sm:gap-4 px-3 py-3 bg-[#F5F7F4] rounded-[12px]">
+                              <div className="flex items-center justify-between sm:block">
+                                <span className="font-medium text-[#3D4A44] text-[14px]">{split.rights_holder_name}</span>
+                                <span className={`sm:hidden inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                                  split.rights_type === 'MASTER' ? 'bg-purple-50 text-purple-600' :
+                                  split.rights_type === 'PUBLISHING' ? 'bg-blue-50 text-blue-600' :
+                                  split.rights_type === 'PERFORMANCE' ? 'bg-amber-50 text-amber-600' :
+                                  split.rights_type === 'MECHANICAL' ? 'bg-indigo-50 text-indigo-600' :
+                                  'bg-gray-50 text-gray-600'
+                                }`}>
+                                  {split.rights_type}
+                                </span>
+                              </div>
+                              <span className={`hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-medium w-fit ${
                                 split.rights_type === 'MASTER' ? 'bg-purple-50 text-purple-600' :
                                 split.rights_type === 'PUBLISHING' ? 'bg-blue-50 text-blue-600' :
                                 split.rights_type === 'PERFORMANCE' ? 'bg-amber-50 text-amber-600' :
@@ -1973,6 +2002,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                               }`}>
                                 {split.rights_type}
                               </span>
+                              <div className="flex items-center justify-between sm:contents">
                               <div className="flex items-center gap-2">
                                 <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden max-w-[80px]">
                                   <div className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full" style={{ width: `${Math.min(split.share_percentage, 100)}%` }}></div>
@@ -1980,6 +2010,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 <span className="text-[14px] font-semibold text-[#3D4A44]">{split.share_percentage}%</span>
                               </div>
                               <span className="text-[13px] text-[#7A8580] truncate">{split.role || '-'}</span>
+                              </div>
                             </div>
                           ))}
                         </div>
