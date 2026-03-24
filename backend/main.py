@@ -54,10 +54,9 @@ def startup_event():
                     ChecklistItem.code.in_(REMOVED_CODES)
                 ).all()
                 if removed_items:
-                    from ..models.models import SongChecklistStatus as SCS
                     removed_ids = [item.id for item in removed_items]
-                    db.query(SCS).filter(
-                        SCS.checklist_item_id.in_(removed_ids)
+                    db.query(SongChecklistStatus).filter(
+                        SongChecklistStatus.checklist_item_id.in_(removed_ids)
                     ).delete(synchronize_session=False)
                     for item in removed_items:
                         db.delete(item)
