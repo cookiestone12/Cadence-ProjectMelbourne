@@ -333,12 +333,9 @@ def get_creator(
     is_shared = False
     if not membership:
         share = has_shared_access(db, current_user.id, creator_id)
-        logger.info(f"[CREATOR DEBUG] creator_id={creator_id}, org={creator.organization_id}, user_org=?, shared_access={share is not None}")
         if not share:
             raise HTTPException(status_code=403, detail="Not authorized to access this creator")
         is_shared = True
-    else:
-        logger.info(f"[CREATOR DEBUG] creator_id={creator_id}, org={creator.organization_id}, user_org={membership.organization_id}, is_own=True")
     
     song_count = db.query(func.count(SongCredit.id)).join(
         Song, Song.id == SongCredit.song_id
