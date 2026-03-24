@@ -7,6 +7,7 @@ import logging
 from ..models import get_db, SongCredit, SongDSPLink, Song, OrganizationMember, User, ClientShare
 from ..utils.auth import get_current_user
 from .client_sharing import has_shared_access
+from .contracts_mgmt import sync_credit_to_splits
 
 logger = logging.getLogger("cadence")
 
@@ -114,6 +115,11 @@ def create_credit(
         master_share=request.master_share
     )
     db.add(credit)
+    db.flush()
+
+    if request.pub_share is not None or request.master_share is not None:
+        sync_credit_to_splits(db, song, request.creator_id, request.pub_share, request.master_share, request.role, current_user.id)
+
     db.commit()
     db.refresh(credit)
     
@@ -162,7 +168,10 @@ def update_credit(
     update_data = request.dict(exclude_unset=True)
     for key, value in update_data.items():
         setattr(credit, key, value)
-    
+
+    if "pub_share" in update_data or "master_share" in update_data:
+        sync_credit_to_splits(db, song, credit.creator_id, credit.pub_share, credit.master_share, credit.role, current_user.id)
+
     db.commit()
     db.refresh(credit)
     

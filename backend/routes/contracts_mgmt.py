@@ -8,10 +8,14 @@ from datetime import date, datetime
 import io
 from ..models import (
     get_db, Contract, ContractParty, ContractAsset, ContractDocument, RightsSplit,
-    Song, Work, Release, Creator, OrganizationMember, User, AudioAsset, CreativeContact
+    Song, Work, Release, Creator, OrganizationMember, User, AudioAsset, CreativeContact,
+    SongCredit
 )
 from ..utils.auth import get_current_user
 from ..services.contract_parser import parse_contract_document
+import logging
+
+logger = logging.getLogger("cadence")
 
 router = APIRouter(prefix="/api/rights", tags=["rights-management"])
 
@@ -27,6 +31,103 @@ def _sync_song_pub_percentage(db: Session, song_id: int):
     song = db.query(Song).filter(Song.id == song_id).first()
     if song:
         song.publishing_percentage = float(total_pub) if total_pub else None
+
+
+def _sync_splits_to_credits(db: Session, song_id: int, creator_id: int):
+    cas = db.query(ContractAsset).join(
+        Contract, Contract.id == ContractAsset.contract_id
+    ).filter(
+        ContractAsset.asset_type == "SONG",
+        ContractAsset.asset_id == song_id,
+    ).all()
+    ca_ids = [ca.id for ca in cas]
+    if not ca_ids:
+        return
+
+    pub_total = db.query(func.sum(RightsSplit.share_percentage)).filter(
+        RightsSplit.contract_asset_id.in_(ca_ids),
+        RightsSplit.rights_holder_id == creator_id,
+        RightsSplit.rights_type == "PUBLISHING",
+    ).scalar()
+
+    master_total = db.query(func.sum(RightsSplit.share_percentage)).filter(
+        RightsSplit.contract_asset_id.in_(ca_ids),
+        RightsSplit.rights_holder_id == creator_id,
+        RightsSplit.rights_type == "MASTER",
+    ).scalar()
+
+    credit = db.query(SongCredit).filter(
+        SongCredit.song_id == song_id,
+        SongCredit.creator_id == creator_id,
+    ).first()
+    if credit:
+        credit.pub_share = float(pub_total) if pub_total else None
+        credit.master_share = float(master_total) if master_total else None
+
+
+def _get_or_create_split_sheet(db: Session, song: Song, user_id: int):
+    contract = db.query(Contract).filter(
+        Contract.organization_id == song.organization_id,
+        Contract.title == f"Song Splits: {song.title}",
+        Contract.contract_type == "SPLIT_SHEET",
+    ).first()
+    if not contract:
+        contract = Contract(
+            organization_id=song.organization_id,
+            title=f"Song Splits: {song.title}",
+            contract_type="SPLIT_SHEET",
+            status="ACTIVE",
+            created_by_user_id=user_id,
+        )
+        db.add(contract)
+        db.flush()
+
+    ca = db.query(ContractAsset).filter(
+        ContractAsset.contract_id == contract.id,
+        ContractAsset.asset_type == "SONG",
+        ContractAsset.asset_id == song.id,
+    ).first()
+    if not ca:
+        ca = ContractAsset(
+            contract_id=contract.id,
+            asset_type="SONG",
+            asset_id=song.id,
+        )
+        db.add(ca)
+        db.flush()
+    return ca
+
+
+def sync_credit_to_splits(db: Session, song: Song, creator_id: int, pub_share, master_share, role: str, user_id: int):
+    ca = _get_or_create_split_sheet(db, song, user_id)
+    creator = db.query(Creator).filter(Creator.id == creator_id).first()
+    holder_name = creator.display_name if creator else "Unknown"
+
+    for rights_type, share_val in [("PUBLISHING", pub_share), ("MASTER", master_share)]:
+        existing = db.query(RightsSplit).filter(
+            RightsSplit.contract_asset_id == ca.id,
+            RightsSplit.rights_holder_id == creator_id,
+            RightsSplit.rights_type == rights_type,
+        ).first()
+
+        if share_val is not None and share_val > 0:
+            if existing:
+                existing.share_percentage = float(share_val)
+                existing.role = role or existing.role
+            else:
+                new_split = RightsSplit(
+                    contract_asset_id=ca.id,
+                    rights_holder_id=creator_id,
+                    rights_holder_name=holder_name,
+                    rights_type=rights_type,
+                    share_percentage=float(share_val),
+                    role=role or "",
+                )
+                db.add(new_split)
+        elif existing:
+            db.delete(existing)
+
+    _sync_song_pub_percentage(db, song.id)
 
 
 def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = None):
@@ -542,6 +643,8 @@ def add_song_split(
     db.flush()
 
     _sync_song_pub_percentage(db, song_id)
+    if data.rights_holder_id and data.rights_type in ("PUBLISHING", "MASTER"):
+        _sync_splits_to_credits(db, song_id, data.rights_holder_id)
 
     db.commit()
     db.refresh(split)
@@ -576,12 +679,16 @@ def delete_song_split(
         verify_org_access(current_user, contract.organization_id, db)
 
     song_id = ca.asset_id if ca.asset_type == "SONG" else None
+    creator_id = split.rights_holder_id
+    rights_type = split.rights_type
 
     db.delete(split)
     db.flush()
 
     if song_id:
         _sync_song_pub_percentage(db, song_id)
+        if creator_id and rights_type in ("PUBLISHING", "MASTER"):
+            _sync_splits_to_credits(db, song_id, creator_id)
 
     db.commit()
     return {"message": "Split deleted successfully"}

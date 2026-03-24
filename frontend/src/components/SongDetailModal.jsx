@@ -227,6 +227,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       loadSongSplits()
       loadRightsData()
       loadDirectoryContacts()
+      await loadSongDetails()
       if (onSongUpdated) onSongUpdated()
     } catch (error) {
       console.error('Failed to add split:', error)
@@ -266,6 +267,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       await axios.delete(`/api/rights/song-splits/${splitId}`)
       loadSongSplits()
       loadRightsData()
+      await loadSongDetails()
       if (onSongUpdated) onSongUpdated()
     } catch (error) {
       console.error('Failed to delete split:', error)
@@ -977,6 +979,8 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                       await axios.patch(`/api/songs/${song.id}/credits/${credit.id}`, payload)
                                       setEditingCreditId(null)
                                       await loadSongDetails()
+                                      loadSongSplits()
+                                      loadRightsData()
                                       if (onSongUpdated) onSongUpdated()
                                     } catch (err) {
                                       console.error('Failed to update credit:', err)
@@ -1119,6 +1123,8 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                   setAddClientMasterShare('')
                                   setShowAddClient(false)
                                   await loadSongDetails()
+                                  loadSongSplits()
+                                  loadRightsData()
                                   if (onSongUpdated) onSongUpdated()
                                 } catch (err) {
                                   console.error('Failed to add credit:', err)
