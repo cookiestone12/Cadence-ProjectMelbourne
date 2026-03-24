@@ -28,7 +28,6 @@ app = FastAPI(title="Cadence Catalog Intelligence API")
 
 @app.on_event("startup")
 def startup_event():
-    import traceback
     log = logging.getLogger("cadence")
 
     try:
@@ -37,18 +36,15 @@ def startup_event():
     except Exception as e:
         log.warning(f"Email scheduler failed to start: {e}")
 
-    checklist_changed = _seed_checklist(log, traceback)
-
     import threading
-    threading.Thread(
-        target=_deferred_startup_tasks,
-        args=(checklist_changed, log),
-        daemon=True,
-    ).start()
+    threading.Thread(target=_deferred_startup_tasks, daemon=True).start()
 
 
-def _deferred_startup_tasks(checklist_changed, log):
+def _deferred_startup_tasks():
     import traceback
+    log = logging.getLogger("cadence")
+
+    checklist_changed = _seed_checklist(log, traceback)
 
     if checklist_changed:
         _resync_all_health_scores(log, traceback)
