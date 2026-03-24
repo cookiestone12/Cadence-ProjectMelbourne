@@ -1919,12 +1919,12 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                         </span>
                         <div className="flex items-center justify-between sm:contents">
                           <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden max-w-[80px]">
+                            <div className="hidden sm:block flex-1 h-2 bg-[#EEF1EC] rounded-full overflow-hidden max-w-[80px]">
                               <div className="h-full bg-gradient-to-r from-[#5B8A72] to-[#7BA594] rounded-full" style={{ width: `${Math.min(split.share_percentage, 100)}%` }}></div>
                             </div>
                             <span className="text-[14px] font-semibold text-[#3D4A44]">{split.share_percentage}%</span>
                           </div>
-                          <span className="text-[13px] text-[#7A8580] truncate">{split.role || '-'}</span>
+                          <span className="text-[13px] text-[#7A8580]">{split.role || '-'}</span>
                           <div className="hidden sm:flex justify-end">
                             <button onClick={() => handleDeleteSongSplit(split.id)} className="p-1 text-[#7A8580] hover:text-[#C47068] rounded transition-colors" title="Remove split">
                               <TrashIcon className="w-4 h-4" />
@@ -2009,7 +2009,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 </div>
                                 <span className="text-[14px] font-semibold text-[#3D4A44]">{split.share_percentage}%</span>
                               </div>
-                              <span className="text-[13px] text-[#7A8580] truncate">{split.role || '-'}</span>
+                              <span className="text-[13px] text-[#7A8580]">{split.role || '-'}</span>
                               </div>
                             </div>
                           ))}

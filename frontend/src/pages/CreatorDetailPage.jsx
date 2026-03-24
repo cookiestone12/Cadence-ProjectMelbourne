@@ -1608,7 +1608,7 @@ export default function CreatorDetailPage() {
               </div>
             </div>
             <div className="overflow-auto" style={{ maxHeight: '70vh' }}>
-              <table className="w-full text-sm">
+              <table className="w-full text-sm min-w-[900px]">
                 <thead className="bg-[#F8F8FB] border-b border-[rgba(59,77,67,0.08)] sticky top-0 z-10">
                   <tr>
                     <th className="px-3 py-3 text-center w-10">
