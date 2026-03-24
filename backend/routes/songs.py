@@ -7,7 +7,7 @@ from datetime import date
 from ..models import (
     get_db, Song, SongCredit, SongDSPLink, SongChecklistStatus,
     ChecklistItem, Creator, OrganizationMember, User, SongValuationSnapshot,
-    Placement, ContractAsset, AudioAsset, RoyaltyTransaction,
+    Placement, ContractAsset, AudioAsset, RoyaltyTransaction, RightsSplit,
 )
 from ..utils.auth import get_current_user
 from .client_sharing import has_shared_access
@@ -326,6 +326,36 @@ def get_organization_songs(
                 if creator_obj:
                     song_client_map[credit.song_id] = (creator_obj.display_name, creator_obj.id, credit.role, credit.id)
     
+    creator_pub_map = {}
+    creator_master_map = {}
+    creator_credit_map = {}
+    if creator_id and song_ids:
+        creator_splits = db.query(
+            ContractAsset.asset_id,
+            RightsSplit.rights_type,
+            func.sum(RightsSplit.share_percentage),
+        ).join(
+            RightsSplit, RightsSplit.contract_asset_id == ContractAsset.id
+        ).filter(
+            ContractAsset.asset_type == "SONG",
+            ContractAsset.asset_id.in_(song_ids),
+            RightsSplit.rights_holder_id == creator_id,
+            RightsSplit.rights_type.in_(["PUBLISHING", "MASTER"]),
+        ).group_by(ContractAsset.asset_id, RightsSplit.rights_type).all()
+
+        for sid, rtype, total in creator_splits:
+            if rtype == "PUBLISHING":
+                creator_pub_map[sid] = float(total)
+            elif rtype == "MASTER":
+                creator_master_map[sid] = float(total)
+
+        credits_for_creator = db.query(SongCredit).filter(
+            SongCredit.song_id.in_(song_ids),
+            SongCredit.creator_id == creator_id,
+        ).all()
+        for c in credits_for_creator:
+            creator_credit_map[c.song_id] = c
+
     result = []
     for song in songs:
         client_name = None
@@ -335,6 +365,19 @@ def get_organization_songs(
         if song.id in song_client_map:
             client_name, client_id, credit_role, credit_id = song_client_map[song.id]
         
+        if creator_id:
+            pub_pct = creator_pub_map.get(song.id)
+            master_pct = creator_master_map.get(song.id)
+            credit = creator_credit_map.get(song.id)
+            if credit:
+                if pub_pct is None and credit.pub_share is not None:
+                    pub_pct = credit.pub_share
+                if master_pct is None and credit.master_share is not None:
+                    master_pct = credit.master_share
+        else:
+            pub_pct = song.publishing_percentage
+            master_pct = song.master_percentage
+
         result.append({
             "id": song.id,
             "title": song.title,
@@ -353,8 +396,8 @@ def get_organization_songs(
             "is_released": song.is_released,
             "spotify_link": song.spotify_link,
             "label": song.label,
-            "publishing_percentage": song.publishing_percentage,
-            "master_percentage": song.master_percentage,
+            "publishing_percentage": pub_pct,
+            "master_percentage": master_pct,
             "advance_amount": song.advance_amount,
             "recording_code": song.recording_code,
             "master_paid": song.master_paid,
