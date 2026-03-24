@@ -100,10 +100,11 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
       )}
       
       <div className={`
-        fixed lg:relative inset-y-0 left-0 z-50
+        fixed lg:sticky inset-y-0 left-0 z-50
         h-screen w-64 bg-white/95 backdrop-blur-xl
         flex flex-col border-r border-am-separator
         transform transition-transform duration-200 ease-am
+        lg:flex-shrink-0 lg:top-0
         ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
         <div className="p-5 border-b border-am-separator">
