@@ -28,132 +28,149 @@ app = FastAPI(title="Cadence Catalog Intelligence API")
 
 @app.on_event("startup")
 def startup_event():
+    import traceback
+    log = logging.getLogger("cadence")
+
     try:
         from .services.email_scheduler import start_scheduler
         start_scheduler()
     except Exception as e:
-        logging.getLogger("cadence").warning(f"Email scheduler failed to start: {e}")
+        log.warning(f"Email scheduler failed to start: {e}")
 
-    def _seed_checklist():
-        changed = False
-        log = logging.getLogger("cadence")
-        try:
-            from .models.database import SessionLocal
-            from .models.models import ChecklistItem, SongChecklistStatus
-            from .models.database import engine
-            from sqlalchemy import inspect
-            inspector = inspect(engine)
-            existing_tables = set(inspector.get_table_names())
-            for tbl in [ChecklistItem.__table__, SongChecklistStatus.__table__]:
-                if tbl.name not in existing_tables:
-                    tbl.create(engine, checkfirst=True)
-                    log.info(f"Created table {tbl.name}")
-            db = SessionLocal()
-            try:
-                REMOVED_CODES = ["AD-01", "LG-01", "DSP-01", "DSP-02", "SY-02"]
-                removed_items = db.query(ChecklistItem).filter(
-                    ChecklistItem.code.in_(REMOVED_CODES)
-                ).all()
-                if removed_items:
-                    removed_ids = [item.id for item in removed_items]
-                    db.query(SongChecklistStatus).filter(
-                        SongChecklistStatus.checklist_item_id.in_(removed_ids)
-                    ).delete(synchronize_session=False)
-                    for item in removed_items:
-                        db.delete(item)
-                    db.commit()
-                    changed = True
-                    log.info(f"Removed {len(removed_items)} deprecated checklist items")
+    checklist_changed = _seed_checklist(log, traceback)
 
-                existing_count = db.query(ChecklistItem).count()
-                if existing_count == 0:
-                    CHECKLIST_SEED = [
-                        {"code": "AD-02", "category": "ADMIN", "description": "Contract executed/signed", "weight": 15},
-                        {"code": "AD-03", "category": "ADMIN", "description": "Invoice submitted", "weight": 10},
-                        {"code": "LG-02", "category": "LEGAL", "description": "Publishing splits confirmed", "weight": 10},
-                        {"code": "MD-01", "category": "METADATA", "description": "ISRC assigned", "weight": 5},
-                        {"code": "MD-02", "category": "METADATA", "description": "ISWC assigned", "weight": 5},
-                        {"code": "MD-03", "category": "METADATA", "description": "Credits finalized", "weight": 5},
-                        {"code": "DSP-03", "category": "DSP", "description": "Spotify link verified", "weight": 5},
-                        {"code": "SY-01", "category": "SYNC", "description": "Registered with PRO", "weight": 10},
-                        {"code": "SY-03", "category": "SYNC", "description": "MLC registered", "weight": 5},
-                        {"code": "PY-01", "category": "PAYMENT", "description": "Payment received", "weight": 20},
-                    ]
-                    for item_data in CHECKLIST_SEED:
-                        db.add(ChecklistItem(**item_data))
-                    db.commit()
-                    log.info(f"Seeded {len(CHECKLIST_SEED)} checklist items")
-                else:
-                    missing_items = [
-                        {"code": "SY-03", "category": "SYNC", "description": "MLC registered", "weight": 5},
-                    ]
-                    for item_data in missing_items:
-                        exists = db.query(ChecklistItem).filter(ChecklistItem.code == item_data["code"]).first()
-                        if not exists:
-                            db.add(ChecklistItem(**item_data))
-                            log.info(f"Added missing checklist item {item_data['code']}")
-                    db.commit()
-            finally:
-                db.close()
-        except Exception:
-            log.error(f"Checklist seed failed: {traceback.format_exc()}")
-        return changed
+    import threading
+    threading.Thread(
+        target=_deferred_startup_tasks,
+        args=(checklist_changed, log),
+        daemon=True,
+    ).start()
+
+
+def _deferred_startup_tasks(checklist_changed, log):
     import traceback
-    _checklist_changed = _seed_checklist()
 
-    if _checklist_changed:
-        def _resync_all_health_scores():
-            log = logging.getLogger("cadence")
-            try:
-                from .models.database import SessionLocal
-                from .utils.health_sync import sync_song_to_checklist
-                from .models.models import Song
-                db = SessionLocal()
-                try:
-                    songs = db.query(Song).all()
-                    for song in songs:
-                        sync_song_to_checklist(db, song)
-                    db.commit()
-                    log.info(f"Resynced health scores for {len(songs)} songs")
-                finally:
-                    db.close()
-            except Exception:
-                log.error(f"Health score resync failed: {traceback.format_exc()}")
-        _resync_all_health_scores()
+    if checklist_changed:
+        _resync_all_health_scores(log, traceback)
 
-    def _backfill_publishing_percentages():
-        log = logging.getLogger("cadence")
+    _backfill_publishing_percentages(log, traceback)
+
+    log.info("Deferred startup tasks completed")
+
+
+def _seed_checklist(log, traceback):
+    changed = False
+    try:
+        from .models.database import SessionLocal, engine
+        from .models.models import ChecklistItem, SongChecklistStatus
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        existing_tables = set(inspector.get_table_names())
+        for tbl in [ChecklistItem.__table__, SongChecklistStatus.__table__]:
+            if tbl.name not in existing_tables:
+                tbl.create(engine, checkfirst=True)
+                log.info(f"Created table {tbl.name}")
+        db = SessionLocal()
         try:
-            from .models.database import SessionLocal
-            from .models.models import Song, RightsSplit, ContractAsset
-            from sqlalchemy import func as sqlfunc
-            db = SessionLocal()
-            try:
-                song_pub_totals = db.query(
-                    ContractAsset.asset_id,
-                    sqlfunc.sum(RightsSplit.share_percentage)
-                ).join(
-                    RightsSplit, RightsSplit.contract_asset_id == ContractAsset.id
-                ).filter(
-                    ContractAsset.asset_type == "SONG",
-                    RightsSplit.rights_type == "PUBLISHING",
-                ).group_by(ContractAsset.asset_id).all()
+            REMOVED_CODES = ["AD-01", "LG-01", "DSP-01", "DSP-02", "SY-02"]
+            removed_items = db.query(ChecklistItem).filter(
+                ChecklistItem.code.in_(REMOVED_CODES)
+            ).all()
+            if removed_items:
+                removed_ids = [item.id for item in removed_items]
+                db.query(SongChecklistStatus).filter(
+                    SongChecklistStatus.checklist_item_id.in_(removed_ids)
+                ).delete(synchronize_session=False)
+                for item in removed_items:
+                    db.delete(item)
+                db.commit()
+                changed = True
+                log.info(f"Removed {len(removed_items)} deprecated checklist items")
 
-                updated = 0
-                for song_id, total_pub in song_pub_totals:
-                    song = db.query(Song).filter(Song.id == song_id).first()
-                    if song and song.publishing_percentage != float(total_pub):
-                        song.publishing_percentage = float(total_pub)
-                        updated += 1
+            existing_count = db.query(ChecklistItem).count()
+            if existing_count == 0:
+                CHECKLIST_SEED = [
+                    {"code": "AD-02", "category": "ADMIN", "description": "Contract executed/signed", "weight": 15},
+                    {"code": "AD-03", "category": "ADMIN", "description": "Invoice submitted", "weight": 10},
+                    {"code": "LG-02", "category": "LEGAL", "description": "Publishing splits confirmed", "weight": 10},
+                    {"code": "MD-01", "category": "METADATA", "description": "ISRC assigned", "weight": 5},
+                    {"code": "MD-02", "category": "METADATA", "description": "ISWC assigned", "weight": 5},
+                    {"code": "MD-03", "category": "METADATA", "description": "Credits finalized", "weight": 5},
+                    {"code": "DSP-03", "category": "DSP", "description": "Spotify link verified", "weight": 5},
+                    {"code": "SY-01", "category": "SYNC", "description": "Registered with PRO", "weight": 10},
+                    {"code": "SY-03", "category": "SYNC", "description": "MLC registered", "weight": 5},
+                    {"code": "PY-01", "category": "PAYMENT", "description": "Payment received", "weight": 20},
+                ]
+                for item_data in CHECKLIST_SEED:
+                    db.add(ChecklistItem(**item_data))
+                db.commit()
+                log.info(f"Seeded {len(CHECKLIST_SEED)} checklist items")
+            else:
+                missing_items = [
+                    {"code": "SY-03", "category": "SYNC", "description": "MLC registered", "weight": 5},
+                ]
+                for item_data in missing_items:
+                    exists = db.query(ChecklistItem).filter(ChecklistItem.code == item_data["code"]).first()
+                    if not exists:
+                        db.add(ChecklistItem(**item_data))
+                        log.info(f"Added missing checklist item {item_data['code']}")
+                db.commit()
+        finally:
+            db.close()
+    except Exception:
+        log.error(f"Checklist seed failed: {traceback.format_exc()}")
+    return changed
 
-                if updated > 0:
-                    db.commit()
-                    log.info(f"Backfilled publishing_percentage for {updated} songs")
-            finally:
-                db.close()
-        except Exception:
-            log.error(f"Publishing percentage backfill failed: {traceback.format_exc()}")
-    _backfill_publishing_percentages()
+
+def _resync_all_health_scores(log, traceback):
+    try:
+        from .models.database import SessionLocal
+        from .utils.health_sync import sync_song_to_checklist
+        from .models.models import Song
+        db = SessionLocal()
+        try:
+            songs = db.query(Song).all()
+            for song in songs:
+                sync_song_to_checklist(db, song)
+            db.commit()
+            log.info(f"Resynced health scores for {len(songs)} songs")
+        finally:
+            db.close()
+    except Exception:
+        log.error(f"Health score resync failed: {traceback.format_exc()}")
+
+
+def _backfill_publishing_percentages(log, traceback):
+    try:
+        from .models.database import SessionLocal
+        from .models.models import Song, RightsSplit, ContractAsset
+        from sqlalchemy import func as sqlfunc
+        db = SessionLocal()
+        try:
+            song_pub_totals = db.query(
+                ContractAsset.asset_id,
+                sqlfunc.sum(RightsSplit.share_percentage)
+            ).join(
+                RightsSplit, RightsSplit.contract_asset_id == ContractAsset.id
+            ).filter(
+                ContractAsset.asset_type == "SONG",
+                RightsSplit.rights_type == "PUBLISHING",
+            ).group_by(ContractAsset.asset_id).all()
+
+            updated = 0
+            for song_id, total_pub in song_pub_totals:
+                song = db.query(Song).filter(Song.id == song_id).first()
+                if song and song.publishing_percentage != float(total_pub):
+                    song.publishing_percentage = float(total_pub)
+                    updated += 1
+
+            if updated > 0:
+                db.commit()
+                log.info(f"Backfilled publishing_percentage for {updated} songs")
+        finally:
+            db.close()
+    except Exception:
+        log.error(f"Publishing percentage backfill failed: {traceback.format_exc()}")
 
 
 
