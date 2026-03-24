@@ -35,6 +35,7 @@ def startup_event():
         logging.getLogger("cadence").warning(f"Email scheduler failed to start: {e}")
 
     def _seed_checklist():
+        changed = False
         log = logging.getLogger("cadence")
         try:
             from .models.database import SessionLocal
@@ -61,6 +62,7 @@ def startup_event():
                     for item in removed_items:
                         db.delete(item)
                     db.commit()
+                    changed = True
                     log.info(f"Removed {len(removed_items)} deprecated checklist items")
 
                 existing_count = db.query(ChecklistItem).count()
@@ -95,27 +97,29 @@ def startup_event():
                 db.close()
         except Exception:
             log.error(f"Checklist seed failed: {traceback.format_exc()}")
+        return changed
     import traceback
-    _seed_checklist()
+    _checklist_changed = _seed_checklist()
 
-    def _resync_all_health_scores():
-        log = logging.getLogger("cadence")
-        try:
-            from .models.database import SessionLocal
-            from .utils.health_sync import sync_song_to_checklist
-            from .models.models import Song
-            db = SessionLocal()
+    if _checklist_changed:
+        def _resync_all_health_scores():
+            log = logging.getLogger("cadence")
             try:
-                songs = db.query(Song).all()
-                for song in songs:
-                    sync_song_to_checklist(db, song)
-                db.commit()
-                log.info(f"Resynced health scores for {len(songs)} songs")
-            finally:
-                db.close()
-        except Exception:
-            log.error(f"Health score resync failed: {traceback.format_exc()}")
-    _resync_all_health_scores()
+                from .models.database import SessionLocal
+                from .utils.health_sync import sync_song_to_checklist
+                from .models.models import Song
+                db = SessionLocal()
+                try:
+                    songs = db.query(Song).all()
+                    for song in songs:
+                        sync_song_to_checklist(db, song)
+                    db.commit()
+                    log.info(f"Resynced health scores for {len(songs)} songs")
+                finally:
+                    db.close()
+            except Exception:
+                log.error(f"Health score resync failed: {traceback.format_exc()}")
+        _resync_all_health_scores()
 
     def _backfill_publishing_percentages():
         log = logging.getLogger("cadence")
