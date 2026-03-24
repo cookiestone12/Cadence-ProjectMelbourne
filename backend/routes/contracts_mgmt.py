@@ -469,13 +469,19 @@ def add_song_split(
                 legal_name=holder.legal_name,
                 email=holder.email,
                 phone=holder.phone,
-                pro=holder.primary_pro,
-                ipi=holder.primary_ipi,
+                pro=holder_pro or holder.primary_pro,
+                ipi=holder_ipi or holder.primary_ipi,
                 publisher_name=holder.publisher_name,
                 roles=holder.roles or [],
                 territory=holder.primary_territory,
             )
             db.add(new_contact)
+            db.flush()
+        elif existing_contact:
+            if holder_ipi and not existing_contact.ipi:
+                existing_contact.ipi = holder_ipi
+            if holder_pro and not existing_contact.pro:
+                existing_contact.pro = holder_pro
             db.flush()
     elif data.contact_id:
         contact = db.query(CreativeContact).filter(
@@ -488,6 +494,11 @@ def add_song_split(
                 holder_ipi = contact.ipi
             if not holder_pro:
                 holder_pro = contact.pro
+            if holder_ipi and not contact.ipi:
+                contact.ipi = holder_ipi
+            if holder_pro and not contact.pro:
+                contact.pro = holder_pro
+            db.flush()
 
     if not data.rights_holder_id and not data.contact_id and holder_name:
         existing_contact = db.query(CreativeContact).filter(

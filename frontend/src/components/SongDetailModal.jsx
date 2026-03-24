@@ -1799,6 +1799,38 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">IPI Number</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 00123456789"
+                          value={splitForm.ipi}
+                          onChange={(e) => setSplitForm(prev => ({ ...prev, ipi: e.target.value }))}
+                          className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[#7A8580] mb-1">PRO</label>
+                        <select
+                          value={splitForm.pro}
+                          onChange={(e) => setSplitForm(prev => ({ ...prev, pro: e.target.value }))}
+                          className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                        >
+                          <option value="">Select PRO</option>
+                          <option value="ASCAP">ASCAP</option>
+                          <option value="BMI">BMI</option>
+                          <option value="SESAC">SESAC</option>
+                          <option value="GMR">GMR</option>
+                          <option value="PRS">PRS</option>
+                          <option value="SOCAN">SOCAN</option>
+                          <option value="GEMA">GEMA</option>
+                          <option value="SACEM">SACEM</option>
+                          <option value="APRA">APRA</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
                         <label className="block text-xs font-medium text-[#7A8580] mb-1">Share Percentage</label>
                         <input
                           type="number"
