@@ -4,7 +4,8 @@ import axios from 'axios'
 import {
   UserGroupIcon, PlusIcon, MagnifyingGlassIcon, XMarkIcon,
   PencilIcon, TrashIcon, ArrowDownTrayIcon, ArrowPathIcon, LinkIcon, EnvelopeIcon,
-  CheckIcon, ClipboardDocumentIcon, UsersIcon, CameraIcon
+  CheckIcon, ClipboardDocumentIcon, UsersIcon, CameraIcon, LockClosedIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline'
 import EmailSendModal from '../components/EmailSendModal'
 import ShareModal from '../components/ShareModal'
@@ -37,7 +38,8 @@ const emptyForm = {
   publisher_name: '', publisher_ipi: '', publisher_pro: '',
   roles: [],
   representation_name: '', representation_email: '', representation_phone: '',
-  territory: '', notes: ''
+  territory: '', notes: '',
+  is_private: false
 }
 
 function ContactFormModal({ isOpen, onClose, onSubmit, initialData, title, loading, onPhotoUpload }) {
@@ -230,6 +232,23 @@ function ContactFormModal({ isOpen, onClose, onSubmit, initialData, title, loadi
             </div>
           </div>
 
+          <div className="flex items-center gap-3 p-3 rounded-xl border border-[rgba(59,77,67,0.12)] bg-[#FAFBF9]">
+            <button
+              type="button"
+              onClick={() => setForm(p => ({ ...p, is_private: !p.is_private }))}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.is_private ? 'bg-[#5B8A72]' : 'bg-[#B0BDB4]'}`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.is_private ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <LockClosedIcon className="w-4 h-4 text-[#3D4A44]" />
+                <span className="text-sm font-medium text-[#3D4A44]">Private Contact</span>
+              </div>
+              <p className="text-xs text-[#7A8580] mt-0.5">Only visible to you when enabled</p>
+            </div>
+          </div>
+
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
             <button type="submit" disabled={loading || !form.display_name.trim()} className="px-5 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm font-medium disabled:opacity-50">
@@ -359,6 +378,13 @@ export default function CreativeDirectoryPage() {
   const [clientShares, setClientShares] = useState([])
   const [shareToAccountOpen, setShareToAccountOpen] = useState(false)
   const [viewMode, setViewMode] = useState(() => getStoredViewMode('creative-directory'))
+  const [visibilityFilter, setVisibilityFilter] = useState('all')
+  const [proCopied, setProCopied] = useState(null)
+  const [quickShareProOpen, setQuickShareProOpen] = useState(null)
+  const [quickShareProEmail, setQuickShareProEmail] = useState('')
+  const [quickShareProMessage, setQuickShareProMessage] = useState('')
+  const [quickShareProSending, setQuickShareProSending] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState(null)
 
   const handleViewModeChange = (mode) => {
     setViewMode(mode)
@@ -371,6 +397,10 @@ export default function CreativeDirectoryPage() {
 
   async function loadData() {
     try {
+      const storedUser = localStorage.getItem('user')
+      if (storedUser) {
+        try { setCurrentUserId(JSON.parse(storedUser).id) } catch (e) {}
+      }
       const orgRes = await axios.get('/api/organizations/current')
       const orgId = orgRes.data?.id
       if (!orgId) { setLoading(false); return }
@@ -404,10 +434,14 @@ export default function CreativeDirectoryPage() {
     }
   }
 
-  async function loadContacts(orgId, search) {
+  async function loadContacts(orgId, search, visibility) {
     try {
-      const params = search ? `?search=${encodeURIComponent(search)}` : ''
-      const res = await axios.get(`/api/creative-directory/org/${orgId || organizationId}${params}`)
+      const queryParams = new URLSearchParams()
+      if (search) queryParams.set('search', search)
+      const vis = visibility || visibilityFilter
+      if (vis && vis !== 'all') queryParams.set('visibility', vis)
+      const qs = queryParams.toString()
+      const res = await axios.get(`/api/creative-directory/org/${orgId || organizationId}${qs ? '?' + qs : ''}`)
       setContacts(Array.isArray(res.data) ? res.data : res.data.contacts || [])
     } catch (error) {
       console.error('Failed to load contacts:', error)
@@ -582,13 +616,55 @@ export default function CreativeDirectoryPage() {
       .filter(Boolean)
   }
 
+  async function handleTogglePrivate(contact) {
+    try {
+      const res = await axios.put(`/api/creative-directory/${contact.id}`, { is_private: !contact.is_private })
+      setContacts(prev => prev.map(c => c.id === contact.id ? { ...c, is_private: res.data.is_private } : c))
+    } catch (err) {
+      console.error('Failed to toggle privacy:', err)
+      alert(err.response?.data?.detail || 'Failed to update privacy setting')
+    }
+  }
+
+  async function handleCopyProInfo(contact) {
+    try {
+      const res = await axios.get(`/api/creative-directory/${contact.id}/pro-info`)
+      await navigator.clipboard.writeText(res.data.text)
+      setProCopied(contact.id)
+      setTimeout(() => setProCopied(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy PRO info:', err)
+      alert('Failed to copy PRO info')
+    }
+  }
+
+  async function handleQuickSharePro() {
+    if (!quickShareProOpen || !quickShareProEmail.trim()) return
+    setQuickShareProSending(true)
+    try {
+      await axios.post(`/api/creative-directory/${quickShareProOpen.id}/quick-share-pro`, {
+        recipient_email: quickShareProEmail,
+        message: quickShareProMessage || undefined,
+      })
+      alert(`PRO info sent to ${quickShareProEmail}`)
+      setQuickShareProOpen(null)
+      setQuickShareProEmail('')
+      setQuickShareProMessage('')
+    } catch (err) {
+      console.error('Failed to send PRO info:', err)
+      alert(err.response?.data?.detail || 'Failed to send PRO info')
+    } finally {
+      setQuickShareProSending(false)
+    }
+  }
+
   useEffect(() => {
     if (!organizationId) return
     const timer = setTimeout(() => {
-      loadContacts(organizationId, searchTerm)
+      loadContacts(organizationId, searchTerm, visibilityFilter)
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchTerm, organizationId])
+  }, [searchTerm, organizationId, visibilityFilter])
 
   const filteredContacts = roleFilter
     ? contacts.filter(c => c.roles && c.roles.includes(roleFilter))
@@ -623,6 +699,15 @@ export default function CreativeDirectoryPage() {
             className="w-full pl-10 pr-4 py-2.5 border border-[rgba(59,77,67,0.12)] rounded-xl bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
           />
         </div>
+        <select
+          value={visibilityFilter}
+          onChange={e => setVisibilityFilter(e.target.value)}
+          className="border border-[rgba(59,77,67,0.12)] rounded-xl px-3 py-2.5 bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+        >
+          <option value="all">All My Contacts</option>
+          <option value="private">Private Only</option>
+          <option value="org">Org-Wide</option>
+        </select>
         <select
           value={roleFilter}
           onChange={e => setRoleFilter(e.target.value)}
@@ -738,15 +823,36 @@ export default function CreativeDirectoryPage() {
                   )}
                   </div>
                 </div>
-                {contact.creator_id && (
-                  <Link
-                    to={`/roster/${contact.creator_id}`}
-                    className="flex items-center gap-1 px-2 py-1 bg-[#5B8A72]/10 text-[#5B8A72] rounded-full text-xs font-medium hover:bg-[#5B8A72]/20 transition-colors flex-shrink-0 ml-2"
-                  >
-                    <LinkIcon className="w-3 h-3" />
-                    Roster
-                  </Link>
-                )}
+                <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                  {(!contact.created_by_user_id || contact.created_by_user_id === currentUserId) ? (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleTogglePrivate(contact) }}
+                      className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium transition-colors ${
+                        contact.is_private
+                          ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                          : 'bg-[#EEF1EC] text-[#B0BDB4] hover:bg-[#E0E5E2] hover:text-[#7A8580]'
+                      }`}
+                      title={contact.is_private ? 'Click to make org-wide' : 'Click to make private'}
+                    >
+                      <LockClosedIcon className="w-3 h-3" />
+                      {contact.is_private ? 'Private' : 'Public'}
+                    </button>
+                  ) : contact.is_private ? (
+                    <span className="flex items-center gap-1 px-2 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-medium">
+                      <LockClosedIcon className="w-3 h-3" />
+                      Private
+                    </span>
+                  ) : null}
+                  {contact.creator_id && (
+                    <Link
+                      to={`/roster/${contact.creator_id}`}
+                      className="flex items-center gap-1 px-2 py-1 bg-[#5B8A72]/10 text-[#5B8A72] rounded-full text-xs font-medium hover:bg-[#5B8A72]/20 transition-colors"
+                    >
+                      <LinkIcon className="w-3 h-3" />
+                      Roster
+                    </Link>
+                  )}
+                </div>
               </div>
 
               {contact.roles && contact.roles.length > 0 && (
@@ -813,6 +919,27 @@ export default function CreativeDirectoryPage() {
                 >
                   <EnvelopeIcon className="w-3.5 h-3.5" />
                   Share Card
+                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => handleCopyProInfo(contact)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#5A8A9A] hover:bg-[#5A8A9A]/10 rounded-lg transition-colors"
+                    title="Copy PRO info to clipboard"
+                  >
+                    {proCopied === contact.id ? (
+                      <><CheckIcon className="w-3.5 h-3.5" /> Copied!</>
+                    ) : (
+                      <><DocumentDuplicateIcon className="w-3.5 h-3.5" /> PRO Info</>
+                    )}
+                  </button>
+                </div>
+                <button
+                  onClick={() => { setQuickShareProOpen(contact); setQuickShareProEmail(''); setQuickShareProMessage('') }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg transition-colors"
+                  title="Email PRO info"
+                >
+                  <EnvelopeIcon className="w-3.5 h-3.5" />
+                  Email PRO
                 </button>
                 <button
                   onClick={async () => {
@@ -882,7 +1009,12 @@ export default function CreativeDirectoryPage() {
                         </div>
                       )}
                       <div className="min-w-0">
-                        <p className="font-semibold text-[#3D4A44] truncate text-sm">{contact.display_name}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-semibold text-[#3D4A44] truncate text-sm">{contact.display_name}</p>
+                          {contact.is_private && (
+                            <LockClosedIcon className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" title="Private" />
+                          )}
+                        </div>
                         {contact.legal_name && <p className="text-xs text-[#7A8580] truncate">{contact.legal_name}</p>}
                       </div>
                     </div>
@@ -919,6 +1051,9 @@ export default function CreativeDirectoryPage() {
                       </button>
                       <button onClick={() => { setShareModalContact(contact); setShareResult(null) }} className="p-1 sm:p-1.5 rounded-lg hover:bg-[#5B8A72]/10 text-[#7A8580] hover:text-[#5B8A72] transition-colors" title="Share Card">
                         <EnvelopeIcon className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleCopyProInfo(contact)} className="p-1 sm:p-1.5 rounded-lg hover:bg-[#5A8A9A]/10 text-[#7A8580] hover:text-[#5A8A9A] transition-colors hidden sm:inline-flex" title="Copy PRO Info">
+                        {proCopied === contact.id ? <CheckIcon className="w-4 h-4 text-green-500" /> : <DocumentDuplicateIcon className="w-4 h-4" />}
                       </button>
                       <button
                         onClick={async () => {
@@ -1010,6 +1145,62 @@ export default function CreativeDirectoryPage() {
           onClose={() => setShareToAccountOpen(false)}
           orgId={organizationId}
         />
+      )}
+
+      {quickShareProOpen && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.12)]">
+              <h2 className="text-xl font-bold text-[#3D4A44]">Email PRO Info</h2>
+              <button onClick={() => setQuickShareProOpen(null)} className="w-9 h-9 flex items-center justify-center rounded-full text-[#7A8580] hover:text-[#3D4A44] hover:bg-[#EEF1EC] transition-colors">
+                <XMarkIcon className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="bg-[#F5F7F4] rounded-xl p-4">
+                <h3 className="font-semibold text-[#3D4A44] mb-2">{quickShareProOpen.display_name}</h3>
+                <div className="space-y-1 text-sm text-[#7A8580]">
+                  {quickShareProOpen.pro && <p>PRO: <span className="text-[#3D4A44] font-medium">{quickShareProOpen.pro}</span></p>}
+                  {quickShareProOpen.ipi && <p>IPI: <span className="text-[#3D4A44] font-medium">{quickShareProOpen.ipi}</span></p>}
+                  {quickShareProOpen.publisher_name && <p>Publisher: <span className="text-[#3D4A44] font-medium">{quickShareProOpen.publisher_name}</span></p>}
+                  {quickShareProOpen.publisher_ipi && <p>Publisher IPI: <span className="text-[#3D4A44] font-medium">{quickShareProOpen.publisher_ipi}</span></p>}
+                  {quickShareProOpen.publisher_pro && <p>Publisher PRO: <span className="text-[#3D4A44] font-medium">{quickShareProOpen.publisher_pro}</span></p>}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Recipient Email *</label>
+                <input
+                  type="email"
+                  required
+                  value={quickShareProEmail}
+                  onChange={e => setQuickShareProEmail(e.target.value)}
+                  placeholder="colleague@example.com"
+                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Message (optional)</label>
+                <input
+                  type="text"
+                  value={quickShareProMessage}
+                  onChange={e => setQuickShareProMessage(e.target.value)}
+                  placeholder="Here are the PRO details you requested..."
+                  className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={() => setQuickShareProOpen(null)} className="px-4 py-2 text-sm font-medium text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
+                <button
+                  onClick={handleQuickSharePro}
+                  disabled={quickShareProSending || !quickShareProEmail.trim()}
+                  className="px-5 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm font-medium disabled:opacity-50"
+                >
+                  {quickShareProSending ? 'Sending...' : 'Send PRO Info'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

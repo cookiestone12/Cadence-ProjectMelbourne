@@ -33,7 +33,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Expense Tracking**: An Expense model integrated into the Royalties page.
 - **Works Folder Organization**: Supports hierarchical folder organization for Works.
 - **Core Catalog & Creator Management**: Expanded data models for `Works` and `Releases` with `work_type` and `IPAssetType`.
-- **Creative Directory**: Contact management system for industry collaborators.
+- **Creative Directory**: Contact management system for industry collaborators with private/public visibility toggle, per-user ownership, Quick Share PRO Info (copy-to-clipboard and email), and visibility filtering (All My Contacts, Private Only, Org-Wide).
 - **Creator Contact Roles**: Multi-contact assignment system for creators with specific roles.
 - **Unified Email System**: App-wide email infrastructure powered by Resend with branded HTML templates.
 - **Bulk Registration**: Operational PRO registration workflow for tracking and generating branded PDF reports. Includes submission history tracking (sent_at/sent_to) and a Submission History section on the frontend.

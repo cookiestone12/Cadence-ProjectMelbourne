@@ -56,9 +56,34 @@ def ensure_schema_updates():
             if 'photo_mime' not in cc_cols:
                 conn.execute(text("ALTER TABLE creative_contacts ADD COLUMN photo_mime VARCHAR"))
                 cc_added.append('photo_mime')
+            if 'is_private' not in cc_cols:
+                conn.execute(text("ALTER TABLE creative_contacts ADD COLUMN is_private BOOLEAN NOT NULL DEFAULT false"))
+                cc_added.append('is_private')
+            if 'created_by_user_id' not in cc_cols:
+                conn.execute(text("ALTER TABLE creative_contacts ADD COLUMN created_by_user_id INTEGER REFERENCES users(id)"))
+                cc_added.append('created_by_user_id')
             if cc_added:
                 conn.commit()
                 logger.info(f"Added {'/'.join(cc_added)} columns to creative_contacts")
+
+            result = conn.execute(text(
+                "SELECT COUNT(*) FROM creative_contacts WHERE created_by_user_id IS NULL"
+            ))
+            null_count = result.scalar()
+            if null_count and null_count > 0:
+                conn.execute(text("""
+                    UPDATE creative_contacts cc
+                    SET created_by_user_id = (
+                        SELECT om.user_id FROM organization_members om
+                        WHERE om.organization_id = cc.organization_id
+                        AND om.role IN ('OWNER', 'ADMIN')
+                        ORDER BY om.id ASC
+                        LIMIT 1
+                    )
+                    WHERE cc.created_by_user_id IS NULL
+                """))
+                conn.commit()
+                logger.info(f"Backfilled created_by_user_id for {null_count} existing creative contacts")
 
         if 'song_contracts' in inspector.get_table_names():
             sc_cols = [c['name'] for c in inspector.get_columns('song_contracts')]

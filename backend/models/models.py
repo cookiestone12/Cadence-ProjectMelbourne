@@ -266,6 +266,8 @@ class CreativeContact(Base):
     photo_url = Column(String, nullable=True)
     photo_data = Column(LargeBinary, nullable=True)
     photo_mime = Column(String, nullable=True)
+    is_private = Column(Boolean, default=False, nullable=False, server_default="false")
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

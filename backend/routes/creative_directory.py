@@ -25,6 +25,11 @@ def verify_org_access(user: User, org_id: int, db: Session):
     return membership
 
 
+def verify_private_access(contact: CreativeContact, user: User):
+    if contact.is_private and contact.created_by_user_id != user.id:
+        raise HTTPException(status_code=403, detail="This is a private contact")
+
+
 class CreativeContactCreate(BaseModel):
     display_name: str
     legal_name: Optional[str] = None
@@ -42,6 +47,7 @@ class CreativeContactCreate(BaseModel):
     representation_phone: Optional[str] = None
     territory: Optional[str] = None
     notes: Optional[str] = None
+    is_private: Optional[bool] = False
 
 
 class CreativeContactUpdate(BaseModel):
@@ -61,6 +67,7 @@ class CreativeContactUpdate(BaseModel):
     representation_phone: Optional[str] = None
     territory: Optional[str] = None
     notes: Optional[str] = None
+    is_private: Optional[bool] = None
 
 
 def _contact_to_dict(contact: CreativeContact):
@@ -85,6 +92,8 @@ def _contact_to_dict(contact: CreativeContact):
         "territory": contact.territory,
         "notes": contact.notes,
         "photo_url": contact.photo_url,
+        "is_private": bool(contact.is_private) if contact.is_private else False,
+        "created_by_user_id": contact.created_by_user_id,
         "created_at": contact.created_at.isoformat() if contact.created_at else None,
         "updated_at": contact.updated_at.isoformat() if contact.updated_at else None,
     }
@@ -94,11 +103,28 @@ def _contact_to_dict(contact: CreativeContact):
 def list_creative_contacts(
     org_id: int,
     search: Optional[str] = Query(None),
+    visibility: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
+    from sqlalchemy import or_
     query = db.query(CreativeContact).filter(CreativeContact.organization_id == org_id)
+
+    if visibility == "private":
+        query = query.filter(
+            CreativeContact.is_private == True,
+            CreativeContact.created_by_user_id == current_user.id,
+        )
+    elif visibility == "org":
+        query = query.filter(CreativeContact.is_private == False)
+    else:
+        query = query.filter(
+            or_(
+                CreativeContact.is_private == False,
+                CreativeContact.created_by_user_id == current_user.id,
+            )
+        )
 
     if search:
         query = query.filter(CreativeContact.display_name.ilike(f"%{search}%"))
@@ -117,6 +143,7 @@ def get_creative_contact(
     if not contact:
         raise HTTPException(status_code=404, detail="Creative contact not found")
     verify_org_access(current_user, contact.organization_id, db)
+    verify_private_access(contact, current_user)
     return _contact_to_dict(contact)
 
 
@@ -147,6 +174,8 @@ def create_creative_contact(
         representation_phone=data.representation_phone,
         territory=data.territory,
         notes=data.notes,
+        is_private=data.is_private or False,
+        created_by_user_id=current_user.id,
     )
     db.add(contact)
     db.commit()
@@ -165,8 +194,16 @@ def update_creative_contact(
     if not contact:
         raise HTTPException(status_code=404, detail="Creative contact not found")
     verify_org_access(current_user, contact.organization_id, db)
+    verify_private_access(contact, current_user)
 
-    for field, value in data.dict(exclude_unset=True).items():
+    update_data = data.dict(exclude_unset=True)
+    if 'is_private' in update_data:
+        if contact.created_by_user_id is not None and contact.created_by_user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Only the contact owner can change privacy settings")
+        if contact.created_by_user_id is None:
+            contact.created_by_user_id = current_user.id
+
+    for field, value in update_data.items():
         setattr(contact, field, value)
 
     if contact.creator_id:
@@ -202,6 +239,7 @@ def delete_creative_contact(
     if not contact:
         raise HTTPException(status_code=404, detail="Creative contact not found")
     verify_org_access(current_user, contact.organization_id, db)
+    verify_private_access(contact, current_user)
 
     db.delete(contact)
     db.commit()
@@ -218,6 +256,7 @@ def serve_contact_image(
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     verify_org_access(current_user, contact.organization_id, db)
+    verify_private_access(contact, current_user)
 
     if contact.photo_data:
         return Response(
@@ -240,6 +279,7 @@ async def upload_contact_image(
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     verify_org_access(current_user, contact.organization_id, db)
+    verify_private_access(contact, current_user)
 
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Invalid image type. Use JPEG, PNG, WebP, or GIF.")
@@ -266,6 +306,7 @@ def delete_contact_image(
     if not contact:
         raise HTTPException(status_code=404, detail="Contact not found")
     verify_org_access(current_user, contact.organization_id, db)
+    verify_private_access(contact, current_user)
 
     contact.photo_data = None
     contact.photo_mime = None
@@ -310,6 +351,7 @@ def create_from_creator(
         publisher_name=creator.publisher_name,
         roles=creator.roles or [],
         territory=creator.primary_territory,
+        created_by_user_id=current_user.id,
     )
     db.add(contact)
     db.commit()
@@ -362,6 +404,7 @@ def sync_creators(
                 publisher_name=creator.publisher_name,
                 roles=creator.roles or [],
                 territory=creator.primary_territory,
+                created_by_user_id=current_user.id,
             )
             db.add(contact)
             created.append(creator.display_name)
@@ -397,6 +440,7 @@ def share_contact_card(
     if not contact:
         raise HTTPException(status_code=404, detail="Creative contact not found")
     verify_org_access(current_user, contact.organization_id, db)
+    verify_private_access(contact, current_user)
 
     from ..templates.email_templates import share_contact_card as share_template
     from ..services.email_provider import get_email_provider
@@ -446,6 +490,102 @@ def share_contact_card(
     return {"success": True, "message": f"Contact card shared with {data.recipient_email}"}
 
 
+@router.get("/{contact_id}/pro-info")
+def get_pro_info(
+    contact_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    contact = db.query(CreativeContact).filter(CreativeContact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Creative contact not found")
+    verify_org_access(current_user, contact.organization_id, db)
+    verify_private_access(contact, current_user)
+
+    lines = [contact.display_name]
+    if contact.pro:
+        lines.append(f"PRO: {contact.pro}")
+    if contact.ipi:
+        lines.append(f"IPI: {contact.ipi}")
+    if contact.publisher_name:
+        lines.append(f"Publisher: {contact.publisher_name}")
+    if contact.publisher_ipi:
+        lines.append(f"Publisher IPI: {contact.publisher_ipi}")
+    if contact.publisher_pro:
+        lines.append(f"Publisher PRO: {contact.publisher_pro}")
+
+    return {
+        "text": "\n".join(lines),
+        "data": {
+            "name": contact.display_name,
+            "pro": contact.pro,
+            "ipi": contact.ipi,
+            "publisher_name": contact.publisher_name,
+            "publisher_ipi": contact.publisher_ipi,
+            "publisher_pro": contact.publisher_pro,
+        }
+    }
+
+
+class QuickShareProRequest(BaseModel):
+    recipient_email: str
+    message: Optional[str] = None
+
+
+@router.post("/{contact_id}/quick-share-pro")
+def quick_share_pro_info(
+    contact_id: int,
+    data: QuickShareProRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    contact = db.query(CreativeContact).filter(CreativeContact.id == contact_id).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Creative contact not found")
+    verify_org_access(current_user, contact.organization_id, db)
+    verify_private_access(contact, current_user)
+
+    from ..services.email_provider import get_email_provider
+
+    sender_name = getattr(current_user, 'full_name', None) or current_user.username
+    pro_lines = []
+    if contact.pro:
+        pro_lines.append(f"<b>PRO:</b> {contact.pro}")
+    if contact.ipi:
+        pro_lines.append(f"<b>IPI:</b> {contact.ipi}")
+    if contact.publisher_name:
+        pro_lines.append(f"<b>Publisher:</b> {contact.publisher_name}")
+    if contact.publisher_ipi:
+        pro_lines.append(f"<b>Publisher IPI:</b> {contact.publisher_ipi}")
+    if contact.publisher_pro:
+        pro_lines.append(f"<b>Publisher PRO:</b> {contact.publisher_pro}")
+
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto;">
+        <p>{sender_name} shared PRO information for <b>{contact.display_name}</b>:</p>
+        <div style="background: #f5f7f4; border-radius: 8px; padding: 16px; margin: 16px 0;">
+            <h3 style="margin: 0 0 12px 0; color: #3D4A44;">{contact.display_name}</h3>
+            {'<br>'.join(pro_lines) if pro_lines else '<em>No PRO details available</em>'}
+        </div>
+        {f'<p style="color: #7A8580;">{data.message}</p>' if data.message else ''}
+        <hr style="border: none; border-top: 1px solid #e0e5e2; margin: 20px 0;">
+        <p style="font-size: 12px; color: #7A8580;">Sent via Cadence</p>
+    </div>
+    """
+
+    provider = get_email_provider()
+    success = provider.send_email(
+        to=data.recipient_email,
+        subject=f"PRO Info: {contact.display_name}",
+        html_body=html_body,
+    )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send email")
+
+    return {"success": True, "message": f"PRO info shared with {data.recipient_email}"}
+
+
 @router.get("/{contact_id}/pdf")
 def download_creative_card_pdf(
     contact_id: int,
@@ -456,6 +596,7 @@ def download_creative_card_pdf(
     if not contact:
         raise HTTPException(status_code=404, detail="Creative contact not found")
     verify_org_access(current_user, contact.organization_id, db)
+    verify_private_access(contact, current_user)
 
     org = db.query(Organization).filter(Organization.id == contact.organization_id).first()
     org_name = org.display_name or org.name if org else "Cadence"
@@ -652,6 +793,9 @@ def bulk_share_contacts(
     ).all()
     if not contacts:
         raise HTTPException(status_code=404, detail="No contacts found")
+    contacts = [c for c in contacts if not c.is_private or c.created_by_user_id == current_user.id]
+    if not contacts:
+        raise HTTPException(status_code=403, detail="No shareable contacts found")
 
     from ..templates.email_templates import share_contact_card as share_template
     from ..services.email_provider import get_email_provider
@@ -729,6 +873,9 @@ def create_share_link(
     ).all()
     if not contacts:
         raise HTTPException(status_code=404, detail="No contacts found")
+    contacts = [c for c in contacts if not c.is_private or c.created_by_user_id == current_user.id]
+    if not contacts:
+        raise HTTPException(status_code=403, detail="No shareable contacts found")
 
     import uuid
     from datetime import timedelta
@@ -798,6 +945,9 @@ def share_contacts_to_client(
     ).all()
     if not contacts:
         raise HTTPException(status_code=404, detail="No contacts found")
+    contacts = [c for c in contacts if not c.is_private or c.created_by_user_id == current_user.id]
+    if not contacts:
+        raise HTTPException(status_code=403, detail="No shareable contacts found")
 
     client_members = db.query(OrganizationMember).filter(
         OrganizationMember.organization_id == org_id,
@@ -919,6 +1069,9 @@ def share_contacts_to_accounts(
     ).all()
     if not contacts:
         raise HTTPException(status_code=404, detail="No contacts found")
+    contacts = [c for c in contacts if not c.is_private or c.created_by_user_id == current_user.id]
+    if not contacts:
+        raise HTTPException(status_code=403, detail="No shareable contacts found")
 
     recipient_ids = list(data.recipient_user_ids or [])
     if data.recipient_emails:
