@@ -294,8 +294,6 @@ async def import_csv(
     songs_created = 0
     errors = []
     
-    checklist_items = db.query(ChecklistItem).all()
-    
     for idx, row_data in enumerate(validation["valid_rows"]):
         try:
             release_date = None
@@ -325,15 +323,6 @@ async def import_csv(
             )
             db.add(song)
             db.flush()
-            
-            for item in checklist_items:
-                status = determine_checklist_status(item.code, row_data)
-                checklist_status = SongChecklistStatus(
-                    song_id=song.id,
-                    checklist_item_id=item.id,
-                    status=status
-                )
-                db.add(checklist_status)
             
             from ..utils.health_sync import sync_song_to_checklist
             sync_song_to_checklist(db, song)

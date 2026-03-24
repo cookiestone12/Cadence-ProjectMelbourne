@@ -248,8 +248,6 @@ def ingest_schedule_a(
         
         result.creator_id = creator.id
         
-        checklist_items = db.query(ChecklistItem).all()
-        
         for row_num, row in enumerate(rows[1:], start=2):
             try:
                 song_title = get_cell_value(row, column_map['title'])
@@ -361,14 +359,6 @@ def ingest_schedule_a(
                     )
                     db.add(song)
                     db.flush()
-                    
-                    for item in checklist_items:
-                        status = SongChecklistStatus(
-                            song_id=song.id,
-                            checklist_item_id=item.id,
-                            status="NOT_STARTED"
-                        )
-                        db.add(status)
                     
                     from backend.utils.health_sync import sync_song_to_checklist
                     sync_song_to_checklist(db, song)
