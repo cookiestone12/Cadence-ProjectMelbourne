@@ -227,6 +227,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       loadSongSplits()
       loadRightsData()
       loadDirectoryContacts()
+      if (onSongUpdated) onSongUpdated()
     } catch (error) {
       console.error('Failed to add split:', error)
       alert(error.response?.data?.detail || 'Failed to add split')
@@ -265,6 +266,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       await axios.delete(`/api/rights/song-splits/${splitId}`)
       loadSongSplits()
       loadRightsData()
+      if (onSongUpdated) onSongUpdated()
     } catch (error) {
       console.error('Failed to delete split:', error)
     }

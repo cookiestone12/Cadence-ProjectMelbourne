@@ -16,6 +16,19 @@ from ..services.contract_parser import parse_contract_document
 router = APIRouter(prefix="/api/rights", tags=["rights-management"])
 
 
+def _sync_song_pub_percentage(db: Session, song_id: int):
+    total_pub = db.query(func.sum(RightsSplit.share_percentage)).join(
+        ContractAsset, ContractAsset.id == RightsSplit.contract_asset_id
+    ).filter(
+        ContractAsset.asset_type == "SONG",
+        ContractAsset.asset_id == song_id,
+        RightsSplit.rights_type == "PUBLISHING",
+    ).scalar()
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if song:
+        song.publishing_percentage = float(total_pub) if total_pub else None
+
+
 def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = None):
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id,
@@ -526,6 +539,10 @@ def add_song_split(
         notes=data.notes,
     )
     db.add(split)
+    db.flush()
+
+    _sync_song_pub_percentage(db, song_id)
+
     db.commit()
     db.refresh(split)
 
@@ -558,7 +575,14 @@ def delete_song_split(
     if contract:
         verify_org_access(current_user, contract.organization_id, db)
 
+    song_id = ca.asset_id if ca.asset_type == "SONG" else None
+
     db.delete(split)
+    db.flush()
+
+    if song_id:
+        _sync_song_pub_percentage(db, song_id)
+
     db.commit()
     return {"message": "Split deleted successfully"}
 
