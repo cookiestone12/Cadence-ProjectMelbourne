@@ -293,13 +293,15 @@ async def import_csv(
     
     songs_created = 0
     errors = []
+    created_songs = []
+    
+    from datetime import datetime
     
     for idx, row_data in enumerate(validation["valid_rows"]):
         try:
             release_date = None
             if row_data.get("release_date"):
                 try:
-                    from datetime import datetime
                     release_date = datetime.strptime(row_data["release_date"], "%Y-%m-%d").date()
                 except:
                     pass
@@ -322,23 +324,70 @@ async def import_csv(
                 status_health_score=0.0
             )
             db.add(song)
-            db.flush()
-            
-            from ..utils.health_sync import sync_song_to_checklist
-            sync_song_to_checklist(db, song)
-            
-            if creator:
-                credit = SongCredit(
-                    song_id=song.id,
-                    creator_id=creator.id,
-                    role="ARTIST",
-                    share_percentage=row_data.get("publishing_percentage", 100)
-                )
-                db.add(credit)
-            
+            created_songs.append(song)
             songs_created += 1
         except Exception as e:
             errors.append(f"Row {idx + 1}: {str(e)}")
+    
+    try:
+        db.flush()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"CSV import flush failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save imported songs: {str(e)}")
+    
+    checklist_items = db.query(ChecklistItem).all()
+    checklist_by_code = {item.code: item for item in checklist_items}
+    total_weight = sum(item.weight for item in checklist_items) or 1
+    
+    from ..utils.health_sync import FIELD_TO_CHECKLIST_MAP, NA_CAPABLE_FIELDS
+    
+    for song in created_songs:
+        completed_weight = 0
+        for field, code in FIELD_TO_CHECKLIST_MAP.items():
+            item = checklist_by_code.get(code)
+            if not item:
+                continue
+            value = getattr(song, field, None)
+            if value is None and field in NA_CAPABLE_FIELDS:
+                status_val = "NOT_STARTED"
+            elif isinstance(value, bool):
+                status_val = "COMPLETED" if value else "NOT_STARTED"
+            elif field in ("isrc", "iswc"):
+                status_val = "COMPLETED" if (value and str(value).strip()) else "NOT_STARTED"
+            else:
+                str_val = str(value).strip() if value else ""
+                upper_val = str_val.upper()
+                if upper_val in ("N/A", "NA", "NOT_APPLICABLE"):
+                    status_val = "NOT_APPLICABLE"
+                elif upper_val in ("YES", "TRUE", "1"):
+                    status_val = "COMPLETED"
+                elif str_val:
+                    try:
+                        float(str_val)
+                        status_val = "COMPLETED"
+                    except ValueError:
+                        status_val = "NOT_STARTED"
+                else:
+                    status_val = "NOT_STARTED"
+            
+            db.add(SongChecklistStatus(
+                song_id=song.id,
+                checklist_item_id=item.id,
+                status=status_val
+            ))
+            if status_val in ("COMPLETED", "NOT_APPLICABLE"):
+                completed_weight += item.weight
+        
+        song.status_health_score = round(min((completed_weight / total_weight) * 100, 100.0), 2)
+        
+        if creator:
+            db.add(SongCredit(
+                song_id=song.id,
+                creator_id=creator.id,
+                role="ARTIST",
+                share_percentage=song.publishing_percentage or 100
+            ))
     
     for invalid in validation["invalid_rows"]:
         errors.append(f"Row {invalid['row_index'] + 1}: {', '.join(invalid['errors'])}")
