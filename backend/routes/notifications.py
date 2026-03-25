@@ -3,9 +3,16 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
+import logging
+import os
+import json
+from concurrent.futures import ThreadPoolExecutor
 from ..models import get_db, User, Organization, OrganizationMember, OrgNotificationSetting
-from ..models.models import Notification, NotificationPreference, NotificationType
+from ..models.models import Notification, NotificationPreference, NotificationType, PushSubscription
 from ..utils.auth import get_current_user
+
+logger = logging.getLogger("cadence")
+_push_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="push")
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -251,8 +258,65 @@ def create_notification(
     db.add(notification)
     db.commit()
     db.refresh(notification)
-    
+
+    _push_executor.submit(_send_push_for_notification, user_id, title, message, link)
+
     return notification
+
+
+def _send_push_for_notification(user_id: int, title: str, body: str, link: str = None):
+    try:
+        from pywebpush import webpush, WebPushException
+        from ..models.database import SessionLocal
+
+        vapid_private_key = os.environ.get("VAPID_PRIVATE_KEY")
+        if not vapid_private_key:
+            return
+
+        db = SessionLocal()
+        try:
+            subs = db.query(PushSubscription).filter(
+                PushSubscription.user_id == user_id,
+                PushSubscription.is_active == True,
+            ).all()
+
+            if not subs:
+                return
+
+            vapid_claims = {
+                "sub": os.environ.get("VAPID_SUBJECT", "mailto:support@cadence-ci.com")
+            }
+            payload = json.dumps({
+                "title": title,
+                "body": body,
+                "url": link or "/",
+                "icon": "/favicon-192.png",
+                "tag": "cadence-notification",
+            })
+
+            for sub in subs:
+                try:
+                    webpush(
+                        subscription_info={
+                            "endpoint": sub.endpoint,
+                            "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+                        },
+                        data=payload,
+                        vapid_private_key=vapid_private_key,
+                        vapid_claims=vapid_claims,
+                    )
+                except WebPushException as e:
+                    if "410" in str(e) or "404" in str(e):
+                        sub.is_active = False
+                    logger.warning(f"Push to user {user_id} sub {sub.id} failed: {e}")
+                except Exception as e:
+                    logger.error(f"Unexpected push error for sub {sub.id}: {e}")
+
+            db.commit()
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Push notification dispatch failed: {e}")
 
 
 class EmailDigestPreferenceRequest(BaseModel):
