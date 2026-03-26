@@ -695,7 +695,7 @@ function StatementsSubTab({ orgId, creatorId }) {
                       <td className="px-4 py-3 text-sm text-[#3D4A44]">{tx.original_track_title || '—'}</td>
                       <td className="px-4 py-3 text-sm text-[#7A8580]">{tx.original_artist || '—'}</td>
                       <td className="px-4 py-3 text-sm text-[#7A8580] font-mono text-xs">{tx.original_isrc || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatCents(tx.revenue)}</td>
+                      <td className="px-4 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatCents(tx.revenue_cents)}</td>
                       <td className="px-4 py-3 text-sm text-right text-[#7A8580]">{(tx.quantity || 0).toLocaleString()}</td>
                       <td className="px-4 py-3">
                         {tx.matched_song_id || tx.match_status === 'MATCHED' ? (
