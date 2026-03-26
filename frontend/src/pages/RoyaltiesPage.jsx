@@ -149,10 +149,13 @@ function DashboardTab({ orgId }) {
   }))
   const advances = data.recoupment_status || data.contracts_with_advances || []
 
+  const statementsCount = (data.recent_statements || []).length
+  const sourcesCount = (data.revenue_by_source || []).length
+
   const summaryCards = [
     { label: 'Total Revenue', value: formatCents(data.total_revenue_cents), icon: CurrencyDollarIcon, accent: true },
-    { label: 'Total Allocated', value: formatCents(data.total_allocated_cents), icon: CheckCircleIcon },
-    { label: 'Unallocated', value: formatCents(data.total_unallocated_cents), icon: ExclamationCircleIcon },
+    { label: 'Statements', value: String(statementsCount), icon: DocumentDuplicateIcon },
+    { label: 'Sources', value: String(sourcesCount), icon: CheckCircleIcon },
     { label: 'Money Out', value: formatCents(expenseSummary?.total_amount_cents || 0), icon: ArrowUpTrayIcon },
   ]
 
