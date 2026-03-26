@@ -154,7 +154,7 @@ def update_credit(
             SongCredit.id == credit_id,
             SongCredit.song_id == song_id
         ).first()
-        if not credit_check or not has_shared_access(db, current_user.id, credit_check.creator_id):
+        if not credit_check or not has_shared_access(db, current_user.id, credit_check.creator_id, required_module="catalog"):
             raise HTTPException(status_code=403, detail="Not authorized to modify this song")
     
     credit = db.query(SongCredit).filter(
@@ -213,7 +213,7 @@ def delete_credit(
             SongCredit.id == credit_id,
             SongCredit.song_id == song_id
         ).first()
-        if not credit_check or not has_shared_access(db, current_user.id, credit_check.creator_id):
+        if not credit_check or not has_shared_access(db, current_user.id, credit_check.creator_id, required_module="catalog"):
             raise HTTPException(status_code=403, detail="Not authorized to modify this song")
     
     credit = db.query(SongCredit).filter(

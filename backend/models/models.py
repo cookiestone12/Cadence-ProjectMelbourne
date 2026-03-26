@@ -1507,6 +1507,7 @@ class ClientShare(Base):
     passcode = Column(String(6), nullable=False)
     role = Column(String, nullable=False, default="READER")
     status = Column(String, nullable=False, default="PENDING")
+    shared_modules = Column(JSON, nullable=True)
     
     shared_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     accepted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)

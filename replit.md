@@ -29,7 +29,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Action Items System**: Manages proactive action items with deadlines and priorities, auto-generated based on catalog gaps.
 - **Placement Management**: Sync licensing/placement tracking with a status pipeline from PITCHED to PAID, financial tracking, and accounting integration.
 - **Sync Reports**: Customizable sync placement reports with PDF/CSV export and branded templates.
-- **Cross-Organization Client Sharing**: Secure sharing workflow with email invitations, passcode verification, and role-based catalog synchronization.
+- **Cross-Organization Client Sharing**: Secure sharing workflow with email invitations, passcode verification, role-based catalog synchronization, and granular module-level permissions (catalog, contracts, placements, royalties, contacts). Module restrictions enforced server-side via `has_shared_access(required_module=)` and on frontend via tab filtering.
 - **Expense Tracking**: An Expense model integrated into the Royalties page.
 - **Works Folder Organization**: Supports hierarchical folder organization for Works.
 - **Core Catalog & Creator Management**: Expanded data models for `Works` and `Releases` with `work_type` and `IPAssetType`.

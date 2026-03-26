@@ -199,7 +199,7 @@ def get_schedule_a_data(
     ).first()
     
     if not membership:
-        if not has_shared_access(db, current_user.id, creator_id):
+        if not has_shared_access(db, current_user.id, creator_id, required_module="contracts"):
             raise HTTPException(status_code=403, detail="Not authorized")
     
     org = db.query(Organization).filter(Organization.id == creator.organization_id).first()

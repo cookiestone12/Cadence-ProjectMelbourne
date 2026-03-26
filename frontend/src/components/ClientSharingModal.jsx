@@ -139,6 +139,14 @@ export default function ClientSharingTab() {
   )
 }
 
+const SHARE_MODULES = [
+  { key: 'catalog', label: 'Catalog', description: 'Songs, works, and releases' },
+  { key: 'contracts', label: 'Contracts', description: 'Contracts, deals, and rights splits' },
+  { key: 'placements', label: 'Placements', description: 'Sync placements and licensing' },
+  { key: 'royalties', label: 'Royalties', description: 'Statements, transactions, and accounting' },
+  { key: 'contacts', label: 'Contacts', description: 'Creative directory contacts' },
+]
+
 function ShareForm({ creators, onSuccess, onError }) {
   const [form, setForm] = useState({
     creator_id: '',
@@ -146,9 +154,20 @@ function ShareForm({ creators, onSuccess, onError }) {
     recipient_org_name: '',
     role: 'READER',
     passcode: generatePasscode(),
+    shared_modules: SHARE_MODULES.map(m => m.key),
   })
   const [sending, setSending] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  const toggleModule = (key) => {
+    setForm(prev => {
+      const current = prev.shared_modules || []
+      const updated = current.includes(key)
+        ? current.filter(m => m !== key)
+        : [...current, key]
+      return { ...prev, shared_modules: updated }
+    })
+  }
 
   const handleCopyPasscode = () => {
     navigator.clipboard.writeText(form.passcode)
@@ -165,6 +184,7 @@ function ShareForm({ creators, onSuccess, onError }) {
     if (!form.creator_id) { onError('Please select a creator'); return }
     if (!form.recipient_email) { onError('Please enter recipient email'); return }
     if (!form.recipient_org_name) { onError('Please enter recipient organization name'); return }
+    if (!form.shared_modules || form.shared_modules.length === 0) { onError('Please select at least one section to share'); return }
 
     setSending(true)
     try {
@@ -176,6 +196,7 @@ function ShareForm({ creators, onSuccess, onError }) {
         recipient_org_name: '',
         role: 'READER',
         passcode: generatePasscode(),
+        shared_modules: SHARE_MODULES.map(m => m.key),
       })
     } catch (err) {
       onError(err.response?.data?.detail || 'Failed to send share invitation')
@@ -243,6 +264,41 @@ function ShareForm({ creators, onSuccess, onError }) {
             </select>
             <p className="text-xs text-[#7A8580] mt-1">{ROLE_DESCRIPTIONS[form.role]}</p>
           </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[#3D4A44] mb-2">Shared Access</label>
+          <p className="text-xs text-[#7A8580] mb-3">Choose which sections the recipient can access</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {SHARE_MODULES.map(mod => {
+              const isSelected = (form.shared_modules || []).includes(mod.key)
+              return (
+                <button
+                  key={mod.key}
+                  type="button"
+                  onClick={() => toggleModule(mod.key)}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                    isSelected
+                      ? 'border-[#5B8A72] bg-[rgba(91,138,114,0.06)]'
+                      : 'border-[#D1D5CE] bg-white hover:border-[#7A8580]'
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${
+                    isSelected ? 'border-[#5B8A72] bg-[#5B8A72]' : 'border-[#D1D5CE]'
+                  }`}>
+                    {isSelected && <CheckIcon className="w-3 h-3 text-white" />}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-[#3D4A44]">{mod.label}</div>
+                    <div className="text-xs text-[#7A8580]">{mod.description}</div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          {(form.shared_modules || []).length === 0 && (
+            <p className="text-xs text-red-500 mt-1">At least one section must be selected</p>
+          )}
         </div>
 
         <div className="bg-[#F5F7F4] rounded-lg p-4">
@@ -460,6 +516,23 @@ function ActiveShares({ shares, receivedActiveShares = [], onAction, onError }) 
     }
   }
 
+  const handleModuleToggle = async (share, moduleKey) => {
+    const currentModules = share.shared_modules || SHARE_MODULES.map(m => m.key)
+    const updated = currentModules.includes(moduleKey)
+      ? currentModules.filter(m => m !== moduleKey)
+      : [...currentModules, moduleKey]
+    if (updated.length === 0) { onError('At least one section must remain selected'); return }
+    setProcessing(true)
+    try {
+      await axios.put(`/api/client-sharing/${share.id}/modules`, { shared_modules: updated })
+      onAction()
+    } catch (err) {
+      onError(err.response?.data?.detail || 'Failed to update shared modules')
+    } finally {
+      setProcessing(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -477,6 +550,7 @@ function ActiveShares({ shares, receivedActiveShares = [], onAction, onError }) 
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Creator</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Shared With</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Role</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider hidden lg:table-cell">Modules</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider hidden md:table-cell">Accepted</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Actions</th>
                 </tr>
@@ -502,6 +576,28 @@ function ActiveShares({ shares, receivedActiveShares = [], onAction, onError }) 
                           <option key={key} value={key}>{label}</option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      <div className="flex flex-wrap gap-1">
+                        {SHARE_MODULES.map(mod => {
+                          const active = (share.shared_modules || SHARE_MODULES.map(m => m.key)).includes(mod.key)
+                          return (
+                            <button
+                              key={mod.key}
+                              onClick={() => handleModuleToggle(share, mod.key)}
+                              disabled={processing}
+                              className={`px-2 py-0.5 text-xs rounded-full border transition-colors ${
+                                active
+                                  ? 'bg-[#5B8A72] text-white border-[#5B8A72]'
+                                  : 'bg-white text-[#7A8580] border-[#D1D5CE] hover:border-[#5B8A72]'
+                              } disabled:opacity-50`}
+                              title={`${active ? 'Remove' : 'Add'} ${mod.label} access`}
+                            >
+                              {mod.label}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </td>
                     <td className="px-4 py-3 hidden md:table-cell">
                       <span className="text-xs text-[#7A8580]">
@@ -604,11 +700,14 @@ function ActiveShares({ shares, receivedActiveShares = [], onAction, onError }) 
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Creator</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Shared By</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider">Role</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider hidden lg:table-cell">Access</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-[#7A8580] uppercase tracking-wider hidden md:table-cell">Accepted</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E5E8E3]">
-                {receivedActiveShares.map(share => (
+                {receivedActiveShares.map(share => {
+                  const modules = share.shared_modules || SHARE_MODULES.map(m => m.key)
+                  return (
                   <tr key={share.id} className="hover:bg-[#FAFBF9] transition-colors">
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium text-[#3D4A44]">{share.creator_name}</p>
@@ -622,13 +721,23 @@ function ActiveShares({ shares, receivedActiveShares = [], onAction, onError }) 
                         {ROLE_LABELS[share.role] || share.role}
                       </span>
                     </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      <div className="flex flex-wrap gap-1">
+                        {SHARE_MODULES.filter(m => modules.includes(m.key)).map(mod => (
+                          <span key={mod.key} className="px-2 py-0.5 text-xs rounded-full bg-[#5B8A72] text-white">
+                            {mod.label}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 hidden md:table-cell">
                       <span className="text-xs text-[#7A8580]">
                         {share.accepted_at ? new Date(share.accepted_at).toLocaleDateString() : '—'}
                       </span>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

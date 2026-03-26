@@ -117,6 +117,7 @@ export default function CreatorDetailPage() {
   const [sortColumn, setSortColumn] = useState(null)
   const [sortDirection, setSortDirection] = useState('asc')
   const [sharedVersion, setSharedVersion] = useState(null)
+  const [sharedModules, setSharedModules] = useState(null)
   const [showEditCreatorModal, setShowEditCreatorModal] = useState(false)
   const [editingCreator, setEditingCreator] = useState(false)
   const [showSpotifyModal, setShowSpotifyModal] = useState(false)
@@ -233,6 +234,17 @@ export default function CreatorDetailPage() {
           creatorData.is_shared = true
           creatorData.organization_id = sharedOrgId
           setCreator({ ...creatorData })
+        }
+        if (isShared) {
+          try {
+            const sharedRes = await axios.get('/api/client-sharing/shared-clients')
+            const sharedData = (sharedRes.data || []).find(sc => sc.creator_id === parseInt(id))
+            if (sharedData) {
+              setSharedModules(sharedData.shared_modules || ['catalog', 'contracts', 'placements', 'royalties', 'contacts'])
+            }
+          } catch (e) {
+            console.error('Failed to load shared modules:', e)
+          }
         }
         setOrganizationId(effectiveOrgId)
         
@@ -1182,16 +1194,19 @@ export default function CreatorDetailPage() {
     }
   }
 
-  const tabs = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'records', label: `Records (${songs.length})` },
-    { id: 'releases', label: `Artist Releases (${creatorReleases.length})` },
-    { id: 'contracts', label: `Contracts${creatorContracts.length ? ` (${creatorContracts.length})` : ''}` },
-    { id: 'credits', label: 'Credits' },
-    { id: 'actions', label: 'Actions' },
-    { id: 'accounting', label: 'Accounting' },
-    { id: 'schedule-a', label: 'Schedule A' }
+  const allTabs = [
+    { id: 'overview', label: 'Overview', module: null },
+    { id: 'records', label: `Records (${songs.length})`, module: 'catalog' },
+    { id: 'releases', label: `Artist Releases (${creatorReleases.length})`, module: 'catalog' },
+    { id: 'contracts', label: `Contracts${creatorContracts.length ? ` (${creatorContracts.length})` : ''}`, module: 'contracts' },
+    { id: 'credits', label: 'Credits', module: null },
+    { id: 'actions', label: 'Actions', module: null },
+    { id: 'accounting', label: 'Accounting', module: 'royalties' },
+    { id: 'schedule-a', label: 'Schedule A', module: 'contracts' }
   ]
+  const tabs = sharedModules
+    ? allTabs.filter(tab => !tab.module || sharedModules.includes(tab.module))
+    : allTabs
   
   return (
     <div className="min-h-screen bg-[#F5F7F4]">

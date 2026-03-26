@@ -257,7 +257,7 @@ def get_organization_songs(
     ).first()
     
     if not membership:
-        if creator_id and has_shared_access(db, current_user.id, creator_id):
+        if creator_id and has_shared_access(db, current_user.id, creator_id, required_module="catalog"):
             pass
         else:
             raise HTTPException(status_code=403, detail="Not authorized to access this organization")
@@ -850,7 +850,7 @@ def update_song(
     
     if not membership:
         song_credits = db.query(SongCredit).filter(SongCredit.song_id == song_id).all()
-        has_access = any(has_shared_access(db, current_user.id, c.creator_id) for c in song_credits)
+        has_access = any(has_shared_access(db, current_user.id, c.creator_id, required_module="catalog") for c in song_credits)
         if not has_access:
             raise HTTPException(status_code=403, detail="Not authorized to access this song")
     

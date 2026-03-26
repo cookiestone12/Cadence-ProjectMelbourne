@@ -138,7 +138,7 @@ def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = No
     if not membership and not user.is_super_admin:
         if creator_id:
             from .client_sharing import has_shared_access
-            if has_shared_access(db, user.id, creator_id):
+            if has_shared_access(db, user.id, creator_id, required_module="contracts"):
                 return None
         raise HTTPException(status_code=403, detail="Access denied")
     return membership

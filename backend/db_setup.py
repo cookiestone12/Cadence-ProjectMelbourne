@@ -250,6 +250,13 @@ def ensure_schema_updates():
 
         _generate_missing_access_codes()
 
+        if 'client_shares' in inspector.get_table_names():
+            cs_cols = [c['name'] for c in inspector.get_columns('client_shares')]
+            if 'shared_modules' not in cs_cols:
+                conn.execute(text("ALTER TABLE client_shares ADD COLUMN shared_modules JSON"))
+                conn.commit()
+                logger.info("Added shared_modules column to client_shares")
+
         try:
             existing_constraints = inspector.get_unique_constraints('client_shares')
             has_old_constraint = any(c['name'] == 'uq_client_share_creator_email' for c in existing_constraints)

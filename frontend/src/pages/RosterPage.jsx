@@ -205,6 +205,7 @@ export default function RosterPage() {
         shared: true,
         shared_from: sc.primary_org_name,
         share_role: sc.role,
+        shared_modules: sc.shared_modules || ['catalog', 'contracts', 'placements', 'royalties', 'contacts'],
       }))
       const ownIds = new Set(ownCreators.map(c => c.id))
       const uniqueShared = sharedClients.filter(sc => !ownIds.has(sc.id))

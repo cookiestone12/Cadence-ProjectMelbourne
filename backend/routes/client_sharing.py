@@ -13,7 +13,7 @@ logger = logging.getLogger("cadence")
 router = APIRouter(prefix="/api/client-sharing", tags=["client-sharing"])
 
 
-def has_shared_access(db: Session, user_id: int, creator_id: int):
+def has_shared_access(db: Session, user_id: int, creator_id: int, required_module: str = None):
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user_id
     ).first()
@@ -24,6 +24,10 @@ def has_shared_access(db: Session, user_id: int, creator_id: int):
         ClientShare.recipient_org_id == membership.organization_id,
         ClientShare.status == "ACCEPTED"
     ).first()
+    if share and required_module:
+        modules = getattr(share, 'shared_modules', None) or ALL_SHARE_MODULES
+        if required_module not in modules:
+            return None
     return share
 
 
@@ -36,12 +40,15 @@ def get_user_org(db: Session, user: User):
     return membership
 
 
+ALL_SHARE_MODULES = ["catalog", "contracts", "placements", "royalties", "contacts"]
+
 class ShareRequest(BaseModel):
     creator_id: int
     recipient_email: str
     recipient_org_name: str
     role: str
     passcode: str
+    shared_modules: Optional[list] = None
 
 
 class AcceptRequest(BaseModel):
@@ -51,6 +58,9 @@ class AcceptRequest(BaseModel):
 
 class RoleUpdateRequest(BaseModel):
     role: str
+
+class ModulesUpdateRequest(BaseModel):
+    shared_modules: list
 
 
 def share_to_dict(share, db, include_passcode=False):
@@ -64,6 +74,7 @@ def share_to_dict(share, db, include_passcode=False):
     if share.accepted_by_user_id:
         accepted_by = db.query(User).filter(User.id == share.accepted_by_user_id).first()
 
+    modules = getattr(share, 'shared_modules', None) or ALL_SHARE_MODULES
     result = {
         "id": share.id,
         "creator_id": share.creator_id,
@@ -76,6 +87,7 @@ def share_to_dict(share, db, include_passcode=False):
         "recipient_org_name_verification": share.recipient_org_name_verification,
         "role": share.role,
         "status": share.status,
+        "shared_modules": modules,
         "shared_by_user_id": share.shared_by_user_id,
         "shared_by_username": shared_by.username if shared_by else None,
         "accepted_by_user_id": share.accepted_by_user_id,
@@ -119,6 +131,11 @@ def create_share(
     if existing:
         raise HTTPException(status_code=400, detail="An active share already exists for this creator and recipient")
 
+    modules = req.shared_modules if req.shared_modules else ALL_SHARE_MODULES
+    for m in modules:
+        if m not in ALL_SHARE_MODULES:
+            raise HTTPException(status_code=400, detail=f"Invalid module: {m}. Valid: {', '.join(ALL_SHARE_MODULES)}")
+
     share = ClientShare(
         creator_id=req.creator_id,
         primary_org_id=membership.organization_id,
@@ -128,6 +145,7 @@ def create_share(
         role=req.role.upper(),
         status="PENDING",
         shared_by_user_id=current_user.id,
+        shared_modules=modules,
     )
     db.add(share)
     db.commit()
@@ -374,6 +392,45 @@ def update_share_role(
     return {"message": "Role updated successfully"}
 
 
+@router.put("/{share_id}/modules")
+def update_share_modules(
+    share_id: int,
+    req: ModulesUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    membership = get_user_org(db, current_user)
+
+    for m in req.shared_modules:
+        if m not in ALL_SHARE_MODULES:
+            raise HTTPException(status_code=400, detail=f"Invalid module: {m}. Valid: {', '.join(ALL_SHARE_MODULES)}")
+
+    if not req.shared_modules:
+        raise HTTPException(status_code=400, detail="At least one module must be selected")
+
+    share = db.query(ClientShare).filter(
+        ClientShare.id == share_id,
+        ClientShare.status.in_(["PENDING", "ACCEPTED"])
+    ).first()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share not found")
+
+    if share.primary_org_id != membership.organization_id:
+        coprimary_check = db.query(ClientShare).filter(
+            ClientShare.creator_id == share.creator_id,
+            ClientShare.recipient_org_id == membership.organization_id,
+            ClientShare.status == "ACCEPTED",
+            ClientShare.role == "COPRIMARY"
+        ).first()
+        if not coprimary_check:
+            raise HTTPException(status_code=403, detail="Only primary or co-primary users can update shared modules")
+
+    share.shared_modules = req.shared_modules
+    db.commit()
+
+    return {"message": "Shared modules updated successfully", "shared_modules": req.shared_modules}
+
+
 @router.get("/shared-clients")
 def get_shared_clients(
     db: Session = Depends(get_db),
@@ -398,6 +455,7 @@ def get_shared_clients(
                 "creator_email": creator.email,
                 "primary_org_name": primary_org.name if primary_org else None,
                 "role": share.role,
+                "shared_modules": getattr(share, 'shared_modules', None) or ALL_SHARE_MODULES,
                 "accepted_at": share.accepted_at.isoformat() if share.accepted_at else None,
             })
 
@@ -416,7 +474,8 @@ def get_shared_songs(
         ClientShare.status == "ACCEPTED"
     ).all()
 
-    creator_ids = [s.creator_id for s in shares]
+    catalog_shares = [s for s in shares if "catalog" in (getattr(s, 'shared_modules', None) or ALL_SHARE_MODULES)]
+    creator_ids = [s.creator_id for s in catalog_shares]
     if not creator_ids:
         return []
 

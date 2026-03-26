@@ -35,15 +35,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/royalties", tags=["royalties"])
 
 
-def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = None):
+def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = None, required_module: str = None):
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id,
         OrganizationMember.organization_id == org_id
     ).first()
     if not membership and not user.is_super_admin:
         if creator_id:
-            from .client_sharing import has_shared_access
-            if has_shared_access(db, user.id, creator_id):
+            from .client_sharing import has_shared_access, ALL_SHARE_MODULES
+            share = has_shared_access(db, user.id, creator_id)
+            if share:
+                if required_module:
+                    modules = getattr(share, 'shared_modules', None) or ALL_SHARE_MODULES
+                    if required_module not in modules:
+                        raise HTTPException(status_code=403, detail=f"Access to {required_module} is not included in this share")
                 return None
         raise HTTPException(status_code=403, detail="Access denied")
     return membership
