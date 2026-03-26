@@ -507,7 +507,7 @@ function RevenueTab({ data }) {
                       <p className="text-[12px] text-[#7A8580]">{track.artist}</p>
                     </div>
                   </div>
-                  <span className="text-[14px] font-semibold text-[#5B9A6E]">{formatCents(track.revenue)}</span>
+                  <span className="text-[14px] font-semibold text-[#5B9A6E]">{formatCents(track.total_revenue_cents)}</span>
                 </div>
               ))}
             </div>
