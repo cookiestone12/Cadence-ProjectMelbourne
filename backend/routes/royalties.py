@@ -1321,6 +1321,7 @@ def royalties_dashboard(
     matched_tracks = db.query(
         Song.id, Song.title, Song.primary_artist,
         func.sum(RoyaltyTransaction.revenue_cents).label("total_cents"),
+        func.sum(RoyaltyTransaction.quantity).label("total_quantity"),
     ).join(
         RoyaltyTransaction, RoyaltyTransaction.song_id == Song.id
     ).filter(
@@ -1333,6 +1334,7 @@ def royalties_dashboard(
         RoyaltyTransaction.original_track_title,
         RoyaltyTransaction.original_artist,
         func.sum(RoyaltyTransaction.revenue_cents).label("total_cents"),
+        func.sum(RoyaltyTransaction.quantity).label("total_quantity"),
     ).filter(
         RoyaltyTransaction.organization_id == org_id,
         RoyaltyTransaction.song_id.is_(None),
@@ -1350,6 +1352,7 @@ def royalties_dashboard(
             "artist": t.primary_artist,
             "total_revenue_cents": t.total_cents,
             "total_revenue_dollars": t.total_cents / 100.0,
+            "total_quantity": t.total_quantity or 0,
         })
     for t in unmatched_tracks:
         if t.total_cents and t.total_cents > 0:
@@ -1359,6 +1362,7 @@ def royalties_dashboard(
                 "artist": t.original_artist,
                 "total_revenue_cents": t.total_cents,
                 "total_revenue_dollars": t.total_cents / 100.0,
+                "total_quantity": t.total_quantity or 0,
                 "unmatched": True,
             })
     all_tracks.sort(key=lambda x: x.get("total_revenue_cents", 0) or 0, reverse=True)
