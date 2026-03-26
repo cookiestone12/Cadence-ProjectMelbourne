@@ -23,6 +23,7 @@ import {
   NoSymbolIcon,
   ShieldCheckIcon,
   ChartBarIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline'
 
 const MATCH_STATUS_COLORS = {
@@ -113,6 +114,8 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
 
   const [showProcessModal, setShowProcessModal] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const [bulkThreshold, setBulkThreshold] = useState(85)
   const [bulkConfirming, setBulkConfirming] = useState(false)
@@ -342,6 +345,20 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
     window.open(`/api/royalty-processing/${orgId}/statements/${statementId}/export/${type}`, '_blank')
   }
 
+  const handleDeleteStatement = async () => {
+    setDeleting(true)
+    try {
+      await axios.delete(`/api/royalties/statements/${orgId}/${statementId}`)
+      onBack()
+    } catch (err) {
+      console.error('Delete failed:', err)
+      alert(err.response?.data?.detail || 'Failed to delete statement.')
+    } finally {
+      setDeleting(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -406,6 +423,13 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium"
             >
               <PlayIcon className="w-4 h-4" /> Process Statement
+            </button>
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="flex items-center gap-2 px-3 py-2 border border-red-300 text-red-500 rounded-xl hover:bg-red-50 transition-all text-sm font-medium"
+              title="Delete Statement"
+            >
+              <TrashIcon className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -519,6 +543,34 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
                   className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium disabled:opacity-50"
                 >
                   {processing ? 'Processing...' : 'Confirm & Process'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-sm">
+            <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-lg font-semibold text-red-600">Delete Statement</h3>
+              <button onClick={() => setShowDeleteConfirm(false)} className="p-2 hover:bg-[rgba(59,77,67,0.06)] rounded-full transition-colors">
+                <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-[#7A8580]">
+                This will permanently delete <span className="font-semibold text-[#3D4A44]">{statement.source_name || 'this statement'}</span> and all its lines, ledger entries, and processing history. This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-3 pt-2">
+                <button onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
+                <button
+                  onClick={handleDeleteStatement}
+                  disabled={deleting}
+                  className="px-5 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all text-sm font-medium disabled:opacity-50"
+                >
+                  {deleting ? 'Deleting...' : 'Delete Statement'}
                 </button>
               </div>
             </div>
