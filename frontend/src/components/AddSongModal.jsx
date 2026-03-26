@@ -187,7 +187,7 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
           </div>
         </div>
         
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 bg-[#FFFFFF]">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 bg-[#FFFFFF]" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           {error && (
             <div className="mb-6 p-4 bg-[rgba(196,112,104,0.1)] rounded-xl text-[#C47068]">
               {error}
