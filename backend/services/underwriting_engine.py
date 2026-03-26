@@ -400,8 +400,8 @@ def run_underwriting(
             exclude_right_types=effective_exclude_rt if effective_exclude_rt else None,
             exclude_flags=exclude_flags,
             scope_creator_id=scope_creator_id,
-            scope_statement_ids=processed_stmt_ids if processed_stmt_ids else None,
-        )
+            scope_statement_ids=processed_stmt_ids,
+        ) if processed_stmt_ids else []
         unmatched_total_net = 0.0
         unmatched_line_count = 0
         unmatched_by_period = defaultdict(float)
