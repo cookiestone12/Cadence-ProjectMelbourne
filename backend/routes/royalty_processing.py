@@ -281,15 +281,16 @@ def trigger_auto_match(
     total_review = status_counts.get("REVIEW_REQUIRED", 0)
     total_unmatched = status_counts.get("UNMATCHED", 0)
 
-    if total_unmatched == 0 and total_review == 0:
-        stmt.status = "FULLY_MATCHED"
-    elif total_unmatched == 0:
-        stmt.status = "REVIEW_REQUIRED"
-    else:
-        stmt.status = "PARTIALLY_MATCHED"
-
     stmt.matched_transactions = total_matched + total_review
     stmt.unmatched_transactions = total_unmatched
+
+    if stmt.status != "PROCESSED":
+        if total_unmatched == 0 and total_review == 0:
+            stmt.status = "FULLY_MATCHED"
+        elif total_unmatched == 0:
+            stmt.status = "REVIEW_REQUIRED"
+        else:
+            stmt.status = "PARTIALLY_MATCHED"
 
     db.commit()
     return {"success": True, "stats": stats, "status": stmt.status}
@@ -1210,7 +1211,7 @@ async def upload_and_parse_statement(
     currency: str = Form("USD"),
     column_mapping: Optional[str] = Form(None),
     creator_id: Optional[int] = Form(None),
-    auto_match: Optional[str] = Form("true"),
+    auto_match: Optional[str] = Query("true"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):

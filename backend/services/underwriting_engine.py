@@ -399,6 +399,7 @@ def run_underwriting(
         ]
         unmatched_total_net = 0.0
         unmatched_line_count = 0
+        unmatched_by_period = defaultdict(float)
         if processed_stmt_ids:
             unmatched_lines = db.query(RoyaltyStatementLine).filter(
                 RoyaltyStatementLine.org_id == org_id,
@@ -407,6 +408,13 @@ def run_underwriting(
             ).all()
             unmatched_total_net = sum(float(l.net_amount or 0) for l in unmatched_lines)
             unmatched_line_count = len(unmatched_lines)
+            for ul in unmatched_lines:
+                if periodization_mode == "activity" and ul.activity_period_start:
+                    pd = ul.activity_period_start
+                else:
+                    pd = ul.activity_period_start or date.today()
+                p_key = _period_key(pd, granularity)
+                unmatched_by_period[p_key] += float(ul.net_amount or 0)
 
         periods = sorted(set(e["period"] for e in spine), key=_period_sort_key)
 
@@ -461,9 +469,19 @@ def run_underwriting(
                     publisher_annual += entry["publisher_net"] * scale
                     master_annual += entry["master_net"] * scale
 
-        total_annual += unmatched_total_net
+        unmatched_annual = 0.0
+        if len(periods) >= 2:
+            last_periods = periods[-2:]
+            for p in last_periods:
+                unmatched_annual += unmatched_by_period.get(p, 0)
+        elif periods:
+            p = periods[-1]
+            scale = 2 if granularity == "half" else 4
+            unmatched_annual = unmatched_by_period.get(p, 0) * scale
 
-        total_rev = publisher_annual + master_annual + unmatched_total_net
+        total_annual += unmatched_annual
+
+        total_rev = publisher_annual + master_annual + unmatched_annual
         pub_share = publisher_annual / total_rev if total_rev > 0 else 0.5
         master_share = master_annual / total_rev if total_rev > 0 else 0.5
 
@@ -539,6 +557,7 @@ def run_underwriting(
             "stability_signals": stability_signals,
             "unmatched_revenue": {
                 "total_net": round(unmatched_total_net, 2),
+                "annual_net": round(unmatched_annual, 2),
                 "line_count": unmatched_line_count,
             },
         }
