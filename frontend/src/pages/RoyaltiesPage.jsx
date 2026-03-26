@@ -1272,24 +1272,24 @@ function EarningsTab({ orgId }) {
               <table className="w-full">
                 <thead className="bg-[#EEF1EC]">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Rights Holder</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Total Allocated</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Client</th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Total Revenue</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Net Earned</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Total Recouped</th>
+                    <th className="px-6 py-3 text-center text-xs font-medium text-[#7A8580] uppercase">Statements</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
                   {data.map((row, i) => (
                     <tr key={i} className="hover:bg-[rgba(91,138,114,0.04)]">
                       <td className="px-6 py-4 text-sm font-medium text-[#3D4A44]">{row.rights_holder_name || '—'}</td>
-                      <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(row.total_allocated_cents)}</td>
+                      <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(row.total_revenue_cents)}</td>
                       <td className="px-6 py-4 text-sm text-right text-[#7A8580]">{formatCents(row.net_earned_cents)}</td>
-                      <td className="px-6 py-4 text-sm text-right text-[#7A8580]">{formatCents(row.total_recouped_cents)}</td>
+                      <td className="px-6 py-4 text-sm text-center text-[#7A8580]">{row.statement_count || 0}</td>
                     </tr>
                   ))}
                   {data.length === 0 && (
                     <tr><td colSpan={4} className="px-6 py-12 text-center text-sm text-[#7A8580]">
-                      No rights holder allocations yet. Set up contracts with rights splits and run royalty calculations to see this breakdown.
+                      No client earnings yet. Assign statements to clients to see their earnings here.
                     </td></tr>
                   )}
                 </tbody>
@@ -2246,9 +2246,7 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
   const loadStatements = useCallback(async () => {
     if (!orgId) return
     try {
-      let url = `/api/royalties/statements/${orgId}`
-      if (selectedCreatorId) url += `?creator_id=${selectedCreatorId}`
-      const res = await axios.get(url)
+      const res = await axios.get(`/api/royalties/statements/${orgId}`)
       const data = Array.isArray(res.data) ? res.data : res.data.statements || []
       setStatements(data)
     } catch (err) {
@@ -2256,7 +2254,7 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
     } finally {
       setStatementsLoading(false)
     }
-  }, [orgId, selectedCreatorId])
+  }, [orgId])
 
   useEffect(() => { loadStatements() }, [loadStatements])
 

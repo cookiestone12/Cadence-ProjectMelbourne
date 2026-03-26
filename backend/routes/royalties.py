@@ -1453,7 +1453,7 @@ def earnings_by_holder(
 ):
     verify_org_access(current_user, org_id, db)
 
-    results = db.query(
+    alloc_results = db.query(
         Creator.id, Creator.display_name,
         func.sum(RoyaltyAllocation.allocated_cents).label("total_cents"),
         func.sum(RoyaltyAllocation.recouped_cents).label("total_recouped"),
@@ -1463,21 +1463,59 @@ def earnings_by_holder(
         RoyaltyAllocation.organization_id == org_id,
     ).group_by(Creator.id, Creator.display_name).order_by(desc("total_cents")).all()
 
-    return {
-        "earnings": [
-            {
+    alloc_map = {}
+    for r in alloc_results:
+        alloc_map[r.id] = {
+            "allocated_cents": r.total_cents or 0,
+            "recouped_cents": r.total_recouped or 0,
+        }
+
+    stmt_results = db.query(
+        Creator.id, Creator.display_name,
+        func.sum(RoyaltyStatement.total_revenue_cents).label("total_revenue"),
+        func.count(RoyaltyStatement.id).label("stmt_count"),
+    ).join(
+        RoyaltyStatement, RoyaltyStatement.creator_id == Creator.id
+    ).filter(
+        RoyaltyStatement.organization_id == org_id,
+    ).group_by(Creator.id, Creator.display_name).all()
+
+    holders = {}
+    for r in stmt_results:
+        alloc = alloc_map.get(r.id, {"allocated_cents": 0, "recouped_cents": 0})
+        total_rev = r.total_revenue or 0
+        holders[r.id] = {
+            "rights_holder_id": r.id,
+            "rights_holder_name": r.display_name,
+            "total_revenue_cents": total_rev,
+            "total_revenue_dollars": total_rev / 100.0,
+            "total_allocated_cents": alloc["allocated_cents"],
+            "total_allocated_dollars": alloc["allocated_cents"] / 100.0,
+            "total_recouped_cents": alloc["recouped_cents"],
+            "total_recouped_dollars": alloc["recouped_cents"] / 100.0,
+            "net_earned_cents": total_rev - alloc["recouped_cents"],
+            "net_earned_dollars": (total_rev - alloc["recouped_cents"]) / 100.0,
+            "statement_count": r.stmt_count,
+        }
+
+    for r in alloc_results:
+        if r.id not in holders:
+            holders[r.id] = {
                 "rights_holder_id": r.id,
                 "rights_holder_name": r.display_name,
-                "total_allocated_cents": r.total_cents,
-                "total_allocated_dollars": r.total_cents / 100.0,
-                "total_recouped_cents": r.total_recouped,
-                "total_recouped_dollars": r.total_recouped / 100.0,
-                "net_earned_cents": r.total_cents - r.total_recouped,
-                "net_earned_dollars": (r.total_cents - r.total_recouped) / 100.0,
+                "total_revenue_cents": r.total_cents or 0,
+                "total_revenue_dollars": (r.total_cents or 0) / 100.0,
+                "total_allocated_cents": r.total_cents or 0,
+                "total_allocated_dollars": (r.total_cents or 0) / 100.0,
+                "total_recouped_cents": r.total_recouped or 0,
+                "total_recouped_dollars": (r.total_recouped or 0) / 100.0,
+                "net_earned_cents": (r.total_cents or 0) - (r.total_recouped or 0),
+                "net_earned_dollars": ((r.total_cents or 0) - (r.total_recouped or 0)) / 100.0,
+                "statement_count": 0,
             }
-            for r in results
-        ]
-    }
+
+    earnings = sorted(holders.values(), key=lambda x: x.get("total_revenue_cents", 0), reverse=True)
+    return {"earnings": earnings}
 
 
 @router.get("/earnings/{org_id}/by-contract")
