@@ -898,7 +898,7 @@ export default function CreativeDirectoryPage() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2 mt-4 pt-3 border-t border-[rgba(59,77,67,0.08)]">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-4 pt-3 border-t border-[rgba(59,77,67,0.08)]">
                 <button
                   onClick={() => openEdit(contact)}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#5B8A72] hover:bg-[#5B8A72]/10 rounded-lg transition-colors"
@@ -958,7 +958,7 @@ export default function CreativeDirectoryPage() {
                       alert('Failed to download creative card PDF')
                     }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg transition-colors ml-auto"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#7A8580] hover:bg-[#EEF1EC] rounded-lg transition-colors sm:ml-auto"
                 >
                   <ArrowDownTrayIcon className="w-3.5 h-3.5" />
                   PDF
