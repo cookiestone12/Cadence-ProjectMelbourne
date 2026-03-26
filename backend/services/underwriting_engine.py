@@ -44,11 +44,15 @@ def build_song_period_spine(
     exclude_right_types: list[str] | None = None,
     exclude_flags: list[str] | None = None,
     scope_creator_id: int | None = None,
+    scope_statement_ids: list[int] | None = None,
 ) -> list[dict]:
     query = db.query(RoyaltyStatementLine).filter(
         RoyaltyStatementLine.org_id == org_id,
         RoyaltyStatementLine.match_status.in_(["MATCHED", "CONFIRMED", "AUTO_MATCHED"]),
     )
+
+    if scope_statement_ids is not None:
+        query = query.filter(RoyaltyStatementLine.statement_id.in_(scope_statement_ids))
 
     if exclude_right_types:
         for rt in exclude_right_types:
@@ -382,6 +386,13 @@ def run_underwriting(
     db.flush()
 
     try:
+        processed_stmt_ids = [
+            s_id for (s_id,) in db.query(RoyaltyStatement.id).filter(
+                RoyaltyStatement.organization_id == org_id,
+                RoyaltyStatement.status == "PROCESSED",
+            ).all()
+        ]
+
         spine = build_song_period_spine(
             db, org_id,
             periodization_mode=periodization_mode,
@@ -389,14 +400,8 @@ def run_underwriting(
             exclude_right_types=effective_exclude_rt if effective_exclude_rt else None,
             exclude_flags=exclude_flags,
             scope_creator_id=scope_creator_id,
+            scope_statement_ids=processed_stmt_ids if processed_stmt_ids else None,
         )
-
-        processed_stmt_ids = [
-            s_id for (s_id,) in db.query(RoyaltyStatement.id).filter(
-                RoyaltyStatement.organization_id == org_id,
-                RoyaltyStatement.status == "PROCESSED",
-            ).all()
-        ]
         unmatched_total_net = 0.0
         unmatched_line_count = 0
         unmatched_by_period = defaultdict(float)
@@ -406,8 +411,8 @@ def run_underwriting(
                 RoyaltyStatementLine.statement_id.in_(processed_stmt_ids),
                 RoyaltyStatementLine.match_status.in_(["UNMATCHED", "REVIEW_REQUIRED"]),
             )
-            if exclude_right_types:
-                for rt in exclude_right_types:
+            if effective_exclude_rt:
+                for rt in effective_exclude_rt:
                     unmatched_q = unmatched_q.filter(RoyaltyStatementLine.canonical_right_category != rt)
             unmatched_lines = unmatched_q.all()
             if exclude_flags:
@@ -427,11 +432,20 @@ def run_underwriting(
                 unmatched_lines = filtered
             unmatched_total_net = sum(float(l.net_amount or 0) for l in unmatched_lines)
             unmatched_line_count = len(unmatched_lines)
+            stmt_periods = {}
+            if processed_stmt_ids:
+                for sid_val, ps in db.query(RoyaltyStatement.id, RoyaltyStatement.period_start).filter(
+                    RoyaltyStatement.id.in_(processed_stmt_ids)
+                ).all():
+                    stmt_periods[sid_val] = ps
+
             for ul in unmatched_lines:
                 if periodization_mode == "activity" and ul.activity_period_start:
                     pd = ul.activity_period_start
+                elif ul.activity_period_start:
+                    pd = ul.activity_period_start
                 else:
-                    pd = ul.activity_period_start or date.today()
+                    pd = stmt_periods.get(ul.statement_id) or date.today()
                 p_key = _period_key(pd, granularity)
                 unmatched_by_period[p_key] += float(ul.net_amount or 0)
 
