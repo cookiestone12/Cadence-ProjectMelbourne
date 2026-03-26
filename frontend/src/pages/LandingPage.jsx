@@ -328,8 +328,7 @@ export default function LandingPage() {
       <footer className="border-t border-[rgba(59,77,67,0.06)] py-8 px-6">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src="/cadence-icon-new.png" alt="Cadence" className="h-5 w-auto opacity-50" />
-            <span className="text-[13px] text-[#B0B8B3]">Cadence Catalog Intelligence</span>
+            <img src="/cadence-logo-full.png" alt="Cadence" className="h-6 w-auto opacity-40" />
           </div>
           <p className="text-[12px] text-[#B0B8B3]">&copy; {new Date().getFullYear()} Cadence CI. All rights reserved.</p>
         </div>
