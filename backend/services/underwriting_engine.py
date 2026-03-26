@@ -416,7 +416,9 @@ def run_underwriting(
                 p_key = _period_key(pd, granularity)
                 unmatched_by_period[p_key] += float(ul.net_amount or 0)
 
-        periods = sorted(set(e["period"] for e in spine), key=_period_sort_key)
+        all_period_keys = set(e["period"] for e in spine)
+        all_period_keys.update(unmatched_by_period.keys())
+        periods = sorted(all_period_keys, key=_period_sort_key)
 
         song_series = defaultdict(dict)
         for entry in spine:
