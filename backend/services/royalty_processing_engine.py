@@ -467,12 +467,73 @@ def _find_splits_for_song(db: Session, org_id: int, song_id: int) -> List[Tuple]
     return results
 
 
-def get_allocation_preview(db: Session, statement_id: int, org_id: int) -> list:
+def _get_allocation_from_ledger(db: Session, statement_id: int, org_id: int) -> list:
+    latest_run = db.query(RoyaltyProcessingRun).filter(
+        RoyaltyProcessingRun.org_id == org_id,
+        RoyaltyProcessingRun.statement_id == statement_id,
+        RoyaltyProcessingRun.status == "SUCCEEDED",
+    ).order_by(RoyaltyProcessingRun.run_version.desc()).first()
+
+    if not latest_run:
+        return []
+
+    entries = db.query(RoyaltyLedgerEntry).filter(
+        RoyaltyLedgerEntry.org_id == org_id,
+        RoyaltyLedgerEntry.statement_id == statement_id,
+        RoyaltyLedgerEntry.processing_run_id == latest_run.id,
+    ).all()
+
+    payee_totals: Dict[int, dict] = {}
+
+    for entry in entries:
+        pid = entry.payee_id
+        if pid not in payee_totals:
+            payee = db.query(Payee).filter(Payee.id == pid).first()
+            payee_name = "Unknown"
+            if payee and payee.creator_id:
+                creator = db.query(Creator).filter(Creator.id == payee.creator_id).first()
+                payee_name = creator.display_name if creator else (payee.company_name or "Unknown")
+            elif payee:
+                payee_name = payee.company_name or "Unknown"
+            payee_totals[pid] = {
+                "payee_id": pid,
+                "payee_name": payee_name,
+                "payee_type": payee.payee_type if payee else "OTHER",
+                "earnings_cents": 0,
+                "fees_cents": 0,
+                "recoupment_cents": 0,
+                "payable_cents": 0,
+            }
+
+        if entry.entry_type == "EARNING":
+            payee_totals[pid]["earnings_cents"] += entry.amount_cents
+        elif entry.entry_type == "FEE":
+            payee_totals[pid]["fees_cents"] += abs(entry.amount_cents)
+        elif entry.entry_type == "RECOUPMENT_APPLIED":
+            payee_totals[pid]["recoupment_cents"] += abs(entry.amount_cents)
+        elif entry.entry_type == "PAYABLE_CREATED":
+            payee_totals[pid]["payable_cents"] += entry.amount_cents
+
+    return list(payee_totals.values())
+
+
+def get_allocation_preview(db: Session, statement_id: int, org_id: int) -> dict:
     try:
+        statement = db.query(RoyaltyStatement).filter(
+            RoyaltyStatement.id == statement_id,
+            RoyaltyStatement.organization_id == org_id,
+        ).first()
+
+        is_processed = statement and statement.status == "PROCESSED"
+
+        if is_processed:
+            allocations = _get_allocation_from_ledger(db, statement_id, org_id)
+            return {"allocations": allocations, "is_processed": True}
+
         lines = db.query(RoyaltyStatementLine).filter(
             RoyaltyStatementLine.org_id == org_id,
             RoyaltyStatementLine.statement_id == statement_id,
-            RoyaltyStatementLine.match_status.in_(["CONFIRMED", "AUTO_MATCHED"]),
+            RoyaltyStatementLine.match_status.in_(["MATCHED", "CONFIRMED", "AUTO_MATCHED"]),
             RoyaltyStatementLine.matched_song_id.isnot(None),
         ).all()
 
@@ -529,7 +590,7 @@ def get_allocation_preview(db: Session, statement_id: int, org_id: int) -> list:
             totals["recoupment_cents"] = total_recoup
             totals["payable_cents"] = totals["earnings_cents"] - totals["fees_cents"] - total_recoup
 
-        return list(payee_totals.values())
+        return {"allocations": list(payee_totals.values()), "is_processed": False}
 
     except Exception as e:
         logger.error(f"Error getting allocation preview for statement {statement_id}: {e}")

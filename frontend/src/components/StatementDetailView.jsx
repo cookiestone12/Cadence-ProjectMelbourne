@@ -105,6 +105,7 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
 
   const [allocations, setAllocations] = useState([])
   const [allocLoading, setAllocLoading] = useState(false)
+  const [allocIsProcessed, setAllocIsProcessed] = useState(false)
 
   const [runs, setRuns] = useState([])
   const [runsLoading, setRunsLoading] = useState(false)
@@ -261,6 +262,7 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
     try {
       const res = await axios.get(`/api/royalty-processing/${orgId}/statements/${statementId}/allocation-preview`)
       setAllocations(res.data.allocations || [])
+      setAllocIsProcessed(res.data.is_processed || false)
     } catch (err) {
       console.error('Failed to load allocations:', err)
     } finally {
@@ -483,7 +485,7 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
         <ClassificationPane orgId={orgId} statementId={statementId} />
       )}
       {activeTab === 'allocation' && (
-        <AllocationPane allocations={allocations} loading={allocLoading} />
+        <AllocationPane allocations={allocations} loading={allocLoading} isProcessed={allocIsProcessed} />
       )}
       {activeTab === 'runs' && (
         <RunsPane
@@ -915,7 +917,7 @@ function MatchingPane({ queue, queueLoading, selectedLine, onSelectLine, suggest
   )
 }
 
-function AllocationPane({ allocations, loading }) {
+function AllocationPane({ allocations, loading, isProcessed }) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -927,8 +929,8 @@ function AllocationPane({ allocations, loading }) {
   return (
     <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)]">
       <div className="p-6 border-b border-[rgba(59,77,67,0.08)]">
-        <h3 className="text-lg font-semibold text-[#3D4A44]">Allocation Preview</h3>
-        <p className="text-sm text-[#7A8580] mt-1">Preview how earnings will be distributed to payees</p>
+        <h3 className="text-lg font-semibold text-[#3D4A44]">{isProcessed ? 'Allocation Summary' : 'Allocation Preview'}</h3>
+        <p className="text-sm text-[#7A8580] mt-1">{isProcessed ? 'Actual earnings distribution from the latest processing run' : 'Preview how earnings will be distributed to payees'}</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full">
@@ -958,7 +960,7 @@ function AllocationPane({ allocations, loading }) {
               </tr>
             ))}
             {allocations.length === 0 && (
-              <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-[#7A8580]">No allocation data available. Process the statement first.</td></tr>
+              <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-[#7A8580]">{isProcessed ? 'No allocations were recorded during processing.' : 'No allocation data available. Match statement lines and process the statement to see allocations.'}</td></tr>
             )}
           </tbody>
         </table>

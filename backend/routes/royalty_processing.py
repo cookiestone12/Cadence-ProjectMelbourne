@@ -551,8 +551,12 @@ def get_statement_allocation_preview(
     if not stmt:
         raise HTTPException(status_code=404, detail="Statement not found")
 
-    preview = get_allocation_preview(db, statement_id, org_id)
-    return {"statement_id": statement_id, "allocations": preview}
+    result = get_allocation_preview(db, statement_id, org_id)
+    return {
+        "statement_id": statement_id,
+        "allocations": result["allocations"],
+        "is_processed": result["is_processed"],
+    }
 
 
 @router.post("/{org_id}/statements/{statement_id}/process")
@@ -1251,12 +1255,12 @@ def export_allocation_preview(
     if not stmt:
         raise HTTPException(status_code=404, detail="Statement not found")
 
-    preview = get_allocation_preview(db, statement_id, org_id)
+    result = get_allocation_preview(db, statement_id, org_id)
 
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["Payee ID", "Payee Name", "Payee Type", "Earnings (cents)", "Fees (cents)", "Recoupment (cents)", "Payable (cents)"])
-    for row in preview:
+    for row in result["allocations"]:
         writer.writerow([
             row["payee_id"], row["payee_name"], row["payee_type"],
             row["earnings_cents"], row["fees_cents"], row["recoupment_cents"], row["payable_cents"],
