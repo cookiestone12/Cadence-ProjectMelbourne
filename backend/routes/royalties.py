@@ -1449,7 +1449,7 @@ def earnings_by_track(
 ):
     verify_org_access(current_user, org_id, db)
 
-    results = db.query(
+    matched_results = db.query(
         Song.id, Song.title, Song.primary_artist, Song.isrc,
         func.sum(RoyaltyTransaction.revenue_cents).label("total_revenue_cents"),
         func.sum(RoyaltyTransaction.quantity).label("total_quantity"),
@@ -1459,20 +1459,49 @@ def earnings_by_track(
         RoyaltyTransaction.organization_id == org_id,
     ).group_by(Song.id, Song.title, Song.primary_artist, Song.isrc).order_by(desc("total_revenue_cents")).all()
 
-    return {
-        "earnings": [
-            {
-                "song_id": r.id,
-                "title": r.title,
-                "artist": r.primary_artist,
-                "isrc": r.isrc,
+    earnings = [
+        {
+            "song_id": r.id,
+            "title": r.title,
+            "artist": r.primary_artist,
+            "isrc": r.isrc,
+            "total_revenue_cents": r.total_revenue_cents,
+            "total_revenue_dollars": r.total_revenue_cents / 100.0,
+            "total_quantity": r.total_quantity,
+        }
+        for r in matched_results
+    ]
+
+    unmatched_results = db.query(
+        RoyaltyTransaction.original_track_title,
+        RoyaltyTransaction.original_artist,
+        func.sum(RoyaltyTransaction.revenue_cents).label("total_revenue_cents"),
+        func.sum(RoyaltyTransaction.quantity).label("total_quantity"),
+    ).filter(
+        RoyaltyTransaction.organization_id == org_id,
+        RoyaltyTransaction.song_id.is_(None),
+        RoyaltyTransaction.original_track_title.isnot(None),
+    ).group_by(
+        RoyaltyTransaction.original_track_title,
+        RoyaltyTransaction.original_artist,
+    ).order_by(desc("total_revenue_cents")).limit(100).all()
+
+    for r in unmatched_results:
+        if r.total_revenue_cents and r.total_revenue_cents > 0:
+            earnings.append({
+                "song_id": None,
+                "title": r.original_track_title,
+                "artist": r.original_artist,
+                "isrc": None,
                 "total_revenue_cents": r.total_revenue_cents,
                 "total_revenue_dollars": r.total_revenue_cents / 100.0,
                 "total_quantity": r.total_quantity,
-            }
-            for r in results
-        ]
-    }
+                "unmatched": True,
+            })
+
+    earnings.sort(key=lambda x: x.get("total_revenue_cents", 0) or 0, reverse=True)
+
+    return {"earnings": earnings}
 
 
 @router.get("/payments/{org_id}")

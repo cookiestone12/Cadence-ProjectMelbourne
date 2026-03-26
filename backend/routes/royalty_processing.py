@@ -151,6 +151,67 @@ def list_statement_lines(
     if not stmt:
         raise HTTPException(status_code=404, detail="Statement not found")
 
+    line_count_check = db.query(func.count(RoyaltyStatementLine.id)).filter(
+        RoyaltyStatementLine.org_id == org_id,
+        RoyaltyStatementLine.statement_id == statement_id,
+    ).scalar() or 0
+
+    if line_count_check == 0:
+        tx_query = db.query(RoyaltyTransaction).filter(
+            RoyaltyTransaction.statement_id == statement_id,
+            RoyaltyTransaction.organization_id == org_id,
+        )
+        if match_status:
+            tx_query = tx_query.filter(RoyaltyTransaction.match_status == match_status)
+        if search:
+            search_term = f"%{search}%"
+            tx_query = tx_query.filter(
+                or_(
+                    RoyaltyTransaction.original_track_title.ilike(search_term),
+                    RoyaltyTransaction.original_artist.ilike(search_term),
+                    RoyaltyTransaction.original_isrc.ilike(search_term),
+                )
+            )
+        total = tx_query.count()
+        txs = tx_query.order_by(RoyaltyTransaction.id).offset(offset).limit(limit).all()
+        results = []
+        for tx in txs:
+            song_title = None
+            if tx.song_id:
+                song = db.query(Song).filter(Song.id == tx.song_id).first()
+                if song:
+                    song_title = song.title
+            results.append({
+                "id": tx.id,
+                "statement_id": tx.statement_id,
+                "isrc": tx.original_isrc,
+                "upc": tx.original_upc,
+                "iswc": None,
+                "track_title_raw": tx.original_track_title,
+                "artist_name_raw": tx.original_artist,
+                "release_title_raw": None,
+                "label_raw": None,
+                "territory": tx.territory,
+                "store": tx.platform,
+                "revenue_type": tx.revenue_type,
+                "unit_count": tx.quantity,
+                "gross_amount": None,
+                "net_amount": tx.revenue_cents / 100.0 if tx.revenue_cents else 0.0,
+                "currency": tx.currency,
+                "net_amount_statement_currency": tx.revenue_cents / 100.0 if tx.revenue_cents else 0.0,
+                "matched_song_id": tx.song_id,
+                "matched_song_title": song_title,
+                "matched_work_id": None,
+                "matched_release_id": None,
+                "match_status": tx.match_status or "UNMATCHED",
+                "match_confidence": tx.match_confidence,
+                "match_method": None,
+                "matched_at": None,
+                "created_at": tx.created_at.isoformat() if tx.created_at else None,
+                "source": "transaction_fallback",
+            })
+        return {"total": total, "offset": offset, "limit": limit, "lines": results}
+
     query = db.query(RoyaltyStatementLine).filter(
         RoyaltyStatementLine.org_id == org_id,
         RoyaltyStatementLine.statement_id == statement_id,
@@ -223,6 +284,36 @@ def get_statement_line_stats(
     ).first()
     if not stmt:
         raise HTTPException(status_code=404, detail="Statement not found")
+
+    line_exists = db.query(func.count(RoyaltyStatementLine.id)).filter(
+        RoyaltyStatementLine.org_id == org_id,
+        RoyaltyStatementLine.statement_id == statement_id,
+    ).scalar() or 0
+
+    if line_exists == 0:
+        status_counts = db.query(
+            RoyaltyTransaction.match_status,
+            func.count(RoyaltyTransaction.id),
+            func.coalesce(func.sum(RoyaltyTransaction.revenue_cents), 0),
+        ).filter(
+            RoyaltyTransaction.statement_id == statement_id,
+            RoyaltyTransaction.organization_id == org_id,
+        ).group_by(RoyaltyTransaction.match_status).all()
+
+        counts = {}
+        total_amount = 0.0
+        total_lines = 0
+        for status, count, amount_cents in status_counts:
+            amount_dollars = float(amount_cents) / 100.0
+            counts[status or "UNMATCHED"] = {"count": count, "total_amount": amount_dollars}
+            total_amount += amount_dollars
+            total_lines += count
+
+        return {
+            "total_lines": total_lines,
+            "total_amount": total_amount,
+            "by_status": counts,
+        }
 
     status_counts = db.query(
         RoyaltyStatementLine.match_status,
