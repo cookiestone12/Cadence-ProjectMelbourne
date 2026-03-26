@@ -47,7 +47,7 @@ def build_song_period_spine(
 ) -> list[dict]:
     query = db.query(RoyaltyStatementLine).filter(
         RoyaltyStatementLine.org_id == org_id,
-        RoyaltyStatementLine.match_status.in_(["MATCHED", "CONFIRMED", "AUTO_MATCHED", "UNMATCHED", "REVIEW_REQUIRED"]),
+        RoyaltyStatementLine.match_status.in_(["MATCHED", "CONFIRMED", "AUTO_MATCHED"]),
     )
 
     if exclude_right_types:
@@ -391,6 +391,14 @@ def run_underwriting(
             scope_creator_id=scope_creator_id,
         )
 
+        unmatched_query = db.query(RoyaltyStatementLine).filter(
+            RoyaltyStatementLine.org_id == org_id,
+            RoyaltyStatementLine.match_status.in_(["UNMATCHED", "REVIEW_REQUIRED"]),
+        )
+        unmatched_lines = unmatched_query.all()
+        unmatched_total_net = sum(float(l.net_amount or 0) for l in unmatched_lines)
+        unmatched_line_count = len(unmatched_lines)
+
         periods = sorted(set(e["period"] for e in spine), key=_period_sort_key)
 
         song_series = defaultdict(dict)
@@ -518,6 +526,11 @@ def run_underwriting(
             "portfolio_decay_k": round(portfolio_k, 4),
             "portfolio_half_life": round(portfolio_half_life, 2) if portfolio_half_life else None,
             "stability_signals": stability_signals,
+            "unmatched_revenue": {
+                "total_net": round(unmatched_total_net, 2),
+                "line_count": unmatched_line_count,
+            },
+            "total_revenue_incl_unmatched": round(total_annual + unmatched_total_net, 2),
         }
 
         spine_for_storage = spine[:500]

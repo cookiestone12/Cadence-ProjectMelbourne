@@ -393,15 +393,13 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors.bg} ${statusColors.text}`}>
               {statement.status}
             </span>
-            {statement.status !== 'PROCESSED' && (
-              <button
-                onClick={handleAutoMatch}
-                disabled={autoMatching}
-                className="flex items-center gap-2 px-4 py-2 border border-[#5B8A72] text-[#5B8A72] rounded-xl hover:bg-[rgba(91,138,114,0.06)] transition-all text-sm font-medium disabled:opacity-50"
-              >
-                <LinkIcon className="w-4 h-4" /> {autoMatching ? 'Matching...' : 'Run Auto-Match'}
-              </button>
-            )}
+            <button
+              onClick={handleAutoMatch}
+              disabled={autoMatching}
+              className="flex items-center gap-2 px-4 py-2 border border-[#5B8A72] text-[#5B8A72] rounded-xl hover:bg-[rgba(91,138,114,0.06)] transition-all text-sm font-medium disabled:opacity-50"
+            >
+              <LinkIcon className="w-4 h-4" /> {autoMatching ? 'Matching...' : 'Run Auto-Match'}
+            </button>
             <button
               onClick={() => setShowProcessModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium"
