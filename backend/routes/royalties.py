@@ -671,6 +671,31 @@ def get_creators_royalty_summary(
     }
 
 
+@router.post("/statements/{org_id}/assign-unassigned")
+def assign_unassigned_statements(
+    org_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    creator_id = body.get("creator_id")
+    if not creator_id:
+        raise HTTPException(status_code=400, detail="creator_id is required")
+
+    creator = db.query(Creator).filter(Creator.id == creator_id, Creator.organization_id == org_id).first()
+    if not creator:
+        raise HTTPException(status_code=404, detail="Creator not found in this organization")
+
+    updated = db.query(RoyaltyStatement).filter(
+        RoyaltyStatement.organization_id == org_id,
+        RoyaltyStatement.creator_id.is_(None),
+    ).update({"creator_id": creator_id}, synchronize_session="fetch")
+
+    db.commit()
+    return {"assigned": updated, "creator_id": creator_id, "creator_name": creator.display_name}
+
+
 @router.get("/statements/{org_id}")
 def list_statements(
     org_id: int,

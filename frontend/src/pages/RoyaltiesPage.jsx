@@ -2438,14 +2438,32 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
 function CreatorRoyaltyLanding({ orgId, creators, onSelectCreator }) {
   const [summaryData, setSummaryData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [assigningCreator, setAssigningCreator] = useState('')
+  const [assigning, setAssigning] = useState(false)
 
-  useEffect(() => {
+  const loadSummary = useCallback(() => {
     if (!orgId) return
     axios.get(`/api/royalties/creators-summary/${orgId}`)
       .then(res => setSummaryData(res.data))
       .catch(err => console.error('Failed to load creator royalty summary:', err))
       .finally(() => setLoading(false))
   }, [orgId])
+
+  useEffect(() => { loadSummary() }, [loadSummary])
+
+  const handleAssignAll = async () => {
+    if (!assigningCreator) return
+    setAssigning(true)
+    try {
+      await axios.post(`/api/royalties/statements/${orgId}/assign-unassigned`, { creator_id: parseInt(assigningCreator) })
+      setAssigningCreator('')
+      loadSummary()
+    } catch (err) {
+      console.error('Failed to assign statements:', err)
+    } finally {
+      setAssigning(false)
+    }
+  }
 
   if (loading) return <LoadingSpinner message="Loading clients..." />
 
@@ -2528,11 +2546,32 @@ function CreatorRoyaltyLanding({ orgId, creators, onSelectCreator }) {
 
       {unassignedCount > 0 && (
         <div className="bg-amber-50/80 backdrop-blur-xl rounded-[18px] shadow-am border border-amber-200/50 p-5">
-          <div className="flex items-center gap-3">
-            <ExclamationCircleIcon className="w-5 h-5 text-amber-600" />
-            <div>
-              <p className="text-sm font-medium text-amber-800">{unassignedCount} unassigned statement{unassignedCount !== 1 ? 's' : ''}</p>
-              <p className="text-xs text-amber-600">{formatDollars(unassignedRevenue)} in revenue not attributed to any client</p>
+          <div className="flex items-start gap-3">
+            <ExclamationCircleIcon className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-amber-800">{unassignedCount} unassigned statement{unassignedCount !== 1 ? 's' : ''}</p>
+                <p className="text-xs text-amber-600">{formatDollars(unassignedRevenue)} in revenue not attributed to any client</p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={assigningCreator}
+                  onChange={e => setAssigningCreator(e.target.value)}
+                  className="px-3 py-1.5 text-sm border border-amber-300 rounded-lg bg-white text-[#3D4A44] focus:ring-2 focus:ring-amber-400 outline-none"
+                >
+                  <option value="">Assign to client...</option>
+                  {creators.map(c => (
+                    <option key={c.id} value={c.id}>{c.display_name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAssignAll}
+                  disabled={!assigningCreator || assigning}
+                  className="px-4 py-1.5 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {assigning ? 'Assigning...' : 'Assign'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
