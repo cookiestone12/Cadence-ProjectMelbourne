@@ -71,9 +71,8 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#FAFBF9] overflow-x-hidden">
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#FAFBF9]/80 backdrop-blur-xl border-b border-[rgba(59,77,67,0.06)]">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <img src="/cadence-icon-new.png" alt="Cadence" className="h-8 w-auto" />
-            <span className="text-[17px] font-semibold text-[#3D4A44] tracking-tight">cadence</span>
+          <div className="flex items-center">
+            <img src="/cadence-logo-full.png" alt="Cadence - Catalog Intelligence" className="h-12 w-auto" />
           </div>
           <button
             onClick={() => navigate('/login')}
