@@ -693,7 +693,7 @@ function StatementsTab({ orgId, songs }) {
                   <td className="px-6 py-4 text-sm font-medium text-[#3D4A44]">{stmt.source_name || '—'}</td>
                   <td className="px-6 py-4 text-sm text-[#7A8580]">{formatDate(stmt.period_start)} — {formatDate(stmt.period_end)}</td>
                   <td className="px-6 py-4 text-sm text-[#7A8580]">{stmt.currency || 'USD'}</td>
-                  <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(stmt.total_revenue)}</td>
+                  <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(stmt.total_revenue_cents)}</td>
                   <td className="px-6 py-4"><StatusBadge status={stmt.status || 'PENDING'} colorMap={STATEMENT_STATUS_COLORS} /></td>
                   <td className="px-6 py-4 text-sm text-right text-[#7A8580]">{stmt.matched_percentage != null ? `${stmt.matched_percentage}%` : '—'}</td>
                   <td className="px-6 py-4">
