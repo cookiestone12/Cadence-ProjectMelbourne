@@ -388,6 +388,7 @@ export default function LandingPage() {
                     type="text"
                     value={demoForm.company}
                     onChange={(e) => setDemoForm({ ...demoForm, company: e.target.value })}
+                    required
                     className="w-full px-4 py-3 bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] rounded-xl text-[15px] text-[#3D4A44] focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[#5B8A72]/20 transition-all"
                     placeholder="Your company or label"
                   />

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 import logging
@@ -22,7 +22,7 @@ class WaitlistRequest(BaseModel):
 class DemoRequest(BaseModel):
     name: str
     email: str
-    company: Optional[str] = None
+    company: str
     message: Optional[str] = None
 
 
