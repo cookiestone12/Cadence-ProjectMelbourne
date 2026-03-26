@@ -7,6 +7,7 @@ from datetime import date, datetime
 from difflib import SequenceMatcher
 import csv
 import io
+import re
 import logging
 
 from ..models import (
@@ -88,6 +89,7 @@ COLUMN_HINTS = {
         "revenue", "amount", "earnings", "net", "royalty", "payment", "gross", "total", "payout",
         "royalty amount", "net amount", "gross amount", "total earned", "net royalty",
         "domestic amount", "foreign amount", "total amount", "license fee",
+        "accrued amount", "accrual amount",
     ],
     "quantity": [
         "quantity", "streams", "plays", "downloads", "units", "count",
@@ -111,7 +113,7 @@ COLUMN_HINTS = {
     ],
     "iswc": ["iswc", "work code", "work id"],
     "work_id": [
-        "work id", "work #", "work number", "song code", "internal id",
+        "work id", "work #", "work number", "song code", "song number", "internal id",
         "bmi work#", "ascap work id", "sesac work id", "bmi work id",
     ],
     "share_percentage": [
@@ -126,9 +128,10 @@ PRO_SOURCE_TYPES = {
         "extra_hints": {
             "track_title": ["work title", "song title"],
             "artist": ["writer", "writer name", "affiliated writer"],
-            "revenue": ["current activity royalty", "royalty amount", "total earned"],
-            "quantity": ["performances", "credits", "total performances"],
-            "work_id": ["bmi work#", "work #", "bmi work id"],
+            "revenue": ["current activity royalty", "royalty amount", "total earned", "accrued amount"],
+            "quantity": ["performances", "performance count", "credits", "total performances"],
+            "work_id": ["bmi work#", "work #", "bmi work id", "song number"],
+            "platform": ["source", "survey type", "medium"],
         }
     },
     "ASCAP": {
@@ -207,8 +210,9 @@ def suggest_column_mapping(headers: List[str], source_type: str = "") -> Dict[st
             if header in used_headers:
                 continue
             lower = header.lower().strip()
+            lower_clean = re.sub(r'\s+', ' ', lower)
             for hint in field_hints:
-                if hint == lower or hint in lower:
+                if hint == lower_clean or re.search(r'(?:^|[\s_\-/])' + re.escape(hint) + r'(?:[\s_\-/]|$)', lower_clean):
                     best_match = header
                     break
             if best_match:
@@ -277,16 +281,36 @@ def _parse_pdf_with_tables(content: bytes) -> tuple:
                 for table in tables:
                     for row in table:
                         if row and any(cell and str(cell).strip() for cell in row):
-                            cleaned = [str(cell).strip() if cell else "" for cell in row]
+                            cleaned = [re.sub(r'\s+', ' ', str(cell).strip()) if cell else "" for cell in row]
                             all_table_rows.append(cleaned)
 
         if not all_table_rows:
             return None, None
 
-        headers = all_table_rows[0]
+        header_idx = 0
+        for idx, row in enumerate(all_table_rows[:5]):
+            non_empty = sum(1 for v in row if v.strip())
+            if non_empty >= 3:
+                text_cells = sum(1 for v in row if v.strip() and not v.replace('.', '').replace(',', '').replace('$', '').replace('-', '').strip().isdigit())
+                if text_cells >= 3:
+                    header_idx = idx
+                    break
+
+        headers = all_table_rows[header_idx]
         headers = [h if h else f"Column_{i}" for i, h in enumerate(headers)]
+
+        header_lower = set(h.lower() for h in headers if h and not h.startswith("Column_"))
+
         rows = []
-        for row_data in all_table_rows[1:]:
+        for row_data in all_table_rows[header_idx + 1:]:
+            row_lower = set(re.sub(r'\s+', ' ', str(v).strip()).lower() for v in row_data if v and str(v).strip())
+            if row_lower and header_lower and len(row_lower & header_lower) >= len(header_lower) * 0.6:
+                continue
+
+            row_vals = [str(v).strip().lower() for v in row_data if v and str(v).strip()]
+            if any(t in val for val in row_vals for t in ("totals:", "total:", "grand total", "sub-total", "subtotal")):
+                continue
+
             row_dict = {}
             for i, val in enumerate(row_data):
                 if i < len(headers):
@@ -422,7 +446,36 @@ def parse_uploaded_file(content: bytes, filename: str, org_id: int = None) -> tu
             logger.warning(f"Publishing statement parser failed, falling back: {e}")
         headers, rows = _parse_pdf_with_tables(content)
         if headers and rows:
-            return headers, rows, {}
+            pdf_meta = {}
+            try:
+                full_text = _extract_pdf_text(content)
+                grand_match = re.search(r'(?i)grand\s+totals?[:\s]+\$?([\d,]+\.?\d*)', full_text)
+                if grand_match:
+                    total_str = grand_match.group(1).replace(",", "")
+                    pdf_meta["grand_total_net"] = float(total_str)
+                else:
+                    all_totals = re.findall(r'(?i)totals?:\s*[\d,]+\s+\$?([\d,]+\.?\d*)', full_text)
+                    if all_totals:
+                        total_str = all_totals[-1].replace(",", "")
+                        extracted = float(total_str)
+                        row_sum = 0.0
+                        rev_col = suggest_column_mapping(headers, "").get("revenue")
+                        if rev_col:
+                            for r in rows:
+                                val = r.get(rev_col, "").replace("$", "").replace(",", "").strip()
+                                try:
+                                    row_sum += float(val) if val else 0
+                                except (ValueError, TypeError):
+                                    pass
+                        if row_sum > 0 and abs(extracted - row_sum) / row_sum < 0.05:
+                            pdf_meta["grand_total_net"] = extracted
+                        elif row_sum == 0:
+                            pdf_meta["grand_total_net"] = extracted
+                if "grand_total_net" in pdf_meta:
+                    logger.info(f"Extracted PDF grand total: ${pdf_meta['grand_total_net']:.2f}")
+            except Exception as e:
+                logger.warning(f"Grand total extraction failed: {e}")
+            return headers, rows, pdf_meta
         result = _parse_pdf_with_ai(content, org_id=org_id)
         if isinstance(result, tuple) and len(result) == 2:
             return result[0], result[1], {}
