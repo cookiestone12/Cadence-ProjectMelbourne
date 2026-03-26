@@ -682,6 +682,7 @@ function StatementsSubTab({ orgId, creatorId }) {
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Track</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Artist</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Source</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">ISRC</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Revenue</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Qty</th>
@@ -694,6 +695,7 @@ function StatementsSubTab({ orgId, creatorId }) {
                     <tr key={tx.id} className="hover:bg-[rgba(91,138,114,0.04)]">
                       <td className="px-4 py-3 text-sm text-[#3D4A44]">{tx.original_track_title || '—'}</td>
                       <td className="px-4 py-3 text-sm text-[#7A8580]">{tx.original_artist || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580]">{tx.platform || '—'}</td>
                       <td className="px-4 py-3 text-sm text-[#7A8580] font-mono text-xs">{tx.original_isrc || '—'}</td>
                       <td className="px-4 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatCents(tx.revenue_cents)}</td>
                       <td className="px-4 py-3 text-sm text-right text-[#7A8580]">{(tx.quantity || 0).toLocaleString()}</td>
@@ -730,7 +732,7 @@ function StatementsSubTab({ orgId, creatorId }) {
                     </tr>
                   ))}
                   {transactions.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#7A8580]">No transactions found.</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#7A8580]">No transactions found.</td></tr>
                   )}
                 </tbody>
               </table>

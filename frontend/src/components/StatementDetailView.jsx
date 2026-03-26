@@ -702,6 +702,7 @@ function LinesPane({ lines, total, loading, filter, setFilter, search, setSearch
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Track</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Artist</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Source</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">ISRC</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Net Amount</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Status</th>
@@ -716,6 +717,7 @@ function LinesPane({ lines, total, loading, filter, setFilter, search, setSearch
                     <tr key={line.id} className="hover:bg-[rgba(91,138,114,0.04)]">
                       <td className="px-4 py-3 text-sm text-[#3D4A44]">{line.track_title_raw || '—'}</td>
                       <td className="px-4 py-3 text-sm text-[#7A8580]">{line.artist_name_raw || '—'}</td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580]">{line.store || '—'}</td>
                       <td className="px-4 py-3 text-sm text-[#7A8580] font-mono text-xs">{line.isrc || '—'}</td>
                       <td className="px-4 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatDollars(line.net_amount)}</td>
                       <td className="px-4 py-3">
@@ -848,6 +850,7 @@ function MatchingPane({ queue, queueLoading, selectedLine, onSelectLine, suggest
               <div className="bg-[rgba(91,138,114,0.06)] rounded-xl p-4">
                 <p className="text-sm font-medium text-[#3D4A44]">{selectedLine.track_title_raw}</p>
                 <p className="text-xs text-[#7A8580]">{selectedLine.artist_name_raw}</p>
+                {selectedLine.store && <p className="text-xs text-[#7A8580] mt-1">Source: {selectedLine.store}</p>}
                 {selectedLine.isrc && <p className="text-xs text-[#7A8580] font-mono mt-1">ISRC: {selectedLine.isrc}</p>}
                 <p className="text-xs text-[#7A8580] mt-1">Amount: {formatDollars(selectedLine.net_amount)}</p>
               </div>
