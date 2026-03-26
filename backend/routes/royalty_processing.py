@@ -1216,6 +1216,8 @@ async def upload_and_parse_statement(
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
+    from .royalties import normalize_source_name
+    source_name = normalize_source_name(source_name)
     content = await file.read()
     try:
         headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)

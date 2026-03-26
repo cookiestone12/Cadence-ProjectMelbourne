@@ -705,9 +705,7 @@ function ActiveShares({ shares, receivedActiveShares = [], onAction, onError }) 
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#E5E8E3]">
-                {receivedActiveShares.map(share => {
-                  const modules = share.shared_modules || SHARE_MODULES.map(m => m.key)
-                  return (
+                {receivedActiveShares.map(share => (
                   <tr key={share.id} className="hover:bg-[#FAFBF9] transition-colors">
                     <td className="px-4 py-3">
                       <p className="text-sm font-medium text-[#3D4A44]">{share.creator_name}</p>
@@ -723,7 +721,7 @@ function ActiveShares({ shares, receivedActiveShares = [], onAction, onError }) 
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell">
                       <div className="flex flex-wrap gap-1">
-                        {SHARE_MODULES.filter(m => modules.includes(m.key)).map(mod => (
+                        {SHARE_MODULES.filter(m => (share.shared_modules || SHARE_MODULES.map(s => s.key)).includes(m.key)).map(mod => (
                           <span key={mod.key} className="px-2 py-0.5 text-xs rounded-full bg-[#5B8A72] text-white">
                             {mod.label}
                           </span>
@@ -736,8 +734,7 @@ function ActiveShares({ shares, receivedActiveShares = [], onAction, onError }) 
                       </span>
                     </td>
                   </tr>
-                  );
-                })}
+                ))}
               </tbody>
             </table>
           </div>

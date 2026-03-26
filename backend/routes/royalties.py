@@ -187,6 +187,23 @@ PRO_SOURCE_TYPES = {
 }
 
 
+KNOWN_SOURCE_NAMES = {
+    "bmi": "BMI", "ascap": "ASCAP", "sesac": "SESAC",
+    "soundexchange": "SoundExchange", "sound exchange": "SoundExchange",
+    "socan": "SOCAN", "prs": "PRS", "prs for music": "PRS",
+    "distrokid": "DistroKid", "tunecore": "TuneCore",
+    "cd baby": "CD Baby", "cdbaby": "CD Baby",
+    "stem": "Stem", "songtrust": "Songtrust",
+}
+
+
+def normalize_source_name(source_name: str) -> str:
+    if not source_name:
+        return source_name
+    lookup = source_name.strip().lower()
+    return KNOWN_SOURCE_NAMES.get(lookup, source_name.strip())
+
+
 def detect_pro_source(headers: List[str], source_name: str = "") -> Optional[str]:
     all_text = " ".join(headers).lower() + " " + source_name.lower()
     for pro_name, config in PRO_SOURCE_TYPES.items():
@@ -772,6 +789,7 @@ async def upload_statement(
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
+    source_name = normalize_source_name(source_name)
     content = await file.read()
     headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)
 
@@ -783,9 +801,9 @@ async def upload_statement(
         try:
             mapping = json.loads(column_mapping)
         except Exception:
-            mapping = suggest_column_mapping(headers)
+            mapping = suggest_column_mapping(headers, source_name or "")
     else:
-        mapping = suggest_column_mapping(headers)
+        mapping = suggest_column_mapping(headers, source_name or "")
 
     p_start = None
     p_end = None
@@ -879,6 +897,17 @@ async def upload_statement(
     statement.unmatched_transactions = unmatched_count
     statement.status = "PROCESSED" if unmatched_count == 0 else "PARTIALLY_MATCHED"
 
+    line_parse_warning = None
+    try:
+        from ..services.royalty_processing_engine import parse_statement_to_lines, auto_match_lines
+        line_count = parse_statement_to_lines(db, statement.id, org_id, mapping, rows, pdf_metadata=pdf_metadata)
+        if line_count > 0:
+            auto_match_lines(db, statement.id, org_id)
+            logger.info(f"Created {line_count} statement lines for statement {statement.id}")
+    except Exception as e:
+        line_parse_warning = str(e)
+        logger.warning(f"Failed to create statement lines: {e}")
+
     from ..services.audit_service import log_action
     log_action(db, org_id, current_user.id, "UPLOAD", "STATEMENT", statement.id, source_name,
                details={"file_name": file.filename, "source_type": source_type, "currency": currency,
@@ -887,7 +916,7 @@ async def upload_statement(
     db.commit()
     db.refresh(statement)
 
-    return {
+    result = {
         "id": statement.id,
         "status": statement.status,
         "total_transactions": statement.total_transactions,
@@ -896,6 +925,9 @@ async def upload_statement(
         "total_revenue_cents": statement.total_revenue_cents,
         "total_revenue_dollars": statement.total_revenue_cents / 100.0,
     }
+    if line_parse_warning:
+        result["warning"] = f"Statement uploaded but line parsing failed: {line_parse_warning}"
+    return result
 
 
 @router.delete("/statements/{org_id}/{statement_id}")
