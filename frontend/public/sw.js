@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'cadence-v17';
+const CACHE_VERSION = 'cadence-v18';
 const STATIC_ASSETS = [
   '/favicon.ico',
   '/favicon-32.png',
@@ -34,41 +34,33 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        return new Response(JSON.stringify({ error: 'Offline' }), {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      })
-    );
     return;
   }
 
   if (event.request.mode === 'navigate') {
+    return;
+  }
+
+  if (url.pathname.startsWith('/assets/')) {
+    return;
+  }
+
+  if (STATIC_ASSETS.some(asset => url.pathname === asset)) {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match('/') || new Response('Offline', { status: 503 });
+      caches.match(event.request).then((cached) => {
+        return cached || fetch(event.request).then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(CACHE_VERSION).then((cache) => {
+              cache.put(event.request, clone);
+            });
+          }
+          return response;
+        });
       })
     );
     return;
   }
-
-  event.respondWith(
-    fetch(event.request).then((response) => {
-      if (response.ok && event.request.method === 'GET') {
-        const clone = response.clone();
-        caches.open(CACHE_VERSION).then((cache) => {
-          cache.put(event.request, clone);
-        });
-      }
-      return response;
-    }).catch(() => {
-      return caches.match(event.request).then((cached) => {
-        return cached || new Response('', { status: 503 });
-      });
-    })
-  );
 });
 
 self.addEventListener('push', (event) => {
