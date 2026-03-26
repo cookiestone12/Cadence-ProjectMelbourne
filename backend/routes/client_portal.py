@@ -336,10 +336,21 @@ def get_client_accounting(
                 "remaining": (c.advance_amount or 0) - (c.advance_recouped or 0),
             })
 
+    total_tx_revenue = sum(t.get("revenue_amount_cents", 0) or 0 for t in transactions)
+
+    if total_tx_revenue == 0:
+        creator_statements = db.query(RoyaltyStatement).filter(
+            RoyaltyStatement.organization_id == org_id,
+            RoyaltyStatement.creator_id == creator.id,
+            RoyaltyStatement.status.in_(["PROCESSED", "PARTIALLY_MATCHED", "FULLY_MATCHED"]),
+        ).all()
+        statement_revenue = sum(s.total_revenue_cents or 0 for s in creator_statements)
+        total_tx_revenue = max(total_tx_revenue, statement_revenue)
+
     return {
         "transactions": transactions,
         "advances": advances,
-        "total_revenue_cents": sum(t.get("revenue_amount_cents", 0) or 0 for t in transactions),
+        "total_revenue_cents": total_tx_revenue,
     }
 
 

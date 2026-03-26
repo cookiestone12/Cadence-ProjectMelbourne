@@ -2096,6 +2096,29 @@ def get_creator_accounting(
     ).all()
     total_royalties_cents = sum(a.allocated_cents for a in allocations)
 
+    if total_royalties_cents == 0:
+        creator_statements = db.query(RoyaltyStatement).filter(
+            RoyaltyStatement.organization_id == org_id,
+            RoyaltyStatement.creator_id == creator_id,
+            RoyaltyStatement.status.in_(["PROCESSED", "PARTIALLY_MATCHED", "FULLY_MATCHED"]),
+        ).all()
+        statement_revenue_cents = sum(s.total_revenue_cents or 0 for s in creator_statements)
+
+        creator_songs = db.query(Song).filter(
+            Song.organization_id == org_id,
+            Song.creator_id == creator_id,
+        ).all()
+        creator_song_ids_set = {s.id for s in creator_songs}
+        if creator_song_ids_set:
+            from sqlalchemy import func as sa_func
+            matched_revenue = db.query(sa_func.coalesce(sa_func.sum(RoyaltyTransaction.revenue_cents), 0)).filter(
+                RoyaltyTransaction.organization_id == org_id,
+                RoyaltyTransaction.song_id.in_(creator_song_ids_set),
+            ).scalar() or 0
+            statement_revenue_cents = max(statement_revenue_cents, matched_revenue)
+
+        total_royalties_cents = statement_revenue_cents
+
     payments = db.query(Payment).filter(
         Payment.organization_id == org_id,
         Payment.payee_id == creator_id,
