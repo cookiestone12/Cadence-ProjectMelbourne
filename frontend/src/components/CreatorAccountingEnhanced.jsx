@@ -483,6 +483,8 @@ function StatementsSubTab({ orgId, creatorId }) {
   const [txLoading, setTxLoading] = useState(false)
   const [matchingSongId, setMatchingSongId] = useState({})
   const [songs, setSongs] = useState([])
+  const [songSearchTerm, setSongSearchTerm] = useState({})
+  const [songDropdownOpen, setSongDropdownOpen] = useState({})
 
   const loadStatements = useCallback(async () => {
     if (!orgId) return
@@ -709,16 +711,52 @@ function StatementsSubTab({ orgId, creatorId }) {
                       <td className="px-4 py-3">
                         {!(tx.matched_song_id || tx.match_status === 'MATCHED') && (
                           <div className="flex items-center gap-1">
-                            <select
-                              value={matchingSongId[tx.id] || ''}
-                              onChange={e => setMatchingSongId(prev => ({ ...prev, [tx.id]: e.target.value }))}
-                              className="text-xs border border-[rgba(59,77,67,0.15)] rounded-lg px-2 py-1 bg-white text-[#3D4A44] max-w-[160px]"
-                            >
-                              <option value="">Select song...</option>
-                              {songs.map(s => (
-                                <option key={s.id} value={s.id}>{s.title}</option>
-                              ))}
-                            </select>
+                            <div className="relative">
+                              <input
+                                type="text"
+                                placeholder="Search songs..."
+                                value={songSearchTerm[tx.id] ?? (matchingSongId[tx.id] ? songs.find(s => String(s.id) === String(matchingSongId[tx.id]))?.title || '' : '')}
+                                onChange={e => {
+                                  setSongSearchTerm(prev => ({ ...prev, [tx.id]: e.target.value }))
+                                  setSongDropdownOpen(prev => ({ ...prev, [tx.id]: true }))
+                                  if (!e.target.value) setMatchingSongId(prev => ({ ...prev, [tx.id]: '' }))
+                                }}
+                                onFocus={() => setSongDropdownOpen(prev => ({ ...prev, [tx.id]: true }))}
+                                onBlur={() => setTimeout(() => setSongDropdownOpen(prev => ({ ...prev, [tx.id]: false })), 200)}
+                                className="text-xs border border-[rgba(59,77,67,0.15)] rounded-lg px-2 py-1 bg-white text-[#3D4A44] w-[160px]"
+                              />
+                              {songDropdownOpen[tx.id] && (
+                                <div className="absolute z-50 mt-1 w-[220px] max-h-[200px] overflow-y-auto bg-white border border-[rgba(59,77,67,0.15)] rounded-lg shadow-lg">
+                                  {songs
+                                    .filter(s => {
+                                      const term = (songSearchTerm[tx.id] || '').toLowerCase()
+                                      return !term || s.title.toLowerCase().includes(term) || (s.primary_artist || '').toLowerCase().includes(term)
+                                    })
+                                    .map(s => (
+                                      <button
+                                        key={s.id}
+                                        type="button"
+                                        onClick={() => {
+                                          setMatchingSongId(prev => ({ ...prev, [tx.id]: String(s.id) }))
+                                          setSongSearchTerm(prev => ({ ...prev, [tx.id]: s.title }))
+                                          setSongDropdownOpen(prev => ({ ...prev, [tx.id]: false }))
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 text-xs text-[#3D4A44] hover:bg-[rgba(91,138,114,0.08)] transition-colors"
+                                      >
+                                        <div className="font-medium truncate">{s.title}</div>
+                                        {s.primary_artist && <div className="text-[10px] text-[#7A8580] truncate">{s.primary_artist}</div>}
+                                      </button>
+                                    ))
+                                  }
+                                  {songs.filter(s => {
+                                    const term = (songSearchTerm[tx.id] || '').toLowerCase()
+                                    return !term || s.title.toLowerCase().includes(term) || (s.primary_artist || '').toLowerCase().includes(term)
+                                  }).length === 0 && (
+                                    <div className="px-3 py-2 text-xs text-[#7A8580]">No songs found</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                             <button
                               onClick={() => handleManualMatch(tx.id)}
                               disabled={!matchingSongId[tx.id]}

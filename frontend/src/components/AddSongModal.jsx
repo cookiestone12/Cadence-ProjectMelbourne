@@ -151,10 +151,10 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
         const creditPayload = {
           creator_id: parseInt(formData.creator_id),
           role: formData.creator_role,
-          split_percentage: Number.isNaN(parsedSplit) ? 100 : parsedSplit
+          share_percentage: Number.isNaN(parsedSplit) ? 100 : parsedSplit
         }
         
-        await axios.post(`/api/credits/${songResponse.data.id}`, creditPayload, {
+        await axios.post(`/api/songs/${songResponse.data.id}/credits`, creditPayload, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       }
