@@ -71,8 +71,9 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#FAFBF9] overflow-x-hidden">
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#FAFBF9]/80 backdrop-blur-xl border-b border-[rgba(59,77,67,0.06)]">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center">
-            <img src="/cadence-logo.png" alt="Cadence" className="h-9 w-auto" />
+          <div className="flex items-center gap-2.5">
+            <img src="/cadence-icon-new.png" alt="Cadence" className="h-8 w-auto" />
+            <span className="text-[17px] font-semibold text-[#3D4A44] tracking-tight">cadence</span>
           </div>
           <button
             onClick={() => navigate('/login')}
@@ -328,7 +329,7 @@ export default function LandingPage() {
       <footer className="border-t border-[rgba(59,77,67,0.06)] py-8 px-6">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src="/cadence-icon-transparent.png" alt="Cadence" className="h-5 w-auto opacity-50" />
+            <img src="/cadence-icon-new.png" alt="Cadence" className="h-5 w-auto opacity-50" />
             <span className="text-[13px] text-[#B0B8B3]">Cadence Catalog Intelligence</span>
           </div>
           <p className="text-[12px] text-[#B0B8B3]">&copy; {new Date().getFullYear()} Cadence CI. All rights reserved.</p>
