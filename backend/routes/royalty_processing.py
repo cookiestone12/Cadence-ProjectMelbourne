@@ -217,7 +217,10 @@ def list_statement_lines(
         RoyaltyStatementLine.statement_id == statement_id,
     )
     if match_status:
-        query = query.filter(RoyaltyStatementLine.match_status == match_status)
+        if match_status == "MATCHED":
+            query = query.filter(RoyaltyStatementLine.match_status.in_(["MATCHED", "AUTO_MATCHED"]))
+        else:
+            query = query.filter(RoyaltyStatementLine.match_status == match_status)
     if search:
         search_term = f"%{search}%"
         query = query.filter(
@@ -305,7 +308,12 @@ def get_statement_line_stats(
         total_lines = 0
         for status, count, amount_cents in status_counts:
             amount_dollars = float(amount_cents) / 100.0
-            counts[status or "UNMATCHED"] = {"count": count, "total_amount": amount_dollars}
+            display_status = "MATCHED" if status == "AUTO_MATCHED" else (status or "UNMATCHED")
+            if display_status in counts:
+                counts[display_status]["count"] += count
+                counts[display_status]["total_amount"] += amount_dollars
+            else:
+                counts[display_status] = {"count": count, "total_amount": amount_dollars}
             total_amount += amount_dollars
             total_lines += count
 
@@ -328,7 +336,12 @@ def get_statement_line_stats(
     total_amount = 0.0
     total_lines = 0
     for status, count, amount in status_counts:
-        counts[status] = {"count": count, "total_amount": float(amount)}
+        display_status = "MATCHED" if status == "AUTO_MATCHED" else status
+        if display_status in counts:
+            counts[display_status]["count"] += count
+            counts[display_status]["total_amount"] += float(amount)
+        else:
+            counts[display_status] = {"count": count, "total_amount": float(amount)}
         total_amount += float(amount)
         total_lines += count
 
