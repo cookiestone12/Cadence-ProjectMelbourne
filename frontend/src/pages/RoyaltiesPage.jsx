@@ -299,6 +299,9 @@ function StatementsTab({ orgId, songs }) {
   const [songSearchTerm, setSongSearchTerm] = useState({})
   const [songDropdownOpen, setSongDropdownOpen] = useState({})
   const [calculating, setCalculating] = useState({})
+  const [txPage, setTxPage] = useState(0)
+  const [txTotal, setTxTotal] = useState(0)
+  const txPerPage = 50
 
   const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [bulkFiles, setBulkFiles] = useState([])
@@ -326,12 +329,15 @@ function StatementsTab({ orgId, songs }) {
 
   useEffect(() => { loadStatements() }, [loadStatements])
 
-  const loadTransactions = async (stmt) => {
+  const loadTransactions = async (stmt, page = 0) => {
     setSelectedStatement(stmt)
     setTxLoading(true)
+    setTxPage(page)
     try {
-      const res = await axios.get(`/api/royalties/statements/${orgId}/${stmt.id}/transactions`)
+      const skip = page * txPerPage
+      const res = await axios.get(`/api/royalties/statements/${orgId}/${stmt.id}/transactions?skip=${skip}&limit=${txPerPage}`)
       setTransactions(Array.isArray(res.data) ? res.data : res.data.transactions || [])
+      setTxTotal(res.data.total || 0)
     } catch (err) {
       console.error('Failed to load transactions:', err)
     } finally {
@@ -648,10 +654,36 @@ function StatementsTab({ orgId, songs }) {
                     </tr>
                   ))}
                   {transactions.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-[#7A8580]">No transactions found.</td></tr>
+                    <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#7A8580]">No transactions found.</td></tr>
                   )}
                 </tbody>
               </table>
+              {txTotal > txPerPage && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-[rgba(59,77,67,0.08)]">
+                  <span className="text-sm text-[#7A8580]">
+                    Showing {txPage * txPerPage + 1}–{Math.min((txPage + 1) * txPerPage, txTotal)} of {txTotal}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => loadTransactions(selectedStatement, txPage - 1)}
+                      disabled={txPage === 0}
+                      className="px-3 py-1.5 text-sm font-medium text-[#3D4A44] bg-white border border-[rgba(59,77,67,0.15)] rounded-lg hover:bg-[rgba(91,138,114,0.06)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-sm text-[#7A8580]">
+                      Page {txPage + 1} of {Math.ceil(txTotal / txPerPage)}
+                    </span>
+                    <button
+                      onClick={() => loadTransactions(selectedStatement, txPage + 1)}
+                      disabled={(txPage + 1) * txPerPage >= txTotal}
+                      className="px-3 py-1.5 text-sm font-medium text-[#3D4A44] bg-white border border-[rgba(59,77,67,0.15)] rounded-lg hover:bg-[rgba(91,138,114,0.06)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
