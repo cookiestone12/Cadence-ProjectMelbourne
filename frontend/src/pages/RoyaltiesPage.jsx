@@ -230,7 +230,10 @@ function DashboardTab({ orgId }) {
                 {topTracks.slice(0, 10).map((track, i) => (
                   <tr key={i} className="hover:bg-[rgba(91,138,114,0.04)]">
                     <td className="px-6 py-3 text-sm text-[#7A8580]">{i + 1}</td>
-                    <td className="px-6 py-3 text-sm font-medium text-[#3D4A44]">{track.title}</td>
+                    <td className="px-6 py-3 text-sm font-medium text-[#3D4A44]">
+                      {track.title}
+                      {track.unmatched && <span className="ml-2 px-1.5 py-0.5 text-[10px] font-medium bg-[#F5E6D3] text-[#C4956B] rounded">Unmatched</span>}
+                    </td>
                     <td className="px-6 py-3 text-sm text-[#7A8580]">{track.artist}</td>
                     <td className="px-6 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatCents(track.total_revenue_cents)}</td>
                     <td className="px-6 py-3 text-sm text-right text-[#7A8580]">{(track.total_quantity || 0).toLocaleString()}</td>
@@ -1115,6 +1118,14 @@ function EarningsTab({ orgId }) {
   const [view, setView] = useState('holder')
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
+  const [summary, setSummary] = useState(null)
+
+  useEffect(() => {
+    if (!orgId) return
+    axios.get(`/api/royalties/dashboard/${orgId}`).then(res => {
+      setSummary(res.data)
+    }).catch(() => {})
+  }, [orgId])
 
   const loadData = useCallback(async () => {
     if (!orgId) return
@@ -1145,6 +1156,23 @@ function EarningsTab({ orgId }) {
 
   return (
     <div className="space-y-4">
+      {summary && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(91,138,114,0.15)]">
+            <span className="text-sm font-medium text-[#7A8580]">Total Statement Revenue</span>
+            <p className="text-2xl font-bold text-[#5B8A72] mt-1">{formatCents(summary.total_revenue_cents)}</p>
+          </div>
+          <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(59,77,67,0.08)]">
+            <span className="text-sm font-medium text-[#7A8580]">Allocated to Rights Holders</span>
+            <p className="text-2xl font-bold text-[#3D4A44] mt-1">{formatCents(summary.total_allocated_cents)}</p>
+          </div>
+          <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(59,77,67,0.08)]">
+            <span className="text-sm font-medium text-[#7A8580]">Unallocated</span>
+            <p className="text-2xl font-bold text-[#C4956B] mt-1">{formatCents(summary.total_unallocated_cents)}</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-2 flex-wrap">
         {viewButtons.map(btn => (
           <button
@@ -1184,7 +1212,11 @@ function EarningsTab({ orgId }) {
                     </tr>
                   ))}
                   {data.length === 0 && (
-                    <tr><td colSpan={4} className="px-6 py-12 text-center text-sm text-[#7A8580]">No earnings data available.</td></tr>
+                    <tr><td colSpan={4} className="px-6 py-12 text-center text-sm text-[#7A8580]">
+                      {summary && summary.total_revenue_cents > 0
+                        ? 'No allocations yet. Run "Calculate Royalties" on a statement to allocate earnings to rights holders.'
+                        : 'No earnings data available.'}
+                    </td></tr>
                   )}
                 </tbody>
               </table>

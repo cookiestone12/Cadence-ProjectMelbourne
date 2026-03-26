@@ -1288,7 +1288,7 @@ def royalties_dashboard(
 
     total_unallocated = total_revenue - total_allocated
 
-    top_tracks = db.query(
+    matched_tracks = db.query(
         Song.id, Song.title, Song.primary_artist,
         func.sum(RoyaltyTransaction.revenue_cents).label("total_cents"),
     ).join(
@@ -1298,6 +1298,41 @@ def royalties_dashboard(
     ).group_by(Song.id, Song.title, Song.primary_artist).order_by(
         desc("total_cents")
     ).limit(10).all()
+
+    unmatched_tracks = db.query(
+        RoyaltyTransaction.original_track_title,
+        RoyaltyTransaction.original_artist,
+        func.sum(RoyaltyTransaction.revenue_cents).label("total_cents"),
+    ).filter(
+        RoyaltyTransaction.organization_id == org_id,
+        RoyaltyTransaction.song_id.is_(None),
+        RoyaltyTransaction.original_track_title.isnot(None),
+    ).group_by(
+        RoyaltyTransaction.original_track_title,
+        RoyaltyTransaction.original_artist,
+    ).order_by(desc("total_cents")).limit(10).all()
+
+    all_tracks = []
+    for t in matched_tracks:
+        all_tracks.append({
+            "song_id": t.id,
+            "title": t.title,
+            "artist": t.primary_artist,
+            "total_revenue_cents": t.total_cents,
+            "total_revenue_dollars": t.total_cents / 100.0,
+        })
+    for t in unmatched_tracks:
+        if t.total_cents and t.total_cents > 0:
+            all_tracks.append({
+                "song_id": None,
+                "title": t.original_track_title,
+                "artist": t.original_artist,
+                "total_revenue_cents": t.total_cents,
+                "total_revenue_dollars": t.total_cents / 100.0,
+                "unmatched": True,
+            })
+    all_tracks.sort(key=lambda x: x.get("total_revenue_cents", 0) or 0, reverse=True)
+    top_tracks = all_tracks[:10]
 
     revenue_by_source = db.query(
         RoyaltyStatement.source_name,
@@ -1340,16 +1375,7 @@ def royalties_dashboard(
         "total_allocated_dollars": total_allocated / 100.0,
         "total_unallocated_cents": total_unallocated,
         "total_unallocated_dollars": total_unallocated / 100.0,
-        "top_earning_tracks": [
-            {
-                "song_id": t.id,
-                "title": t.title,
-                "artist": t.primary_artist,
-                "total_revenue_cents": t.total_cents,
-                "total_revenue_dollars": t.total_cents / 100.0,
-            }
-            for t in top_tracks
-        ],
+        "top_earning_tracks": top_tracks,
         "revenue_by_source": [
             {"source": r.source_name, "total_cents": r.total_cents, "total_dollars": r.total_cents / 100.0}
             for r in revenue_by_source
