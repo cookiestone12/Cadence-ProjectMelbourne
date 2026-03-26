@@ -391,13 +391,22 @@ def run_underwriting(
             scope_creator_id=scope_creator_id,
         )
 
-        unmatched_query = db.query(RoyaltyStatementLine).filter(
-            RoyaltyStatementLine.org_id == org_id,
-            RoyaltyStatementLine.match_status.in_(["UNMATCHED", "REVIEW_REQUIRED"]),
-        )
-        unmatched_lines = unmatched_query.all()
-        unmatched_total_net = sum(float(l.net_amount or 0) for l in unmatched_lines)
-        unmatched_line_count = len(unmatched_lines)
+        processed_stmt_ids = [
+            s_id for (s_id,) in db.query(RoyaltyStatement.id).filter(
+                RoyaltyStatement.organization_id == org_id,
+                RoyaltyStatement.status == "PROCESSED",
+            ).all()
+        ]
+        unmatched_total_net = 0.0
+        unmatched_line_count = 0
+        if processed_stmt_ids:
+            unmatched_lines = db.query(RoyaltyStatementLine).filter(
+                RoyaltyStatementLine.org_id == org_id,
+                RoyaltyStatementLine.statement_id.in_(processed_stmt_ids),
+                RoyaltyStatementLine.match_status.in_(["UNMATCHED", "REVIEW_REQUIRED"]),
+            ).all()
+            unmatched_total_net = sum(float(l.net_amount or 0) for l in unmatched_lines)
+            unmatched_line_count = len(unmatched_lines)
 
         periods = sorted(set(e["period"] for e in spine), key=_period_sort_key)
 
@@ -452,7 +461,9 @@ def run_underwriting(
                     publisher_annual += entry["publisher_net"] * scale
                     master_annual += entry["master_net"] * scale
 
-        total_rev = publisher_annual + master_annual
+        total_annual += unmatched_total_net
+
+        total_rev = publisher_annual + master_annual + unmatched_total_net
         pub_share = publisher_annual / total_rev if total_rev > 0 else 0.5
         master_share = master_annual / total_rev if total_rev > 0 else 0.5
 
@@ -530,7 +541,6 @@ def run_underwriting(
                 "total_net": round(unmatched_total_net, 2),
                 "line_count": unmatched_line_count,
             },
-            "total_revenue_incl_unmatched": round(total_annual + unmatched_total_net, 2),
         }
 
         spine_for_storage = spine[:500]
