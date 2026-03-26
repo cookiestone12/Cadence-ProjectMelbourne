@@ -1298,13 +1298,18 @@ def list_allocations(
 @router.get("/dashboard/{org_id}")
 def royalties_dashboard(
     org_id: int,
+    creator_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
 
+    stmt_filter = [RoyaltyStatement.organization_id == org_id]
+    if creator_id:
+        stmt_filter.append(RoyaltyStatement.creator_id == creator_id)
+
     total_revenue = db.query(func.coalesce(func.sum(RoyaltyStatement.total_revenue_cents), 0)).filter(
-        RoyaltyStatement.organization_id == org_id
+        *stmt_filter
     ).scalar()
 
     total_allocated = db.query(func.coalesce(func.sum(RoyaltyAllocation.allocated_cents), 0)).filter(
@@ -1363,7 +1368,7 @@ def royalties_dashboard(
         RoyaltyStatement.source_name,
         func.sum(RoyaltyStatement.total_revenue_cents).label("total_cents"),
     ).filter(
-        RoyaltyStatement.organization_id == org_id
+        *stmt_filter
     ).group_by(RoyaltyStatement.source_name).all()
 
     revenue_by_period = db.query(
@@ -1372,7 +1377,7 @@ def royalties_dashboard(
         RoyaltyStatement.source_name,
         RoyaltyStatement.total_revenue_cents,
     ).filter(
-        RoyaltyStatement.organization_id == org_id
+        *stmt_filter
     ).order_by(RoyaltyStatement.period_start).all()
 
     recent_stmts = db.query(
@@ -1385,13 +1390,13 @@ def royalties_dashboard(
         RoyaltyStatement.status,
         RoyaltyStatement.created_at,
     ).filter(
-        RoyaltyStatement.organization_id == org_id
+        *stmt_filter
     ).order_by(RoyaltyStatement.created_at.desc()).limit(20).all()
 
-    contracts_with_advances = db.query(Contract).filter(
-        Contract.organization_id == org_id,
-        Contract.advance_amount > 0,
-    ).all()
+    contract_filter = [Contract.organization_id == org_id, Contract.advance_amount > 0]
+    if creator_id:
+        contract_filter.append(Contract.creator_id == creator_id)
+    contracts_with_advances = db.query(Contract).filter(*contract_filter).all()
 
     recoupment_status = []
     for c in contracts_with_advances:

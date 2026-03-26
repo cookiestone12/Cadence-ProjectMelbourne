@@ -117,7 +117,7 @@ const StatusBadge = ({ status, colorMap }) => {
   )
 }
 
-function DashboardTab({ orgId }) {
+function DashboardTab({ orgId, creatorId }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [expenseSummary, setExpenseSummary] = useState(null)
@@ -125,7 +125,8 @@ function DashboardTab({ orgId }) {
   useEffect(() => {
     if (!orgId) return
     setLoading(true)
-    axios.get(`/api/royalties/dashboard/${orgId}`)
+    const url = creatorId ? `/api/royalties/dashboard/${orgId}?creator_id=${creatorId}` : `/api/royalties/dashboard/${orgId}`
+    axios.get(url)
       .then(res => setData(res.data))
       .catch(err => console.error('Dashboard load error:', err))
       .finally(() => setLoading(false))
@@ -2709,7 +2710,7 @@ export default function RoyaltiesPage() {
           })}
         </div>
 
-        {activeTab === 'dashboard' && <DashboardTab orgId={orgId} />}
+        {activeTab === 'dashboard' && <DashboardTab orgId={orgId} creatorId={selectedCreatorId} />}
         {activeTab === 'processing' && <ProcessingTab orgId={orgId} creators={creators} selectedCreatorId={selectedCreatorId} />}
         {activeTab === 'statements' && <StatementsTab orgId={orgId} songs={songs} />}
         {activeTab === 'earnings' && <EarningsTab orgId={orgId} />}
