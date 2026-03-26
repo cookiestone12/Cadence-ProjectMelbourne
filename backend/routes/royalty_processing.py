@@ -1290,6 +1290,9 @@ async def upload_and_parse_statement(
 
         statement.matched_transactions = matched + review
         statement.unmatched_transactions = unmatched
+    else:
+        statement.matched_transactions = 0
+        statement.unmatched_transactions = line_count
 
     try:
         generate_statement_action_items(db, statement.id, org_id)
