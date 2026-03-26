@@ -372,7 +372,8 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
   const statusColors = STATEMENT_STATUS_COLORS[statement.status] || { bg: 'bg-gray-100', text: 'text-gray-700' }
   const totalLines = stats?.total_lines || 0
   const matchedCount = (stats?.by_status?.MATCHED?.count || 0) + (stats?.by_status?.CONFIRMED?.count || 0) + (stats?.by_status?.AUTO_MATCHED?.count || 0)
-  const unmatchedCount = totalLines - matchedCount
+  const ignoredCount = stats?.by_status?.IGNORED?.count || 0
+  const unmatchedCount = totalLines - matchedCount - ignoredCount
   const matchPct = totalLines > 0 ? (matchedCount / totalLines) * 100 : 0
 
   return (

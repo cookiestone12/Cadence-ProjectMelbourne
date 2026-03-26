@@ -400,7 +400,7 @@ def run_underwriting(
         unmatched_total_net = 0.0
         unmatched_line_count = 0
         unmatched_by_period = defaultdict(float)
-        if processed_stmt_ids:
+        if processed_stmt_ids and not scope_creator_id:
             unmatched_lines = db.query(RoyaltyStatementLine).filter(
                 RoyaltyStatementLine.org_id == org_id,
                 RoyaltyStatementLine.statement_id.in_(processed_stmt_ids),
