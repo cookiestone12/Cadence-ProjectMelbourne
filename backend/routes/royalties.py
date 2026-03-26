@@ -1350,6 +1350,19 @@ def royalties_dashboard(
         RoyaltyStatement.organization_id == org_id
     ).order_by(RoyaltyStatement.period_start).all()
 
+    recent_stmts = db.query(
+        RoyaltyStatement.id,
+        RoyaltyStatement.source_name,
+        RoyaltyStatement.period_start,
+        RoyaltyStatement.period_end,
+        RoyaltyStatement.currency,
+        RoyaltyStatement.total_revenue_cents,
+        RoyaltyStatement.status,
+        RoyaltyStatement.created_at,
+    ).filter(
+        RoyaltyStatement.organization_id == org_id
+    ).order_by(RoyaltyStatement.created_at.desc()).limit(20).all()
+
     contracts_with_advances = db.query(Contract).filter(
         Contract.organization_id == org_id,
         Contract.advance_amount > 0,
@@ -1391,6 +1404,19 @@ def royalties_dashboard(
             for r in revenue_by_period
         ],
         "recoupment_status": recoupment_status,
+        "recent_statements": [
+            {
+                "id": s.id,
+                "source": s.source_name,
+                "period_start": s.period_start.isoformat() if s.period_start else None,
+                "period_end": s.period_end.isoformat() if s.period_end else None,
+                "currency": s.currency or "USD",
+                "total_cents": s.total_revenue_cents,
+                "total_dollars": (s.total_revenue_cents or 0) / 100.0,
+                "status": s.status,
+            }
+            for s in recent_stmts
+        ],
     }
 
 

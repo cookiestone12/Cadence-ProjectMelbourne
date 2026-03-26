@@ -1115,20 +1115,23 @@ function StatementsTab({ orgId, songs }) {
 }
 
 function EarningsTab({ orgId }) {
-  const [view, setView] = useState('holder')
+  const [view, setView] = useState('overview')
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState(null)
+  const [statements, setStatements] = useState([])
 
   useEffect(() => {
     if (!orgId) return
     axios.get(`/api/royalties/dashboard/${orgId}`).then(res => {
       setSummary(res.data)
+      setStatements(res.data.recent_statements || [])
     }).catch(() => {})
   }, [orgId])
 
   const loadData = useCallback(async () => {
     if (!orgId) return
+    if (view === 'overview') { setLoading(false); return }
     setLoading(true)
     const endpoints = {
       holder: `/api/royalties/earnings/${orgId}/by-holder`,
@@ -1149,29 +1152,33 @@ function EarningsTab({ orgId }) {
   useEffect(() => { loadData() }, [loadData])
 
   const viewButtons = [
+    { key: 'overview', label: 'Overview', icon: CurrencyDollarIcon },
+    { key: 'track', label: 'By Track', icon: MusicalNoteIcon },
     { key: 'holder', label: 'By Rights Holder', icon: UserGroupIcon },
     { key: 'contract', label: 'By Contract', icon: DocumentDuplicateIcon },
-    { key: 'track', label: 'By Track', icon: MusicalNoteIcon },
   ]
+
+  const totalEarnings = summary?.total_revenue_cents || 0
+  const stmtCount = statements.length || (summary?.revenue_by_source?.length || 0)
 
   return (
     <div className="space-y-4">
-      {summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(91,138,114,0.15)]">
-            <span className="text-sm font-medium text-[#7A8580]">Total Statement Revenue</span>
-            <p className="text-2xl font-bold text-[#5B8A72] mt-1">{formatCents(summary.total_revenue_cents)}</p>
-          </div>
-          <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(59,77,67,0.08)]">
-            <span className="text-sm font-medium text-[#7A8580]">Allocated to Rights Holders</span>
-            <p className="text-2xl font-bold text-[#3D4A44] mt-1">{formatCents(summary.total_allocated_cents)}</p>
-          </div>
-          <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(59,77,67,0.08)]">
-            <span className="text-sm font-medium text-[#7A8580]">Unallocated</span>
-            <p className="text-2xl font-bold text-[#C4956B] mt-1">{formatCents(summary.total_unallocated_cents)}</p>
-          </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(91,138,114,0.15)]">
+          <span className="text-sm font-medium text-[#7A8580]">Total Earnings</span>
+          <p className="text-2xl font-bold text-[#5B8A72] mt-1">{formatCents(totalEarnings)}</p>
         </div>
-      )}
+        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(59,77,67,0.08)]">
+          <span className="text-sm font-medium text-[#7A8580]">Statements Processed</span>
+          <p className="text-2xl font-bold text-[#3D4A44] mt-1">{stmtCount}</p>
+        </div>
+        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-5 border border-[rgba(59,77,67,0.08)]">
+          <span className="text-sm font-medium text-[#7A8580]">Sources</span>
+          <p className="text-2xl font-bold text-[#3D4A44] mt-1">
+            {(summary?.revenue_by_source || []).map(s => s.source).filter(Boolean).join(', ') || '—'}
+          </p>
+        </div>
+      </div>
 
       <div className="flex items-center gap-2 flex-wrap">
         {viewButtons.map(btn => (
@@ -1189,7 +1196,76 @@ function EarningsTab({ orgId }) {
         ))}
       </div>
 
-      {loading ? <LoadingSpinner message="Loading earnings..." /> : (
+      {view === 'overview' && (
+        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)]">
+          <div className="p-6 border-b border-[rgba(59,77,67,0.08)]">
+            <h3 className="text-lg font-semibold text-[#3D4A44]">Earnings by Source</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-[#EEF1EC]">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Source</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Revenue</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                {(summary?.revenue_by_source || []).map((src, i) => (
+                  <tr key={i} className="hover:bg-[rgba(91,138,114,0.04)]">
+                    <td className="px-6 py-4 text-sm font-medium text-[#3D4A44]">{src.source || 'Unknown'}</td>
+                    <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(src.total_cents)}</td>
+                  </tr>
+                ))}
+                {(summary?.revenue_by_source || []).length === 0 && (
+                  <tr><td colSpan={2} className="px-6 py-12 text-center text-sm text-[#7A8580]">No earnings yet. Upload royalty statements to see your earnings.</td></tr>
+                )}
+              </tbody>
+              {(summary?.revenue_by_source || []).length > 0 && (
+                <tfoot className="bg-[rgba(91,138,114,0.04)]">
+                  <tr>
+                    <td className="px-6 py-4 text-sm font-bold text-[#3D4A44]">Total</td>
+                    <td className="px-6 py-4 text-sm text-right font-bold text-[#5B8A72]">{formatCents(totalEarnings)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+
+          {statements.length > 0 && (
+            <>
+              <div className="p-6 border-t border-[rgba(59,77,67,0.08)] border-b border-[rgba(59,77,67,0.08)]">
+                <h3 className="text-lg font-semibold text-[#3D4A44]">Statement History</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-[#EEF1EC]">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Source</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Period</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Currency</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Revenue</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                    {statements.map((stmt, i) => (
+                      <tr key={i} className="hover:bg-[rgba(91,138,114,0.04)]">
+                        <td className="px-6 py-4 text-sm font-medium text-[#3D4A44]">{stmt.source || '—'}</td>
+                        <td className="px-6 py-4 text-sm text-[#7A8580]">{stmt.period_start || '—'}</td>
+                        <td className="px-6 py-4 text-sm text-[#7A8580]">{stmt.currency || 'USD'}</td>
+                        <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(stmt.total_cents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {view !== 'overview' && loading && <LoadingSpinner message="Loading earnings..." />}
+
+      {view !== 'overview' && !loading && (
         <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)]">
           <div className="overflow-x-auto">
             {view === 'holder' && (
@@ -1213,9 +1289,7 @@ function EarningsTab({ orgId }) {
                   ))}
                   {data.length === 0 && (
                     <tr><td colSpan={4} className="px-6 py-12 text-center text-sm text-[#7A8580]">
-                      {summary && summary.total_revenue_cents > 0
-                        ? 'No allocations yet. Run "Calculate Royalties" on a statement to allocate earnings to rights holders.'
-                        : 'No earnings data available.'}
+                      No rights holder allocations yet. Set up contracts with rights splits and run royalty calculations to see this breakdown.
                     </td></tr>
                   )}
                 </tbody>
@@ -1265,7 +1339,10 @@ function EarningsTab({ orgId }) {
                 <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
                   {data.map((row, i) => (
                     <tr key={i} className="hover:bg-[rgba(91,138,114,0.04)]">
-                      <td className="px-6 py-4 text-sm font-medium text-[#3D4A44]">{row.title || '—'}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-[#3D4A44]">
+                        {row.title || '—'}
+                        {row.unmatched && <span className="ml-2 px-1.5 py-0.5 text-[10px] font-medium bg-[#F5E6D3] text-[#C4956B] rounded">Unmatched</span>}
+                      </td>
                       <td className="px-6 py-4 text-sm text-[#7A8580]">{row.artist || '—'}</td>
                       <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(row.total_revenue_cents)}</td>
                       <td className="px-6 py-4 text-sm text-right text-[#7A8580]">{(row.total_quantity || 0).toLocaleString()}</td>
