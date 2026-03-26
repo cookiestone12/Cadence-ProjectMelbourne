@@ -171,7 +171,7 @@ export default function LandingPage() {
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[120px] h-[28px] bg-[#1a1a1a] rounded-b-[14px] z-20" />
                     <div className="rounded-[30px] overflow-hidden bg-[#FAFBF9] aspect-[9/19.5]">
                       <img
-                        src="/preview-mobile.jpg"
+                        src="/preview-mobile-analytics.jpg"
                         alt="Cadence on iPhone"
                         className="w-full h-full object-cover object-top"
                       />
@@ -188,7 +188,7 @@ export default function LandingPage() {
                     <div className="bg-[#2a2a2a] rounded-[8px] p-[3px]">
                       <div className="rounded-[6px] overflow-hidden bg-[#FAFBF9] aspect-[16/10]">
                         <img
-                          src="/preview-desktop.jpg"
+                          src="/preview-desktop-dashboard.png"
                           alt="Cadence dashboard"
                           className="w-full h-full object-cover object-top"
                         />
