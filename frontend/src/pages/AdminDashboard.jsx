@@ -315,7 +315,7 @@ export default function AdminDashboard() {
 
       <div className="mb-6 border-b border-[rgba(59,77,67,0.08)] overflow-x-auto">
         <div className="flex space-x-4 sm:space-x-8 min-w-max">
-          {['overview', 'users', 'organizations', 'merge-requests', 'api-config', 'costs', 'support'].map((tab) => (
+          {['overview', 'users', 'organizations', 'merge-requests', 'api-config', 'costs', 'support', 'leads'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1000,6 +1000,10 @@ export default function AdminDashboard() {
           onSaveNotes={handleSaveAdminNotes}
           savingNotes={savingNotes}
         />
+      )}
+
+      {activeTab === 'leads' && (
+        <LeadsTab />
       )}
 
       {showIntegrationModal && configuringIntegration && (
@@ -2177,6 +2181,112 @@ function AdminResetPasswordModal({ user, onClose, onSuccess }) {
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
+function LeadsTab() {
+  const [leads, setLeads] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all')
+
+  useEffect(() => {
+    loadLeads()
+  }, [filter])
+
+  const loadLeads = async () => {
+    setLoading(true)
+    try {
+      const params = {}
+      if (filter !== 'all') params.lead_type = filter
+      const res = await axios.get('/api/admin/leads', { params })
+      setLeads(res.data.leads || [])
+    } catch (err) {
+      console.error('Failed to load leads:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const waitlistCount = leads.filter(l => l.lead_type === 'WAITLIST').length
+  const demoCount = leads.filter(l => l.lead_type === 'DEMO_REQUEST').length
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[#3D4A44]">Waitlist & Leads</h2>
+          <p className="text-sm text-[#7A8580]">
+            {filter === 'all' ? leads.length : leads.length} total
+            {filter === 'all' && ` (${waitlistCount} waitlist, ${demoCount} demo requests)`}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {['all', 'WAITLIST', 'DEMO_REQUEST'].map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                filter === f
+                  ? 'bg-[#5B8A72] text-white'
+                  : 'bg-[#EEF1EC] text-[#7A8580] hover:text-[#3D4A44]'
+              }`}
+            >
+              {f === 'all' ? 'All' : f === 'WAITLIST' ? 'Waitlist' : 'Demo Requests'}
+            </button>
+          ))}
+          <button
+            onClick={loadLeads}
+            className="p-1.5 text-[#7A8580] hover:text-[#3D4A44] hover:bg-[#EEF1EC] rounded-lg"
+          >
+            <ArrowPathIcon className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-12 text-[#7A8580]">Loading leads...</div>
+      ) : leads.length === 0 ? (
+        <div className="text-center py-12">
+          <EnvelopeIcon className="w-12 h-12 text-[#B0B8B3] mx-auto mb-3" />
+          <p className="text-[#7A8580]">No leads yet</p>
+        </div>
+      ) : (
+        <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-x-auto">
+          <table className="w-full min-w-[600px]">
+            <thead className="bg-[#EEF1EC]">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Type</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Email</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Company</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+              {leads.map(lead => (
+                <tr key={lead.id} className="hover:bg-[#EEF1EC]">
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      lead.lead_type === 'WAITLIST'
+                        ? 'bg-[rgba(91,138,114,0.12)] text-[#5B8A72]'
+                        : 'bg-[rgba(90,138,154,0.12)] text-[#5A8A9A]'
+                    }`}>
+                      {lead.lead_type === 'WAITLIST' ? 'Waitlist' : 'Demo'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-[#3D4A44] font-medium">{lead.email}</td>
+                  <td className="px-6 py-4 text-sm text-[#7A8580]">{lead.name || '-'}</td>
+                  <td className="px-6 py-4 text-sm text-[#7A8580]">{lead.company || '-'}</td>
+                  <td className="px-6 py-4 text-sm text-[#7A8580]">
+                    {lead.created_at ? new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

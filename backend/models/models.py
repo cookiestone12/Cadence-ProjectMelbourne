@@ -2368,6 +2368,22 @@ class TicketStatus(str, enum.Enum):
     RESOLVED = "RESOLVED"
     CLOSED = "CLOSED"
 
+class LeadType(str, enum.Enum):
+    WAITLIST = "WAITLIST"
+    DEMO_REQUEST = "DEMO_REQUEST"
+
+class Lead(Base):
+    __tablename__ = "leads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=True)
+    company = Column(String, nullable=True)
+    message = Column(Text, nullable=True)
+    lead_type = Column(String, nullable=False, default="WAITLIST")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class SupportTicket(Base):
     __tablename__ = "support_tickets"
     __table_args__ = (

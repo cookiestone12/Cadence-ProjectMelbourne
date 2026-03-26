@@ -62,6 +62,7 @@ import SharedContactsPage from './pages/SharedContactsPage'
 import SharedCreditsPage from './pages/SharedCreditsPage'
 import SharedWithMePage from './pages/SharedWithMePage'
 import SupportPage from './pages/SupportPage'
+import LandingPage from './pages/LandingPage'
 import Sidebar from './components/Sidebar'
 import PullToRefresh from './components/PullToRefresh'
 import AssistantChat from './components/AssistantChat'
@@ -138,11 +139,12 @@ function App() {
     return (
       <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
+          <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
           <Route path="/guide" element={<UserGuidePage />} />
           <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
           <Route path="/shared/credits/:token" element={<SharedCreditsPage />} />
-          <Route path="*" element={<Navigate to="/login" />} />
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Router>
     )

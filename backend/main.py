@@ -286,6 +286,10 @@ app.include_router(document_sharing.router)
 app.include_router(support.router)
 app.include_router(assistant.router)
 
+from .routes import leads
+app.include_router(leads.router)
+app.include_router(leads.admin_router)
+
 uploads_dir = Path(__file__).parent / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")

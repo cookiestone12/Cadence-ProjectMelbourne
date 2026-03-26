@@ -33,6 +33,7 @@ from .models import (
     SharedItem, SharedItemType, SharedItemStatus,
     AIUsageLog,
     TicketCategory, TicketStatus, SupportTicket, SupportTicketAttachment,
+    LeadType, Lead,
 )
 
 __all__ = [
@@ -69,4 +70,5 @@ __all__ = [
     "SharedItem", "SharedItemType", "SharedItemStatus",
     "AIUsageLog",
     "TicketCategory", "TicketStatus", "SupportTicket", "SupportTicketAttachment",
+    "LeadType", "Lead",
 ]
