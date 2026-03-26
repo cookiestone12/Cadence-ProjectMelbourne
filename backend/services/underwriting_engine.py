@@ -401,11 +401,30 @@ def run_underwriting(
         unmatched_line_count = 0
         unmatched_by_period = defaultdict(float)
         if processed_stmt_ids and not scope_creator_id:
-            unmatched_lines = db.query(RoyaltyStatementLine).filter(
+            unmatched_q = db.query(RoyaltyStatementLine).filter(
                 RoyaltyStatementLine.org_id == org_id,
                 RoyaltyStatementLine.statement_id.in_(processed_stmt_ids),
                 RoyaltyStatementLine.match_status.in_(["UNMATCHED", "REVIEW_REQUIRED"]),
-            ).all()
+            )
+            if exclude_right_types:
+                for rt in exclude_right_types:
+                    unmatched_q = unmatched_q.filter(RoyaltyStatementLine.canonical_right_category != rt)
+            unmatched_lines = unmatched_q.all()
+            if exclude_flags:
+                filtered = []
+                for ul in unmatched_lines:
+                    if ul.accounting_flags:
+                        flags = ul.accounting_flags
+                        if isinstance(flags, dict):
+                            active = [k.replace("is_", "") for k, v in flags.items() if v]
+                        elif isinstance(flags, list):
+                            active = flags
+                        else:
+                            active = []
+                        if any(f in exclude_flags for f in active):
+                            continue
+                    filtered.append(ul)
+                unmatched_lines = filtered
             unmatched_total_net = sum(float(l.net_amount or 0) for l in unmatched_lines)
             unmatched_line_count = len(unmatched_lines)
             for ul in unmatched_lines:
