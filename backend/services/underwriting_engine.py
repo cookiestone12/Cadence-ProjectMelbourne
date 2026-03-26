@@ -47,7 +47,7 @@ def build_song_period_spine(
 ) -> list[dict]:
     query = db.query(RoyaltyStatementLine).filter(
         RoyaltyStatementLine.org_id == org_id,
-        RoyaltyStatementLine.match_status == "MATCHED",
+        RoyaltyStatementLine.match_status.in_(["MATCHED", "CONFIRMED", "AUTO_MATCHED", "UNMATCHED", "REVIEW_REQUIRED"]),
     )
 
     if exclude_right_types:

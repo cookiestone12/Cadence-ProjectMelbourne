@@ -116,6 +116,7 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
 
   const [bulkThreshold, setBulkThreshold] = useState(85)
   const [bulkConfirming, setBulkConfirming] = useState(false)
+  const [autoMatching, setAutoMatching] = useState(false)
 
   const loadStatement = useCallback(async () => {
     if (!orgId || !statementId) return
@@ -317,6 +318,26 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
     }
   }
 
+  const handleAutoMatch = async () => {
+    setAutoMatching(true)
+    try {
+      const res = await axios.post(`/api/royalty-processing/${orgId}/statements/${statementId}/auto-match`)
+      loadStatement()
+      if (activeTab === 'matching') {
+        loadMatchQueue()
+      }
+      if (activeTab === 'lines') {
+        loadLines()
+      }
+      alert(`Auto-match complete. ${res.data.stats?.auto_matched || 0} lines matched.`)
+    } catch (err) {
+      console.error('Auto-match failed:', err)
+      alert(err.response?.data?.detail || 'Auto-match failed.')
+    } finally {
+      setAutoMatching(false)
+    }
+  }
+
   const handleExport = (type) => {
     window.open(`/api/royalty-processing/${orgId}/statements/${statementId}/export/${type}`, '_blank')
   }
@@ -350,7 +371,8 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
 
   const statusColors = STATEMENT_STATUS_COLORS[statement.status] || { bg: 'bg-gray-100', text: 'text-gray-700' }
   const totalLines = stats?.total_lines || 0
-  const matchedCount = (stats?.by_status?.MATCHED?.count || 0) + (stats?.by_status?.CONFIRMED?.count || 0)
+  const matchedCount = (stats?.by_status?.MATCHED?.count || 0) + (stats?.by_status?.CONFIRMED?.count || 0) + (stats?.by_status?.AUTO_MATCHED?.count || 0)
+  const unmatchedCount = totalLines - matchedCount
   const matchPct = totalLines > 0 ? (matchedCount / totalLines) * 100 : 0
 
   return (
@@ -371,6 +393,15 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors.bg} ${statusColors.text}`}>
               {statement.status}
             </span>
+            {statement.status !== 'PROCESSED' && (
+              <button
+                onClick={handleAutoMatch}
+                disabled={autoMatching}
+                className="flex items-center gap-2 px-4 py-2 border border-[#5B8A72] text-[#5B8A72] rounded-xl hover:bg-[rgba(91,138,114,0.06)] transition-all text-sm font-medium disabled:opacity-50"
+              >
+                <LinkIcon className="w-4 h-4" /> {autoMatching ? 'Matching...' : 'Run Auto-Match'}
+              </button>
+            )}
             <button
               onClick={() => setShowProcessModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium"
@@ -454,7 +485,7 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
             </div>
             <div className="p-6 space-y-4">
               <p className="text-sm text-[#7A8580]">
-                This will allocate earnings from matched lines to payees based on contract splits, apply recoupments, and create ledger entries.
+                This will create ledger entries for all statement lines. Matched lines are allocated to payees based on contract splits with recoupment applied. Unmatched lines are booked as unallocated org revenue.
               </p>
               <div className="bg-[rgba(91,138,114,0.06)] rounded-xl p-4">
                 <div className="flex justify-between text-sm mb-2">
@@ -463,13 +494,24 @@ export default function StatementDetailView({ orgId, statementId, onBack }) {
                 </div>
                 <div className="flex justify-between text-sm mb-2">
                   <span className="text-[#7A8580]">Matched</span>
-                  <span className="font-medium text-[#3D4A44]">{matchedCount}</span>
+                  <span className="font-medium text-[#5B8A72]">{matchedCount}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-[#7A8580]">Unmatched</span>
+                  <span className="font-medium text-[#B87333]">{unmatchedCount}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-[#7A8580]">Match Rate</span>
                   <span className="font-medium text-[#3D4A44]">{matchPct.toFixed(1)}%</span>
                 </div>
               </div>
+              {unmatchedCount > 0 && (
+                <div className="bg-[rgba(184,115,51,0.06)] rounded-xl p-3">
+                  <p className="text-xs text-[#B87333]">
+                    {unmatchedCount} unmatched line{unmatchedCount !== 1 ? 's' : ''} will be booked as unallocated revenue. You can run auto-match afterwards and reprocess to allocate them.
+                  </p>
+                </div>
+              )}
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={() => setShowProcessModal(false)} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
                 <button

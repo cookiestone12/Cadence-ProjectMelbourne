@@ -266,8 +266,33 @@ def trigger_auto_match(
         raise HTTPException(status_code=404, detail="Statement not found")
 
     stats = auto_match_lines(db, statement_id, org_id)
+
+    status_counts = dict(
+        db.query(RoyaltyStatementLine.match_status, func.count(RoyaltyStatementLine.id))
+        .filter(
+            RoyaltyStatementLine.org_id == org_id,
+            RoyaltyStatementLine.statement_id == statement_id,
+        )
+        .group_by(RoyaltyStatementLine.match_status)
+        .all()
+    )
+
+    total_matched = sum(status_counts.get(s, 0) for s in ("MATCHED", "CONFIRMED", "AUTO_MATCHED"))
+    total_review = status_counts.get("REVIEW_REQUIRED", 0)
+    total_unmatched = status_counts.get("UNMATCHED", 0)
+
+    if total_unmatched == 0 and total_review == 0:
+        stmt.status = "FULLY_MATCHED"
+    elif total_unmatched == 0:
+        stmt.status = "REVIEW_REQUIRED"
+    else:
+        stmt.status = "PARTIALLY_MATCHED"
+
+    stmt.matched_transactions = total_matched + total_review
+    stmt.unmatched_transactions = total_unmatched
+
     db.commit()
-    return {"success": True, "stats": stats}
+    return {"success": True, "stats": stats, "status": stmt.status}
 
 
 @router.post("/{org_id}/lines/{line_id}/confirm-match")
@@ -1185,6 +1210,7 @@ async def upload_and_parse_statement(
     currency: str = Form("USD"),
     column_mapping: Optional[str] = Form(None),
     creator_id: Optional[int] = Form(None),
+    auto_match: Optional[str] = Form("true"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1244,21 +1270,25 @@ async def upload_and_parse_statement(
     statement.status = "UPLOADED"
     db.flush()
 
-    match_stats = auto_match_lines(db, statement.id, org_id)
+    should_auto_match = auto_match.lower() in ("true", "1", "yes")
+    match_stats = {}
 
-    matched = match_stats.get("auto_matched", 0)
-    review = match_stats.get("review_required", 0)
-    unmatched = match_stats.get("unmatched", 0)
+    if should_auto_match:
+        match_stats = auto_match_lines(db, statement.id, org_id)
 
-    if unmatched == 0 and review == 0:
-        statement.status = "FULLY_MATCHED"
-    elif unmatched == 0:
-        statement.status = "REVIEW_REQUIRED"
-    else:
-        statement.status = "PARTIALLY_MATCHED"
+        matched = match_stats.get("auto_matched", 0)
+        review = match_stats.get("review_required", 0)
+        unmatched = match_stats.get("unmatched", 0)
 
-    statement.matched_transactions = matched + review
-    statement.unmatched_transactions = unmatched
+        if unmatched == 0 and review == 0:
+            statement.status = "FULLY_MATCHED"
+        elif unmatched == 0:
+            statement.status = "REVIEW_REQUIRED"
+        else:
+            statement.status = "PARTIALLY_MATCHED"
+
+        statement.matched_transactions = matched + review
+        statement.unmatched_transactions = unmatched
 
     try:
         generate_statement_action_items(db, statement.id, org_id)

@@ -566,7 +566,7 @@ def process_statement(db: Session, statement_id: int, org_id: int, user_id: int)
         lines = db.query(RoyaltyStatementLine).filter(
             RoyaltyStatementLine.org_id == org_id,
             RoyaltyStatementLine.statement_id == statement_id,
-            RoyaltyStatementLine.match_status.in_(["CONFIRMED", "AUTO_MATCHED"]),
+            RoyaltyStatementLine.match_status != "IGNORED",
         ).all()
 
         summary = {
@@ -578,6 +578,8 @@ def process_statement(db: Session, statement_id: int, org_id: int, user_id: int)
             "total_recouped_cents": 0,
             "total_payable_cents": 0,
             "lines_without_splits": 0,
+            "lines_matched_processed": 0,
+            "lines_unmatched_processed": 0,
         }
 
         for line in lines:
@@ -587,9 +589,33 @@ def process_statement(db: Session, statement_id: int, org_id: int, user_id: int)
             release_id = line.matched_release_id
             net_cents = int(round((line.net_amount_statement_currency or 0) * 100))
 
-            if not song_id:
+            is_matched = line.match_status in ("MATCHED", "CONFIRMED", "AUTO_MATCHED") and song_id
+
+            if not is_matched:
+                summary["lines_unmatched_processed"] += 1
+                unmatched_payee = _get_or_create_org_payee(db, org_id)
+                entry = RoyaltyLedgerEntry(
+                    org_id=org_id,
+                    statement_id=statement_id,
+                    statement_line_id=line.id,
+                    processing_run_id=processing_run.id,
+                    song_id=None,
+                    work_id=None,
+                    release_id=None,
+                    payee_id=unmatched_payee.id,
+                    entry_type="EARNING",
+                    amount_cents=net_cents,
+                    revenue_type=line.revenue_type,
+                    source=line.store,
+                    memo="Unmatched statement line",
+                    created_by_user_id=user_id,
+                )
+                db.add(entry)
+                summary["total_earning_entries"] += 1
+                summary["total_earnings_cents"] += net_cents
                 continue
 
+            summary["lines_matched_processed"] += 1
             splits = _find_splits_for_song(db, org_id, song_id)
 
             if not splits:
