@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
 
 function useInView(ref, threshold = 0.15) {
   const [inView, setInView] = useState(false)
@@ -26,7 +27,12 @@ function FadeIn({ children, className = '', delay = 0 }) {
   )
 }
 
-const APPLICATION_URL = 'https://forms.gle/cadence-internship-2026'
+const ROLE_OPTIONS = [
+  'Software Engineering Intern',
+  'Product / UX Design Intern',
+  'Marketing & Content Intern',
+  'Business Development & Sales Intern',
+]
 
 const roles = [
   {
@@ -122,6 +128,34 @@ const roles = [
 export default function CareersPage() {
   const navigate = useNavigate()
   const [expandedRole, setExpandedRole] = useState(null)
+  const [showApplyModal, setShowApplyModal] = useState(false)
+  const [appForm, setAppForm] = useState({ name: '', email: '', role: '', location: '', linkedin: '', portfolio: '', experience: '', why_cadence: '' })
+  const [appStatus, setAppStatus] = useState(null)
+  const [appStatusType, setAppStatusType] = useState(null)
+  const [appLoading, setAppLoading] = useState(false)
+
+  const openApplyModal = (role = '') => {
+    setAppForm({ name: '', email: '', role: role, location: '', linkedin: '', portfolio: '', experience: '', why_cadence: '' })
+    setAppStatus(null)
+    setAppStatusType(null)
+    setShowApplyModal(true)
+  }
+
+  const handleApply = async (e) => {
+    e.preventDefault()
+    if (!appForm.name.trim() || !appForm.email.trim() || !appForm.role) return
+    setAppLoading(true)
+    try {
+      const res = await axios.post('/api/public/intern-application', appForm)
+      setAppStatus(res.data.message)
+      setAppStatusType('success')
+    } catch (err) {
+      setAppStatus(err.response?.data?.detail || 'Something went wrong. Please try again.')
+      setAppStatusType('error')
+    } finally {
+      setAppLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#FAFBF9] overflow-x-hidden">
@@ -175,17 +209,15 @@ export default function CareersPage() {
           </FadeIn>
 
           <FadeIn delay={300}>
-            <a
-              href={APPLICATION_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={() => openApplyModal()}
               className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-[#5B8A72] to-[#6B9A84] text-white font-semibold text-[16px] rounded-full hover:shadow-lg hover:shadow-[#5B8A72]/25 transition-all"
             >
               Apply Now
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
               </svg>
-            </a>
+            </button>
           </FadeIn>
         </div>
       </section>
@@ -361,17 +393,15 @@ export default function CareersPage() {
                         </div>
 
                         <div className="mt-5">
-                          <a
-                            href={APPLICATION_URL}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            onClick={() => openApplyModal(role.title)}
                             className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#6B9A84] text-white font-medium text-[14px] rounded-full hover:shadow-lg hover:shadow-[#5B8A72]/25 transition-all"
                           >
                             Apply for this role
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                             </svg>
-                          </a>
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -410,17 +440,15 @@ export default function CareersPage() {
             </p>
           </FadeIn>
           <FadeIn delay={150}>
-            <a
-              href={APPLICATION_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={() => openApplyModal()}
               className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-[#5B8A72] to-[#6B9A84] text-white font-semibold text-[16px] rounded-full hover:shadow-lg hover:shadow-[#5B8A72]/25 transition-all"
             >
               Start Your Application
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
               </svg>
-            </a>
+            </button>
           </FadeIn>
         </div>
       </section>
@@ -437,6 +465,141 @@ export default function CareersPage() {
           <p className="text-[12px] text-[#B0B8B3]">&copy; {new Date().getFullYear()} Cadence CI. All rights reserved.</p>
         </div>
       </footer>
+
+      {showApplyModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setShowApplyModal(false)}>
+          <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-8 animate-am-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-[20px] font-bold text-[#3D4A44]">Apply for Internship</h3>
+              <button onClick={() => setShowApplyModal(false)} className="p-1 text-[#7A8580] hover:text-[#3D4A44] transition-colors">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {appStatus && appStatusType === 'success' ? (
+              <div className="text-center py-8">
+                <div className="w-14 h-14 rounded-full bg-[#5B8A72]/10 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-7 h-7 text-[#5B8A72]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p className="text-[16px] font-medium text-[#3D4A44] mb-2">{appStatus}</p>
+                <p className="text-[14px] text-[#7A8580]">We review applications on a rolling basis and will reach out within 2 weeks if there's a fit.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleApply} className="space-y-4">
+                {appStatusType === 'error' && appStatus && (
+                  <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-[14px] text-red-600">
+                    {appStatus}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[13px] font-medium text-[#3D4A44] mb-1.5">Full Name *</label>
+                    <input
+                      type="text"
+                      value={appForm.name}
+                      onChange={(e) => setAppForm({ ...appForm, name: e.target.value })}
+                      required
+                      className="w-full px-4 py-3 bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] rounded-xl text-[15px] text-[#3D4A44] focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[#5B8A72]/20 transition-all"
+                      placeholder="Your name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[13px] font-medium text-[#3D4A44] mb-1.5">Email *</label>
+                    <input
+                      type="email"
+                      value={appForm.email}
+                      onChange={(e) => setAppForm({ ...appForm, email: e.target.value })}
+                      required
+                      className="w-full px-4 py-3 bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] rounded-xl text-[15px] text-[#3D4A44] focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[#5B8A72]/20 transition-all"
+                      placeholder="you@email.com"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[13px] font-medium text-[#3D4A44] mb-1.5">Role *</label>
+                  <select
+                    value={appForm.role}
+                    onChange={(e) => setAppForm({ ...appForm, role: e.target.value })}
+                    required
+                    className="w-full px-4 py-3 bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] rounded-xl text-[15px] text-[#3D4A44] focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[#5B8A72]/20 transition-all"
+                  >
+                    <option value="">Select a role</option>
+                    {ROLE_OPTIONS.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[13px] font-medium text-[#3D4A44] mb-1.5">Location Preference</label>
+                    <select
+                      value={appForm.location}
+                      onChange={(e) => setAppForm({ ...appForm, location: e.target.value })}
+                      className="w-full px-4 py-3 bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] rounded-xl text-[15px] text-[#3D4A44] focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[#5B8A72]/20 transition-all"
+                    >
+                      <option value="">Select preference</option>
+                      <option value="Hybrid - Atlanta, GA">Hybrid - Atlanta, GA</option>
+                      <option value="Hybrid - Los Angeles, CA">Hybrid - Los Angeles, CA</option>
+                      <option value="Remote">Remote</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[13px] font-medium text-[#3D4A44] mb-1.5">LinkedIn URL</label>
+                    <input
+                      type="url"
+                      value={appForm.linkedin}
+                      onChange={(e) => setAppForm({ ...appForm, linkedin: e.target.value })}
+                      className="w-full px-4 py-3 bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] rounded-xl text-[15px] text-[#3D4A44] focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[#5B8A72]/20 transition-all"
+                      placeholder="linkedin.com/in/..."
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[13px] font-medium text-[#3D4A44] mb-1.5">Portfolio / GitHub / Website</label>
+                  <input
+                    type="url"
+                    value={appForm.portfolio}
+                    onChange={(e) => setAppForm({ ...appForm, portfolio: e.target.value })}
+                    className="w-full px-4 py-3 bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] rounded-xl text-[15px] text-[#3D4A44] focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[#5B8A72]/20 transition-all"
+                    placeholder="Your portfolio or GitHub link"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[13px] font-medium text-[#3D4A44] mb-1.5">Relevant Experience</label>
+                  <textarea
+                    value={appForm.experience}
+                    onChange={(e) => setAppForm({ ...appForm, experience: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-3 bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] rounded-xl text-[15px] text-[#3D4A44] focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[#5B8A72]/20 transition-all resize-none"
+                    placeholder="Tell us about your relevant experience..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-[13px] font-medium text-[#3D4A44] mb-1.5">Why Cadence?</label>
+                  <textarea
+                    value={appForm.why_cadence}
+                    onChange={(e) => setAppForm({ ...appForm, why_cadence: e.target.value })}
+                    rows={3}
+                    className="w-full px-4 py-3 bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] rounded-xl text-[15px] text-[#3D4A44] focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[#5B8A72]/20 transition-all resize-none"
+                    placeholder="What excites you about working at an early-stage music tech company?"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={appLoading}
+                  className="w-full px-6 py-3.5 bg-gradient-to-r from-[#5B8A72] to-[#6B9A84] text-white font-semibold text-[15px] rounded-xl hover:shadow-lg hover:shadow-[#5B8A72]/25 transition-all disabled:opacity-60"
+                >
+                  {appLoading ? 'Submitting...' : 'Submit Application'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

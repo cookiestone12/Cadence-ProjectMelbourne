@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from html import escape as html_escape
 import logging
 import re
 
@@ -148,6 +149,13 @@ def submit_investor_inquiry(request: InvestorInquiryRequest, db: Session = Depen
     try:
         from ..services.email_provider import get_email_provider
         provider = get_email_provider()
+        safe_inv = {
+            "name": html_escape(request.name or "") or "N/A",
+            "email": html_escape(email),
+            "firm": html_escape(request.firm or "") or "N/A",
+            "focus": html_escape(request.investment_focus or "") or "N/A",
+            "message": html_escape(request.message or "") or "N/A",
+        }
         provider.send_email(
             to="communication@cadence-ci.com",
             subject=f"New Investor Inquiry: {request.name or email}",
@@ -157,11 +165,11 @@ def submit_investor_inquiry(request: InvestorInquiryRequest, db: Session = Depen
                     <h1 style="color: white; margin: 0; font-size: 24px;">New Investor Inquiry</h1>
                 </div>
                 <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 12px 12px;">
-                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Name:</strong> {request.name or 'N/A'}</p>
-                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Email:</strong> {email}</p>
-                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Firm / Fund:</strong> {request.firm or 'N/A'}</p>
-                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Investment Focus:</strong> {request.investment_focus or 'N/A'}</p>
-                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Message:</strong> {request.message or 'N/A'}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Name:</strong> {safe_inv['name']}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Email:</strong> {safe_inv['email']}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Firm / Fund:</strong> {safe_inv['firm']}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Investment Focus:</strong> {safe_inv['focus']}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Message:</strong> {safe_inv['message']}</p>
                     <p style="color: #7A8580; font-size: 14px; margin: 16px 0 0;">Submitted at {datetime.utcnow().strftime('%B %d, %Y at %I:%M %p')} UTC</p>
                 </div>
             </div>
@@ -171,6 +179,92 @@ def submit_investor_inquiry(request: InvestorInquiryRequest, db: Session = Depen
         logger.error(f"Failed to send investor inquiry notification: {e}")
 
     return {"message": "Thank you for your interest. Our team will be in touch shortly.", "status": "created"}
+
+
+class InternApplicationRequest(BaseModel):
+    name: str
+    email: str
+    role: str
+    location: Optional[str] = None
+    linkedin: Optional[str] = None
+    portfolio: Optional[str] = None
+    experience: Optional[str] = None
+    why_cadence: Optional[str] = None
+
+
+@router.post("/intern-application")
+def submit_intern_application(request: InternApplicationRequest, db: Session = Depends(get_db)):
+    email = _validate_email(request.email)
+
+    name = (request.name or "").strip()
+    role = (request.role or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required.")
+    if not role:
+        raise HTTPException(status_code=400, detail="Role is required.")
+
+    details = []
+    if request.location:
+        details.append(f"Location: {request.location.strip()}")
+    if request.linkedin:
+        details.append(f"LinkedIn: {request.linkedin.strip()}")
+    if request.portfolio:
+        details.append(f"Portfolio: {request.portfolio.strip()}")
+    if request.experience:
+        details.append(f"Experience: {request.experience.strip()}")
+    if request.why_cadence:
+        details.append(f"Why Cadence: {request.why_cadence.strip()}")
+    message_text = "\n".join(details) if details else None
+
+    lead = Lead(
+        email=email,
+        name=name,
+        company=role,
+        message=message_text,
+        lead_type="INTERN_APPLICATION",
+    )
+    db.add(lead)
+    db.commit()
+
+    try:
+        from ..services.email_provider import get_email_provider
+        provider = get_email_provider()
+        safe = {
+            "name": html_escape(name),
+            "email": html_escape(email),
+            "role": html_escape(role),
+            "location": html_escape(request.location or "") or "N/A",
+            "linkedin": html_escape(request.linkedin or "") or "N/A",
+            "portfolio": html_escape(request.portfolio or "") or "N/A",
+            "experience": html_escape(request.experience or "") or "N/A",
+            "why_cadence": html_escape(request.why_cadence or "") or "N/A",
+        }
+        provider.send_email(
+            to="communication@cadence-ci.com",
+            subject=f"New Intern Application: {name} - {role}",
+            html_body=f"""
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #5B8A72, #7BA594); padding: 30px; border-radius: 12px 12px 0 0;">
+                    <h1 style="color: white; margin: 0; font-size: 24px;">New Intern Application</h1>
+                </div>
+                <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 12px 12px;">
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Name:</strong> {safe['name']}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Email:</strong> {safe['email']}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Role:</strong> {safe['role']}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Location:</strong> {safe['location']}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>LinkedIn:</strong> {safe['linkedin']}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Portfolio:</strong> {safe['portfolio']}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Experience:</strong> {safe['experience']}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Why Cadence:</strong> {safe['why_cadence']}</p>
+                    <p style="color: #7A8580; font-size: 14px; margin: 16px 0 0;">Submitted at {datetime.utcnow().strftime('%B %d, %Y at %I:%M %p')} UTC</p>
+                </div>
+            </div>
+            """,
+        )
+    except Exception as e:
+        logger.error(f"Failed to send intern application notification: {e}")
+
+    return {"message": "Application submitted! We'll review it and reach out if there's a fit.", "status": "created"}
 
 
 @admin_router.get("/leads")

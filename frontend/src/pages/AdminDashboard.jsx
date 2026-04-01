@@ -2211,6 +2211,7 @@ function LeadsTab() {
   const waitlistCount = leads.filter(l => l.lead_type === 'WAITLIST').length
   const demoCount = leads.filter(l => l.lead_type === 'DEMO_REQUEST').length
   const investorCount = leads.filter(l => l.lead_type === 'INVESTOR_INQUIRY').length
+  const applicationCount = leads.filter(l => l.lead_type === 'INTERN_APPLICATION').length
 
   return (
     <div className="space-y-4">
@@ -2219,11 +2220,11 @@ function LeadsTab() {
           <h2 className="text-xl font-bold text-[#3D4A44]">Waitlist & Leads</h2>
           <p className="text-sm text-[#7A8580]">
             {filter === 'all' ? leads.length : leads.length} total
-            {filter === 'all' && ` (${waitlistCount} waitlist, ${demoCount} demo, ${investorCount} investor)`}
+            {filter === 'all' && ` (${waitlistCount} waitlist, ${demoCount} demo, ${investorCount} investor, ${applicationCount} applications)`}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {['all', 'WAITLIST', 'DEMO_REQUEST', 'INVESTOR_INQUIRY'].map((f) => (
+          {['all', 'WAITLIST', 'DEMO_REQUEST', 'INVESTOR_INQUIRY', 'INTERN_APPLICATION'].map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -2233,7 +2234,7 @@ function LeadsTab() {
                   : 'bg-[#EEF1EC] text-[#7A8580] hover:text-[#3D4A44]'
               }`}
             >
-              {f === 'all' ? 'All' : f === 'WAITLIST' ? 'Waitlist' : f === 'DEMO_REQUEST' ? 'Demo Requests' : 'Investors'}
+              {f === 'all' ? 'All' : f === 'WAITLIST' ? 'Waitlist' : f === 'DEMO_REQUEST' ? 'Demo Requests' : f === 'INVESTOR_INQUIRY' ? 'Investors' : 'Applications'}
             </button>
           ))}
           <button
@@ -2260,7 +2261,8 @@ function LeadsTab() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Type</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Email</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Company</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Company / Role</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Details</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-[#3D4A44] uppercase">Date</th>
               </tr>
             </thead>
@@ -2273,14 +2275,17 @@ function LeadsTab() {
                         ? 'bg-[rgba(91,138,114,0.12)] text-[#5B8A72]'
                         : lead.lead_type === 'INVESTOR_INQUIRY'
                         ? 'bg-[rgba(196,149,107,0.12)] text-[#C4956B]'
+                        : lead.lead_type === 'INTERN_APPLICATION'
+                        ? 'bg-[rgba(139,92,246,0.12)] text-[#8B5CF6]'
                         : 'bg-[rgba(90,138,154,0.12)] text-[#5A8A9A]'
                     }`}>
-                      {lead.lead_type === 'WAITLIST' ? 'Waitlist' : lead.lead_type === 'INVESTOR_INQUIRY' ? 'Investor' : 'Demo'}
+                      {lead.lead_type === 'WAITLIST' ? 'Waitlist' : lead.lead_type === 'INVESTOR_INQUIRY' ? 'Investor' : lead.lead_type === 'INTERN_APPLICATION' ? 'Application' : 'Demo'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-[#3D4A44] font-medium">{lead.email}</td>
                   <td className="px-6 py-4 text-sm text-[#7A8580]">{lead.name || '-'}</td>
                   <td className="px-6 py-4 text-sm text-[#7A8580]">{lead.company || '-'}</td>
+                  <td className="px-6 py-4 text-sm text-[#7A8580] max-w-[200px] truncate" title={lead.message || ''}>{lead.message ? lead.message.substring(0, 80) + (lead.message.length > 80 ? '...' : '') : '-'}</td>
                   <td className="px-6 py-4 text-sm text-[#7A8580]">
                     {lead.created_at ? new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
                   </td>

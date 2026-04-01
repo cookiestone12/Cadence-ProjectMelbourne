@@ -2372,6 +2372,7 @@ class LeadType(str, enum.Enum):
     WAITLIST = "WAITLIST"
     DEMO_REQUEST = "DEMO_REQUEST"
     INVESTOR_INQUIRY = "INVESTOR_INQUIRY"
+    INTERN_APPLICATION = "INTERN_APPLICATION"
 
 class Lead(Base):
     __tablename__ = "leads"
