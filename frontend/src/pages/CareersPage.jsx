@@ -42,7 +42,7 @@ const roles = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
       </svg>
     ),
-    about: 'Contribute directly to the Cadence platform \u2014 building features, fixing bugs, and helping architect systems that handle complex music rights data. You\'ll ship code to production.',
+    about: 'Contribute directly to the Cadence platform — building features, fixing bugs, and helping architect systems that handle complex music rights data. You\'ll ship code to production.',
     responsibilities: [
       'Build and ship frontend and/or backend features',
       'Collaborate on database schema design for royalty accounting',
@@ -86,7 +86,7 @@ const roles = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 001.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 010 3.46" />
       </svg>
     ),
-    about: 'Build the voice and visibility of Cadence across channels. From social media to thought leadership, email campaigns to event collateral \u2014 help position Cadence as the go-to platform for catalog intelligence.',
+    about: 'Build the voice and visibility of Cadence across channels. From social media to thought leadership, email campaigns to event collateral — help position Cadence as the go-to platform for catalog intelligence.',
     responsibilities: [
       'Develop and execute social media content calendars',
       'Write blog posts, case studies, and thought leadership pieces',
@@ -305,7 +305,7 @@ export default function CareersPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {[
-              { title: 'Real Ownership', desc: 'Work on production features, campaigns, and strategy \u2014 not busywork.' },
+              { title: 'Real Ownership', desc: 'Work on production features, campaigns, and strategy — not busywork.' },
               { title: 'Founding Team Access', desc: 'Weekly 1:1s with a founder and bi-weekly all-hands syncs.' },
               { title: 'Music Industry Network', desc: 'Access to a network spanning Grammy-winning studios and enterprise tech.' },
               { title: 'Portfolio-Ready Work', desc: 'Leave with tangible deliverables and a letter of recommendation.' },
@@ -335,7 +335,7 @@ export default function CareersPage() {
               Open Roles
             </h2>
             <p className="text-[16px] text-[#7A8580] text-center max-w-xl mx-auto mb-12">
-              We're hiring across four disciplines. No degree required \u2014 we care about what you can do.
+              We're hiring across four disciplines. No degree required — we care about what you can do.
             </p>
           </FadeIn>
 
@@ -423,7 +423,7 @@ export default function CareersPage() {
               Cadence (Catalog Intelligence) is a SaaS platform built for the modern music industry. We help rights holders, publishers, distributors, and independent artists manage their catalogs, track royalties, understand their rights, and value their assets.
             </p>
             <p className="text-[15px] text-[#7A8580] leading-relaxed max-w-2xl mx-auto">
-              Founded by a team of music industry veterans and technologists, our founding team has credits spanning Beyonc\u00e9, Ariana Grande, Usher, and Tyla, and brings 13+ years of enterprise IT infrastructure experience from organizations like Fidelity Investments.
+              Founded by a team of music industry veterans and technologists, our founding team has credits spanning Beyoncé, Ariana Grande, Usher, and Tyla, and brings 13+ years of enterprise IT infrastructure experience from one of the world's largest financial institutions.
             </p>
           </FadeIn>
         </div>
@@ -436,7 +436,7 @@ export default function CareersPage() {
               Ready to apply?
             </h2>
             <p className="text-[16px] text-[#7A8580] mb-8">
-              If you've ever wondered who wrote your favorite song \u2014 come build the platform that answers that question.
+              If you've ever wondered who wrote your favorite song — come build the platform that answers that question.
             </p>
           </FadeIn>
           <FadeIn delay={150}>
