@@ -441,7 +441,7 @@ export default function CareersPage() {
               Ready to apply?
             </h2>
             <p className="text-[16px] text-[#7A8580] mb-8">
-              If you've ever wondered who wrote your favorite song — come build the platform that answers that question.
+              The music industry still runs on spreadsheets and PDFs. We're replacing that with real intelligence.
             </p>
           </FadeIn>
           <FadeIn delay={150}>
