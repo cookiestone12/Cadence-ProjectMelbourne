@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -6,6 +7,8 @@ from datetime import datetime
 from html import escape as html_escape
 import logging
 import re
+import os
+import uuid
 
 from ..models import get_db, Lead, User
 from ..utils.auth import get_current_super_admin
@@ -181,47 +184,72 @@ def submit_investor_inquiry(request: InvestorInquiryRequest, db: Session = Depen
     return {"message": "Thank you for your interest. Our team will be in touch shortly.", "status": "created"}
 
 
-class InternApplicationRequest(BaseModel):
-    name: str
-    email: str
-    role: str
-    location: Optional[str] = None
-    linkedin: Optional[str] = None
-    portfolio: Optional[str] = None
-    experience: Optional[str] = None
-    why_cadence: Optional[str] = None
+RESUME_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads", "resumes")
+ALLOWED_RESUME_TYPES = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+MAX_RESUME_SIZE = 10 * 1024 * 1024
 
 
 @router.post("/intern-application")
-def submit_intern_application(request: InternApplicationRequest, db: Session = Depends(get_db)):
-    email = _validate_email(request.email)
+async def submit_intern_application(
+    name: str = Form(...),
+    email: str = Form(...),
+    role: str = Form(...),
+    location: Optional[str] = Form(None),
+    linkedin: Optional[str] = Form(None),
+    portfolio: Optional[str] = Form(None),
+    experience: Optional[str] = Form(None),
+    why_cadence: Optional[str] = Form(None),
+    resume: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+):
+    validated_email = _validate_email(email)
 
-    name = (request.name or "").strip()
-    role = (request.role or "").strip()
+    name = (name or "").strip()
+    role = (role or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Name is required.")
     if not role:
         raise HTTPException(status_code=400, detail="Role is required.")
 
+    resume_path = None
+    if resume and resume.filename:
+        if resume.content_type not in ALLOWED_RESUME_TYPES:
+            raise HTTPException(status_code=400, detail="Resume must be a PDF or Word document.")
+        content = await resume.read()
+        if len(content) > MAX_RESUME_SIZE:
+            raise HTTPException(status_code=400, detail="Resume file must be under 10MB.")
+        os.makedirs(RESUME_UPLOAD_DIR, exist_ok=True)
+        ext = os.path.splitext(resume.filename)[1] or ".pdf"
+        filename = f"{uuid.uuid4().hex}{ext}"
+        filepath = os.path.join(RESUME_UPLOAD_DIR, filename)
+        with open(filepath, "wb") as f:
+            f.write(content)
+        resume_path = f"uploads/resumes/{filename}"
+
     details = []
-    if request.location:
-        details.append(f"Location: {request.location.strip()}")
-    if request.linkedin:
-        details.append(f"LinkedIn: {request.linkedin.strip()}")
-    if request.portfolio:
-        details.append(f"Portfolio: {request.portfolio.strip()}")
-    if request.experience:
-        details.append(f"Experience: {request.experience.strip()}")
-    if request.why_cadence:
-        details.append(f"Why Cadence: {request.why_cadence.strip()}")
+    if location:
+        details.append(f"Location: {location.strip()}")
+    if linkedin:
+        details.append(f"LinkedIn: {linkedin.strip()}")
+    if portfolio:
+        details.append(f"Portfolio: {portfolio.strip()}")
+    if experience:
+        details.append(f"Experience: {experience.strip()}")
+    if why_cadence:
+        details.append(f"Why Cadence: {why_cadence.strip()}")
     message_text = "\n".join(details) if details else None
 
     lead = Lead(
-        email=email,
+        email=validated_email,
         name=name,
         company=role,
         message=message_text,
         lead_type="INTERN_APPLICATION",
+        resume_path=resume_path,
     )
     db.add(lead)
     db.commit()
@@ -231,14 +259,15 @@ def submit_intern_application(request: InternApplicationRequest, db: Session = D
         provider = get_email_provider()
         safe = {
             "name": html_escape(name),
-            "email": html_escape(email),
+            "email": html_escape(validated_email),
             "role": html_escape(role),
-            "location": html_escape(request.location or "") or "N/A",
-            "linkedin": html_escape(request.linkedin or "") or "N/A",
-            "portfolio": html_escape(request.portfolio or "") or "N/A",
-            "experience": html_escape(request.experience or "") or "N/A",
-            "why_cadence": html_escape(request.why_cadence or "") or "N/A",
+            "location": html_escape(location or "") or "N/A",
+            "linkedin": html_escape(linkedin or "") or "N/A",
+            "portfolio": html_escape(portfolio or "") or "N/A",
+            "experience": html_escape(experience or "") or "N/A",
+            "why_cadence": html_escape(why_cadence or "") or "N/A",
         }
+        resume_line = f'<p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Resume:</strong> Attached ({html_escape(resume.filename)})</p>' if resume_path else ''
         provider.send_email(
             to="communication@cadence-ci.com",
             subject=f"New Intern Application: {name} - {role}",
@@ -256,6 +285,7 @@ def submit_intern_application(request: InternApplicationRequest, db: Session = D
                     <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Portfolio:</strong> {safe['portfolio']}</p>
                     <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Experience:</strong> {safe['experience']}</p>
                     <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Why Cadence:</strong> {safe['why_cadence']}</p>
+                    {resume_line}
                     <p style="color: #7A8580; font-size: 14px; margin: 16px 0 0;">Submitted at {datetime.utcnow().strftime('%B %d, %Y at %I:%M %p')} UTC</p>
                 </div>
             </div>
@@ -287,9 +317,25 @@ def list_leads(
                 "company": l.company,
                 "message": l.message,
                 "lead_type": l.lead_type,
+                "resume_path": l.resume_path,
                 "created_at": l.created_at.isoformat() if l.created_at else None,
             }
             for l in leads
         ],
         "total": len(leads),
     }
+
+
+@admin_router.get("/leads/{lead_id}/resume")
+def download_resume(
+    lead_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+):
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead or not lead.resume_path:
+        raise HTTPException(status_code=404, detail="Resume not found.")
+    filepath = os.path.join(os.path.dirname(os.path.dirname(__file__)), lead.resume_path)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Resume file not found on disk.")
+    return FileResponse(filepath, filename=os.path.basename(filepath), media_type="application/octet-stream")

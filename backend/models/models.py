@@ -2383,6 +2383,7 @@ class Lead(Base):
     company = Column(String, nullable=True)
     message = Column(Text, nullable=True)
     lead_type = Column(String, nullable=False, default="WAITLIST")
+    resume_path = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

@@ -130,12 +130,14 @@ export default function CareersPage() {
   const [expandedRole, setExpandedRole] = useState(null)
   const [showApplyModal, setShowApplyModal] = useState(false)
   const [appForm, setAppForm] = useState({ name: '', email: '', role: '', location: '', linkedin: '', portfolio: '', experience: '', why_cadence: '' })
+  const [resumeFile, setResumeFile] = useState(null)
   const [appStatus, setAppStatus] = useState(null)
   const [appStatusType, setAppStatusType] = useState(null)
   const [appLoading, setAppLoading] = useState(false)
 
   const openApplyModal = (role = '') => {
     setAppForm({ name: '', email: '', role: role, location: '', linkedin: '', portfolio: '', experience: '', why_cadence: '' })
+    setResumeFile(null)
     setAppStatus(null)
     setAppStatusType(null)
     setShowApplyModal(true)
@@ -146,7 +148,10 @@ export default function CareersPage() {
     if (!appForm.name.trim() || !appForm.email.trim() || !appForm.role) return
     setAppLoading(true)
     try {
-      const res = await axios.post('/api/public/intern-application', appForm)
+      const formData = new FormData()
+      Object.entries(appForm).forEach(([key, val]) => { if (val) formData.append(key, val) })
+      if (resumeFile) formData.append('resume', resumeFile)
+      const res = await axios.post('/api/public/intern-application', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
       setAppStatus(res.data.message)
       setAppStatusType('success')
     } catch (err) {
@@ -587,6 +592,41 @@ export default function CareersPage() {
                     className="w-full px-4 py-3 bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] rounded-xl text-[15px] text-[#3D4A44] focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[#5B8A72]/20 transition-all resize-none"
                     placeholder="What excites you about working at an early-stage music tech company?"
                   />
+                </div>
+                <div>
+                  <label className="block text-[13px] font-medium text-[#3D4A44] mb-1.5">Resume (PDF or Word)</label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      onChange={(e) => setResumeFile(e.target.files[0] || null)}
+                      className="hidden"
+                      id="resume-upload"
+                    />
+                    <label
+                      htmlFor="resume-upload"
+                      className="flex items-center gap-3 w-full px-4 py-3 bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] rounded-xl text-[15px] cursor-pointer hover:border-[#5B8A72] transition-all"
+                    >
+                      <svg className="w-5 h-5 text-[#7A8580] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                      </svg>
+                      <span className={resumeFile ? 'text-[#3D4A44]' : 'text-[#7A8580]'}>
+                        {resumeFile ? resumeFile.name : 'Upload your resume'}
+                      </span>
+                      {resumeFile && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); setResumeFile(null); document.getElementById('resume-upload').value = '' }}
+                          className="ml-auto text-[#7A8580] hover:text-red-500 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                    </label>
+                  </div>
+                  <p className="text-[11px] text-[#B0B8B3] mt-1">Max 10MB. PDF or Word format.</p>
                 </div>
                 <button
                   type="submit"
