@@ -123,6 +123,56 @@ def request_demo(request: DemoRequest, db: Session = Depends(get_db)):
     return {"message": "Demo request submitted! We'll be in touch soon.", "status": "created"}
 
 
+class InvestorInquiryRequest(BaseModel):
+    name: str
+    email: str
+    firm: str
+    investment_focus: Optional[str] = None
+    message: Optional[str] = None
+
+
+@router.post("/investor-inquiry")
+def submit_investor_inquiry(request: InvestorInquiryRequest, db: Session = Depends(get_db)):
+    email = _validate_email(request.email)
+
+    lead = Lead(
+        email=email,
+        name=request.name.strip() if request.name else None,
+        company=request.firm.strip() if request.firm else None,
+        message=f"Investment Focus: {request.investment_focus or 'N/A'}\n{request.message or ''}".strip(),
+        lead_type="INVESTOR_INQUIRY",
+    )
+    db.add(lead)
+    db.commit()
+
+    try:
+        from ..services.email_provider import get_email_provider
+        provider = get_email_provider()
+        provider.send_email(
+            to="communication@cadence-ci.com",
+            subject=f"New Investor Inquiry: {request.name or email}",
+            html_body=f"""
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #5B8A72, #7BA594); padding: 30px; border-radius: 12px 12px 0 0;">
+                    <h1 style="color: white; margin: 0; font-size: 24px;">New Investor Inquiry</h1>
+                </div>
+                <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 12px 12px;">
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Name:</strong> {request.name or 'N/A'}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Email:</strong> {email}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Firm / Fund:</strong> {request.firm or 'N/A'}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Investment Focus:</strong> {request.investment_focus or 'N/A'}</p>
+                    <p style="color: #3D4A44; font-size: 16px; margin: 0 0 8px;"><strong>Message:</strong> {request.message or 'N/A'}</p>
+                    <p style="color: #7A8580; font-size: 14px; margin: 16px 0 0;">Submitted at {datetime.utcnow().strftime('%B %d, %Y at %I:%M %p')} UTC</p>
+                </div>
+            </div>
+            """,
+        )
+    except Exception as e:
+        logger.error(f"Failed to send investor inquiry notification: {e}")
+
+    return {"message": "Thank you for your interest. Our team will be in touch shortly.", "status": "created"}
+
+
 @admin_router.get("/leads")
 def list_leads(
     lead_type: Optional[str] = None,

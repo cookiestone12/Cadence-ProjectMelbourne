@@ -2371,6 +2371,7 @@ class TicketStatus(str, enum.Enum):
 class LeadType(str, enum.Enum):
     WAITLIST = "WAITLIST"
     DEMO_REQUEST = "DEMO_REQUEST"
+    INVESTOR_INQUIRY = "INVESTOR_INQUIRY"
 
 class Lead(Base):
     __tablename__ = "leads"

@@ -74,12 +74,26 @@ export default function LandingPage() {
           <div className="flex items-center">
             <img src="/cadence-logo-full.png" alt="Cadence - Catalog Intelligence" className="h-12 w-auto" />
           </div>
-          <button
-            onClick={() => navigate('/login')}
-            className="text-[14px] font-medium text-[#5B8A72] hover:text-[#4A7A62] transition-colors px-4 py-2 rounded-full hover:bg-[#5B8A72]/8"
-          >
-            Sign In
-          </button>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/careers')}
+              className="hidden sm:inline-flex text-[14px] font-medium text-[#7A8580] hover:text-[#5B8A72] transition-colors"
+            >
+              Careers
+            </button>
+            <button
+              onClick={() => navigate('/investors')}
+              className="hidden sm:inline-flex text-[14px] font-medium text-[#7A8580] hover:text-[#5B8A72] transition-colors"
+            >
+              Investors
+            </button>
+            <button
+              onClick={() => navigate('/login')}
+              className="text-[14px] font-medium text-[#5B8A72] hover:text-[#4A7A62] transition-colors px-4 py-2 rounded-full hover:bg-[#5B8A72]/8"
+            >
+              Sign In
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -329,6 +343,10 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <img src="/cadence-logo-full.png" alt="Cadence" className="h-6 w-auto opacity-40" />
+          </div>
+          <div className="flex items-center gap-6">
+            <button onClick={() => navigate('/careers')} className="text-[12px] text-[#7A8580] hover:text-[#5B8A72] transition-colors">Careers</button>
+            <button onClick={() => navigate('/investors')} className="text-[12px] text-[#7A8580] hover:text-[#5B8A72] transition-colors">Investors</button>
           </div>
           <p className="text-[12px] text-[#B0B8B3]">&copy; {new Date().getFullYear()} Cadence CI. All rights reserved.</p>
         </div>

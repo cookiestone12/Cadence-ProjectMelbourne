@@ -2210,6 +2210,7 @@ function LeadsTab() {
 
   const waitlistCount = leads.filter(l => l.lead_type === 'WAITLIST').length
   const demoCount = leads.filter(l => l.lead_type === 'DEMO_REQUEST').length
+  const investorCount = leads.filter(l => l.lead_type === 'INVESTOR_INQUIRY').length
 
   return (
     <div className="space-y-4">
@@ -2218,11 +2219,11 @@ function LeadsTab() {
           <h2 className="text-xl font-bold text-[#3D4A44]">Waitlist & Leads</h2>
           <p className="text-sm text-[#7A8580]">
             {filter === 'all' ? leads.length : leads.length} total
-            {filter === 'all' && ` (${waitlistCount} waitlist, ${demoCount} demo requests)`}
+            {filter === 'all' && ` (${waitlistCount} waitlist, ${demoCount} demo, ${investorCount} investor)`}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {['all', 'WAITLIST', 'DEMO_REQUEST'].map((f) => (
+          {['all', 'WAITLIST', 'DEMO_REQUEST', 'INVESTOR_INQUIRY'].map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -2232,7 +2233,7 @@ function LeadsTab() {
                   : 'bg-[#EEF1EC] text-[#7A8580] hover:text-[#3D4A44]'
               }`}
             >
-              {f === 'all' ? 'All' : f === 'WAITLIST' ? 'Waitlist' : 'Demo Requests'}
+              {f === 'all' ? 'All' : f === 'WAITLIST' ? 'Waitlist' : f === 'DEMO_REQUEST' ? 'Demo Requests' : 'Investors'}
             </button>
           ))}
           <button
@@ -2270,9 +2271,11 @@ function LeadsTab() {
                     <span className={`px-2 py-1 rounded text-xs font-medium ${
                       lead.lead_type === 'WAITLIST'
                         ? 'bg-[rgba(91,138,114,0.12)] text-[#5B8A72]'
+                        : lead.lead_type === 'INVESTOR_INQUIRY'
+                        ? 'bg-[rgba(196,149,107,0.12)] text-[#C4956B]'
                         : 'bg-[rgba(90,138,154,0.12)] text-[#5A8A9A]'
                     }`}>
-                      {lead.lead_type === 'WAITLIST' ? 'Waitlist' : 'Demo'}
+                      {lead.lead_type === 'WAITLIST' ? 'Waitlist' : lead.lead_type === 'INVESTOR_INQUIRY' ? 'Investor' : 'Demo'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-[#3D4A44] font-medium">{lead.email}</td>
