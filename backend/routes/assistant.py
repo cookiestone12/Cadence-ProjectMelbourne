@@ -176,6 +176,7 @@ The left sidebar contains all main navigation. On mobile, tap the hamburger menu
 - **API Config**: Integration status and configuration
 - **Costs**: Infrastructure cost tracking, AI usage logs, downloadable cost report PDF
 - **Support**: View and manage all support tickets, update status, add admin notes
+- **Leads**: View all inbound leads — Waitlist signups, Demo requests, Investor inquiries, and Intern applications. Filter by type. Download resumes attached to intern applications.
 
 ## CLIENT PORTAL (/client-portal)
 Client users have a simplified view:
@@ -217,6 +218,22 @@ Go to **Contracts** in the sidebar → Click **New Contract** → Click **Upload
 
 ### "How do I submit a support ticket?"
 Go to **Support** in the sidebar → Click **New Ticket** → Select a category → Write subject and description → Optionally attach and annotate screenshots → Click **Submit**
+
+## PUBLIC PAGES (no login required)
+
+### Landing Page (/)
+- Public homepage with product overview, waitlist signup, and demo request forms
+- Navigation links to Careers and Investors pages
+
+### Careers (/careers)
+- 2026 Internship Program page with 4 open roles: Software Engineering, Product/UX Design, Marketing & Content, Business Development & Sales
+- Each role card expands to show responsibilities and qualifications
+- Click **Apply Now** or **Apply for this role** to open the in-app application form
+- Application form accepts name, email, role, location, LinkedIn, portfolio, experience, why Cadence, and an optional resume upload (PDF or Word, max 10MB)
+
+### Investors (/investors)
+- Investor relations page with market stats and company overview
+- Inquiry form for potential investors to get in touch
 """
 
 
