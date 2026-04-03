@@ -69,6 +69,7 @@ def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> 
             from .spotify_service import _get_access_token, _spotify_get
             token = _get_access_token()
             if token:
+                logger.info(f"Spotify search lookup for {len(songs_for_search)} songs without URLs")
                 for song_id, song in songs_for_search.items():
                     if song_id in results:
                         continue
@@ -80,6 +81,7 @@ def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> 
                         clean_artist = song.primary_artist.split(" feat.")[0].split(" ft.")[0].split(",")[0].strip()
                         query_parts.append(f"artist:{clean_artist}")
                     if not query_parts:
+                        logger.info(f"Song {song_id} has no title or artist for search")
                         continue
                     search_query = " ".join(query_parts)
                     try:
@@ -96,17 +98,25 @@ def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> 
                                     "popularity": pop,
                                     "album_art": album_art,
                                 }
-                    except Exception:
-                        pass
+                                logger.info(f"Spotify search hit for song {song_id}: '{track.get('name')}' pop={pop}")
+                            else:
+                                logger.info(f"Spotify search found '{track.get('name')}' for song {song_id} but popularity=0")
+                        else:
+                            logger.info(f"Spotify search returned no results for song {song_id}: '{search_query}'")
+                    except Exception as e:
+                        logger.warning(f"Spotify search failed for song {song_id} ('{search_query}'): {e}")
+            else:
+                logger.warning(f"No Spotify token available for search lookup of {len(songs_for_search)} songs")
         except Exception as e:
-            logger.warning(f"Spotify search batch failed: {e}")
+            logger.error(f"Spotify search batch failed: {e}", exc_info=True)
 
     return results
 
 
-def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[str, Any]:
+def compute_creator_credits(creator_id: int, org_id: int, db: Session, force_refresh: bool = False) -> Dict[str, Any]:
     from ..models.models import SongCredit, Song, Creator, CreatorCreditsProfile, StreamEstimate, Analytics, SongStreamingMetrics
     from .stream_estimator import get_song_stream_summary, estimate_streams_for_song, _estimate_from_popularity, MARKET_SHARE_RATIOS
+    from sqlalchemy import func as sa_func
 
     creator = db.query(Creator).filter(Creator.id == creator_id, Creator.organization_id == org_id).first()
     if not creator:
@@ -127,13 +137,14 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[s
 
     today = date.today()
     recently_estimated = set()
-    if unique_song_ids:
-        recent = db.query(StreamEstimate.song_id).filter(
+    if unique_song_ids and not force_refresh:
+        nonzero_songs = db.query(StreamEstimate.song_id).filter(
             StreamEstimate.song_id.in_(unique_song_ids),
             StreamEstimate.organization_id == org_id,
             StreamEstimate.period_date == today,
+            StreamEstimate.estimated_streams > 0,
         ).distinct().all()
-        recently_estimated = {r[0] for r in recent}
+        recently_estimated = {r[0] for r in nonzero_songs}
 
     songs_needing_spotify = {}
     songs_with_local_data = set()
@@ -153,7 +164,7 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session) -> Dict[s
             continue
         songs_needing_spotify[sid] = song
 
-    logger.info(f"Credits refresh for creator {creator_id}: {len(unique_song_ids)} unique songs, {len(recently_estimated)} cached, {len(songs_with_local_data)} have local data, {len(songs_needing_spotify)} need Spotify lookup")
+    logger.info(f"Credits refresh for creator {creator_id} (force={force_refresh}): {len(unique_song_ids)} unique songs, {len(recently_estimated)} cached with data, {len(songs_with_local_data)} have local data, {len(songs_needing_spotify)} need Spotify lookup")
 
     prefetched = {}
     if songs_needing_spotify:

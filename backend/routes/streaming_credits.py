@@ -156,7 +156,7 @@ def refresh_creator_credits(
     _verify_org_access(user, org_id, db, creator_id=creator_id)
 
     from ..services.credits_service import compute_creator_credits
-    result = compute_creator_credits(creator_id, org_id, db)
+    result = compute_creator_credits(creator_id, org_id, db, force_refresh=True)
     if result.get("error"):
         raise HTTPException(status_code=404, detail=result["error"])
     return result

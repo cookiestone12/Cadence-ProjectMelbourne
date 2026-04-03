@@ -103,9 +103,12 @@ def _refresh_spotify_token(refresh_token: str, client_id: str) -> Optional[str]:
 
 
 def _get_client_credentials_token() -> Optional[str]:
+    import logging
+    logger = logging.getLogger("cadence")
     client_id = _get_spotify_client_id()
     client_secret = _get_spotify_client_secret()
     if not client_id or not client_secret:
+        logger.info("Spotify client credentials: SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET not set")
         return None
     try:
         resp = requests.post(
@@ -116,7 +119,8 @@ def _get_client_credentials_token() -> Optional[str]:
         )
         resp.raise_for_status()
         return resp.json().get("access_token")
-    except Exception:
+    except Exception as e:
+        logger.error(f"Spotify client credentials token request failed: {e}")
         return None
 
 

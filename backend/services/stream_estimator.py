@@ -75,6 +75,8 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                                 if album_images:
                                     song.media_url = album_images[0].get("url")
                                     db.flush()
+                        else:
+                            logger.info(f"Spotify track lookup returned no data for song {song_id}, track_id={track_id}")
 
                 if spotify_streams == 0:
                     query_parts = []
@@ -100,12 +102,16 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                                     if album_images:
                                         song.media_url = album_images[0].get("url")
                                         db.flush()
+                            else:
+                                logger.info(f"Spotify search hit but popularity=0 for song {song_id}: '{track.get('name')}'")
                         else:
                             logger.info(f"Spotify search returned no results for song {song_id}: '{search_query}'")
+                    else:
+                        logger.info(f"Song {song_id} has no title or artist for Spotify search")
             else:
-                logger.debug(f"No Spotify access token available for song {song_id}")
+                logger.warning(f"No Spotify access token available for song {song_id}")
         except Exception as e:
-            logger.debug(f"Spotify lookup/search failed for song {song_id}: {e}")
+            logger.error(f"Spotify lookup/search failed for song {song_id}: {e}", exc_info=True)
 
     chart_entries = db.query(ChartEntry).filter(ChartEntry.song_id == song_id).all()
     chart_data = {}
@@ -169,34 +175,20 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                 "confidence": 0.3,
             }
 
-    db.query(StreamEstimate).filter(
-        StreamEstimate.song_id == song_id,
-        StreamEstimate.organization_id == org_id,
-    ).delete()
-    db.flush()
+    total_new_streams = sum(e.get("estimated_streams", 0) for e in estimates.values())
 
-    for platform, est in estimates.items():
-        existing = db.query(StreamEstimate).filter(
+    if total_new_streams > 0:
+        db.query(StreamEstimate).filter(
             StreamEstimate.song_id == song_id,
             StreamEstimate.organization_id == org_id,
-            StreamEstimate.platform == platform,
-            StreamEstimate.period_date == today,
-        ).first()
+        ).delete()
+        db.flush()
 
-        if existing:
-            existing.estimated_streams = est["estimated_streams"]
-            existing.actual_streams = est.get("actual_streams")
-            existing.estimation_method = est["method"]
-            existing.confidence_score = est["confidence"]
-            source = {"base_spotify": base_spotify, "chart_data": {k: {"position": v["position"]} for k, v in chart_data.items()}}
-            if popularity_score is not None:
-                source["spotify_popularity"] = popularity_score
-            existing.source_data = source
-            existing.updated_at = datetime.utcnow()
-        else:
-            source = {"base_spotify": base_spotify, "chart_data": {k: {"position": v["position"]} for k, v in chart_data.items()}}
-            if popularity_score is not None:
-                source["spotify_popularity"] = popularity_score
+        source = {"base_spotify": base_spotify, "chart_data": {k: {"position": v["position"]} for k, v in chart_data.items()}}
+        if popularity_score is not None:
+            source["spotify_popularity"] = popularity_score
+
+        for platform, est in estimates.items():
             db.add(StreamEstimate(
                 song_id=song_id,
                 organization_id=org_id,
@@ -209,7 +201,10 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                 source_data=source,
             ))
 
-    db.commit()
+        db.commit()
+        logger.info(f"Saved stream estimates for song {song_id}: total={total_new_streams:,} across {len(estimates)} platforms")
+    else:
+        logger.info(f"No new stream data for song {song_id}, preserving existing estimates")
 
     total_streams = sum(e.get("estimated_streams", 0) for e in estimates.values())
 
