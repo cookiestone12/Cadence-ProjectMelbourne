@@ -166,9 +166,36 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session, force_ref
 
     logger.info(f"Credits refresh for creator {creator_id} (force={force_refresh}): {len(unique_song_ids)} unique songs, {len(recently_estimated)} cached with data, {len(songs_with_local_data)} have local data, {len(songs_needing_spotify)} need Spotify lookup")
 
+    spotify_diagnostics = {
+        "token_available": False,
+        "token_source": None,
+        "lookup_attempted": len(songs_needing_spotify) > 0,
+        "lookup_success_count": 0,
+        "lookup_failure_count": 0,
+        "songs_cached": len(recently_estimated),
+        "songs_with_local_data": len(songs_with_local_data),
+        "songs_needing_lookup": len(songs_needing_spotify),
+    }
+
+    if songs_needing_spotify:
+        try:
+            from .spotify_service import _get_access_token
+            token = _get_access_token()
+            if token:
+                spotify_diagnostics["token_available"] = True
+                spotify_diagnostics["token_source"] = "connector_or_credentials"
+            else:
+                spotify_diagnostics["token_available"] = False
+                spotify_diagnostics["token_source"] = "none"
+        except Exception:
+            spotify_diagnostics["token_available"] = False
+            spotify_diagnostics["token_source"] = "error"
+
     prefetched = {}
     if songs_needing_spotify:
         prefetched = _batch_fetch_spotify_popularity(songs_needing_spotify, db)
+        spotify_diagnostics["lookup_success_count"] = len(prefetched)
+        spotify_diagnostics["lookup_failure_count"] = len(songs_needing_spotify) - len(prefetched)
         logger.info(f"Batch Spotify fetch returned data for {len(prefetched)}/{len(songs_needing_spotify)} songs")
 
     for sid in songs_with_local_data:
@@ -300,7 +327,7 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session, force_ref
 
     logger.info(f"Credits computed for creator {creator_id}: {total_credits} credits, {total_streams} est. streams")
 
-    return {
+    result = {
         "creator_id": creator_id,
         "display_name": creator.display_name,
         "hero_image_url": creator.hero_image_url,
@@ -314,6 +341,11 @@ def compute_creator_credits(creator_id: int, org_id: int, db: Session, force_ref
         "has_passcode": bool(profile.share_passcode),
         "last_computed_at": profile.last_computed_at.isoformat() if profile.last_computed_at else None,
     }
+
+    if force_refresh:
+        result["spotify_status"] = spotify_diagnostics
+
+    return result
 
 
 def compute_all_creators(org_id: int, db: Session) -> Dict[str, Any]:
