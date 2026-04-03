@@ -417,6 +417,7 @@
     -webkit-backdrop-filter: blur(4px);
     z-index: 50;
     animation: amFadeIn 200ms ease-out;
+    overscroll-behavior: contain;
   }
 
   .am-modal {
@@ -425,6 +426,7 @@
     box-shadow: 0px 16px 48px rgba(0,0,0,0.16), 0px 8px 16px rgba(0,0,0,0.08);
     animation: amScaleIn 220ms cubic-bezier(0.25, 0.1, 0.25, 1);
     overflow: hidden;
+    overscroll-behavior: contain;
   }
 
   .am-modal-header {
@@ -436,6 +438,8 @@
     padding: 20px 24px;
     max-height: 60vh;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .am-modal-footer {
@@ -632,6 +636,21 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+  .overscroll-contain {
+    overscroll-behavior: contain;
+  }
+}
+
+.fixed.inset-0 {
+  overscroll-behavior: contain;
+}
+
+.fixed .overflow-y-auto,
+.fixed .overflow-y-scroll,
+.fixed.inset-0.overflow-y-auto,
+.fixed.overflow-hidden .overflow-y-auto {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .apple-transition {
