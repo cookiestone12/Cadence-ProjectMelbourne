@@ -62,7 +62,7 @@ def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> 
                             for sid in track_id_to_song_ids[tid]:
                                 results[sid] = pop_data
         except Exception as e:
-            logger.warning(f"Spotify batch lookup failed: {e}")
+            logger.error(f"Spotify batch lookup failed: {e}", exc_info=True)
 
     if songs_for_search:
         try:
@@ -116,7 +116,6 @@ def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> 
 def compute_creator_credits(creator_id: int, org_id: int, db: Session, force_refresh: bool = False) -> Dict[str, Any]:
     from ..models.models import SongCredit, Song, Creator, CreatorCreditsProfile, StreamEstimate, Analytics, SongStreamingMetrics
     from .stream_estimator import get_song_stream_summary, estimate_streams_for_song, _estimate_from_popularity, MARKET_SHARE_RATIOS
-    from sqlalchemy import func as sa_func
 
     creator = db.query(Creator).filter(Creator.id == creator_id, Creator.organization_id == org_id).first()
     if not creator:
