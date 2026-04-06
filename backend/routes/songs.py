@@ -875,7 +875,39 @@ def update_song(
     # Auto-update is_released if release_date changes
     if 'release_date' in update_data:
         song.is_released = (song.release_date is not None)
-    
+
+    # Cross-field sync: payment_status <-> is_paid / master_paid
+    if 'payment_status' in update_data:
+        ps = (update_data['payment_status'] or '').strip().upper()
+        if ps == 'PAID':
+            song.payment_status = 'PAID'
+            song.is_paid = 'Yes'
+            song.master_paid = 'Yes'
+        else:
+            song.payment_status = ps if ps else None
+            song.is_paid = 'No'
+            song.master_paid = 'No'
+        update_data['is_paid'] = song.is_paid
+        update_data['master_paid'] = song.master_paid
+        update_data['payment_status'] = song.payment_status
+    elif 'is_paid' in update_data:
+        val = update_data['is_paid']
+        if isinstance(val, str):
+            paid = val.strip().lower() in ('yes', 'true')
+        else:
+            paid = bool(val)
+        if paid:
+            song.payment_status = 'PAID'
+            song.is_paid = 'Yes'
+            song.master_paid = 'Yes'
+        else:
+            song.payment_status = 'PENDING'
+            song.is_paid = 'No'
+            song.master_paid = 'No'
+        update_data['payment_status'] = song.payment_status
+        update_data['is_paid'] = song.is_paid
+        update_data['master_paid'] = song.master_paid
+
     from ..services.audit_service import log_action
     changed_fields = list(update_data.keys())
     log_action(db, song.organization_id, current_user.id, "UPDATE", "SONG", song.id, song.title,
