@@ -2292,17 +2292,37 @@ function LeadsTab() {
                   </td>
                   <td className="px-6 py-4 text-sm">
                     {lead.resume_path ? (
-                      <a
-                        href={`/api/admin/leads/${lead.id}/resume`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-[rgba(91,138,114,0.1)] text-[#5B8A72] rounded text-xs font-medium hover:bg-[rgba(91,138,114,0.2)] transition-colors"
+                      <button
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          try {
+                            const token = localStorage.getItem('token');
+                            const res = await fetch(`/api/admin/leads/${lead.id}/resume`, {
+                              headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            if (!res.ok) throw new Error('Download failed');
+                            const blob = await res.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            const disposition = res.headers.get('content-disposition');
+                            const filename = disposition ? disposition.split('filename=')[1]?.replace(/"/g, '') : 'resume.pdf';
+                            a.download = filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                            window.URL.revokeObjectURL(url);
+                          } catch (err) {
+                            console.error('Resume download failed:', err);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-[rgba(91,138,114,0.1)] text-[#5B8A72] rounded text-xs font-medium hover:bg-[rgba(91,138,114,0.2)] transition-colors cursor-pointer"
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                         </svg>
                         Resume
-                      </a>
+                      </button>
                     ) : lead.lead_type === 'INTERN_APPLICATION' ? (
                       <span className="text-[#B0B8B3] text-xs">No resume</span>
                     ) : null}
