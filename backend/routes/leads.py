@@ -216,18 +216,20 @@ async def submit_intern_application(
         raise HTTPException(status_code=400, detail="Role is required.")
 
     resume_path = None
+    resume_data = None
+    resume_filename = None
+    resume_mime = None
     if resume and resume.filename:
         if resume.content_type not in ALLOWED_RESUME_TYPES:
             raise HTTPException(status_code=400, detail="Resume must be a PDF or Word document.")
         content = await resume.read()
         if len(content) > MAX_RESUME_SIZE:
             raise HTTPException(status_code=400, detail="Resume file must be under 10MB.")
-        os.makedirs(RESUME_UPLOAD_DIR, exist_ok=True)
+        resume_data = content
+        resume_filename = resume.filename
+        resume_mime = resume.content_type or "application/pdf"
         ext = os.path.splitext(resume.filename)[1] or ".pdf"
         filename = f"{uuid.uuid4().hex}{ext}"
-        filepath = os.path.join(RESUME_UPLOAD_DIR, filename)
-        with open(filepath, "wb") as f:
-            f.write(content)
         resume_path = f"uploads/resumes/{filename}"
 
     details = []
@@ -250,6 +252,9 @@ async def submit_intern_application(
         message=message_text,
         lead_type="INTERN_APPLICATION",
         resume_path=resume_path,
+        resume_data=resume_data,
+        resume_filename=resume_filename,
+        resume_mime=resume_mime,
     )
     db.add(lead)
     db.commit()
@@ -333,9 +338,22 @@ def download_resume(
     current_user: User = Depends(get_current_super_admin),
 ):
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
-    if not lead or not lead.resume_path:
+    if not lead:
         raise HTTPException(status_code=404, detail="Resume not found.")
-    filepath = os.path.join(os.path.dirname(os.path.dirname(__file__)), lead.resume_path)
-    if not os.path.exists(filepath):
-        raise HTTPException(status_code=404, detail="Resume file not found on disk.")
-    return FileResponse(filepath, filename=os.path.basename(filepath), media_type="application/octet-stream")
+
+    if lead.resume_data:
+        from fastapi.responses import Response
+        filename = lead.resume_filename or "resume.pdf"
+        mime = lead.resume_mime or "application/octet-stream"
+        return Response(
+            content=lead.resume_data,
+            media_type=mime,
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    if lead.resume_path:
+        filepath = os.path.join(os.path.dirname(os.path.dirname(__file__)), lead.resume_path)
+        if os.path.exists(filepath):
+            return FileResponse(filepath, filename=os.path.basename(filepath), media_type="application/octet-stream")
+
+    raise HTTPException(status_code=404, detail="Resume file not found.")

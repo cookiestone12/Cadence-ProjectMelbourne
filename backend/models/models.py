@@ -2384,6 +2384,9 @@ class Lead(Base):
     message = Column(Text, nullable=True)
     lead_type = Column(String, nullable=False, default="WAITLIST")
     resume_path = Column(String, nullable=True)
+    resume_data = Column(LargeBinary, nullable=True)
+    resume_filename = Column(String, nullable=True)
+    resume_mime = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

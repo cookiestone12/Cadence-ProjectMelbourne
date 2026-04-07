@@ -2314,6 +2314,7 @@ function LeadsTab() {
                             window.URL.revokeObjectURL(url);
                           } catch (err) {
                             console.error('Resume download failed:', err);
+                            alert('Resume file is no longer available. It may have been lost during a deployment. New submissions will be preserved.');
                           }
                         }}
                         className="inline-flex items-center gap-1 px-2 py-1 bg-[rgba(91,138,114,0.1)] text-[#5B8A72] rounded text-xs font-medium hover:bg-[rgba(91,138,114,0.2)] transition-colors cursor-pointer"
