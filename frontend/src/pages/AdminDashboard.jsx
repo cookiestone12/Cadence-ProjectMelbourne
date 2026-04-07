@@ -2189,6 +2189,7 @@ function LeadsTab() {
   const [leads, setLeads] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
+  const [expandedLeadId, setExpandedLeadId] = useState(null)
 
   useEffect(() => {
     loadLeads()
@@ -2268,8 +2269,15 @@ function LeadsTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
-              {leads.map(lead => (
-                <tr key={lead.id} className="hover:bg-[#EEF1EC]">
+              {leads.map(lead => {
+                const isExpanded = expandedLeadId === lead.id;
+                const detailLines = (lead.message || '').split('\n').filter(l => l.trim());
+                return (
+                <React.Fragment key={lead.id}>
+                <tr
+                  className={`cursor-pointer transition-colors ${isExpanded ? 'bg-[#EEF1EC]' : 'hover:bg-[#EEF1EC]'}`}
+                  onClick={() => setExpandedLeadId(isExpanded ? null : lead.id)}
+                >
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${
                       lead.lead_type === 'WAITLIST'
@@ -2294,7 +2302,7 @@ function LeadsTab() {
                     {lead.resume_path ? (
                       <button
                         onClick={async (e) => {
-                          e.preventDefault();
+                          e.stopPropagation();
                           try {
                             const token = localStorage.getItem('token');
                             const res = await fetch(`/api/admin/leads/${lead.id}/resume`, {
@@ -2329,7 +2337,107 @@ function LeadsTab() {
                     ) : null}
                   </td>
                 </tr>
-              ))}
+                {isExpanded && (
+                  <tr>
+                    <td colSpan={7} className="px-0 py-0">
+                      <div className="bg-white border-t border-b border-[rgba(59,77,67,0.1)] px-8 py-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          <div>
+                            <p className="text-[11px] font-medium text-[#7A8580] uppercase tracking-wide mb-1">Name</p>
+                            <p className="text-[14px] text-[#3D4A44] font-medium">{lead.name || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-medium text-[#7A8580] uppercase tracking-wide mb-1">Email</p>
+                            <p className="text-[14px] text-[#3D4A44]">
+                              <a href={`mailto:${lead.email}`} className="text-[#5B8A72] hover:underline">{lead.email}</a>
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-medium text-[#7A8580] uppercase tracking-wide mb-1">
+                              {lead.lead_type === 'INTERN_APPLICATION' ? 'Role Applied For' : 'Company'}
+                            </p>
+                            <p className="text-[14px] text-[#3D4A44]">{lead.company || 'N/A'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-medium text-[#7A8580] uppercase tracking-wide mb-1">Type</p>
+                            <p className="text-[14px] text-[#3D4A44]">
+                              {lead.lead_type === 'WAITLIST' ? 'Waitlist Signup' : lead.lead_type === 'INVESTOR_INQUIRY' ? 'Investor Inquiry' : lead.lead_type === 'INTERN_APPLICATION' ? 'Intern Application' : 'Demo Request'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-medium text-[#7A8580] uppercase tracking-wide mb-1">Submitted</p>
+                            <p className="text-[14px] text-[#3D4A44]">
+                              {lead.created_at ? new Date(lead.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-medium text-[#7A8580] uppercase tracking-wide mb-1">Resume</p>
+                            {lead.resume_path ? (
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    const token = localStorage.getItem('token');
+                                    const res = await fetch(`/api/admin/leads/${lead.id}/resume`, {
+                                      headers: { 'Authorization': `Bearer ${token}` }
+                                    });
+                                    if (!res.ok) throw new Error('Download failed');
+                                    const blob = await res.blob();
+                                    const url = window.URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    const disposition = res.headers.get('content-disposition');
+                                    const filename = disposition ? disposition.split('filename=')[1]?.replace(/"/g, '') : 'resume.pdf';
+                                    a.download = filename;
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    a.remove();
+                                    window.URL.revokeObjectURL(url);
+                                  } catch (err) {
+                                    console.error('Resume download failed:', err);
+                                    alert('Resume file is no longer available. New submissions will be preserved.');
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#5B8A72] text-white rounded-lg text-xs font-medium hover:bg-[#4A7862] transition-colors cursor-pointer"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                </svg>
+                                Download Resume
+                              </button>
+                            ) : (
+                              <p className="text-[14px] text-[#B0B8B3]">No resume attached</p>
+                            )}
+                          </div>
+                        </div>
+                        {detailLines.length > 0 && (
+                          <div className="mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)]">
+                            <p className="text-[11px] font-medium text-[#7A8580] uppercase tracking-wide mb-2">Application Details</p>
+                            <div className="space-y-2">
+                              {detailLines.map((line, i) => {
+                                const colonIdx = line.indexOf(':');
+                                if (colonIdx > 0 && colonIdx < 30) {
+                                  const label = line.substring(0, colonIdx).trim();
+                                  const value = line.substring(colonIdx + 1).trim();
+                                  return (
+                                    <div key={i}>
+                                      <span className="text-[12px] font-medium text-[#7A8580]">{label}:</span>
+                                      <span className="text-[13px] text-[#3D4A44] ml-1.5">{value}</span>
+                                    </div>
+                                  );
+                                }
+                                return <p key={i} className="text-[13px] text-[#3D4A44]">{line}</p>;
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
