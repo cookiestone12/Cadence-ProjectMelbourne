@@ -418,40 +418,14 @@ def get_organization_songs(
             pub_pct = song.publishing_percentage
             master_pct = song.master_percentage
 
-        result.append({
-            "id": song.id,
-            "title": song.title,
-            "primary_artist": song.primary_artist,
-            "isrc": song.isrc,
-            "iswc": song.iswc,
-            "project_title": song.project_title,
-            "release_date": song.release_date.isoformat() if song.release_date else None,
-            "status_health_score": song.status_health_score,
-            "has_contract_sent": song.has_contract_sent,
-            "has_contract_executed": song.has_contract_executed,
-            "is_registered_with_pro": song.is_registered_with_pro,
-            "is_registered_with_dsp": song.is_registered_with_dsp,
-            "is_invoiced": song.is_invoiced,
-            "is_paid": song.is_paid,
-            "is_released": song.is_released,
-            "spotify_link": song.spotify_link,
-            "label": song.label,
-            "publishing_percentage": pub_pct,
-            "master_percentage": master_pct,
-            "advance_amount": song.advance_amount,
-            "recording_code": song.recording_code,
-            "master_paid": song.master_paid,
-            "soundexchange_registered": song.soundexchange_registered,
-            "mlc_registered": song.mlc_registered,
-            "payment_status": song.payment_status,
-            "contract_location": song.contract_location,
-            "notes": song.notes,
-            "media_url": song.media_url,
-            "client_name": client_name,
-            "client_id": client_id,
-            "credit_role": credit_role,
-            "credit_id": credit_id,
-        })
+        song_data = _song_to_response(song)
+        song_data["publishing_percentage"] = pub_pct
+        song_data["master_percentage"] = master_pct
+        song_data["client_name"] = client_name
+        song_data["client_id"] = client_id
+        song_data["credit_role"] = credit_role
+        song_data["credit_id"] = credit_id
+        result.append(song_data)
     return result
 
 @router.get("/{song_id}", response_model=SongDetailResponse)
