@@ -28,9 +28,17 @@ def _sync_song_pub_percentage(db: Session, song_id: int):
         ContractAsset.asset_id == song_id,
         RightsSplit.rights_type == "PUBLISHING",
     ).scalar()
+    total_master = db.query(func.sum(RightsSplit.share_percentage)).join(
+        ContractAsset, ContractAsset.id == RightsSplit.contract_asset_id
+    ).filter(
+        ContractAsset.asset_type == "SONG",
+        ContractAsset.asset_id == song_id,
+        RightsSplit.rights_type == "MASTER",
+    ).scalar()
     song = db.query(Song).filter(Song.id == song_id).first()
     if song:
         song.publishing_percentage = float(total_pub) if total_pub else None
+        song.master_percentage = float(total_master) if total_master else None
 
 
 def _sync_splits_to_credits(db: Session, song_id: int, creator_id: int):

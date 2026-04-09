@@ -47,6 +47,8 @@ class CreditResponse(BaseModel):
     creator_id: int
     role: str
     share_percentage: Optional[float]
+    pub_share: Optional[float] = None
+    master_share: Optional[float] = None
     
     class Config:
         from_attributes = True
@@ -225,7 +227,14 @@ def delete_credit(
         raise HTTPException(status_code=404, detail="Credit not found")
     
     creator_id = credit.creator_id
+    had_splits = credit.pub_share is not None or credit.master_share is not None
     db.delete(credit)
+    db.flush()
+
+    if had_splits:
+        from .contracts_mgmt import _sync_song_pub_percentage
+        _sync_song_pub_percentage(db, song_id)
+
     db.commit()
     
     threading.Thread(

@@ -128,6 +128,8 @@ class CreditResponse(BaseModel):
     creator_name: str
     role: str
     share_percentage: Optional[float]
+    pub_share: Optional[float] = None
+    master_share: Optional[float] = None
     
     class Config:
         from_attributes = True

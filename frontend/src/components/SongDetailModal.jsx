@@ -367,7 +367,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     setEditingField(null)
     const payload = {}
 
-    const numericFields = ['publishing_percentage', 'master_percentage']
+    const numericFields = []
     const intFields = ['advance_amount']
 
     if (numericFields.includes(field)) {
@@ -1004,8 +1004,8 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 <span className="font-medium text-sm truncate max-w-[120px] sm:max-w-none">{credit.creator_name || 'Unknown'}</span>
                               </Link>
                               <span className="text-xs text-[#7A8580] flex-shrink-0">({credit.role})</span>
-                              {credit.pub_share != null && <span className="text-xs text-[#5B8A72] bg-[rgba(91,138,114,0.1)] px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline">Pub {credit.pub_share}%</span>}
-                              {credit.master_share != null && <span className="text-xs text-[#5A8A9A] bg-[rgba(90,138,154,0.1)] px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline">Master {credit.master_share}%</span>}
+                              <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline ${credit.pub_share != null ? 'text-[#5B8A72] bg-[rgba(91,138,114,0.1)]' : 'text-[#B0BDB4] bg-[rgba(59,77,67,0.04)]'}`}>Pub {credit.pub_share != null ? `${credit.pub_share}%` : '—'}</span>
+                              <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline ${credit.master_share != null ? 'text-[#5A8A9A] bg-[rgba(90,138,154,0.1)]' : 'text-[#B0BDB4] bg-[rgba(59,77,67,0.04)]'}`}>Master {credit.master_share != null ? `${credit.master_share}%` : '—'}</span>
                               <div className="flex items-center gap-1 ml-auto flex-shrink-0">
                                 <button
                                   onClick={() => {
@@ -1322,47 +1322,53 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Publishing %</label>
-                    {editingField === 'publishing_percentage' ? (
-                      <input
-                        type="number"
-                        autoFocus
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={() => saveInlineEdit('publishing_percentage', editValue)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('publishing_percentage', editValue); if (e.key === 'Escape') setEditingField(null) }}
-                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                      />
-                    ) : (
-                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('publishing_percentage', songDetails.publishing_percentage ?? '')}>
-                        <span>{songDetails.publishing_percentage != null ? `${songDetails.publishing_percentage}%` : 'N/A'}</span>
-                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                      </p>
-                    )}
+                    {(() => {
+                      const creditPubTotal = (songDetails.credits || []).reduce((sum, c) => sum + (c.pub_share || 0), 0)
+                      const hasCreditSplits = (songDetails.credits || []).some(c => c.pub_share != null)
+                      const displayVal = hasCreditSplits ? creditPubTotal : songDetails.publishing_percentage
+                      const isLegacy = !hasCreditSplits && songDetails.publishing_percentage != null
+                      return (
+                        <div>
+                          <p className="flex items-center gap-1.5 text-[#3D4A44] px-1 -mx-1 py-0.5">
+                            <span className="font-medium">{displayVal != null ? `${displayVal}%` : '0%'}</span>
+                            {hasCreditSplits && creditPubTotal > 100 && (
+                              <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Exceeds 100%</span>
+                            )}
+                          </p>
+                          {isLegacy && (
+                            <p className="text-[11px] text-amber-600 mt-0.5">Legacy value — add credit-level splits in Rights tab</p>
+                          )}
+                          {!hasCreditSplits && songDetails.publishing_percentage == null && (
+                            <p className="text-[11px] text-[#7A8580] mt-0.5">Add splits in Credits & Links tab</p>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Master %</label>
-                    {editingField === 'master_percentage' ? (
-                      <input
-                        type="number"
-                        autoFocus
-                        min="0"
-                        max="100"
-                        step="0.01"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={() => saveInlineEdit('master_percentage', editValue)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') saveInlineEdit('master_percentage', editValue); if (e.key === 'Escape') setEditingField(null) }}
-                        className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
-                      />
-                    ) : (
-                      <p className="group flex items-center gap-1.5 text-[#3D4A44] cursor-pointer hover:bg-[rgba(91,138,114,0.04)] rounded-lg px-1 -mx-1 py-0.5 transition-colors" onClick={() => startInlineEdit('master_percentage', songDetails.master_percentage ?? '')}>
-                        <span>{songDetails.master_percentage != null ? `${songDetails.master_percentage}%` : 'N/A'}</span>
-                        <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                      </p>
-                    )}
+                    {(() => {
+                      const creditMasterTotal = (songDetails.credits || []).reduce((sum, c) => sum + (c.master_share || 0), 0)
+                      const hasCreditSplits = (songDetails.credits || []).some(c => c.master_share != null)
+                      const displayVal = hasCreditSplits ? creditMasterTotal : songDetails.master_percentage
+                      const isLegacy = !hasCreditSplits && songDetails.master_percentage != null
+                      return (
+                        <div>
+                          <p className="flex items-center gap-1.5 text-[#3D4A44] px-1 -mx-1 py-0.5">
+                            <span className="font-medium">{displayVal != null ? `${displayVal}%` : '0%'}</span>
+                            {hasCreditSplits && creditMasterTotal > 100 && (
+                              <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Exceeds 100%</span>
+                            )}
+                          </p>
+                          {isLegacy && (
+                            <p className="text-[11px] text-amber-600 mt-0.5">Legacy value — add credit-level splits in Rights tab</p>
+                          )}
+                          {!hasCreditSplits && songDetails.master_percentage == null && (
+                            <p className="text-[11px] text-[#7A8580] mt-0.5">Add splits in Credits & Links tab</p>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Advance Amount ($)</label>
