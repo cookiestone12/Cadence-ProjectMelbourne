@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { 
   FunnelIcon, MagnifyingGlassIcon, PlusIcon, ArrowUpTrayIcon,
@@ -15,6 +15,7 @@ import ScheduleAUploadModal from '../components/ScheduleAUploadModal'
 
 export default function NewCatalogPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [songs, setSongs] = useState([])
   const [works, setWorks] = useState([])
   const [creators, setCreators] = useState([])
@@ -148,6 +149,20 @@ export default function NewCatalogPage() {
     } catch {}
     return {}
   })
+  const deepLinkHandled = useRef(false)
+  useEffect(() => {
+    if (deepLinkHandled.current) return
+    const songIdParam = searchParams.get('songId')
+    if (songIdParam && songs.length > 0) {
+      const match = songs.find(s => String(s.id) === songIdParam)
+      if (match) {
+        setSelectedSong(match)
+        deepLinkHandled.current = true
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [searchParams, songs])
+
   useEffect(() => {
     localStorage.setItem('cadence_catalog_columns', JSON.stringify(visibleColumns))
   }, [visibleColumns])

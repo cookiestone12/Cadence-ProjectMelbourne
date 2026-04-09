@@ -48,7 +48,6 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [resolvingCreditId, setResolvingCreditId] = useState(null)
   const [resolveCreatorId, setResolveCreatorId] = useState(null)
   const [resolveNewName, setResolveNewName] = useState('')
-  const [allCreators, setAllCreators] = useState([])
   const [audioAssets, setAudioAssets] = useState([])
   const [audioLoading, setAudioLoading] = useState(false)
   const [showDropboxPicker, setShowDropboxPicker] = useState(false)
@@ -134,13 +133,6 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       setSongDetails(response.data)
-      const hasUnmatched = response.data.credits?.some(c => c.needs_review)
-      if (hasUnmatched && allCreators.length === 0) {
-        try {
-          const creatorsRes = await axios.get('/api/creators', { headers: { 'Authorization': `Bearer ${token}` } })
-          setAllCreators(creatorsRes.data)
-        } catch (e) { /* ignore */ }
-      }
     } catch (error) {
       console.error('Failed to load song details:', error)
     } finally {
@@ -1009,7 +1001,8 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-1.5">
                                   <ExclamationTriangleIcon className="w-4 h-4 text-amber-500" />
-                                  <span className="font-medium text-sm text-amber-700">"{credit.unmatched_artist_name}" — Unmatched</span>
+                                  <span className="font-medium text-sm text-amber-700">"{credit.unmatched_artist_name}"</span>
+                                  <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">Needs Review</span>
                                   <span className="text-xs text-[#7A8580]">({credit.role})</span>
                                 </div>
                                 <button
@@ -1040,7 +1033,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                     className="w-full px-2 py-1.5 border border-amber-200 rounded-[8px] text-xs text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
                                   >
                                     <option value="">-- Select existing creator --</option>
-                                    {allCreators.map(c => (
+                                    {splitCreators.map(c => (
                                       <option key={c.id} value={c.id}>{c.display_name}</option>
                                     ))}
                                   </select>

@@ -477,7 +477,7 @@ export default function ActionItemsPage() {
   const getEntityLink = (action) => {
     const links = []
     if (action.song_id && action.song_title) {
-      links.push({ label: `Song: ${action.song_title}`, path: '/catalog', icon: MusicalNoteIcon })
+      links.push({ label: `Song: ${action.song_title}`, path: `/catalog?songId=${action.song_id}`, icon: MusicalNoteIcon })
     }
     if (action.work_id && action.work_title) {
       links.push({ label: `Work: ${action.work_title}`, path: '/works', icon: DocumentTextIcon })
