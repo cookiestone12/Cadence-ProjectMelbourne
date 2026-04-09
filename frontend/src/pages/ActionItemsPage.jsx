@@ -290,11 +290,11 @@ export default function ActionItemsPage() {
     try {
       await axios.post(`/api/works/${workId}/approve`)
       await Promise.all([loadActions(), loadSummary()])
-      setFeedback({ type: 'success', message: 'Work approved successfully' })
+      setFeedback({ type: 'success', msg: 'Work approved successfully' })
       setTimeout(() => setFeedback(null), 3000)
     } catch (error) {
       console.error('Failed to approve work:', error)
-      setFeedback({ type: 'error', message: error.response?.data?.detail || 'Failed to approve work' })
+      setFeedback({ type: 'error', msg: error.response?.data?.detail || 'Failed to approve work' })
       setTimeout(() => setFeedback(null), 3000)
     }
   }
@@ -303,11 +303,11 @@ export default function ActionItemsPage() {
     try {
       await axios.post(`/api/works/${workId}/reject`)
       await Promise.all([loadActions(), loadSummary()])
-      setFeedback({ type: 'success', message: 'Work rejected' })
+      setFeedback({ type: 'success', msg: 'Work rejected' })
       setTimeout(() => setFeedback(null), 3000)
     } catch (error) {
       console.error('Failed to reject work:', error)
-      setFeedback({ type: 'error', message: error.response?.data?.detail || 'Failed to reject work' })
+      setFeedback({ type: 'error', msg: error.response?.data?.detail || 'Failed to reject work' })
       setTimeout(() => setFeedback(null), 3000)
     }
   }
