@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from pydantic import BaseModel
 from typing import List, Optional
-from ..models import get_db, Work, WorkFolder, WorkTrack, WorkCredit, Song, Creator, OrganizationMember, User, ActionItem
+from ..models import get_db, Work, WorkFolder, WorkTrack, WorkCredit, Song, Creator, OrganizationMember, User, ActionItem, ClientShare
 from ..utils.auth import get_current_user
 
 logger = logging.getLogger("cadence")
@@ -370,21 +370,39 @@ def move_work(work_id: int, data: WorkMove, db: Session = Depends(get_db), curre
     return {"message": "Work moved successfully"}
 
 
+def _is_work_admin(db: Session, current_user: User, work: Work) -> bool:
+    if getattr(current_user, "is_admin", False) or getattr(current_user, "is_super_admin", False):
+        return True
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == work.organization_id
+    ).first()
+    if membership and membership.role in ("OWNER", "ADMIN"):
+        return True
+
+    user_membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if user_membership:
+        share = db.query(ClientShare).filter(
+            ClientShare.creator_id.isnot(None),
+            ClientShare.recipient_org_id == user_membership.organization_id,
+            ClientShare.status == "ACCEPTED"
+        ).first()
+        if share and user_membership.role in ("OWNER", "ADMIN"):
+            return True
+
+    return False
+
+
 @router.post("/{work_id}/approve")
 def approve_work(work_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
         raise HTTPException(status_code=404, detail="Work not found")
 
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id,
-        OrganizationMember.organization_id == work.organization_id
-    ).first()
-
-    is_org_admin = membership and membership.role in ("OWNER", "ADMIN")
-    is_super = getattr(current_user, "is_admin", False) or getattr(current_user, "is_super_admin", False)
-
-    if not is_org_admin and not is_super:
+    if not _is_work_admin(db, current_user, work):
         raise HTTPException(status_code=403, detail="Only organization admins can approve works")
 
     if work.status == "APPROVED":
@@ -405,3 +423,32 @@ def approve_work(work_id: int, db: Session = Depends(get_db), current_user: User
     db.commit()
     logger.info(f"Work {work_id} approved by user {current_user.id}")
     return {"message": "Work approved successfully", "id": work.id, "status": "APPROVED"}
+
+
+@router.post("/{work_id}/reject")
+def reject_work(work_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    work = db.query(Work).filter(Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="Work not found")
+
+    if not _is_work_admin(db, current_user, work):
+        raise HTTPException(status_code=403, detail="Only organization admins can reject works")
+
+    if work.status == "REJECTED":
+        return {"message": "Work is already rejected"}
+
+    work.status = "REJECTED"
+
+    pending_items = db.query(ActionItem).filter(
+        ActionItem.work_id == work_id,
+        ActionItem.is_auto_generated == True,
+        ActionItem.status != "COMPLETED",
+    ).all()
+    for item in pending_items:
+        item.status = "COMPLETED"
+        item.completed_at = datetime.utcnow()
+        item.completed_by_user_id = current_user.id
+
+    db.commit()
+    logger.info(f"Work {work_id} rejected by user {current_user.id}")
+    return {"message": "Work rejected", "id": work.id, "status": "REJECTED"}

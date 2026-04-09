@@ -3,7 +3,7 @@ from sqlalchemy import func
 from datetime import datetime, timedelta
 from ..models import (
     ActionItem, Contract, Release, RoyaltyStatement, RoyaltyTransaction,
-    Placement, Song
+    Placement, Song, Work
 )
 
 
@@ -18,7 +18,7 @@ def generate_cross_module_tasks(db: Session, org_id: int, user_id: int) -> int:
     ).all()
     existing_keys = set()
     for a in existing_actions:
-        key = (a.action_type, a.contract_id, a.release_id, a.placement_id, a.song_id)
+        key = (a.action_type, a.contract_id, a.release_id, a.placement_id, a.song_id, a.work_id)
         existing_keys.add(key)
 
     contracts = db.query(Contract).filter(
@@ -29,7 +29,7 @@ def generate_cross_module_tasks(db: Session, org_id: int, user_id: int) -> int:
     ).all()
 
     for contract in contracts:
-        key = ("CONTRACT_EXPIRING", contract.id, None, None, None)
+        key = ("CONTRACT_EXPIRING", contract.id, None, None, None, None)
         if key not in existing_keys:
             days_left = (contract.end_date - now.date()).days
             action = ActionItem(
@@ -69,7 +69,7 @@ def generate_cross_module_tasks(db: Session, org_id: int, user_id: int) -> int:
             missing.append("Copyright Line")
 
         if missing:
-            key = ("RELEASE_INCOMPLETE", None, release.id, None, None)
+            key = ("RELEASE_INCOMPLETE", None, release.id, None, None, None)
             if key not in existing_keys:
                 action = ActionItem(
                     organization_id=org_id,
@@ -93,7 +93,7 @@ def generate_cross_module_tasks(db: Session, org_id: int, user_id: int) -> int:
         ).scalar() or 0
 
         if unmatched_count > 0:
-            key = ("UNMATCHED_ROYALTIES", None, None, None, None)
+            key = ("UNMATCHED_ROYALTIES", None, None, None, None, None)
             if key not in existing_keys:
                 action = ActionItem(
                     organization_id=org_id,
@@ -120,7 +120,7 @@ def generate_cross_module_tasks(db: Session, org_id: int, user_id: int) -> int:
         if placement.pitched_date:
             days_since = (now.date() - placement.pitched_date).days
             if days_since > 14 and placement.status == "PITCHED":
-                key = ("PLACEMENT_FOLLOWUP", None, None, placement.id, None)
+                key = ("PLACEMENT_FOLLOWUP", None, None, placement.id, None, None)
                 if key not in existing_keys:
                     action = ActionItem(
                         organization_id=org_id,
@@ -138,7 +138,7 @@ def generate_cross_module_tasks(db: Session, org_id: int, user_id: int) -> int:
                     created_count += 1
 
         if placement.status == "SECURED" and not placement.contract_id:
-            key = ("PLACEMENT_NEEDS_CONTRACT", None, None, placement.id, None)
+            key = ("PLACEMENT_NEEDS_CONTRACT", None, None, placement.id, None, None)
             if key not in existing_keys:
                 action = ActionItem(
                     organization_id=org_id,
@@ -154,6 +154,29 @@ def generate_cross_module_tasks(db: Session, org_id: int, user_id: int) -> int:
                 )
                 db.add(action)
                 created_count += 1
+
+    pending_works = db.query(Work).filter(
+        Work.organization_id == org_id,
+        Work.status == "PENDING"
+    ).all()
+
+    for work in pending_works:
+        key = ("WORK_PENDING_APPROVAL", None, None, None, None, work.id)
+        if key not in existing_keys:
+            action = ActionItem(
+                organization_id=org_id,
+                work_id=work.id,
+                entity_type="work",
+                entity_label=work.title,
+                action_type="WORK_PENDING_APPROVAL",
+                title=f"Review & approve work: {work.title}",
+                description=f"Composition '{work.title}' requires admin approval before it becomes active in the catalog.",
+                priority=2,
+                is_auto_generated=True,
+                created_by_user_id=user_id,
+            )
+            db.add(action)
+            created_count += 1
 
     if created_count > 0:
         db.commit()

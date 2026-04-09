@@ -4,7 +4,8 @@ import {
   MagnifyingGlassIcon, PlusIcon, XMarkIcon, TrashIcon,
   PencilIcon, MusicalNoteIcon, UserGroupIcon, LinkIcon,
   FolderIcon, FolderOpenIcon, ChevronDownIcon,
-  EllipsisVerticalIcon, ArrowsUpDownIcon, CheckCircleIcon
+  EllipsisVerticalIcon, ArrowsUpDownIcon, CheckCircleIcon,
+  XCircleIcon
 } from '@heroicons/react/24/outline'
 
 export default function WorksPage() {
@@ -199,6 +200,18 @@ export default function WorksPage() {
       await loadData()
     } catch (error) {
       console.error('Failed to approve work:', error)
+    }
+  }
+
+  async function handleRejectWork() {
+    if (!workDetail) return
+    try {
+      await axios.post(`/api/works/${workDetail.id}/reject`)
+      const res = await axios.get(`/api/works/${workDetail.id}`)
+      setWorkDetail(res.data)
+      await loadData()
+    } catch (error) {
+      console.error('Failed to reject work:', error)
     }
   }
 
@@ -563,7 +576,15 @@ export default function WorksPage() {
                     <td className="px-4 py-3 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-[#3D4A44] truncate">{work.title}</span>
-                        {work.status !== 'APPROVED' && (
+                        {work.status === 'APPROVED' ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 flex-shrink-0">
+                            Approved
+                          </span>
+                        ) : work.status === 'REJECTED' ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 flex-shrink-0">
+                            Rejected
+                          </span>
+                        ) : (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 flex-shrink-0">
                             Pending
                           </span>
@@ -721,14 +742,19 @@ export default function WorksPage() {
                 <h3 className="text-lg font-semibold text-[#3D4A44] truncate">
                   {workDetail?.title || selectedWork.title}
                 </h3>
-                {workDetail && workDetail.status !== 'APPROVED' && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700 flex-shrink-0">
-                    Pending Approval
-                  </span>
-                )}
                 {workDetail && workDetail.status === 'APPROVED' && (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700 flex-shrink-0">
                     Approved
+                  </span>
+                )}
+                {workDetail && workDetail.status === 'REJECTED' && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700 flex-shrink-0">
+                    Rejected
+                  </span>
+                )}
+                {workDetail && workDetail.status !== 'APPROVED' && workDetail.status !== 'REJECTED' && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700 flex-shrink-0">
+                    Pending Approval
                   </span>
                 )}
               </div>
@@ -740,6 +766,15 @@ export default function WorksPage() {
                   >
                     <CheckCircleIcon className="w-4 h-4" />
                     Approve
+                  </button>
+                )}
+                {!editMode && workDetail && isOrgAdmin && workDetail.status !== 'REJECTED' && workDetail.status !== 'APPROVED' && (
+                  <button
+                    onClick={handleRejectWork}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    <XCircleIcon className="w-4 h-4" />
+                    Reject
                   </button>
                 )}
                 {!editMode && workDetail && (
