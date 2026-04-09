@@ -1246,6 +1246,13 @@ def add_split(
         notes=data.notes,
     )
     db.add(split)
+    db.flush()
+
+    if ca.asset_type == "SONG":
+        _sync_song_pub_percentage(db, ca.asset_id)
+        if data.rights_holder_id and data.rights_type in ("PUBLISHING", "MASTER"):
+            _sync_splits_to_credits(db, ca.asset_id, data.rights_holder_id)
+
     db.commit()
     db.refresh(split)
     return {

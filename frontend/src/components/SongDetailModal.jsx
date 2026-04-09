@@ -917,7 +917,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                             <div key={credit.id} className="p-3 bg-[#F5F7F4] rounded-[10px] space-y-2">
                               <div className="flex items-center gap-2">
                                 <UserIcon className="w-4 h-4 text-[#5B8A72]" />
-                                <span className={`font-medium text-sm ${credit.creator_name ? 'text-[#3D4A44]' : 'text-amber-600'}`}>{credit.creator_name || 'Unmatched — Review Needed'}</span>
+                                <span className={`font-medium text-sm ${credit.creator_name ? 'text-[#3D4A44]' : 'text-amber-600 underline'}`}>{credit.creator_name || 'Unmatched — Review Needed'}</span>
                               </div>
                               <div className="space-y-2 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-2">
                                 <div>
@@ -1337,7 +1337,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                             <p className="text-[11px] text-amber-600 mt-0.5">Legacy value — add credit-level splits in Rights tab</p>
                           )}
                           {pubVal == null && (
-                            <p className="text-[11px] text-[#7A8580] mt-0.5">Add splits in Credits & Links tab</p>
+                            <p className="text-[11px] text-[#7A8580] mt-0.5">Add splits in the Rights tab</p>
                           )}
                         </div>
                       )
@@ -1360,7 +1360,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                             <p className="text-[11px] text-amber-600 mt-0.5">Legacy value — add credit-level splits in Rights tab</p>
                           )}
                           {masterVal == null && (
-                            <p className="text-[11px] text-[#7A8580] mt-0.5">Add splits in Credits & Links tab</p>
+                            <p className="text-[11px] text-[#7A8580] mt-0.5">Add splits in the Rights tab</p>
                           )}
                         </div>
                       )
@@ -2173,7 +2173,11 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                     {songDetails.credits.map((credit, idx) => (
                       <div key={idx} className="flex flex-wrap items-center gap-2 p-3 bg-[#F5F7F4] rounded-[12px]">
                         <div className="min-w-0">
-                          <p className={`font-medium ${credit.creator_name ? 'text-[#3D4A44]' : 'text-amber-600'}`}>{credit.creator_name || 'Unmatched — Review Needed'}</p>
+                          {credit.creator_name ? (
+                            <Link to={`/roster/${credit.creator_id}`} onClick={onClose} className="font-medium text-[#5B8A72] hover:text-[#7BA594]">{credit.creator_name}</Link>
+                          ) : (
+                            <Link to="/roster" onClick={onClose} className="font-medium text-amber-600 underline hover:text-amber-700">Unmatched — Review Needed</Link>
+                          )}
                           <p className="text-[13px] text-[#7A8580]">{credit.role}</p>
                         </div>
                         <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
