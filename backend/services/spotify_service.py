@@ -555,6 +555,9 @@ def _fetch_with_retries(fetch_fn, resource_type: str, resource_id: str, tokens, 
             logger.info(f"Spotify: All tokens got 404, retrying in {delay}s (attempt {attempt}/{max_retries})")
             time.sleep(delay)
 
+    if isinstance(last_error, (SpotifyForbiddenError, SpotifyAuthError)):
+        raise last_error
+
     return None, last_error, all_404
 
 
@@ -645,25 +648,34 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
     if url_type == "artist":
         result = _fetch_with_retries(_fetch_artist_tracks, "artist", resource_id, tokens, logger)
         if isinstance(result, tuple):
+            _, err, _ = result
+            if isinstance(err, SpotifyNotFoundError):
+                raise SpotifyNotFoundError("Could not find this artist on Spotify. Please check the URL and try again.")
             raise SpotifyNotFoundError("Could not find this artist on Spotify. Please check the URL and try again.")
         return result
 
     if url_type == "album":
         result = _fetch_with_retries(_fetch_album_tracks, "album", resource_id, tokens, logger)
         if isinstance(result, tuple):
+            _, err, _ = result
+            if isinstance(err, SpotifyNotFoundError):
+                raise SpotifyNotFoundError("Could not find this album on Spotify. Please check the URL and try again.")
             raise SpotifyNotFoundError("Could not find this album on Spotify. Please check the URL and try again.")
         return result
 
     result = _fetch_with_retries(_fetch_playlist_with_token, "playlist", resource_id, tokens, logger)
     if isinstance(result, tuple):
-        tracks_result, last_error, all_404 = result
+        _, last_error, all_404 = result
         if all_404:
             raise SpotifyNotFoundError(
                 "Could not fetch this playlist from Spotify after multiple attempts. "
                 "The Spotify API sometimes has intermittent issues. "
                 "Please wait a moment and try again, or try pasting an artist or album URL instead."
             )
-        return []
+        raise SpotifyNotFoundError(
+            "Could not fetch playlist tracks. The playlist may be empty or temporarily unavailable. "
+            "Please try again in a moment."
+        )
     return result
 
 
