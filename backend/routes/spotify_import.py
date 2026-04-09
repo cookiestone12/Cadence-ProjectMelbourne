@@ -74,6 +74,9 @@ def preview_playlist_import(
         raise HTTPException(status_code=400, detail="Spotify API access is restricted. The connected Spotify app may require a Premium subscription or may be in development mode. Please check your Spotify Developer Dashboard settings.")
     except SpotifyAuthError as e:
         logger.error(f"Spotify auth error for org {org_id}: {e}")
+        err_msg = str(e)
+        if "not connected" in err_msg.lower():
+            raise HTTPException(status_code=400, detail=err_msg)
         raise HTTPException(status_code=400, detail="Spotify authentication failed. Please reconnect the Spotify integration or check your Spotify credentials.")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

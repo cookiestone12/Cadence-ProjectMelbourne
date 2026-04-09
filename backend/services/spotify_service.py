@@ -648,18 +648,12 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
     if url_type == "artist":
         result = _fetch_with_retries(_fetch_artist_tracks, "artist", resource_id, tokens, logger)
         if isinstance(result, tuple):
-            _, err, _ = result
-            if isinstance(err, SpotifyNotFoundError):
-                raise SpotifyNotFoundError("Could not find this artist on Spotify. Please check the URL and try again.")
             raise SpotifyNotFoundError("Could not find this artist on Spotify. Please check the URL and try again.")
         return result
 
     if url_type == "album":
         result = _fetch_with_retries(_fetch_album_tracks, "album", resource_id, tokens, logger)
         if isinstance(result, tuple):
-            _, err, _ = result
-            if isinstance(err, SpotifyNotFoundError):
-                raise SpotifyNotFoundError("Could not find this album on Spotify. Please check the URL and try again.")
             raise SpotifyNotFoundError("Could not find this album on Spotify. Please check the URL and try again.")
         return result
 
@@ -672,7 +666,7 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
                 "The Spotify API sometimes has intermittent issues. "
                 "Please wait a moment and try again, or try pasting an artist or album URL instead."
             )
-        raise SpotifyNotFoundError(
+        raise ValueError(
             "Could not fetch playlist tracks. The playlist may be empty or temporarily unavailable. "
             "Please try again in a moment."
         )
