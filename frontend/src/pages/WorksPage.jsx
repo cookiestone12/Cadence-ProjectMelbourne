@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import {
   MagnifyingGlassIcon, PlusIcon, XMarkIcon, TrashIcon,
@@ -9,6 +10,7 @@ import {
 } from '@heroicons/react/24/outline'
 
 export default function WorksPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [works, setWorks] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -48,6 +50,17 @@ export default function WorksPage() {
   useEffect(() => {
     loadData()
   }, [])
+
+  useEffect(() => {
+    const workIdParam = searchParams.get('workId')
+    if (workIdParam && works.length > 0 && !selectedWork) {
+      const targetWork = works.find(w => w.id === parseInt(workIdParam))
+      if (targetWork) {
+        openWorkDetail(targetWork)
+        setSearchParams({}, { replace: true })
+      }
+    }
+  }, [works, searchParams])
 
   useEffect(() => {
     function handleClickOutside(e) {

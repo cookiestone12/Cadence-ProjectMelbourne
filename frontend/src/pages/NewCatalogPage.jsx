@@ -385,6 +385,24 @@ export default function NewCatalogPage() {
       (work.iswc && work.iswc.toLowerCase().includes(term))
   })
 
+  const unifiedItems = activeTab === 'all' ? [
+    ...sortedSongs.map(s => ({ ...s, _itemType: 'recording' })),
+    ...filteredWorks.map(w => ({
+      _itemType: 'composition',
+      id: w.id,
+      title: w.title,
+      primary_artist: '-',
+      work_type: w.work_type,
+      iswc: w.iswc,
+      genre: w.genre,
+      status: w.status || 'PENDING',
+      track_count: w.track_count || 0,
+      credit_count: w.credit_count || 0,
+      folder_name: w.folder_name,
+      created_at: w.created_at,
+    }))
+  ] : []
+
   const hasActiveFilters = Object.values(filters).some(v => v !== '')
   
   const releasedCount = songs.filter(s => s.is_released).length
@@ -804,7 +822,106 @@ export default function NewCatalogPage() {
         </div>
       )}
       
-      {activeTab !== 'compositions' && (<>
+      {activeTab === 'all' && (
+        <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
+          <div className="p-4">
+            <div className="flex-1 relative">
+              <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7A8580]" />
+              <input
+                type="text"
+                placeholder="Search recordings and compositions..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+              />
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px]">
+              <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] w-24">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Artist / Info</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">ISRC / ISWC</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+                {unifiedItems.map(item => (
+                  <tr
+                    key={`${item._itemType}-${item.id}`}
+                    onClick={() => {
+                      if (item._itemType === 'recording') {
+                        setSelectedSong(item)
+                      } else {
+                        navigate(`/works?workId=${item.id}`)
+                      }
+                    }}
+                    className="group hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      {item._itemType === 'recording' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                          <MusicalNoteIcon className="w-3 h-3 mr-1" />
+                          Recording
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
+                          <DocumentTextIcon className="w-3 h-3 mr-1" />
+                          Composition
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-[#3D4A44] truncate">{item.title}</div>
+                      {item._itemType === 'composition' && item.folder_name && (
+                        <div className="text-xs text-[#7A8580] truncate">{item.folder_name}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">
+                      {item._itemType === 'recording' ? (
+                        <span className="truncate block">{item.primary_artist}</span>
+                      ) : (
+                        <span className="truncate block">{item.track_count} track{item.track_count !== 1 ? 's' : ''}, {item.credit_count} credit{item.credit_count !== 1 ? 's' : ''}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580] font-mono">
+                      {item._itemType === 'recording' ? (item.isrc || '-') : (item.iswc || '-')}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {item._itemType === 'recording' ? (
+                        item.is_released ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">Released</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Unreleased</span>
+                        )
+                      ) : (
+                        item.status === 'APPROVED' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">Approved</span>
+                        ) : item.status === 'REJECTED' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">Rejected</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">Pending</span>
+                        )
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {unifiedItems.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center text-[#7A8580]">
+                      No catalog items found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'recordings' && (<>
       <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
         <div className="flex items-center space-x-4 mb-3 sm:mb-0">
           <div className="flex-1 relative">
@@ -1386,7 +1503,7 @@ export default function NewCatalogPage() {
                 {filteredWorks.map(work => (
                   <tr
                     key={work.id}
-                    onClick={() => navigate('/works')}
+                    onClick={() => navigate(`/works?workId=${work.id}`)}
                     className="group hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-3">
@@ -1394,6 +1511,9 @@ export default function NewCatalogPage() {
                         <DocumentTextIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
                         <span className="font-medium text-[#3D4A44] truncate">{work.title}</span>
                       </div>
+                      {work.folder_name && (
+                        <div className="text-xs text-[#7A8580] mt-0.5 truncate">{work.folder_name}</div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-[#7A8580]">{work.work_type || 'TRACK'}</td>
                     <td className="px-4 py-3 text-sm text-[#7A8580] font-mono">{work.iswc || '-'}</td>
@@ -1429,56 +1549,6 @@ export default function NewCatalogPage() {
         </div>
       )}
 
-      {activeTab === 'all' && works.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-lg font-semibold text-[#3D4A44] mb-3 flex items-center space-x-2">
-            <DocumentTextIcon className="w-5 h-5 text-[#7A8580]" />
-            <span>Compositions</span>
-            <span className="text-sm font-normal text-[#7A8580]">({works.length})</span>
-          </h3>
-          <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[500px]">
-                <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Type</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Tracks</th>
-                    <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
-                  {filteredWorks.map(work => (
-                    <tr
-                      key={`work-${work.id}`}
-                      onClick={() => navigate('/works')}
-                      className="group hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center space-x-2">
-                          <DocumentTextIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
-                          <span className="font-medium text-[#3D4A44] truncate">{work.title}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-[#7A8580]">{work.work_type || 'TRACK'}</td>
-                      <td className="px-4 py-3 text-center text-sm text-[#7A8580]">{work.track_count || 0}</td>
-                      <td className="px-4 py-3 text-center">
-                        {(work.status || 'PENDING') === 'APPROVED' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">Approved</span>
-                        ) : (work.status || 'PENDING') === 'REJECTED' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">Rejected</span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">Pending</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
 
       {selectedSongIds.size > 0 && (
         <div className="fixed bottom-4 left-2 right-2 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-40">

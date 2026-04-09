@@ -92,6 +92,12 @@ def list_works(
     total = query.count()
     works = query.order_by(Work.title).offset(offset).limit(limit).all()
 
+    folder_ids = set(w.folder_id for w in works if w.folder_id)
+    folder_map = {}
+    if folder_ids:
+        folders = db.query(WorkFolder).filter(WorkFolder.id.in_(folder_ids)).all()
+        folder_map = {f.id: f.name for f in folders}
+
     results = []
     for w in works:
         track_count = db.query(WorkTrack).filter(WorkTrack.work_id == w.id).count()
@@ -106,6 +112,7 @@ def list_works(
             "genre": w.genre,
             "notes": w.notes,
             "folder_id": w.folder_id,
+            "folder_name": folder_map.get(w.folder_id) if w.folder_id else None,
             "status": w.status or "PENDING",
             "track_count": track_count,
             "credit_count": credit_count,
