@@ -384,14 +384,20 @@ def _is_work_admin(db: Session, current_user: User, work: Work) -> bool:
     user_membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == current_user.id
     ).first()
-    if user_membership:
-        share = db.query(ClientShare).filter(
-            ClientShare.creator_id.isnot(None),
-            ClientShare.recipient_org_id == user_membership.organization_id,
-            ClientShare.status == "ACCEPTED"
-        ).first()
-        if share and user_membership.role in ("OWNER", "ADMIN"):
-            return True
+    if user_membership and user_membership.role in ("OWNER", "ADMIN"):
+        work_creator_ids = [
+            wc.creator_id for wc in
+            db.query(WorkCredit).filter(WorkCredit.work_id == work.id).all()
+            if wc.creator_id
+        ]
+        if work_creator_ids:
+            shared = db.query(ClientShare).filter(
+                ClientShare.creator_id.in_(work_creator_ids),
+                ClientShare.recipient_org_id == user_membership.organization_id,
+                ClientShare.status == "ACCEPTED"
+            ).first()
+            if shared:
+                return True
 
     return False
 
