@@ -31,6 +31,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Sync Reports**: Customizable sync placement reports with PDF/CSV export and branded templates.
 - **Cross-Organization Client Sharing**: Secure sharing workflow with email invitations, passcode verification, role-based catalog synchronization, and granular module-level permissions (catalog, contracts, placements, royalties, contacts). Module restrictions enforced server-side via `has_shared_access(required_module=)` and on frontend via tab filtering.
 - **Expense Tracking**: An Expense model integrated into the Royalties page.
+- **Works Approval Workflow**: New compositions enter as PENDING and require OWNER/ADMIN approval. Auto-generates `WORK_PENDING_APPROVAL` action items on creation; approval marks action items completed. Frontend shows pending/approved badges and an approve button for admins.
 - **Works Folder Organization**: Supports hierarchical folder organization for Works.
 - **Core Catalog & Creator Management**: Expanded data models for `Works` and `Releases` with `work_type` and `IPAssetType`.
 - **Creative Directory**: Contact management system for industry collaborators with private/public visibility toggle, per-user ownership, Quick Share PRO Info (copy-to-clipboard and email), and visibility filtering (All My Contacts, Private Only, Org-Wide).

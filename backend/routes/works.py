@@ -1,10 +1,14 @@
+import logging
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 from pydantic import BaseModel
 from typing import List, Optional
-from ..models import get_db, Work, WorkFolder, WorkTrack, WorkCredit, Song, Creator, OrganizationMember, User
+from ..models import get_db, Work, WorkFolder, WorkTrack, WorkCredit, Song, Creator, OrganizationMember, User, ActionItem
 from ..utils.auth import get_current_user
+
+logger = logging.getLogger("cadence")
 
 router = APIRouter(prefix="/api/works", tags=["works"])
 
@@ -102,6 +106,7 @@ def list_works(
             "genre": w.genre,
             "notes": w.notes,
             "folder_id": w.folder_id,
+            "status": w.status or "PENDING",
             "track_count": track_count,
             "credit_count": credit_count,
             "created_at": w.created_at.isoformat() if w.created_at else None,
@@ -154,6 +159,7 @@ def get_work(work_id: int, db: Session = Depends(get_db), current_user: User = D
         "notes": work.notes,
         "lyrics": work.lyrics,
         "folder_id": work.folder_id,
+        "status": work.status or "PENDING",
         "tracks": tracks,
         "credits": credits,
         "created_at": work.created_at.isoformat() if work.created_at else None,
@@ -175,8 +181,21 @@ def create_work(org_id: int, data: WorkCreate, db: Session = Depends(get_db), cu
         genre=data.genre,
         notes=data.notes,
         lyrics=data.lyrics,
+        status="PENDING",
     )
     db.add(work)
+    db.flush()
+
+    action_item = ActionItem(
+        organization_id=org_id,
+        work_id=work.id,
+        action_type="WORK_PENDING_APPROVAL",
+        title=f"Review & approve work: {work.title}",
+        description=f"New composition '{work.title}' requires admin approval before it becomes active in the catalog.",
+        priority=2,
+        is_auto_generated=True,
+    )
+    db.add(action_item)
     db.commit()
     db.refresh(work)
     return {"id": work.id, "title": work.title, "message": "Work created successfully"}
@@ -204,6 +223,7 @@ def delete_work(work_id: int, db: Session = Depends(get_db), current_user: User 
         raise HTTPException(status_code=404, detail="Work not found")
     verify_org_access(current_user, work.organization_id, db)
 
+    db.query(ActionItem).filter(ActionItem.work_id == work_id).delete()
     db.delete(work)
     db.commit()
     return {"message": "Work deleted successfully"}
@@ -348,3 +368,40 @@ def move_work(work_id: int, data: WorkMove, db: Session = Depends(get_db), curre
     work.folder_id = data.folder_id
     db.commit()
     return {"message": "Work moved successfully"}
+
+
+@router.post("/{work_id}/approve")
+def approve_work(work_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    work = db.query(Work).filter(Work.id == work_id).first()
+    if not work:
+        raise HTTPException(status_code=404, detail="Work not found")
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == work.organization_id
+    ).first()
+
+    is_org_admin = membership and membership.role in ("OWNER", "ADMIN")
+    is_super = getattr(current_user, "is_admin", False) or getattr(current_user, "is_super_admin", False)
+
+    if not is_org_admin and not is_super:
+        raise HTTPException(status_code=403, detail="Only organization admins can approve works")
+
+    if work.status == "APPROVED":
+        return {"message": "Work is already approved"}
+
+    work.status = "APPROVED"
+
+    pending_items = db.query(ActionItem).filter(
+        ActionItem.work_id == work_id,
+        ActionItem.is_auto_generated == True,
+        ActionItem.status != "COMPLETED",
+    ).all()
+    for item in pending_items:
+        item.status = "COMPLETED"
+        item.completed_at = datetime.utcnow()
+        item.completed_by_user_id = current_user.id
+
+    db.commit()
+    logger.info(f"Work {work_id} approved by user {current_user.id}")
+    return {"message": "Work approved successfully", "id": work.id, "status": "APPROVED"}

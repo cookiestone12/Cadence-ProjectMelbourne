@@ -364,6 +364,7 @@ class Work(Base):
     lyrics = Column(Text, nullable=True)
     folder_id = Column(Integer, ForeignKey("work_folders.id"), nullable=True)
     is_registered_with_pro = Column(Boolean, default=False)
+    status = Column(String, default="PENDING", nullable=False, server_default="PENDING")
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

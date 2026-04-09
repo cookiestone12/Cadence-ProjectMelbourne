@@ -297,6 +297,13 @@ def ensure_schema_updates():
                     conn.commit()
                     logger.info(f"Added {field} column to royalty_statements")
 
+        if 'works' in inspector.get_table_names():
+            works_cols = [c['name'] for c in inspector.get_columns('works')]
+            if 'status' not in works_cols:
+                conn.execute(text("ALTER TABLE works ADD COLUMN status VARCHAR NOT NULL DEFAULT 'PENDING'"))
+                conn.commit()
+                logger.info("Added status column to works")
+
         if 'registration_reports' not in inspector.get_table_names():
             try:
                 from backend.models.models import RegistrationReport

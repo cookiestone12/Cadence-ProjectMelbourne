@@ -4,7 +4,7 @@ import {
   MagnifyingGlassIcon, PlusIcon, XMarkIcon, TrashIcon,
   PencilIcon, MusicalNoteIcon, UserGroupIcon, LinkIcon,
   FolderIcon, FolderOpenIcon, ChevronDownIcon,
-  EllipsisVerticalIcon, ArrowsUpDownIcon
+  EllipsisVerticalIcon, ArrowsUpDownIcon, CheckCircleIcon
 } from '@heroicons/react/24/outline'
 
 export default function WorksPage() {
@@ -40,6 +40,7 @@ export default function WorksPage() {
   const [creditsFilter, setCreditsFilter] = useState('')
   const [tracksFilter, setTracksFilter] = useState('')
   const [sortOption, setSortOption] = useState('title_asc')
+  const [isOrgAdmin, setIsOrgAdmin] = useState(false)
 
   const folderMenuRef = useRef(null)
 
@@ -64,17 +65,20 @@ export default function WorksPage() {
       if (!orgId) { setLoading(false); return }
       setOrganizationId(orgId)
 
-      const [worksResponse, songsResponse, creatorsResponse, foldersResponse] = await Promise.all([
+      const [worksResponse, songsResponse, creatorsResponse, foldersResponse, membershipResponse] = await Promise.all([
         axios.get(`/api/works/org/${orgId}?limit=500`),
         axios.get(`/api/songs/org/${orgId}?limit=1000`),
         axios.get(`/api/creators/org/${orgId}`),
-        axios.get(`/api/works/org/${orgId}/folders`)
+        axios.get(`/api/works/org/${orgId}/folders`),
+        axios.get('/api/organizations/current/membership').catch(() => ({ data: {} }))
       ])
 
       setWorks(worksResponse.data.works || [])
       setSongs(songsResponse.data)
       setCreators(creatorsResponse.data)
       setFolders(foldersResponse.data || [])
+      const role = membershipResponse.data?.role
+      setIsOrgAdmin(role === 'OWNER' || role === 'ADMIN')
     } catch (error) {
       console.error('Failed to load works:', error)
     } finally {
@@ -183,6 +187,18 @@ export default function WorksPage() {
       await loadData()
     } catch (error) {
       console.error('Failed to delete work:', error)
+    }
+  }
+
+  async function handleApproveWork() {
+    if (!workDetail) return
+    try {
+      await axios.post(`/api/works/${workDetail.id}/approve`)
+      const res = await axios.get(`/api/works/${workDetail.id}`)
+      setWorkDetail(res.data)
+      await loadData()
+    } catch (error) {
+      console.error('Failed to approve work:', error)
     }
   }
 
@@ -545,7 +561,14 @@ export default function WorksPage() {
                     className="hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-3 min-w-0">
-                      <div className="font-medium text-[#3D4A44] truncate">{work.title}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-[#3D4A44] truncate">{work.title}</span>
+                        {work.status !== 'APPROVED' && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 flex-shrink-0">
+                            Pending
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
@@ -694,10 +717,31 @@ export default function WorksPage() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
-              <h3 className="text-lg font-semibold text-[#3D4A44]">
-                {workDetail?.title || selectedWork.title}
-              </h3>
+              <div className="flex items-center gap-3 min-w-0">
+                <h3 className="text-lg font-semibold text-[#3D4A44] truncate">
+                  {workDetail?.title || selectedWork.title}
+                </h3>
+                {workDetail && workDetail.status !== 'APPROVED' && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700 flex-shrink-0">
+                    Pending Approval
+                  </span>
+                )}
+                {workDetail && workDetail.status === 'APPROVED' && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700 flex-shrink-0">
+                    Approved
+                  </span>
+                )}
+              </div>
               <div className="flex items-center space-x-2">
+                {!editMode && workDetail && isOrgAdmin && workDetail.status !== 'APPROVED' && (
+                  <button
+                    onClick={handleApproveWork}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+                  >
+                    <CheckCircleIcon className="w-4 h-4" />
+                    Approve
+                  </button>
+                )}
                 {!editMode && workDetail && (
                   <>
                     <button
