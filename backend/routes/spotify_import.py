@@ -230,6 +230,7 @@ def import_playlist_tracks(
             credited_creator_ids.add(creator.id)
             credits_created += 1
 
+        unmatched_names = []
         if track_data.all_artists and not creator:
             for idx, artist_name in enumerate(track_data.all_artists):
                 if not artist_name:
@@ -238,27 +239,46 @@ def import_playlist_tracks(
                     Creator.organization_id == org_id,
                     Creator.display_name == artist_name
                 ).first()
-                if not artist_creator:
-                    artist_creator = Creator(
-                        organization_id=org_id,
-                        display_name=artist_name,
-                        roles=["ARTIST"],
-                        contributor_type="ARTIST",
-                    )
-                    db.add(artist_creator)
-                    db.flush()
-                    creators_created += 1
 
-                if artist_creator.id not in credited_creator_ids:
-                    role = "ARTIST" if idx == 0 else "FEATURED_ARTIST"
+                role = "ARTIST" if idx == 0 else "FEATURED_ARTIST"
+                if artist_creator:
+                    if artist_creator.id not in credited_creator_ids:
+                        artist_credit = SongCredit(
+                            song_id=song.id,
+                            creator_id=artist_creator.id,
+                            role=role,
+                        )
+                        db.add(artist_credit)
+                        credited_creator_ids.add(artist_creator.id)
+                        credits_created += 1
+                else:
                     artist_credit = SongCredit(
                         song_id=song.id,
-                        creator_id=artist_creator.id,
+                        creator_id=None,
                         role=role,
+                        needs_review=True,
+                        unmatched_artist_name=artist_name,
                     )
                     db.add(artist_credit)
-                    credited_creator_ids.add(artist_creator.id)
+                    unmatched_names.append(artist_name)
                     credits_created += 1
+
+        if unmatched_names:
+            from ..models import ActionItem
+            unmatched_count = len(unmatched_names)
+            action = ActionItem(
+                organization_id=org_id,
+                song_id=song.id,
+                entity_type="song",
+                entity_label=song.title,
+                action_type="UNMATCHED_CREDIT",
+                title=f"{unmatched_count} unmatched credit{'s' if unmatched_count > 1 else ''} on \"{song.title}\"",
+                description=f"Spotify import found unmatched artists: {', '.join(unmatched_names)}. Review and match to existing creators.",
+                priority=2,
+                is_auto_generated=True,
+                created_by_user_id=current_user.id,
+            )
+            db.add(action)
 
         imported += 1
 

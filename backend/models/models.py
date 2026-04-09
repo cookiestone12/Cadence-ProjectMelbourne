@@ -493,12 +493,14 @@ class SongCredit(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     song_id = Column(Integer, ForeignKey("songs.id"), nullable=False, index=True)
-    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=False, index=True)
+    creator_id = Column(Integer, ForeignKey("creators.id"), nullable=True, index=True)
     role = Column(String, nullable=False)
     share_percentage = Column(Float, nullable=True)
     pub_share = Column(Float, nullable=True)
     master_share = Column(Float, nullable=True)
     creative_contact_id = Column(Integer, nullable=True)
+    needs_review = Column(Boolean, default=False, nullable=False)
+    unmatched_artist_name = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     song = relationship("Song", back_populates="credits")

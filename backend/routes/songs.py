@@ -124,12 +124,14 @@ def _song_to_response(song) -> dict:
 
 class CreditResponse(BaseModel):
     id: int
-    creator_id: int
-    creator_name: str
+    creator_id: Optional[int] = None
+    creator_name: Optional[str] = None
     role: str
     share_percentage: Optional[float]
     pub_share: Optional[float] = None
     master_share: Optional[float] = None
+    needs_review: bool = False
+    unmatched_artist_name: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -449,7 +451,7 @@ def get_song(
     if not membership:
         raise HTTPException(status_code=403, detail="Not authorized to access this song")
     
-    credits = db.query(SongCredit, Creator).join(
+    credits = db.query(SongCredit, Creator).outerjoin(
         Creator, SongCredit.creator_id == Creator.id
     ).filter(SongCredit.song_id == song.id).order_by(SongCredit.id).all()
     
@@ -461,10 +463,11 @@ def get_song(
     
     client_name = None
     client_id = None
-    if credits:
-        first_credit, first_creator = credits[0]
-        client_name = first_creator.display_name
-        client_id = first_creator.id
+    for credit, creator in credits:
+        if creator:
+            client_name = creator.display_name
+            client_id = creator.id
+            break
     
     return {
         "id": song.id,
@@ -500,12 +503,14 @@ def get_song(
         "credits": [
             {
                 "id": credit.id,
-                "creator_id": creator.id,
-                "creator_name": creator.display_name,
+                "creator_id": creator.id if creator else None,
+                "creator_name": creator.display_name if creator else None,
                 "role": credit.role,
                 "share_percentage": credit.share_percentage,
                 "pub_share": credit.pub_share,
-                "master_share": credit.master_share
+                "master_share": credit.master_share,
+                "needs_review": credit.needs_review,
+                "unmatched_artist_name": credit.unmatched_artist_name,
             }
             for credit, creator in credits
         ],

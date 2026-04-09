@@ -228,12 +228,28 @@ def delete_credit(
     
     creator_id = credit.creator_id
     had_splits = credit.pub_share is not None or credit.master_share is not None
+    was_unmatched = credit.needs_review
     db.delete(credit)
     db.flush()
 
     if had_splits:
         from .contracts_mgmt import _sync_song_pub_percentage
         _sync_song_pub_percentage(db, song_id)
+
+    if was_unmatched:
+        from ..models import ActionItem
+        remaining_unmatched = db.query(SongCredit).filter(
+            SongCredit.song_id == song_id,
+            SongCredit.needs_review == True,
+        ).count()
+        if remaining_unmatched == 0:
+            unmatched_actions = db.query(ActionItem).filter(
+                ActionItem.song_id == song_id,
+                ActionItem.action_type == "UNMATCHED_CREDIT",
+                ActionItem.status != "COMPLETED",
+            ).all()
+            for action in unmatched_actions:
+                action.status = "COMPLETED"
 
     db.commit()
     
@@ -244,6 +260,94 @@ def delete_credit(
     ).start()
     
     return {"message": "Credit deleted"}
+
+
+class ResolveCreditRequest(BaseModel):
+    creator_id: Optional[int] = None
+    new_creator_name: Optional[str] = None
+
+@router.post("/{song_id}/credits/{credit_id}/resolve")
+def resolve_credit(
+    song_id: int,
+    credit_id: int,
+    request: ResolveCreditRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import Creator, ActionItem
+
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == song.organization_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    credit = db.query(SongCredit).filter(
+        SongCredit.id == credit_id,
+        SongCredit.song_id == song_id
+    ).first()
+    if not credit:
+        raise HTTPException(status_code=404, detail="Credit not found")
+
+    if not credit.needs_review:
+        raise HTTPException(status_code=400, detail="Credit is not flagged for review")
+
+    if request.creator_id:
+        creator = db.query(Creator).filter(Creator.id == request.creator_id).first()
+        if not creator or creator.organization_id != song.organization_id:
+            raise HTTPException(status_code=404, detail="Creator not found in this organization")
+        credit.creator_id = creator.id
+    elif request.new_creator_name:
+        new_creator = Creator(
+            organization_id=song.organization_id,
+            display_name=request.new_creator_name,
+            roles=["ARTIST"],
+            contributor_type="ARTIST",
+        )
+        db.add(new_creator)
+        db.flush()
+        credit.creator_id = new_creator.id
+    else:
+        raise HTTPException(status_code=400, detail="Provide creator_id or new_creator_name")
+
+    credit.needs_review = False
+    credit.unmatched_artist_name = None
+
+    remaining_unmatched = db.query(SongCredit).filter(
+        SongCredit.song_id == song_id,
+        SongCredit.needs_review == True,
+        SongCredit.id != credit_id,
+    ).count()
+
+    if remaining_unmatched == 0:
+        unmatched_actions = db.query(ActionItem).filter(
+            ActionItem.song_id == song_id,
+            ActionItem.action_type == "UNMATCHED_CREDIT",
+            ActionItem.status != "COMPLETED",
+        ).all()
+        for action in unmatched_actions:
+            action.status = "COMPLETED"
+
+    db.commit()
+
+    threading.Thread(
+        target=_refresh_creator_credits_async,
+        args=(credit.creator_id, song.organization_id),
+        daemon=True,
+    ).start()
+
+    return {
+        "id": credit.id,
+        "creator_id": credit.creator_id,
+        "needs_review": credit.needs_review,
+        "message": "Credit resolved successfully"
+    }
+
 
 @router.post("/{song_id}/dsp-links", response_model=DSPLinkResponse)
 def create_dsp_link(

@@ -154,6 +154,22 @@ def ensure_schema_updates():
                 conn.commit()
                 logger.info(f"Added {field} column to creators")
 
+        sc_cols = [c['name'] for c in inspector.get_columns('song_credits')]
+        if 'needs_review' not in sc_cols:
+            conn.execute(text("ALTER TABLE song_credits ADD COLUMN needs_review BOOLEAN NOT NULL DEFAULT FALSE"))
+            conn.commit()
+            logger.info("Added needs_review column to song_credits")
+        if 'unmatched_artist_name' not in sc_cols:
+            conn.execute(text("ALTER TABLE song_credits ADD COLUMN unmatched_artist_name VARCHAR"))
+            conn.commit()
+            logger.info("Added unmatched_artist_name column to song_credits")
+        try:
+            conn.execute(text("ALTER TABLE song_credits ALTER COLUMN creator_id DROP NOT NULL"))
+            conn.commit()
+            logger.info("Made creator_id nullable in song_credits")
+        except Exception:
+            pass
+
         om_cols = [c['name'] for c in inspector.get_columns('organization_members')]
         if 'can_manage_roster' not in om_cols:
             conn.execute(text("ALTER TABLE organization_members ADD COLUMN can_manage_roster BOOLEAN DEFAULT FALSE"))

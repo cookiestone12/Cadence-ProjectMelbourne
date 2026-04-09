@@ -7,7 +7,7 @@ import {
   DocumentArrowUpIcon, ArrowDownTrayIcon, TrashIcon, PlayIcon, UserIcon,
   ScaleIcon, PencilSquareIcon, PlusIcon, SpeakerWaveIcon,
   FolderIcon, FolderOpenIcon, ArrowLeftIcon, DocumentDuplicateIcon, ShareIcon,
-  ArrowTopRightOnSquareIcon
+  ArrowTopRightOnSquareIcon, ExclamationTriangleIcon
 } from '@heroicons/react/24/outline'
 
 import ShareModal from './ShareModal'
@@ -45,6 +45,10 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [addClientMasterShare, setAddClientMasterShare] = useState('')
   const [editingCreditId, setEditingCreditId] = useState(null)
   const [editCreditForm, setEditCreditForm] = useState({ role: '', pub_share: '', master_share: '' })
+  const [resolvingCreditId, setResolvingCreditId] = useState(null)
+  const [resolveCreatorId, setResolveCreatorId] = useState(null)
+  const [resolveNewName, setResolveNewName] = useState('')
+  const [allCreators, setAllCreators] = useState([])
   const [audioAssets, setAudioAssets] = useState([])
   const [audioLoading, setAudioLoading] = useState(false)
   const [showDropboxPicker, setShowDropboxPicker] = useState(false)
@@ -130,6 +134,13 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       setSongDetails(response.data)
+      const hasUnmatched = response.data.credits?.some(c => c.needs_review)
+      if (hasUnmatched && allCreators.length === 0) {
+        try {
+          const creatorsRes = await axios.get('/api/creators', { headers: { 'Authorization': `Bearer ${token}` } })
+          setAllCreators(creatorsRes.data)
+        } catch (e) { /* ignore */ }
+      }
     } catch (error) {
       console.error('Failed to load song details:', error)
     } finally {
@@ -993,6 +1004,102 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 </button>
                               </div>
                             </div>
+                          ) : credit.needs_review ? (
+                            <div key={credit.id} className="p-3 bg-amber-50 border border-amber-200 rounded-[10px] space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1.5">
+                                  <ExclamationTriangleIcon className="w-4 h-4 text-amber-500" />
+                                  <span className="font-medium text-sm text-amber-700">"{credit.unmatched_artist_name}" — Unmatched</span>
+                                  <span className="text-xs text-[#7A8580]">({credit.role})</span>
+                                </div>
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`Remove this unmatched credit?`)) return
+                                    try {
+                                      await axios.delete(`/api/songs/${song.id}/credits/${credit.id}`)
+                                      await loadSongDetails()
+                                      if (onSongUpdated) onSongUpdated()
+                                    } catch (err) {
+                                      alert('Failed to remove credit')
+                                    }
+                                  }}
+                                  className="p-1 text-[#7A8580] hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
+                                  title="Remove"
+                                >
+                                  <XMarkIcon className="w-4 h-4" />
+                                </button>
+                              </div>
+                              {resolvingCreditId === credit.id ? (
+                                <div className="space-y-2">
+                                  <select
+                                    value={resolveCreatorId || ''}
+                                    onChange={(e) => {
+                                      setResolveCreatorId(e.target.value ? parseInt(e.target.value) : null)
+                                      if (e.target.value) setResolveNewName('')
+                                    }}
+                                    className="w-full px-2 py-1.5 border border-amber-200 rounded-[8px] text-xs text-[#3D4A44] bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                  >
+                                    <option value="">-- Select existing creator --</option>
+                                    {allCreators.map(c => (
+                                      <option key={c.id} value={c.id}>{c.display_name}</option>
+                                    ))}
+                                  </select>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-[#7A8580]">or</span>
+                                    <input
+                                      type="text"
+                                      value={resolveNewName}
+                                      onChange={(e) => {
+                                        setResolveNewName(e.target.value)
+                                        if (e.target.value) setResolveCreatorId(null)
+                                      }}
+                                      placeholder="Create new creator..."
+                                      className="flex-1 px-2 py-1.5 border border-amber-200 rounded-[8px] text-xs text-[#3D4A44] focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                    />
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          const body = resolveCreatorId
+                                            ? { creator_id: resolveCreatorId }
+                                            : { new_creator_name: resolveNewName }
+                                          await axios.post(`/api/songs/${song.id}/credits/${credit.id}/resolve`, body)
+                                          setResolvingCreditId(null)
+                                          setResolveCreatorId(null)
+                                          setResolveNewName('')
+                                          await loadSongDetails()
+                                          if (onSongUpdated) onSongUpdated()
+                                        } catch (err) {
+                                          alert(err.response?.data?.detail || 'Failed to resolve')
+                                        }
+                                      }}
+                                      disabled={!resolveCreatorId && !resolveNewName.trim()}
+                                      className="px-3 py-1.5 bg-amber-500 text-white text-xs rounded-lg hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                      Resolve
+                                    </button>
+                                    <button
+                                      onClick={() => { setResolvingCreditId(null); setResolveCreatorId(null); setResolveNewName('') }}
+                                      className="px-3 py-1.5 text-[#7A8580] text-xs rounded-lg hover:bg-[rgba(59,77,67,0.06)] transition-colors"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setResolvingCreditId(credit.id)
+                                    setResolveCreatorId(null)
+                                    setResolveNewName(credit.unmatched_artist_name || '')
+                                  }}
+                                  className="text-xs text-amber-600 hover:text-amber-700 font-medium underline"
+                                >
+                                  Match to Creator
+                                </button>
+                              )}
+                            </div>
                           ) : (
                             <div key={credit.id} className="flex flex-wrap items-center gap-1.5 sm:gap-2 p-2 bg-[#F5F7F4] rounded-[10px]">
                               <Link
@@ -1001,7 +1108,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 className="flex items-center gap-1.5 text-[#5B8A72] hover:text-[#7BA594] min-w-0"
                               >
                                 <UserIcon className="w-4 h-4 flex-shrink-0" />
-                                <span className={`font-medium text-sm truncate max-w-[120px] sm:max-w-none ${credit.creator_name ? '' : 'text-amber-600'}`}>{credit.creator_name || 'Unmatched — Review Needed'}</span>
+                                <span className="font-medium text-sm truncate max-w-[120px] sm:max-w-none">{credit.creator_name}</span>
                               </Link>
                               <span className="text-xs text-[#7A8580] flex-shrink-0">({credit.role})</span>
                               <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline ${credit.pub_share != null ? 'text-[#5B8A72] bg-[rgba(91,138,114,0.1)]' : 'text-[#B0BDB4] bg-[rgba(59,77,67,0.04)]'}`}>Pub {credit.pub_share != null ? `${credit.pub_share}%` : '—'}</span>
@@ -1023,7 +1130,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 </button>
                                 <button
                                   onClick={async () => {
-                                    if (!confirm(`Remove ${credit.creator_name || 'this client'} from this song?`)) return
+                                    if (!confirm(`Remove ${credit.creator_name} from this song?`)) return
                                     try {
                                       await axios.delete(`/api/songs/${song.id}/credits/${credit.id}`)
                                       await loadSongDetails()
