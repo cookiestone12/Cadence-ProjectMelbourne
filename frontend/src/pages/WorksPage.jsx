@@ -11,6 +11,7 @@ import {
 
 export default function WorksPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const deepLinkHandled = useRef(false)
   const [works, setWorks] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -52,10 +53,12 @@ export default function WorksPage() {
   }, [])
 
   useEffect(() => {
+    if (deepLinkHandled.current) return
     const workIdParam = searchParams.get('workId')
-    if (workIdParam && works.length > 0 && !selectedWork) {
+    if (workIdParam && works.length > 0) {
       const targetWork = works.find(w => w.id === parseInt(workIdParam))
       if (targetWork) {
+        deepLinkHandled.current = true
         openWorkDetail(targetWork)
         setSearchParams({}, { replace: true })
       }
