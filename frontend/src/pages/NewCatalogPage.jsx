@@ -1,23 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { 
   FunnelIcon, MagnifyingGlassIcon, PlusIcon, ArrowUpTrayIcon,
   CheckCircleIcon, XCircleIcon, MinusCircleIcon, LinkIcon, TrashIcon,
   SpeakerWaveIcon, ChevronDownIcon, ChevronUpIcon, ArrowPathIcon,
   DocumentDuplicateIcon, AdjustmentsHorizontalIcon, XMarkIcon,
-  ArrowUpIcon, ArrowDownIcon, ArrowsUpDownIcon
+  ArrowUpIcon, ArrowDownIcon, ArrowsUpDownIcon,
+  DocumentTextIcon, MusicalNoteIcon
 } from '@heroicons/react/24/outline'
 import SongDetailModal from '../components/SongDetailModal'
 import AddSongModal from '../components/AddSongModal'
 import ScheduleAUploadModal from '../components/ScheduleAUploadModal'
 
 export default function NewCatalogPage() {
+  const navigate = useNavigate()
   const [songs, setSongs] = useState([])
+  const [works, setWorks] = useState([])
   const [creators, setCreators] = useState([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('all')
+  const [recordingsSubFilter, setRecordingsSubFilter] = useState('all')
   const [selectedSong, setSelectedSong] = useState(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
@@ -234,6 +239,10 @@ export default function NewCatalogPage() {
         .catch(err => console.error('Failed to load songs:', err))
         .finally(() => setLoading(false))
 
+      axios.get(`/api/works/org/${orgId}?limit=500`)
+        .then(res => setWorks(res.data?.works || []))
+        .catch(err => console.error('Failed to load works:', err))
+
       axios.get(`/api/creators/org/${orgId}`)
         .then(res => setCreators(res.data || []))
         .catch(err => console.error('Failed to load creators:', err))
@@ -293,9 +302,13 @@ export default function NewCatalogPage() {
       (song.project_title && song.project_title.toLowerCase().includes(searchTerm.toLowerCase()))
     )
     
-    const matchesTab = activeTab === 'all' || 
-      (activeTab === 'released' && song.is_released) ||
-      (activeTab === 'unreleased' && !song.is_released)
+    const matchesTab = activeTab === 'all' || activeTab === 'recordings' || activeTab === 'compositions'
+    
+    let matchesSubFilter = true
+    if (activeTab === 'recordings') {
+      if (recordingsSubFilter === 'released') matchesSubFilter = song.is_released
+      else if (recordingsSubFilter === 'unreleased') matchesSubFilter = !song.is_released
+    }
 
     let matchesAudio = true
     if (hasActiveAudioFilters && audioColumnsEnabled) {
@@ -321,7 +334,7 @@ export default function NewCatalogPage() {
       if (audioFilters.vocal === 'instrumental' && analysis?.has_vocals !== false) matchesAudio = false
     }
     
-    return matchesSearch && matchesTab && matchesAudio
+    return matchesSearch && matchesTab && matchesSubFilter && matchesAudio
   })
 
   const sortedSongs = [...filteredSongs].sort((a, b) => {
@@ -365,10 +378,18 @@ export default function NewCatalogPage() {
     return <MinusCircleIcon className="w-5 h-5 text-[#7A8580]" />
   }
   
+  const filteredWorks = works.filter(work => {
+    if (!searchTerm) return true
+    const term = searchTerm.toLowerCase()
+    return work.title.toLowerCase().includes(term) ||
+      (work.iswc && work.iswc.toLowerCase().includes(term))
+  })
+
   const hasActiveFilters = Object.values(filters).some(v => v !== '')
   
   const releasedCount = songs.filter(s => s.is_released).length
   const unreleasedCount = songs.filter(s => !s.is_released).length
+
   
   const handleReleasedToggle = async (e, song) => {
     e.stopPropagation()
@@ -685,7 +706,7 @@ export default function NewCatalogPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Catalog</h1>
-          <p className="text-[#7A8580]">{songs.length} total songs</p>
+          <p className="text-[#7A8580]">{songs.length} recordings, {works.length} compositions</p>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
           <button
@@ -740,31 +761,50 @@ export default function NewCatalogPage() {
                 : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
           >
-            All Songs ({songs.length})
+            All ({songs.length + works.length})
           </button>
           <button
-            onClick={() => setActiveTab('released')}
+            onClick={() => setActiveTab('recordings')}
             className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
-              activeTab === 'released'
+              activeTab === 'recordings'
                 ? 'border-[#5B8A72] text-[#5B8A72]'
                 : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
           >
-            Released ({releasedCount})
+            Recordings ({songs.length})
           </button>
           <button
-            onClick={() => setActiveTab('unreleased')}
+            onClick={() => setActiveTab('compositions')}
             className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
-              activeTab === 'unreleased'
+              activeTab === 'compositions'
                 ? 'border-[#5B8A72] text-[#5B8A72]'
                 : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
           >
-            Unreleased ({unreleasedCount})
+            Compositions ({works.length})
           </button>
         </div>
       </div>
+
+      {activeTab === 'recordings' && (
+        <div className="mb-4 flex items-center gap-2">
+          {['all', 'released', 'unreleased'].map(sub => (
+            <button
+              key={sub}
+              onClick={() => setRecordingsSubFilter(sub)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                recordingsSubFilter === sub
+                  ? 'bg-[#5B8A72] text-white'
+                  : 'bg-[#EEF1EC] text-[#3D4A44] hover:bg-[#E4E8E2]'
+              }`}
+            >
+              {sub === 'all' ? `All (${songs.length})` : sub === 'released' ? `Released (${releasedCount})` : `Unreleased (${unreleasedCount})`}
+            </button>
+          ))}
+        </div>
+      )}
       
+      {activeTab !== 'compositions' && (<>
       <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
         <div className="flex items-center space-x-4 mb-3 sm:mb-0">
           <div className="flex-1 relative">
@@ -1308,6 +1348,137 @@ export default function NewCatalogPage() {
           </table>
         </div>
       </div>
+      </>)}
+
+      {activeTab === 'compositions' && (
+        <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
+          <div className="flex items-center space-x-4 mb-4">
+            <div className="flex-1 relative">
+              <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7A8580]" />
+              <input
+                type="text"
+                placeholder="Search compositions by title or ISWC..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'compositions' && (
+        <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[600px]">
+              <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">ISWC</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Tracks</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Credits</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Genre</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+                {filteredWorks.map(work => (
+                  <tr
+                    key={work.id}
+                    onClick={() => navigate('/works')}
+                    className="group hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center space-x-2">
+                        <DocumentTextIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                        <span className="font-medium text-[#3D4A44] truncate">{work.title}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">{work.work_type || 'TRACK'}</td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580] font-mono">{work.iswc || '-'}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className="inline-flex items-center space-x-1 text-sm text-[#7A8580]">
+                        <MusicalNoteIcon className="w-3.5 h-3.5" />
+                        <span>{work.track_count || 0}</span>
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm text-[#7A8580]">{work.credit_count || 0}</td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">{work.genre || '-'}</td>
+                    <td className="px-4 py-3 text-center">
+                      {(work.status || 'PENDING') === 'APPROVED' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">Approved</span>
+                      ) : (work.status || 'PENDING') === 'REJECTED' ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">Rejected</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">Pending</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {filteredWorks.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center text-[#7A8580]">
+                      No compositions found
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'all' && works.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold text-[#3D4A44] mb-3 flex items-center space-x-2">
+            <DocumentTextIcon className="w-5 h-5 text-[#7A8580]" />
+            <span>Compositions</span>
+            <span className="text-sm font-normal text-[#7A8580]">({works.length})</span>
+          </h3>
+          <div className="bg-[#FAFBF9] rounded-xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[500px]">
+                <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Type</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Tracks</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+                  {filteredWorks.map(work => (
+                    <tr
+                      key={`work-${work.id}`}
+                      onClick={() => navigate('/works')}
+                      className="group hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center space-x-2">
+                          <DocumentTextIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                          <span className="font-medium text-[#3D4A44] truncate">{work.title}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580]">{work.work_type || 'TRACK'}</td>
+                      <td className="px-4 py-3 text-center text-sm text-[#7A8580]">{work.track_count || 0}</td>
+                      <td className="px-4 py-3 text-center">
+                        {(work.status || 'PENDING') === 'APPROVED' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">Approved</span>
+                        ) : (work.status || 'PENDING') === 'REJECTED' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">Rejected</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">Pending</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedSongIds.size > 0 && (
         <div className="fixed bottom-4 left-2 right-2 sm:left-1/2 sm:right-auto sm:transform sm:-translate-x-1/2 z-40">
