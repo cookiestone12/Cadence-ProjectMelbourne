@@ -577,6 +577,7 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
         if not tokens:
             raise SpotifyAuthError("Spotify is not connected. Please check your Spotify credentials.")
 
+        last_error = None
         for token_name, token in tokens:
             try:
                 track_data = _spotify_get(f"tracks/{resource_id}", token)
@@ -612,10 +613,23 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
                         "disc_number": track_data.get("disc_number"),
                         "explicit": track_data.get("explicit"),
                     }]
+            except (SpotifyForbiddenError, SpotifyAuthError) as e:
+                logger.warning(f"Spotify: {token_name} auth/forbidden for single track: {e}")
+                last_error = e
+                continue
+            except SpotifyNotFoundError as e:
+                logger.warning(f"Spotify: {token_name} got 404 for single track {resource_id}: {e}")
+                last_error = e
+                continue
             except Exception as e:
                 logger.warning(f"Spotify: {token_name} failed for single track: {e}")
+                last_error = e
                 continue
 
+        if isinstance(last_error, SpotifyAuthError):
+            raise last_error
+        if isinstance(last_error, SpotifyForbiddenError):
+            raise last_error
         raise SpotifyNotFoundError("Could not find this track on Spotify. Please check the URL and try again.")
 
     logger.info(f"Spotify: Detected URL type '{url_type}' with ID '{resource_id}' from: {playlist_url}")

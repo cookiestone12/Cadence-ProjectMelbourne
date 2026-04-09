@@ -30,6 +30,7 @@ class SpotifyTrackSelect(BaseModel):
     track_number: Optional[int] = None
     duration_ms: Optional[int] = None
     popularity: Optional[int] = None
+    label: Optional[str] = None
 
 
 class PlaylistImportConfirm(BaseModel):
@@ -186,6 +187,7 @@ def import_playlist_tracks(
             release_date=release_date,
             project_title=track_data.album_name,
             spotify_link=track_data.spotify_url,
+            label=track_data.label or None,
             is_released=True,
             status_health_score=0.0,
         )
