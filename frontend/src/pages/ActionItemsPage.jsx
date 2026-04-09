@@ -51,7 +51,8 @@ const ACTION_TYPES = [
   'RELEASE_INCOMPLETE',
   'UNMATCHED_ROYALTIES',
   'PLACEMENT_FOLLOWUP',
-  'PLACEMENT_NEEDS_CONTRACT'
+  'PLACEMENT_NEEDS_CONTRACT',
+  'WORK_PENDING_APPROVAL'
 ]
 
 const formatActionType = (type) => {
@@ -70,7 +71,8 @@ const formatActionType = (type) => {
     'RELEASE_INCOMPLETE': 'Release Incomplete',
     'UNMATCHED_ROYALTIES': 'Unmatched Royalties',
     'PLACEMENT_FOLLOWUP': 'Placement Follow-up',
-    'PLACEMENT_NEEDS_CONTRACT': 'Placement Needs Contract'
+    'PLACEMENT_NEEDS_CONTRACT': 'Placement Needs Contract',
+    'WORK_PENDING_APPROVAL': 'Work Pending Approval'
   }
   return labels[type] || type
 }
@@ -158,6 +160,7 @@ export default function ActionItemsPage() {
   })
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [filterAssignedTo, setFilterAssignedTo] = useState('')
+  const [isOrgAdmin, setIsOrgAdmin] = useState(false)
 
   useEffect(() => {
     loadInitialData()
@@ -176,15 +179,18 @@ export default function ActionItemsPage() {
       if (!id) { setLoading(false); return }
       setOrgId(id)
 
-      const [creatorsRes, songsRes, membersRes] = await Promise.all([
+      const [creatorsRes, songsRes, membersRes, membershipRes] = await Promise.all([
         axios.get(`/api/creators/org/${id}`),
         axios.get(`/api/songs/org/${id}?limit=1000`),
-        axios.get(`/api/organizations/${id}/members`)
+        axios.get(`/api/organizations/${id}/members`),
+        axios.get('/api/organizations/current/membership').catch(() => ({ data: {} }))
       ])
 
       setCreators(creatorsRes.data)
       setSongs(Array.isArray(songsRes.data) ? songsRes.data : [])
       setMembers(membersRes.data.members || membersRes.data || [])
+      const role = membershipRes.data?.role
+      setIsOrgAdmin(role === 'OWNER' || role === 'ADMIN')
 
       await Promise.all([
         loadActions(id),
@@ -277,6 +283,32 @@ export default function ActionItemsPage() {
       await Promise.all([loadActions(), loadSummary()])
     } catch (error) {
       console.error('Failed to complete action:', error)
+    }
+  }
+
+  const handleApproveWork = async (workId) => {
+    try {
+      await axios.post(`/api/works/${workId}/approve`)
+      await Promise.all([loadActions(), loadSummary()])
+      setFeedback({ type: 'success', message: 'Work approved successfully' })
+      setTimeout(() => setFeedback(null), 3000)
+    } catch (error) {
+      console.error('Failed to approve work:', error)
+      setFeedback({ type: 'error', message: error.response?.data?.detail || 'Failed to approve work' })
+      setTimeout(() => setFeedback(null), 3000)
+    }
+  }
+
+  const handleRejectWork = async (workId) => {
+    try {
+      await axios.post(`/api/works/${workId}/reject`)
+      await Promise.all([loadActions(), loadSummary()])
+      setFeedback({ type: 'success', message: 'Work rejected' })
+      setTimeout(() => setFeedback(null), 3000)
+    } catch (error) {
+      console.error('Failed to reject work:', error)
+      setFeedback({ type: 'error', message: error.response?.data?.detail || 'Failed to reject work' })
+      setTimeout(() => setFeedback(null), 3000)
     }
   }
 
@@ -1180,6 +1212,26 @@ export default function ActionItemsPage() {
                     </div>
 
                     <div className="flex items-center space-x-1 sm:ml-4 ml-10 shrink-0">
+                      {!isCompleted && action.action_type === 'WORK_PENDING_APPROVAL' && action.work_id && isOrgAdmin && (
+                        <>
+                          <button
+                            onClick={() => handleApproveWork(action.work_id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 text-white text-xs font-medium rounded-lg hover:bg-emerald-700 transition-colors"
+                            title="Approve Work"
+                          >
+                            <CheckIcon className="w-3.5 h-3.5" />
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => handleRejectWork(action.work_id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-red-600 text-white text-xs font-medium rounded-lg hover:bg-red-700 transition-colors"
+                            title="Reject Work"
+                          >
+                            <XMarkIcon className="w-3.5 h-3.5" />
+                            Reject
+                          </button>
+                        </>
+                      )}
                       {!isCompleted && (
                         <select
                           value={action.assigned_to_user_id || ''}
@@ -1193,7 +1245,7 @@ export default function ActionItemsPage() {
                           ))}
                         </select>
                       )}
-                      {!isCompleted && (
+                      {!isCompleted && action.action_type !== 'WORK_PENDING_APPROVAL' && (
                         <button
                           onClick={() => handleCompleteAction(action.id)}
                           className="p-2 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors"
