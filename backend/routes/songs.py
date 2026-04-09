@@ -850,7 +850,7 @@ def create_song(
     except Exception as e:
         logger.error(f"Failed to create song for org {org_id}: {e}", exc_info=True)
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to create song: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create song. Please try again.")
 
 @router.patch("/{song_id}", response_model=SongResponse)
 def update_song(
