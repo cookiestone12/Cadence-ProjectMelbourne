@@ -385,23 +385,52 @@ export default function NewCatalogPage() {
       (work.iswc && work.iswc.toLowerCase().includes(term))
   })
 
+  const [unifiedSortField, setUnifiedSortField] = useState('title')
+  const [unifiedSortDir, setUnifiedSortDir] = useState('asc')
+
+  const handleUnifiedSort = (field) => {
+    if (unifiedSortField === field) {
+      setUnifiedSortDir(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setUnifiedSortField(field)
+      setUnifiedSortDir('asc')
+    }
+  }
+
   const unifiedItems = activeTab === 'all' ? [
-    ...sortedSongs.map(s => ({ ...s, _itemType: 'recording' })),
+    ...filteredSongs.map(s => ({ ...s, _itemType: 'recording', _sortTitle: s.title, _sortType: 'Recording' })),
     ...filteredWorks.map(w => ({
       _itemType: 'composition',
+      _sortTitle: w.title,
+      _sortType: 'Composition',
       id: w.id,
       title: w.title,
       primary_artist: '-',
       work_type: w.work_type,
       iswc: w.iswc,
+      isrc: null,
       genre: w.genre,
       status: w.status || 'PENDING',
       track_count: w.track_count || 0,
       credit_count: w.credit_count || 0,
       folder_name: w.folder_name,
       created_at: w.created_at,
+      is_released: null,
     }))
-  ] : []
+  ].sort((a, b) => {
+    const dir = unifiedSortDir === 'asc' ? 1 : -1
+    let valA, valB
+    switch (unifiedSortField) {
+      case 'title': valA = a._sortTitle; valB = b._sortTitle; break
+      case '_sortType': valA = a._sortType; valB = b._sortType; break
+      default: valA = a[unifiedSortField]; valB = b[unifiedSortField]
+    }
+    if (valA == null && valB == null) return 0
+    if (valA == null) return 1
+    if (valB == null) return -1
+    if (typeof valA === 'string') return valA.localeCompare(valB) * dir
+    return 0
+  }) : []
 
   const hasActiveFilters = Object.values(filters).some(v => v !== '')
   
@@ -840,11 +869,28 @@ export default function NewCatalogPage() {
             <table className="w-full min-w-[700px]">
               <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44] w-24">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Artist / Info</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">ISRC / ISWC</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Status</th>
+                  {[
+                    { key: '_sortType', label: 'Type', align: 'left', w: 'w-24' },
+                    { key: 'title', label: 'Title', align: 'left' },
+                    { key: null, label: 'Artist / Info', align: 'left' },
+                    { key: null, label: 'ISRC / ISWC', align: 'left' },
+                    { key: null, label: 'Status', align: 'center' },
+                  ].map((col, i) => (
+                    <th
+                      key={i}
+                      className={`px-4 py-3 text-${col.align} text-xs font-semibold text-[#3D4A44] ${col.w || ''} ${col.key ? 'cursor-pointer select-none hover:bg-[rgba(59,77,67,0.08)]' : ''} transition-colors`}
+                      onClick={() => col.key && handleUnifiedSort(col.key)}
+                    >
+                      <div className={`flex items-center ${col.align === 'center' ? 'justify-center' : ''} space-x-1`}>
+                        <span>{col.label}</span>
+                        {col.key && (
+                          unifiedSortField === col.key
+                            ? (unifiedSortDir === 'asc' ? <ArrowUpIcon className="w-3.5 h-3.5 text-[#5B8A72]" /> : <ArrowDownIcon className="w-3.5 h-3.5 text-[#5B8A72]" />)
+                            : <ArrowsUpDownIcon className="w-3.5 h-3.5 text-[#B0BDB4]" />
+                        )}
+                      </div>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
@@ -1492,6 +1538,7 @@ export default function NewCatalogPage() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Folder</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">ISWC</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Tracks</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Credits</th>
@@ -1511,11 +1558,9 @@ export default function NewCatalogPage() {
                         <DocumentTextIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
                         <span className="font-medium text-[#3D4A44] truncate">{work.title}</span>
                       </div>
-                      {work.folder_name && (
-                        <div className="text-xs text-[#7A8580] mt-0.5 truncate">{work.folder_name}</div>
-                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-[#7A8580]">{work.work_type || 'TRACK'}</td>
+                    <td className="px-4 py-3 text-sm text-[#7A8580]">{work.folder_name || '-'}</td>
                     <td className="px-4 py-3 text-sm text-[#7A8580] font-mono">{work.iswc || '-'}</td>
                     <td className="px-4 py-3 text-center">
                       <span className="inline-flex items-center space-x-1 text-sm text-[#7A8580]">
@@ -1538,7 +1583,7 @@ export default function NewCatalogPage() {
                 ))}
                 {filteredWorks.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-[#7A8580]">
+                    <td colSpan={8} className="px-6 py-12 text-center text-[#7A8580]">
                       No compositions found
                     </td>
                   </tr>
