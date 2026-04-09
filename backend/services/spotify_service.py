@@ -645,20 +645,29 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
     if not tokens:
         raise SpotifyAuthError("Spotify is not connected. Please check your Spotify credentials.")
 
+    def _check_tuple_error(result):
+        if isinstance(result, tuple):
+            _, err, _ = result
+            if isinstance(err, (SpotifyForbiddenError, SpotifyAuthError)):
+                raise err
+
     if url_type == "artist":
         result = _fetch_with_retries(_fetch_artist_tracks, "artist", resource_id, tokens, logger)
         if isinstance(result, tuple):
+            _check_tuple_error(result)
             raise SpotifyNotFoundError("Could not find this artist on Spotify. Please check the URL and try again.")
         return result
 
     if url_type == "album":
         result = _fetch_with_retries(_fetch_album_tracks, "album", resource_id, tokens, logger)
         if isinstance(result, tuple):
+            _check_tuple_error(result)
             raise SpotifyNotFoundError("Could not find this album on Spotify. Please check the URL and try again.")
         return result
 
     result = _fetch_with_retries(_fetch_playlist_with_token, "playlist", resource_id, tokens, logger)
     if isinstance(result, tuple):
+        _check_tuple_error(result)
         _, last_error, all_404 = result
         if all_404:
             raise SpotifyNotFoundError(
