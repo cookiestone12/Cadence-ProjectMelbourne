@@ -917,7 +917,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                             <div key={credit.id} className="p-3 bg-[#F5F7F4] rounded-[10px] space-y-2">
                               <div className="flex items-center gap-2">
                                 <UserIcon className="w-4 h-4 text-[#5B8A72]" />
-                                <span className="font-medium text-sm text-[#3D4A44]">{credit.creator_name || 'Unknown'}</span>
+                                <span className={`font-medium text-sm ${credit.creator_name ? 'text-[#3D4A44]' : 'text-amber-600'}`}>{credit.creator_name || 'Unmatched — Review Needed'}</span>
                               </div>
                               <div className="space-y-2 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-2">
                                 <div>
@@ -1001,7 +1001,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 className="flex items-center gap-1.5 text-[#5B8A72] hover:text-[#7BA594] min-w-0"
                               >
                                 <UserIcon className="w-4 h-4 flex-shrink-0" />
-                                <span className="font-medium text-sm truncate max-w-[120px] sm:max-w-none">{credit.creator_name || 'Unknown'}</span>
+                                <span className={`font-medium text-sm truncate max-w-[120px] sm:max-w-none ${credit.creator_name ? '' : 'text-amber-600'}`}>{credit.creator_name || 'Unmatched — Review Needed'}</span>
                               </Link>
                               <span className="text-xs text-[#7A8580] flex-shrink-0">({credit.role})</span>
                               <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline ${credit.pub_share != null ? 'text-[#5B8A72] bg-[rgba(91,138,114,0.1)]' : 'text-[#B0BDB4] bg-[rgba(59,77,67,0.04)]'}`}>Pub {credit.pub_share != null ? `${credit.pub_share}%` : '—'}</span>
@@ -1323,22 +1323,20 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Publishing %</label>
                     {(() => {
-                      const creditPubTotal = (songDetails.credits || []).reduce((sum, c) => sum + (c.pub_share || 0), 0)
                       const hasCreditSplits = (songDetails.credits || []).some(c => c.pub_share != null)
-                      const displayVal = hasCreditSplits ? creditPubTotal : songDetails.publishing_percentage
-                      const isLegacy = !hasCreditSplits && songDetails.publishing_percentage != null
+                      const pubVal = songDetails.publishing_percentage
                       return (
                         <div>
                           <p className="flex items-center gap-1.5 text-[#3D4A44] px-1 -mx-1 py-0.5">
-                            <span className="font-medium">{displayVal != null ? `${displayVal}%` : '0%'}</span>
-                            {hasCreditSplits && creditPubTotal > 100 && (
+                            <span className="font-medium">{pubVal != null ? `${pubVal}%` : '0%'}</span>
+                            {pubVal != null && pubVal > 100 && (
                               <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Exceeds 100%</span>
                             )}
                           </p>
-                          {isLegacy && (
+                          {!hasCreditSplits && pubVal != null && (
                             <p className="text-[11px] text-amber-600 mt-0.5">Legacy value — add credit-level splits in Rights tab</p>
                           )}
-                          {!hasCreditSplits && songDetails.publishing_percentage == null && (
+                          {pubVal == null && (
                             <p className="text-[11px] text-[#7A8580] mt-0.5">Add splits in Credits & Links tab</p>
                           )}
                         </div>
@@ -1348,22 +1346,20 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Master %</label>
                     {(() => {
-                      const creditMasterTotal = (songDetails.credits || []).reduce((sum, c) => sum + (c.master_share || 0), 0)
                       const hasCreditSplits = (songDetails.credits || []).some(c => c.master_share != null)
-                      const displayVal = hasCreditSplits ? creditMasterTotal : songDetails.master_percentage
-                      const isLegacy = !hasCreditSplits && songDetails.master_percentage != null
+                      const masterVal = songDetails.master_percentage
                       return (
                         <div>
                           <p className="flex items-center gap-1.5 text-[#3D4A44] px-1 -mx-1 py-0.5">
-                            <span className="font-medium">{displayVal != null ? `${displayVal}%` : '0%'}</span>
-                            {hasCreditSplits && creditMasterTotal > 100 && (
+                            <span className="font-medium">{masterVal != null ? `${masterVal}%` : '0%'}</span>
+                            {masterVal != null && masterVal > 100 && (
                               <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Exceeds 100%</span>
                             )}
                           </p>
-                          {isLegacy && (
+                          {!hasCreditSplits && masterVal != null && (
                             <p className="text-[11px] text-amber-600 mt-0.5">Legacy value — add credit-level splits in Rights tab</p>
                           )}
-                          {!hasCreditSplits && songDetails.master_percentage == null && (
+                          {masterVal == null && (
                             <p className="text-[11px] text-[#7A8580] mt-0.5">Add splits in Credits & Links tab</p>
                           )}
                         </div>
@@ -2175,14 +2171,15 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                 {songDetails.credits && songDetails.credits.length > 0 ? (
                   <div className="space-y-2">
                     {songDetails.credits.map((credit, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-[#F5F7F4] rounded-[12px]">
-                        <div>
-                          <p className="font-medium text-[#3D4A44]">{credit.creator?.display_name || 'Unknown'}</p>
+                      <div key={idx} className="flex flex-wrap items-center gap-2 p-3 bg-[#F5F7F4] rounded-[12px]">
+                        <div className="min-w-0">
+                          <p className={`font-medium ${credit.creator_name ? 'text-[#3D4A44]' : 'text-amber-600'}`}>{credit.creator_name || 'Unmatched — Review Needed'}</p>
                           <p className="text-[13px] text-[#7A8580]">{credit.role}</p>
                         </div>
-                        <span className="text-[15px] font-medium text-[#3D4A44]">
-                          {credit.share_percentage ? `${credit.share_percentage}%` : '-'}
-                        </span>
+                        <div className="flex items-center gap-1.5 ml-auto flex-shrink-0">
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${credit.pub_share != null ? 'text-[#5B8A72] bg-[rgba(91,138,114,0.1)]' : 'text-[#B0BDB4] bg-[rgba(59,77,67,0.04)]'}`}>Pub {credit.pub_share != null ? `${credit.pub_share}%` : '—'}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${credit.master_share != null ? 'text-[#5A8A9A] bg-[rgba(90,138,154,0.1)]' : 'text-[#B0BDB4] bg-[rgba(59,77,67,0.04)]'}`}>Master {credit.master_share != null ? `${credit.master_share}%` : '—'}</span>
+                        </div>
                       </div>
                     ))}
                   </div>

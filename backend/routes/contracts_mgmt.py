@@ -1306,6 +1306,12 @@ def update_split(
     if data.notes is not None:
         split.notes = data.notes
 
+    db.flush()
+    if ca.asset_type == "SONG":
+        _sync_song_pub_percentage(db, ca.asset_id)
+        if split.rights_holder_id:
+            _sync_splits_to_credits(db, ca.asset_id, split.rights_holder_id)
+
     db.commit()
     db.refresh(split)
     return {
@@ -1335,7 +1341,15 @@ def delete_split(
         raise HTTPException(status_code=404, detail="Contract not found")
     verify_org_access(current_user, contract.organization_id, db)
 
+    asset_type = ca.asset_type
+    asset_id = ca.asset_id
+    holder_id = split.rights_holder_id
     db.delete(split)
+    db.flush()
+    if asset_type == "SONG":
+        _sync_song_pub_percentage(db, asset_id)
+        if holder_id:
+            _sync_splits_to_credits(db, asset_id, holder_id)
     db.commit()
     return {"message": "Split removed successfully"}
 
