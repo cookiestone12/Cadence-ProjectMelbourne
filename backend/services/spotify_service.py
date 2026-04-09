@@ -565,10 +565,58 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
     url_type, resource_id = _extract_spotify_url_type(playlist_url)
 
     if not resource_id or url_type == "unknown":
-        raise ValueError("Could not recognize that Spotify URL. Please paste a valid Spotify playlist, artist, or album link.")
+        raise ValueError("Could not recognize that Spotify URL. Please paste a valid Spotify track, playlist, artist, or album link.")
 
     if url_type == "track":
-        raise ValueError("That looks like a single track URL. Please paste a playlist, artist, or album link to import multiple tracks.")
+        logger.info(f"Spotify: Detected single track URL with ID '{resource_id}' from: {playlist_url}")
+
+        cc_token = _get_client_credentials_token()
+        connector_token = _get_replit_access_token()
+        tokens = [(n, t) for n, t in [("client_credentials", cc_token), ("connector", connector_token)] if t]
+
+        if not tokens:
+            raise SpotifyAuthError("Spotify is not connected. Please check your Spotify credentials.")
+
+        for token_name, token in tokens:
+            try:
+                track_data = _spotify_get(f"tracks/{resource_id}", token)
+                if track_data:
+                    artists = [a.get("name") for a in track_data.get("artists", [])]
+                    album = track_data.get("album", {})
+                    album_art = album.get("images", [{}])[0].get("url") if album.get("images") else None
+
+                    label = ""
+                    album_id = album.get("id")
+                    if album_id:
+                        try:
+                            full_album = _spotify_get(f"albums/{album_id}", token)
+                            if full_album:
+                                label = full_album.get("label", "")
+                        except Exception:
+                            pass
+
+                    return [{
+                        "title": track_data.get("name", ""),
+                        "primary_artist": artists[0] if artists else "Unknown",
+                        "all_artists": artists,
+                        "isrc": track_data.get("external_ids", {}).get("isrc"),
+                        "album_name": album.get("name", ""),
+                        "release_date": album.get("release_date", ""),
+                        "spotify_url": track_data.get("external_urls", {}).get("spotify"),
+                        "spotify_id": track_data.get("id"),
+                        "duration_ms": track_data.get("duration_ms"),
+                        "popularity": track_data.get("popularity"),
+                        "album_art": album_art,
+                        "label": label,
+                        "track_number": track_data.get("track_number"),
+                        "disc_number": track_data.get("disc_number"),
+                        "explicit": track_data.get("explicit"),
+                    }]
+            except Exception as e:
+                logger.warning(f"Spotify: {token_name} failed for single track: {e}")
+                continue
+
+        raise SpotifyNotFoundError("Could not find this track on Spotify. Please check the URL and try again.")
 
     logger.info(f"Spotify: Detected URL type '{url_type}' with ID '{resource_id}' from: {playlist_url}")
 
