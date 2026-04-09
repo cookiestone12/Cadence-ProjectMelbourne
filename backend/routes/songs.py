@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
@@ -81,6 +82,45 @@ class SongResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+def _song_to_response(song) -> dict:
+    return {
+        "id": song.id,
+        "title": song.title,
+        "primary_artist": song.primary_artist,
+        "isrc": song.isrc,
+        "iswc": song.iswc,
+        "project_title": song.project_title,
+        "release_date": song.release_date.isoformat() if song.release_date else None,
+        "status_health_score": song.status_health_score or 0.0,
+        "has_contract_sent": song.has_contract_sent or False,
+        "has_contract_executed": song.has_contract_executed or False,
+        "is_registered_with_pro": song.is_registered_with_pro or False,
+        "is_registered_with_dsp": song.is_registered_with_dsp,
+        "is_invoiced": song.is_invoiced,
+        "is_paid": song.is_paid,
+        "is_released": song.is_released or False,
+        "spotify_link": song.spotify_link,
+        "label": song.label,
+        "publishing_percentage": song.publishing_percentage,
+        "master_percentage": song.master_percentage,
+        "advance_amount": song.advance_amount,
+        "recording_code": song.recording_code,
+        "master_paid": song.master_paid,
+        "soundexchange_registered": song.soundexchange_registered,
+        "payment_status": song.payment_status,
+        "contract_location": song.contract_location,
+        "notes": song.notes,
+        "media_url": song.media_url,
+        "audio_file_url": song.audio_file_url,
+        "lyrics": song.lyrics,
+        "credit_role": None,
+        "credit_id": None,
+        "client_name": None,
+        "client_id": None,
+    }
+
 
 class CreditResponse(BaseModel):
     id: int
@@ -746,6 +786,7 @@ def create_song(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    logger = logging.getLogger("cadence")
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == current_user.id,
         OrganizationMember.organization_id == org_id
@@ -754,82 +795,62 @@ def create_song(
     if not membership:
         raise HTTPException(status_code=403, detail="Not authorized to access this organization")
     
-    song = Song(
-        organization_id=org_id,
-        title=request.title,
-        primary_artist=request.primary_artist,
-        isrc=request.isrc,
-        iswc=request.iswc,
-        project_title=request.project_title,
-        release_date=request.release_date,
-        is_released=(request.release_date is not None),
-        label=request.label,
-        publishing_percentage=request.publishing_percentage,
-        master_percentage=request.master_percentage,
-        advance_amount=request.advance_amount,
-        recording_code=request.recording_code,
-        master_paid=request.master_paid,
-        soundexchange_registered=request.soundexchange_registered,
-        mlc_registered=request.mlc_registered,
-        payment_status=request.payment_status,
-        contract_location=request.contract_location,
-        notes=request.notes,
-        media_url=request.media_url,
-        has_contract_executed=request.has_contract_executed or False,
-        is_registered_with_pro=request.is_registered_with_pro or False,
-        is_registered_with_dsp=request.is_registered_with_dsp,
-        is_invoiced=request.is_invoiced,
-        is_paid=request.is_paid
-    )
-    db.add(song)
-    db.flush()
-    
-    checklist_items = db.query(ChecklistItem).all()
-    for item in checklist_items:
-        status = SongChecklistStatus(
-            song_id=song.id,
-            checklist_item_id=item.id,
-            status="NOT_STARTED"
+    try:
+        song = Song(
+            organization_id=org_id,
+            title=request.title,
+            primary_artist=request.primary_artist,
+            isrc=request.isrc,
+            iswc=request.iswc,
+            project_title=request.project_title,
+            release_date=request.release_date,
+            is_released=(request.release_date is not None),
+            label=request.label,
+            publishing_percentage=request.publishing_percentage,
+            master_percentage=request.master_percentage,
+            advance_amount=request.advance_amount,
+            recording_code=request.recording_code,
+            master_paid=request.master_paid,
+            soundexchange_registered=request.soundexchange_registered,
+            mlc_registered=request.mlc_registered,
+            payment_status=request.payment_status,
+            contract_location=request.contract_location,
+            notes=request.notes,
+            media_url=request.media_url,
+            has_contract_executed=request.has_contract_executed or False,
+            is_registered_with_pro=request.is_registered_with_pro or False,
+            is_registered_with_dsp=request.is_registered_with_dsp,
+            is_invoiced=request.is_invoiced,
+            is_paid=request.is_paid
         )
-        db.add(status)
-    
-    from ..utils.health_sync import sync_song_to_checklist
-    sync_song_to_checklist(db, song)
+        db.add(song)
+        db.flush()
+        
+        checklist_items = db.query(ChecklistItem).all()
+        for item in checklist_items:
+            status = SongChecklistStatus(
+                song_id=song.id,
+                checklist_item_id=item.id,
+                status="NOT_STARTED"
+            )
+            db.add(status)
+        db.flush()
+        
+        from ..utils.health_sync import sync_song_to_checklist
+        sync_song_to_checklist(db, song)
 
-    from ..services.audit_service import log_action
-    log_action(db, org_id, current_user.id, "CREATE", "SONG", song.id, song.title)
-    db.commit()
-    db.refresh(song)
-    
-    return {
-        "id": song.id,
-        "title": song.title,
-        "primary_artist": song.primary_artist,
-        "isrc": song.isrc,
-        "iswc": song.iswc,
-        "project_title": song.project_title,
-        "release_date": song.release_date.isoformat() if song.release_date else None,
-        "status_health_score": song.status_health_score,
-        "has_contract_sent": song.has_contract_sent,
-        "has_contract_executed": song.has_contract_executed,
-        "is_registered_with_pro": song.is_registered_with_pro,
-        "is_registered_with_dsp": song.is_registered_with_dsp,
-        "is_invoiced": song.is_invoiced,
-        "is_paid": song.is_paid,
-        "is_released": song.is_released,
-        "label": song.label,
-        "publishing_percentage": song.publishing_percentage,
-        "master_percentage": song.master_percentage,
-        "advance_amount": song.advance_amount,
-        "recording_code": song.recording_code,
-        "master_paid": song.master_paid,
-        "soundexchange_registered": song.soundexchange_registered,
-        "mlc_registered": song.mlc_registered,
-        "payment_status": song.payment_status,
-        "contract_location": song.contract_location,
-        "notes": song.notes,
-        "media_url": song.media_url
-    }
+        from ..services.audit_service import log_action
+        log_action(db, org_id, current_user.id, "CREATE", "SONG", song.id, song.title)
+        db.commit()
+        db.refresh(song)
+        
+        return _song_to_response(song)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create song for org {org_id}: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create song: {str(e)}")
 
 @router.patch("/{song_id}", response_model=SongResponse)
 def update_song(
@@ -923,35 +944,7 @@ def update_song(
     db.commit()
     db.refresh(song)
     
-    return {
-        "id": song.id,
-        "title": song.title,
-        "primary_artist": song.primary_artist,
-        "isrc": song.isrc,
-        "iswc": song.iswc,
-        "project_title": song.project_title,
-        "release_date": song.release_date.isoformat() if song.release_date else None,
-        "status_health_score": song.status_health_score,
-        "has_contract_sent": song.has_contract_sent,
-        "has_contract_executed": song.has_contract_executed,
-        "is_registered_with_pro": song.is_registered_with_pro,
-        "is_registered_with_dsp": song.is_registered_with_dsp,
-        "is_invoiced": song.is_invoiced,
-        "is_paid": song.is_paid,
-        "is_released": song.is_released,
-        "label": song.label,
-        "publishing_percentage": song.publishing_percentage,
-        "master_percentage": song.master_percentage,
-        "advance_amount": song.advance_amount,
-        "recording_code": song.recording_code,
-        "master_paid": song.master_paid,
-        "soundexchange_registered": song.soundexchange_registered,
-        "mlc_registered": song.mlc_registered,
-        "payment_status": song.payment_status,
-        "contract_location": song.contract_location,
-        "notes": song.notes,
-        "media_url": song.media_url
-    }
+    return _song_to_response(song)
 
 
 class MergeSongsRequest(BaseModel):
@@ -1187,6 +1180,7 @@ def duplicate_song(
             status="NOT_STARTED"
         )
         db.add(status)
+    db.flush()
 
     from ..utils.health_sync import sync_song_to_checklist
     sync_song_to_checklist(db, new_song)
@@ -1196,32 +1190,4 @@ def duplicate_song(
     db.commit()
     db.refresh(new_song)
 
-    return {
-        "id": new_song.id,
-        "title": new_song.title,
-        "primary_artist": new_song.primary_artist,
-        "isrc": new_song.isrc,
-        "iswc": new_song.iswc,
-        "project_title": new_song.project_title,
-        "release_date": new_song.release_date.isoformat() if new_song.release_date else None,
-        "status_health_score": new_song.status_health_score,
-        "has_contract_sent": new_song.has_contract_sent,
-        "has_contract_executed": new_song.has_contract_executed,
-        "is_registered_with_pro": new_song.is_registered_with_pro,
-        "is_registered_with_dsp": new_song.is_registered_with_dsp,
-        "is_invoiced": new_song.is_invoiced,
-        "is_paid": new_song.is_paid,
-        "is_released": new_song.is_released,
-        "label": new_song.label,
-        "publishing_percentage": new_song.publishing_percentage,
-        "master_percentage": new_song.master_percentage,
-        "advance_amount": new_song.advance_amount,
-        "recording_code": new_song.recording_code,
-        "master_paid": new_song.master_paid,
-        "soundexchange_registered": new_song.soundexchange_registered,
-        "mlc_registered": new_song.mlc_registered,
-        "payment_status": new_song.payment_status,
-        "contract_location": new_song.contract_location,
-        "notes": new_song.notes,
-        "media_url": new_song.media_url,
-    }
+    return _song_to_response(new_song)

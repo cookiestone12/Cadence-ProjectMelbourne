@@ -202,6 +202,7 @@ def import_playlist_tracks(
                 status="NOT_STARTED"
             )
             db.add(cl_status)
+        db.flush()
 
         if track_data.spotify_url:
             dsp_link = SongDSPLink(
