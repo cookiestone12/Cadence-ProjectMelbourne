@@ -9,27 +9,37 @@ function requestDesktopNotificationPermission() {
   }
 }
 
-function sendDesktopNotification(title, body, onClick) {
-  if ('Notification' in window && Notification.permission === 'granted') {
-    try {
-      const notification = new Notification(title, {
+async function sendDesktopNotification(title, body, onClick) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.ready
+      await reg.showNotification(title, {
         body: body || '',
         icon: '/favicon-192.png',
         badge: '/favicon-192.png',
         tag: 'cadence-notification-' + Date.now(),
-        requireInteraction: false,
+        data: { url: '/actions' },
+        renotify: true,
       })
-      if (onClick) {
-        notification.onclick = () => {
-          window.focus()
-          onClick()
-          notification.close()
-        }
-      }
-      setTimeout(() => notification.close(), 8000)
-    } catch (e) {
-      // Silent fail for environments that don't support Notification constructor
+      return
     }
+    const notification = new Notification(title, {
+      body: body || '',
+      icon: '/favicon-192.png',
+      badge: '/favicon-192.png',
+      tag: 'cadence-notification-' + Date.now(),
+      requireInteraction: false,
+    })
+    if (onClick) {
+      notification.onclick = () => {
+        window.focus()
+        onClick()
+        notification.close()
+      }
+    }
+    setTimeout(() => notification.close(), 8000)
+  } catch (e) {
   }
 }
 

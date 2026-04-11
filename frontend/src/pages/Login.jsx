@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import axios from 'axios'
+import { subscribeToPush, isPushSupported } from '../utils/pushNotifications'
 
 export default function Login({ onLogin }) {
   const [username, setUsername] = useState('')
@@ -19,10 +20,12 @@ export default function Login({ onLogin }) {
       })
 
       const { access_token, user } = response.data
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission()
-      }
       onLogin(access_token, user)
+      if (isPushSupported()) {
+        setTimeout(() => {
+          subscribeToPush().catch(() => {})
+        }, 2000)
+      }
     } catch (err) {
       setError(err.response?.data?.detail || 'Login failed. Please try again.')
     } finally {

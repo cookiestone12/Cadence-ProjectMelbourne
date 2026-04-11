@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
-import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, CloudArrowUpIcon, CloudIcon, FolderIcon, CheckCircleIcon, XMarkIcon, DevicePhoneMobileIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
+import { BellIcon, KeyIcon, EnvelopeIcon, BuildingOfficeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, CloudArrowUpIcon, CloudIcon, FolderIcon, CheckCircleIcon, XMarkIcon, DevicePhoneMobileIcon, ArrowDownTrayIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import FolderPicker from '../components/FolderPicker'
+import { isIOSSafari, isInstalledPWA, needsPWAInstall } from '../utils/pushNotifications'
 
 const NOTIFICATION_TYPES = {
   MISSING_ISRC: { label: 'Missing ISRC', description: 'Alert when songs are missing ISRC codes' },
@@ -847,7 +848,7 @@ export default function Settings() {
               )}
             </div>
 
-            {pushSupported && (
+            {(pushSupported || isIOSSafari()) && (
               <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center space-x-3">
@@ -859,20 +860,42 @@ export default function Settings() {
                       <p className="text-[14px] text-[#7A8580] mt-0.5">Receive instant alerts on this device</p>
                     </div>
                   </div>
-                  <button
-                    onClick={togglePush}
-                    disabled={pushLoading}
-                    className={`w-14 h-8 rounded-full transition-colors relative flex-shrink-0 ${
-                      pushEnabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
-                    } ${pushLoading ? 'opacity-50' : ''}`}
-                  >
-                    <span className={`absolute top-1.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                      pushEnabled ? 'left-8' : 'left-1.5'
-                    }`} />
-                  </button>
+                  {!needsPWAInstall() && pushSupported && (
+                    <button
+                      onClick={togglePush}
+                      disabled={pushLoading}
+                      className={`w-14 h-8 rounded-full transition-colors relative flex-shrink-0 ${
+                        pushEnabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                      } ${pushLoading ? 'opacity-50' : ''}`}
+                    >
+                      <span className={`absolute top-1.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                        pushEnabled ? 'left-8' : 'left-1.5'
+                      }`} />
+                    </button>
+                  )}
                 </div>
 
-                {pushEnabled && (
+                {needsPWAInstall() && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                    <div className="flex items-start gap-3">
+                      <ExclamationTriangleIcon className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-[14px] font-medium text-amber-800">Install Cadence to enable push notifications</p>
+                        <p className="text-[13px] text-amber-700 mt-1">
+                          On iPhone/iPad, push notifications require the app to be installed to your home screen.
+                        </p>
+                        <ol className="text-[13px] text-amber-700 mt-2 space-y-1 list-decimal list-inside">
+                          <li>Tap the <strong>Share</strong> button in Safari (the square with an arrow)</li>
+                          <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+                          <li>Open Cadence from your home screen and sign in</li>
+                          <li>Come back here to enable push notifications</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {pushEnabled && !needsPWAInstall() && (
                   <div className="mt-4 pt-4 border-t border-[rgba(59,77,67,0.08)]">
                     <div className="flex items-center justify-between">
                       <p className="text-[13px] text-[#7A8580]">
