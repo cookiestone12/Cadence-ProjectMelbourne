@@ -572,6 +572,29 @@ def sync_stale_health_scores():
         db.close()
 
 
+def sync_release_status():
+    from sqlalchemy import text as sa_text
+    db = SessionLocal()
+    try:
+        fixed = db.execute(sa_text(
+            "UPDATE songs SET is_released = true WHERE release_status = 'released' AND is_released = false"
+        ))
+        fixed2 = db.execute(sa_text(
+            "UPDATE songs SET is_released = false WHERE release_status = 'unreleased' AND is_released = true"
+        ))
+        total = fixed.rowcount + fixed2.rowcount
+        if total > 0:
+            db.commit()
+            logger.info(f"Synced is_released flag for {total} songs")
+        else:
+            db.rollback()
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Release status sync error: {e}")
+    finally:
+        db.close()
+
+
 def main():
     logger.info("Starting database setup...")
     try:
@@ -600,6 +623,7 @@ def main():
     seed_super_admin()
     seed_checklist_items()
     sync_stale_health_scores()
+    sync_release_status()
     backfill_publishing_percentages()
     logger.info("Database setup complete")
 

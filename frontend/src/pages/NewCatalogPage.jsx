@@ -467,7 +467,7 @@ export default function NewCatalogPage() {
       setSpotifyModal({ open: true, song, link: '' })
     } else {
       try {
-        await axios.put(`/api/songs/${song.id}`, { is_released: newReleasedState })
+        await axios.patch(`/api/songs/${song.id}`, { is_released: newReleasedState })
         setSongs(prev => prev.map(s => 
           s.id === song.id ? { ...s, is_released: newReleasedState, release_status: newReleasedState ? 'released' : 'unreleased' } : s
         ))
@@ -481,7 +481,7 @@ export default function NewCatalogPage() {
     if (!spotifyModal.song) return
     
     try {
-      await axios.put(`/api/songs/${spotifyModal.song.id}`, { 
+      await axios.patch(`/api/songs/${spotifyModal.song.id}`, { 
         is_released: true,
         spotify_link: spotifyModal.link || null 
       })
