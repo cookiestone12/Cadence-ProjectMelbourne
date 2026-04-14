@@ -311,6 +311,7 @@ class Song(Base):
     release_status = Column(String, default="unreleased", nullable=False)
     entry_type = Column(String, default="Song", nullable=False)
     parent_song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
+    shared_song_group_id = Column(String, nullable=True, index=True)
     spotify_link = Column(String, nullable=True)
     label = Column(String, nullable=True)
     publishing_percentage = Column(Float, nullable=True)

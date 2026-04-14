@@ -25,7 +25,8 @@ def _refresh_creator_credits_async(creator_id: int, org_id: int):
 router = APIRouter(prefix="/api/songs", tags=["credits"])
 
 class CreditCreateRequest(BaseModel):
-    creator_id: int
+    creator_id: Optional[int] = None
+    new_creator_name: Optional[str] = None
     role: str
     share_percentage: Optional[float] = None
     pub_share: Optional[float] = None
@@ -97,20 +98,31 @@ def create_credit(
         if not has_share:
             raise HTTPException(status_code=403, detail="Not authorized to modify this song")
     
-    creator = db.query(Creator).filter(Creator.id == request.creator_id).first()
-    
-    if not creator:
-        raise HTTPException(status_code=404, detail="Creator not found")
-    
-    if creator.organization_id != song.organization_id:
-        raise HTTPException(
-            status_code=403,
-            detail="Cannot add credits from creators outside this organization"
+    creator = None
+    if request.creator_id:
+        creator = db.query(Creator).filter(Creator.id == request.creator_id).first()
+        if not creator:
+            raise HTTPException(status_code=404, detail="Creator not found")
+        if creator.organization_id != song.organization_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot add credits from creators outside this organization"
+            )
+    elif request.new_creator_name:
+        creator = Creator(
+            organization_id=song.organization_id,
+            display_name=request.new_creator_name.strip(),
+            primary_artist=request.new_creator_name.strip(),
         )
-    
+        db.add(creator)
+        db.flush()
+        logger.info(f"Auto-created creator '{creator.display_name}' (id={creator.id}) for org {song.organization_id}")
+    else:
+        raise HTTPException(status_code=400, detail="Provide creator_id or new_creator_name")
+
     credit = SongCredit(
         song_id=song_id,
-        creator_id=request.creator_id,
+        creator_id=creator.id,
         role=request.role,
         share_percentage=request.share_percentage,
         pub_share=request.pub_share,
@@ -120,14 +132,14 @@ def create_credit(
     db.flush()
 
     if request.pub_share is not None or request.master_share is not None:
-        sync_credit_to_splits(db, song, request.creator_id, request.pub_share, request.master_share, request.role, current_user.id)
+        sync_credit_to_splits(db, song, creator.id, request.pub_share, request.master_share, request.role, current_user.id)
 
     db.commit()
     db.refresh(credit)
     
     threading.Thread(
         target=_refresh_creator_credits_async,
-        args=(request.creator_id, song.organization_id),
+        args=(creator.id, song.organization_id),
         daemon=True,
     ).start()
     

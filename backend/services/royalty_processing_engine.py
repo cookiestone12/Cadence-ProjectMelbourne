@@ -597,6 +597,30 @@ def get_allocation_preview(db: Session, statement_id: int, org_id: int) -> dict:
         raise
 
 
+def _is_mlc_statement(statement) -> bool:
+    source_name = (getattr(statement, 'source_name', '') or '').lower()
+    source_type = (getattr(statement, 'source_type', '') or '').lower()
+    mlc_keywords = ['mlc', 'mechanical licensing collective']
+    combined = f"{source_name} {source_type}"
+    return any(kw in combined for kw in mlc_keywords)
+
+
+def _find_multi_client_songs(db: Session, org_id: int, song_id: int) -> list:
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if not song:
+        return [song_id]
+    group_id = getattr(song, 'shared_song_group_id', None)
+    if not group_id:
+        return [song_id]
+    sibling_ids = [
+        s.id for s in db.query(Song).filter(
+            Song.shared_song_group_id == group_id,
+            Song.organization_id == org_id,
+        ).all()
+    ]
+    return sibling_ids if sibling_ids else [song_id]
+
+
 def process_statement(db: Session, statement_id: int, org_id: int, user_id: int) -> int:
     try:
         statement = db.query(RoyaltyStatement).filter(
@@ -643,6 +667,10 @@ def process_statement(db: Session, statement_id: int, org_id: int, user_id: int)
             "lines_unmatched_processed": 0,
         }
 
+        is_mlc = _is_mlc_statement(statement)
+        if is_mlc:
+            logger.info(f"MLC statement detected for statement {statement_id} — multi-client distribution enabled")
+
         for line in lines:
             summary["total_lines_processed"] += 1
             song_id = line.matched_song_id
@@ -677,7 +705,14 @@ def process_statement(db: Session, statement_id: int, org_id: int, user_id: int)
                 continue
 
             summary["lines_matched_processed"] += 1
-            splits = _find_splits_for_song(db, org_id, song_id)
+
+            all_song_ids = [song_id]
+            if is_mlc:
+                all_song_ids = _find_multi_client_songs(db, org_id, song_id)
+
+            splits = []
+            for sid in all_song_ids:
+                splits.extend(_find_splits_for_song(db, org_id, sid))
 
             if not splits:
                 summary["lines_without_splits"] += 1
@@ -703,12 +738,18 @@ def process_statement(db: Session, statement_id: int, org_id: int, user_id: int)
                 summary["total_earnings_cents"] += net_cents
                 continue
 
+            total_share = sum((s.share_percentage or 0) for _, _, s in splits if s.rights_holder_id)
+            normalize = is_mlc and len(all_song_ids) > 1 and total_share > 100.0
+
             for contract_id, ca, split in splits:
                 if not split.rights_holder_id:
                     continue
 
                 payee = ensure_payee_for_creator(db, org_id, split.rights_holder_id)
-                earning_cents = int(round(net_cents * (split.share_percentage or 0) / 100.0))
+                share_pct = split.share_percentage or 0
+                if normalize and total_share > 0:
+                    share_pct = share_pct * 100.0 / total_share
+                earning_cents = int(round(net_cents * share_pct / 100.0))
 
                 earning_entry = RoyaltyLedgerEntry(
                     org_id=org_id,

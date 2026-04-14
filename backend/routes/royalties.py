@@ -184,6 +184,18 @@ PRO_SOURCE_TYPES = {
             "revenue": ["royalty", "amount", "net"],
         }
     },
+    "MLC": {
+        "keywords": ["mlc", "mechanical licensing collective", "the mlc"],
+        "extra_hints": {
+            "track_title": ["song title", "track title", "title", "work title"],
+            "artist": ["performer", "artist", "writer"],
+            "revenue": ["royalty", "amount", "net amount", "total earned", "payment amount"],
+            "isrc": ["isrc"],
+            "iswc": ["iswc", "hfa song code"],
+            "quantity": ["streams", "plays", "uses"],
+            "platform": ["service", "dsp", "licensee"],
+        }
+    },
 }
 
 
@@ -191,6 +203,7 @@ KNOWN_SOURCE_NAMES = {
     "bmi": "BMI", "ascap": "ASCAP", "sesac": "SESAC",
     "soundexchange": "SoundExchange", "sound exchange": "SoundExchange",
     "socan": "SOCAN", "prs": "PRS", "prs for music": "PRS",
+    "mlc": "MLC", "the mlc": "MLC", "mechanical licensing collective": "MLC",
     "distrokid": "DistroKid", "tunecore": "TuneCore",
     "cd baby": "CD Baby", "cdbaby": "CD Baby",
     "stem": "Stem", "songtrust": "Songtrust",

@@ -189,6 +189,12 @@ def ensure_schema_updates():
             conn.execute(text("ALTER TABLE songs ADD COLUMN parent_song_id INTEGER REFERENCES songs(id)"))
             conn.commit()
             logger.info("Added parent_song_id column to songs")
+        if 'shared_song_group_id' not in song_cols_refreshed:
+            conn.execute(text("ALTER TABLE songs ADD COLUMN shared_song_group_id VARCHAR"))
+            conn.commit()
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_songs_shared_song_group_id ON songs (shared_song_group_id)"))
+            conn.commit()
+            logger.info("Added shared_song_group_id column to songs")
 
         try:
             conn.execute(text(

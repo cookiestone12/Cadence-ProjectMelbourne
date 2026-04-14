@@ -59,8 +59,6 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
     release_date: '',
     entry_type: 'Song',
     label: '',
-    publishing_percentage: '',
-    master_percentage: '',
     advance_amount: '',
     recording_code: '',
     master_paid: '',
@@ -127,8 +125,6 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
         release_date: formData.release_date || null,
         entry_type: formData.entry_type || 'Song',
         label: formData.label || null,
-        publishing_percentage: formData.publishing_percentage ? parseFloat(formData.publishing_percentage) : null,
-        master_percentage: formData.master_percentage ? parseFloat(formData.master_percentage) : null,
         advance_amount: formData.advance_amount ? parseFloat(formData.advance_amount) * 100 : null,
         recording_code: formData.recording_code || null,
         master_paid: formData.master_paid || null,
@@ -441,34 +437,6 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
           <div className="mb-8">
             <h3 className="text-lg font-semibold text-[#3D4A44] mb-4">Ownership & Financial</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Publishing %</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  value={formData.publishing_percentage}
-                  onChange={(e) => handleChange('publishing_percentage', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
-                  placeholder="0.00"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Master %</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max="100"
-                  value={formData.master_percentage}
-                  onChange={(e) => handleChange('master_percentage', e.target.value)}
-                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44] placeholder-[#7A8580]"
-                  placeholder="0.00"
-                />
-              </div>
-              
               <div>
                 <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Advance Amount ($)</label>
                 <input

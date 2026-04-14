@@ -1,4 +1,5 @@
 import logging
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
@@ -66,6 +67,7 @@ class SongResponse(BaseModel):
     entry_type: Optional[str] = "Song"
     parent_song_id: Optional[int] = None
     parent_song_title: Optional[str] = None
+    shared_song_group_id: Optional[str] = None
     spotify_link: Optional[str] = None
     label: Optional[str]
     publishing_percentage: Optional[float]
@@ -113,6 +115,7 @@ def _song_to_response(song) -> dict:
         "entry_type": getattr(song, 'entry_type', None) or "Song",
         "parent_song_id": song.parent_song_id,
         "parent_song_title": parent_title,
+        "shared_song_group_id": getattr(song, 'shared_song_group_id', None),
         "spotify_link": song.spotify_link,
         "label": song.label,
         "publishing_percentage": song.publishing_percentage,
@@ -188,6 +191,7 @@ class SongDetailResponse(BaseModel):
     entry_type: Optional[str] = "Song"
     parent_song_id: Optional[int] = None
     parent_song_title: Optional[str] = None
+    shared_song_group_id: Optional[str] = None
     spotify_link: Optional[str] = None
     label: Optional[str]
     publishing_percentage: Optional[float]
@@ -203,6 +207,7 @@ class SongDetailResponse(BaseModel):
     media_url: Optional[str]
     client_name: Optional[str] = None
     client_id: Optional[int] = None
+    also_represented_for: Optional[list] = None
     credits: List[CreditResponse]
     dsp_links: List[DSPLinkResponse]
     checklist_statuses: List[ChecklistStatusResponse]
@@ -219,8 +224,6 @@ class SongCreateRequest(BaseModel):
     release_date: Optional[date] = None
     entry_type: Optional[str] = "Song"
     label: Optional[str] = None
-    publishing_percentage: Optional[float] = None
-    master_percentage: Optional[float] = None
     advance_amount: Optional[int] = None
     recording_code: Optional[str] = None
     master_paid: Optional[str] = None
@@ -253,8 +256,6 @@ class SongUpdateRequest(BaseModel):
     is_released: Optional[bool] = None
     spotify_link: Optional[str] = None
     label: Optional[str] = None
-    publishing_percentage: Optional[float] = None
-    master_percentage: Optional[float] = None
     advance_amount: Optional[Any] = None
     soundexchange_registered: Optional[Any] = None
     mlc_registered: Optional[Any] = None
@@ -450,6 +451,75 @@ def get_organization_songs(
         result.append(song_data)
     return result
 
+class GroupSongsRequest(BaseModel):
+    song_ids: List[int]
+
+
+@router.post("/group")
+def group_songs(
+    request: GroupSongsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if len(request.song_ids) < 2:
+        raise HTTPException(status_code=400, detail="At least 2 songs required to form a group")
+
+    songs = db.query(Song).filter(Song.id.in_(request.song_ids)).all()
+    if len(songs) != len(request.song_ids):
+        raise HTTPException(status_code=404, detail="One or more songs not found")
+
+    org_ids = {s.organization_id for s in songs}
+    if len(org_ids) != 1:
+        raise HTTPException(status_code=400, detail="All songs must belong to the same organization")
+
+    org_id = org_ids.pop()
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    existing_group = None
+    for s in songs:
+        if s.shared_song_group_id:
+            existing_group = s.shared_song_group_id
+            break
+
+    group_id = existing_group or str(uuid.uuid4())
+    for s in songs:
+        s.shared_song_group_id = group_id
+
+    from ..services.audit_service import log_action
+    log_action(db, org_id, current_user.id, "GROUP", "SONG", songs[0].id, f"Grouped {len(songs)} songs",
+               details={"group_id": group_id, "song_ids": request.song_ids})
+    db.commit()
+    return {"group_id": group_id, "song_ids": request.song_ids}
+
+
+def _get_also_represented(db: Session, song) -> list:
+    group_id = getattr(song, 'shared_song_group_id', None)
+    if not group_id:
+        return []
+    siblings = db.query(Song).filter(
+        Song.shared_song_group_id == group_id,
+        Song.organization_id == song.organization_id,
+        Song.id != song.id,
+    ).all()
+    result = []
+    for s in siblings:
+        first_credit = db.query(SongCredit).filter(SongCredit.song_id == s.id).first()
+        client_name = None
+        client_id = None
+        if first_credit and first_credit.creator_id:
+            creator = db.query(Creator).filter(Creator.id == first_credit.creator_id).first()
+            if creator:
+                client_name = creator.display_name
+                client_id = creator.id
+        result.append({"song_id": s.id, "title": s.title, "client_name": client_name, "client_id": client_id})
+    return result
+
+
 @router.get("/{song_id}", response_model=SongDetailResponse)
 def get_song(
     song_id: int,
@@ -507,6 +577,7 @@ def get_song(
         "entry_type": getattr(song, 'entry_type', None) or "Song",
         "parent_song_id": song.parent_song_id,
         "parent_song_title": song.parent_song.title if song.parent_song_id and song.parent_song else None,
+        "shared_song_group_id": getattr(song, 'shared_song_group_id', None),
         "spotify_link": song.spotify_link,
         "label": song.label,
         "publishing_percentage": song.publishing_percentage,
@@ -522,6 +593,7 @@ def get_song(
         "media_url": song.media_url,
         "client_name": client_name,
         "client_id": client_id,
+        "also_represented_for": _get_also_represented(db, song),
         "credits": [
             {
                 "id": credit.id,
@@ -811,8 +883,6 @@ def create_song(
             release_status="unreleased",
             entry_type=request.entry_type or "Song",
             label=request.label,
-            publishing_percentage=request.publishing_percentage,
-            master_percentage=request.master_percentage,
             advance_amount=request.advance_amount,
             recording_code=request.recording_code,
             master_paid=request.master_paid,
@@ -881,6 +951,9 @@ def update_song(
             raise HTTPException(status_code=403, detail="Not authorized to access this song")
     
     update_data = request.dict(exclude_unset=True)
+
+    update_data.pop("publishing_percentage", None)
+    update_data.pop("master_percentage", None)
 
     bool_fields = {"has_contract_sent", "has_contract_executed", "is_registered_with_pro"}
     for key in bool_fields:
@@ -1212,6 +1285,37 @@ def duplicate_song(
     db.refresh(new_song)
 
     return _song_to_response(new_song)
+
+
+@router.delete("/{song_id}/group")
+def ungroup_song(
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == song.organization_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    old_group = song.shared_song_group_id
+    song.shared_song_group_id = None
+
+    if old_group:
+        remaining = db.query(Song).filter(
+            Song.shared_song_group_id == old_group,
+            Song.id != song_id
+        ).all()
+        if len(remaining) == 1:
+            remaining[0].shared_song_group_id = None
+
+    db.commit()
+    return {"msg": "Song removed from group"}
 
 
 @router.post("/{song_id}/mark-released")

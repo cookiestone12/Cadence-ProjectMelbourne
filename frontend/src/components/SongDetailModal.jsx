@@ -334,6 +334,10 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   }
 
   const [duplicating, setDuplicating] = useState(false)
+  const [showGroupLink, setShowGroupLink] = useState(false)
+  const [groupSearchQuery, setGroupSearchQuery] = useState('')
+  const [orgSongs, setOrgSongs] = useState([])
+  const [groupLinking, setGroupLinking] = useState(false)
 
   async function handleDuplicate() {
     setDuplicating(true)
@@ -349,6 +353,50 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       alert(error.response?.data?.detail || 'Failed to duplicate song')
     } finally {
       setDuplicating(false)
+    }
+  }
+
+  async function openGroupLink() {
+    setShowGroupLink(true)
+    setGroupSearchQuery('')
+    try {
+      const orgResponse = await axios.get('/api/organizations/current')
+      const res = await axios.get(`/api/songs/org/${orgResponse.data.id}?limit=1000`)
+      setOrgSongs((res.data || []).filter(s => s.id !== song.id))
+    } catch (e) {
+      console.error('Failed to load org songs:', e)
+    }
+  }
+
+  async function handleGroupLink(targetSongId) {
+    setGroupLinking(true)
+    try {
+      const token = localStorage.getItem('token')
+      await axios.post('/api/songs/group', { song_ids: [song.id, targetSongId] }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setShowGroupLink(false)
+      await loadSongDetails()
+      if (onSongUpdated) onSongUpdated()
+    } catch (err) {
+      console.error('Failed to group songs:', err)
+      alert(err.response?.data?.detail || 'Failed to link songs')
+    } finally {
+      setGroupLinking(false)
+    }
+  }
+
+  async function handleUngroup() {
+    if (!confirm('Remove this song from the shared group?')) return
+    try {
+      const token = localStorage.getItem('token')
+      await axios.delete(`/api/songs/${song.id}/group`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      await loadSongDetails()
+      if (onSongUpdated) onSongUpdated()
+    } catch (err) {
+      console.error('Failed to ungroup:', err)
     }
   }
 
@@ -837,6 +885,22 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   Linked to: <Link to={`/catalog?songId=${songDetails.parent_song_id}`} onClick={onClose} className="text-[#5B8A72] hover:underline font-medium">{songDetails.parent_song_title}</Link>
                 </p>
               )}
+              {songDetails.also_represented_for && songDetails.also_represented_for.length > 0 && (
+                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[13px] text-[#7A8580]">Also represented for:</span>
+                  {songDetails.also_represented_for.map((entry, idx) => (
+                    <Link
+                      key={entry.song_id}
+                      to={`/catalog?songId=${entry.song_id}`}
+                      onClick={onClose}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] font-medium bg-[rgba(91,138,114,0.10)] text-[#5B8A72] hover:bg-[rgba(91,138,114,0.20)] transition-colors"
+                    >
+                      <UserIcon className="w-3 h-3" />
+                      {entry.client_name || entry.title}
+                    </Link>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               <button
@@ -856,6 +920,25 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                 <DocumentDuplicateIcon className="w-5 h-5" />
                 <span className="hidden sm:inline">{duplicating ? 'Duplicating...' : 'Duplicate'}</span>
               </button>
+              {songDetails?.shared_song_group_id ? (
+                <button
+                  onClick={handleUngroup}
+                  className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#9A7A5A] hover:bg-[rgba(154,122,90,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
+                  title="Remove from group"
+                >
+                  <LinkIcon className="w-5 h-5" />
+                  <span className="hidden sm:inline">Unlink</span>
+                </button>
+              ) : (
+                <button
+                  onClick={openGroupLink}
+                  className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#7A6B9A] hover:bg-[rgba(122,107,154,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
+                  title="Link to another client's catalog entry"
+                >
+                  <LinkIcon className="w-5 h-5" />
+                  <span className="hidden sm:inline">Link</span>
+                </button>
+              )}
               <button
                 onClick={onClose}
                 className="text-[#7A8580] hover:text-[#3D4A44] transition-colors"
@@ -2738,6 +2821,50 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
           itemName={shareTarget.name}
           onClose={() => setShareTarget(null)}
         />
+      )}
+      {showGroupLink && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70]" onClick={() => setShowGroupLink(false)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-lg font-semibold text-[#3D4A44]">Link to Another Catalog Entry</h3>
+              <p className="text-[13px] text-[#7A8580] mt-1">Select a song to share the same catalog group (e.g., same song represented for different clients).</p>
+            </div>
+            <div className="px-6 py-3">
+              <input
+                type="text"
+                placeholder="Search songs..."
+                value={groupSearchQuery}
+                onChange={(e) => setGroupSearchQuery(e.target.value)}
+                className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.12)] rounded-xl text-[#3D4A44] placeholder-[#7A8580] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                autoFocus
+              />
+            </div>
+            <div className="max-h-[300px] overflow-y-auto px-6 pb-4">
+              {orgSongs
+                .filter(s => !groupSearchQuery || s.title.toLowerCase().includes(groupSearchQuery.toLowerCase()) || (s.primary_artist || '').toLowerCase().includes(groupSearchQuery.toLowerCase()) || (s.client_name || '').toLowerCase().includes(groupSearchQuery.toLowerCase()))
+                .slice(0, 20)
+                .map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleGroupLink(s.id)}
+                    disabled={groupLinking}
+                    className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[rgba(91,138,114,0.06)] transition-colors flex items-center justify-between disabled:opacity-50"
+                  >
+                    <div>
+                      <p className="text-[14px] font-medium text-[#3D4A44]">{s.title}</p>
+                      <p className="text-[12px] text-[#7A8580]">{s.primary_artist}{s.client_name ? ` \u00B7 ${s.client_name}` : ''}</p>
+                    </div>
+                    <LinkIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                  </button>
+                ))
+              }
+              {orgSongs.length === 0 && <p className="text-[13px] text-[#7A8580] text-center py-4">No songs found</p>}
+            </div>
+            <div className="px-6 py-3 border-t border-[rgba(59,77,67,0.08)] flex justify-end">
+              <button onClick={() => setShowGroupLink(false)} className="px-4 py-2 text-[14px] text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
