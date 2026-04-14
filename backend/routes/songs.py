@@ -480,15 +480,19 @@ def group_songs(
     if not membership:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    existing_group = None
-    for s in songs:
-        if s.shared_song_group_id:
-            existing_group = s.shared_song_group_id
-            break
+    existing_groups = {s.shared_song_group_id for s in songs if s.shared_song_group_id}
+    group_id = existing_groups.pop() if existing_groups else str(uuid.uuid4())
 
-    group_id = existing_group or str(uuid.uuid4())
     for s in songs:
         s.shared_song_group_id = group_id
+
+    if existing_groups:
+        other_songs = db.query(Song).filter(
+            Song.shared_song_group_id.in_(existing_groups),
+            Song.organization_id == org_id,
+        ).all()
+        for s in other_songs:
+            s.shared_song_group_id = group_id
 
     from ..services.audit_service import log_action
     log_action(db, org_id, current_user.id, "GROUP", "SONG", songs[0].id, f"Grouped {len(songs)} songs",

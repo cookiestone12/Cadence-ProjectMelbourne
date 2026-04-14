@@ -108,17 +108,18 @@ def create_credit(
                 status_code=403,
                 detail="Cannot add credits from creators outside this organization"
             )
-    elif request.new_creator_name:
+    elif request.new_creator_name and request.new_creator_name.strip():
+        cleaned_name = request.new_creator_name.strip()
         creator = Creator(
             organization_id=song.organization_id,
-            display_name=request.new_creator_name.strip(),
-            primary_artist=request.new_creator_name.strip(),
+            display_name=cleaned_name,
+            primary_artist=cleaned_name,
         )
         db.add(creator)
         db.flush()
         logger.info(f"Auto-created creator '{creator.display_name}' (id={creator.id}) for org {song.organization_id}")
     else:
-        raise HTTPException(status_code=400, detail="Provide creator_id or new_creator_name")
+        raise HTTPException(status_code=400, detail="Provide creator_id or a non-empty new_creator_name")
 
     credit = SongCredit(
         song_id=song_id,
