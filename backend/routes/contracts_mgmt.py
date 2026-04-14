@@ -650,6 +650,9 @@ def add_song_split(
     db.add(split)
     db.flush()
 
+    from ..utils.edit_history import record_split_change
+    record_split_change(db, song_id, song.organization_id, current_user.id, holder_name, data.rights_type, None, data.share_percentage)
+
     _sync_song_pub_percentage(db, song_id)
     if data.rights_holder_id and data.rights_type in ("PUBLISHING", "MASTER"):
         _sync_splits_to_credits(db, song_id, data.rights_holder_id)
@@ -689,6 +692,14 @@ def delete_song_split(
     song_id = ca.asset_id if ca.asset_type == "SONG" else None
     creator_id = split.rights_holder_id
     rights_type = split.rights_type
+    old_pct = split.share_percentage
+    holder_name = split.rights_holder_name or str(creator_id)
+
+    if song_id:
+        song_for_hist = db.query(Song).filter(Song.id == song_id).first()
+        if song_for_hist:
+            from ..utils.edit_history import record_split_change
+            record_split_change(db, song_id, song_for_hist.organization_id, current_user.id, holder_name, rights_type, old_pct, None)
 
     db.delete(split)
     db.flush()

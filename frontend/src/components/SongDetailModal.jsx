@@ -43,8 +43,9 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [addClientRole, setAddClientRole] = useState('PRIMARY_ARTIST')
   const [addClientPubShare, setAddClientPubShare] = useState('')
   const [addClientMasterShare, setAddClientMasterShare] = useState('')
+  const [addClientNotes, setAddClientNotes] = useState('')
   const [editingCreditId, setEditingCreditId] = useState(null)
-  const [editCreditForm, setEditCreditForm] = useState({ role: '', pub_share: '', master_share: '' })
+  const [editCreditForm, setEditCreditForm] = useState({ role: '', pub_share: '', master_share: '', edit_notes: '' })
   const [resolvingCreditId, setResolvingCreditId] = useState(null)
   const [resolveCreatorId, setResolveCreatorId] = useState(null)
   const [resolveNewName, setResolveNewName] = useState('')
@@ -72,6 +73,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [historyEntries, setHistoryEntries] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyTotal, setHistoryTotal] = useState(0)
+  const [expandedHistoryIds, setExpandedHistoryIds] = useState(new Set())
   
   useEffect(() => {
     setActiveTab('overview')
@@ -1124,6 +1126,13 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                   />
                                 </div>
                               </div>
+                              <input
+                                type="text"
+                                value={editCreditForm.edit_notes}
+                                onChange={(e) => setEditCreditForm(prev => ({ ...prev, edit_notes: e.target.value }))}
+                                placeholder="Reason for change (optional)"
+                                className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-[8px] text-xs text-[#3D4A44] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] placeholder-[#A0A8A3]"
+                              />
                               <div className="flex justify-end gap-2">
                                 <button
                                   onClick={() => setEditingCreditId(null)}
@@ -1137,6 +1146,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                       const payload = { role: editCreditForm.role }
                                       payload.pub_share = editCreditForm.pub_share === '' ? null : parseFloat(editCreditForm.pub_share)
                                       payload.master_share = editCreditForm.master_share === '' ? null : parseFloat(editCreditForm.master_share)
+                                      if (editCreditForm.edit_notes?.trim()) payload.edit_notes = editCreditForm.edit_notes.trim()
                                       await axios.patch(`/api/songs/${song.id}/credits/${credit.id}`, payload)
                                       setEditingCreditId(null)
                                       await loadSongDetails()
@@ -1271,7 +1281,8 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                     setEditCreditForm({
                                       role: credit.role,
                                       pub_share: credit.pub_share != null ? String(credit.pub_share) : '',
-                                      master_share: credit.master_share != null ? String(credit.master_share) : ''
+                                      master_share: credit.master_share != null ? String(credit.master_share) : '',
+                                      edit_notes: ''
                                     })
                                   }}
                                   className="p-1 text-[#7A8580] hover:text-[#5B8A72] rounded-lg hover:bg-[rgba(91,138,114,0.08)] transition-colors"
@@ -1358,9 +1369,16 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                               />
                             </div>
                           </div>
+                          <input
+                            type="text"
+                            value={addClientNotes}
+                            onChange={(e) => setAddClientNotes(e.target.value)}
+                            placeholder="Reason for change (optional)"
+                            className="w-full px-3 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-[8px] text-xs text-[#3D4A44] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] placeholder-[#A0A8A3]"
+                          />
                           <div className="flex items-center justify-between pt-1">
                             <button
-                              onClick={() => { setShowAddClient(false); setAddClientCreatorId(''); setAddClientPubShare(''); setAddClientMasterShare('') }}
+                              onClick={() => { setShowAddClient(false); setAddClientCreatorId(''); setAddClientPubShare(''); setAddClientMasterShare(''); setAddClientNotes('') }}
                               className="px-3 py-1.5 text-xs text-[#7A8580] hover:text-[#3D4A44] rounded-[8px] hover:bg-white transition-colors"
                             >
                               Cancel
@@ -1375,10 +1393,12 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                   }
                                   if (addClientPubShare !== '') payload.pub_share = parseFloat(addClientPubShare)
                                   if (addClientMasterShare !== '') payload.master_share = parseFloat(addClientMasterShare)
+                                  if (addClientNotes.trim()) payload.edit_notes = addClientNotes.trim()
                                   await axios.post(`/api/songs/${song.id}/credits`, payload)
                                   setAddClientCreatorId('')
                                   setAddClientPubShare('')
                                   setAddClientMasterShare('')
+                                  setAddClientNotes('')
                                   setShowAddClient(false)
                                   await loadSongDetails()
                                   loadSongSplits()
@@ -2947,10 +2967,30 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                         const ts = entry.created_at ? new Date(entry.created_at) : null
                         const timeStr = ts ? ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + ts.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''
 
+                        const isExpanded = expandedHistoryIds.has(entry.id)
+                        const hasDiffData = entry.change_type !== 'create' && (entry.old_value != null || entry.new_value != null)
+
+                        function formatDiffValue(val) {
+                          if (val == null) return '(empty)'
+                          if (typeof val === 'object') return JSON.stringify(val, null, 2)
+                          return String(val)
+                        }
+
                         return (
                           <div key={entry.id} className="relative pl-10 pb-5">
                             <div className={`absolute left-[14px] top-[6px] w-[10px] h-[10px] rounded-full ${dotColor} ring-2 ring-white`} />
-                            <div className="bg-[rgba(91,138,114,0.03)] rounded-[12px] px-4 py-3 border border-[rgba(59,77,67,0.06)]">
+                            <div
+                              className={`bg-[rgba(91,138,114,0.03)] rounded-[12px] px-4 py-3 border border-[rgba(59,77,67,0.06)] ${hasDiffData ? 'cursor-pointer hover:bg-[rgba(91,138,114,0.06)]' : ''} transition-colors`}
+                              onClick={() => {
+                                if (!hasDiffData) return
+                                setExpandedHistoryIds(prev => {
+                                  const next = new Set(prev)
+                                  if (next.has(entry.id)) next.delete(entry.id)
+                                  else next.add(entry.id)
+                                  return next
+                                })
+                              }}
+                            >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 flex-wrap">
@@ -2958,10 +2998,25 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                       {changeLabels[entry.change_type] || entry.change_type}
                                     </span>
                                     <span className="text-[12px] text-[#7A8580]">{entry.user_name}</span>
+                                    {hasDiffData && (
+                                      <span className="text-[10px] text-[#A0A8A3]">{isExpanded ? 'collapse' : 'expand'}</span>
+                                    )}
                                   </div>
                                   <p className="text-[13px] text-[#3D4A44] mt-1.5 break-words">{description}</p>
                                   {entry.notes && (
                                     <p className="text-[12px] text-[#7A8580] mt-1 italic">"{entry.notes}"</p>
+                                  )}
+                                  {isExpanded && hasDiffData && (
+                                    <div className="mt-2 space-y-1 text-[12px] font-mono">
+                                      <div className="flex items-start gap-2">
+                                        <span className="text-[#EF4444] flex-shrink-0">-</span>
+                                        <pre className="text-[#EF4444] bg-[rgba(239,68,68,0.05)] rounded px-2 py-1 whitespace-pre-wrap break-all flex-1 overflow-hidden">{formatDiffValue(entry.old_value)}</pre>
+                                      </div>
+                                      <div className="flex items-start gap-2">
+                                        <span className="text-[#22C55E] flex-shrink-0">+</span>
+                                        <pre className="text-[#22C55E] bg-[rgba(34,197,94,0.05)] rounded px-2 py-1 whitespace-pre-wrap break-all flex-1 overflow-hidden">{formatDiffValue(entry.new_value)}</pre>
+                                      </div>
+                                    </div>
                                   )}
                                 </div>
                                 <span className="text-[11px] text-[#A0A8A3] whitespace-nowrap flex-shrink-0">{timeStr}</span>

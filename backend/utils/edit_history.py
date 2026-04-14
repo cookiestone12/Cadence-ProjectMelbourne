@@ -40,8 +40,9 @@ def record_edit(
             notes=notes,
         )
         db.add(entry)
+        db.flush()
     except Exception as e:
-        logger.error(f"Failed to record edit history: {e}")
+        logger.warning(f"Failed to record edit history for song {song_id}, field {field_name}: {e}", exc_info=True)
 
 
 def record_song_create(db: Session, song, user_id: int, notes: str = None):

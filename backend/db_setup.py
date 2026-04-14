@@ -363,6 +363,14 @@ def ensure_schema_updates():
                 conn.commit()
                 logger.info("Added status column to works")
 
+        if 'song_edit_history' not in inspector.get_table_names():
+            try:
+                from backend.models.models import SongEditHistory
+                SongEditHistory.__table__.create(bind=engine, checkfirst=True)
+                logger.info("Created song_edit_history table")
+            except Exception as e:
+                logger.warning(f"Could not create song_edit_history table: {e}")
+
         if 'registration_reports' not in inspector.get_table_names():
             try:
                 from backend.models.models import RegistrationReport
