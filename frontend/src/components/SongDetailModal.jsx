@@ -35,7 +35,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const fileInputRef = useRef(null)
   const [songSplits, setSongSplits] = useState([])
   const [showSplitForm, setShowSplitForm] = useState(false)
-  const [splitForm, setSplitForm] = useState({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '' })
+  const [splitForm, setSplitForm] = useState({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '', edit_notes: '' })
   const [splitSaving, setSplitSaving] = useState(false)
   const [splitCreators, setSplitCreators] = useState([])
   const [showAddClient, setShowAddClient] = useState(false)
@@ -270,8 +270,9 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       }
       if (splitForm.ipi) payload.ipi = splitForm.ipi
       if (splitForm.pro) payload.pro = splitForm.pro
+      if (splitForm.edit_notes) payload.notes = splitForm.edit_notes
       await axios.post(`/api/rights/song-splits/${song.id}`, payload)
-      setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '' })
+      setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '', edit_notes: '' })
       setSplitSearchQuery('')
       setShowSplitForm(false)
       loadSongSplits()
@@ -313,8 +314,9 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
 
   async function handleDeleteSongSplit(splitId) {
     if (!confirm('Remove this split?')) return
+    const reason = prompt('Reason for removal (optional):')
     try {
-      await axios.delete(`/api/rights/song-splits/${splitId}`)
+      await axios.delete(`/api/rights/song-splits/${splitId}`, { params: reason ? { notes: reason } : {} })
       loadSongSplits()
       loadRightsData()
       await loadSongDetails()
@@ -1176,8 +1178,9 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 <button
                                   onClick={async () => {
                                     if (!confirm(`Remove this unmatched credit?`)) return
+                                    const reason = prompt('Reason for removal (optional):')
                                     try {
-                                      await axios.delete(`/api/songs/${song.id}/credits/${credit.id}`)
+                                      await axios.delete(`/api/songs/${song.id}/credits/${credit.id}`, { params: reason ? { notes: reason } : {} })
                                       await loadSongDetails()
                                       if (onSongUpdated) onSongUpdated()
                                     } catch (err) {
@@ -1293,8 +1296,9 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 <button
                                   onClick={async () => {
                                     if (!confirm(`Remove ${credit.creator_name} from this song?`)) return
+                                    const reason = prompt('Reason for removal (optional):')
                                     try {
-                                      await axios.delete(`/api/songs/${song.id}/credits/${credit.id}`)
+                                      await axios.delete(`/api/songs/${song.id}/credits/${credit.id}`, { params: reason ? { notes: reason } : {} })
                                       await loadSongDetails()
                                       if (onSongUpdated) onSongUpdated()
                                     } catch (err) {
@@ -2160,9 +2164,19 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                         </select>
                       </div>
                     </div>
+                    <div>
+                      <label className="block text-xs font-medium text-[#7A8580] mb-1">Reason for Change (optional)</label>
+                      <input
+                        type="text"
+                        placeholder="Why is this split being added?"
+                        value={splitForm.edit_notes}
+                        onChange={(e) => setSplitForm(prev => ({ ...prev, edit_notes: e.target.value }))}
+                        className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
+                      />
+                    </div>
                     <div className="flex justify-end space-x-2">
                       <button
-                        onClick={() => { setShowSplitForm(false); setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '' }); setSplitSearchQuery('') }}
+                        onClick={() => { setShowSplitForm(false); setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '', edit_notes: '' }); setSplitSearchQuery('') }}
                         className="px-4 py-2 text-sm text-[#7A8580] border border-[rgba(59,77,67,0.12)] rounded-lg hover:bg-[#EEF1EC] transition-colors"
                       >
                         Cancel

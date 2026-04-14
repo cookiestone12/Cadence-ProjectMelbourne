@@ -674,6 +674,7 @@ def add_song_split(
 @router.delete("/song-splits/{split_id}")
 def delete_song_split(
     split_id: int,
+    notes: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -699,7 +700,7 @@ def delete_song_split(
         song_for_hist = db.query(Song).filter(Song.id == song_id).first()
         if song_for_hist:
             from ..utils.edit_history import record_split_change
-            record_split_change(db, song_id, song_for_hist.organization_id, current_user.id, holder_name, rights_type, old_pct, None)
+            record_split_change(db, song_id, song_for_hist.organization_id, current_user.id, holder_name, rights_type, old_pct, None, notes=notes)
 
     db.delete(split)
     db.flush()
@@ -1260,6 +1261,8 @@ def add_split(
     db.flush()
 
     if ca.asset_type == "SONG":
+        from ..utils.edit_history import record_split_change
+        record_split_change(db, ca.asset_id, contract.organization_id, current_user.id, holder_name, data.rights_type, None, data.share_percentage, notes=data.notes)
         _sync_song_pub_percentage(db, ca.asset_id)
         if data.rights_holder_id and data.rights_type in ("PUBLISHING", "MASTER"):
             _sync_splits_to_credits(db, ca.asset_id, data.rights_holder_id)
@@ -1313,6 +1316,10 @@ def update_split(
             detail=f"Total splits for {new_rights_type} would exceed 100% (others: {existing_total}%, new: {new_percentage}%)"
         )
 
+    old_pct = split.share_percentage
+    old_rights_type = split.rights_type
+    holder_name = split.rights_holder_name or str(split.rights_holder_id or "unknown")
+
     if data.rights_type is not None:
         split.rights_type = data.rights_type
     if data.share_percentage is not None:
@@ -1326,6 +1333,9 @@ def update_split(
 
     db.flush()
     if ca.asset_type == "SONG":
+        if old_pct != split.share_percentage or old_rights_type != split.rights_type:
+            from ..utils.edit_history import record_split_change
+            record_split_change(db, ca.asset_id, contract.organization_id, current_user.id, holder_name, split.rights_type, old_pct, split.share_percentage, notes=data.notes)
         _sync_song_pub_percentage(db, ca.asset_id)
         if split.rights_holder_id:
             _sync_splits_to_credits(db, ca.asset_id, split.rights_holder_id)
@@ -1362,6 +1372,14 @@ def delete_split(
     asset_type = ca.asset_type
     asset_id = ca.asset_id
     holder_id = split.rights_holder_id
+    old_pct = split.share_percentage
+    holder_name = split.rights_holder_name or str(holder_id or "unknown")
+    rights_type = split.rights_type
+
+    if asset_type == "SONG":
+        from ..utils.edit_history import record_split_change
+        record_split_change(db, asset_id, contract.organization_id, current_user.id, holder_name, rights_type, old_pct, None)
+
     db.delete(split)
     db.flush()
     if asset_type == "SONG":
