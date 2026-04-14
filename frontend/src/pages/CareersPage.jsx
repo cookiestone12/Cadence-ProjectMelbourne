@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import PublicFooter from '../components/PublicFooter'
 
 function useInView(ref, threshold = 0.15) {
   const [inView, setInView] = useState(false)
@@ -458,18 +459,7 @@ export default function CareersPage() {
         </div>
       </section>
 
-      <footer className="border-t border-[rgba(59,77,67,0.06)] py-8 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-            <img src="/cadence-logo-full.png" alt="Cadence" className="h-6 w-auto opacity-40" />
-          </div>
-          <div className="flex items-center gap-6">
-            <button onClick={() => navigate('/')} className="text-[12px] text-[#7A8580] hover:text-[#5B8A72] transition-colors">Home</button>
-            <button onClick={() => navigate('/investors')} className="text-[12px] text-[#7A8580] hover:text-[#5B8A72] transition-colors">Investors</button>
-          </div>
-          <p className="text-[12px] text-[#B0B8B3]">&copy; {new Date().getFullYear()} Cadence CI. All rights reserved.</p>
-        </div>
-      </footer>
+      <PublicFooter />
 
       {showApplyModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setShowApplyModal(false)}>

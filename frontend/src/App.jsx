@@ -65,6 +65,13 @@ import SupportPage from './pages/SupportPage'
 import LandingPage from './pages/LandingPage'
 import CareersPage from './pages/CareersPage'
 import InvestorsPage from './pages/InvestorsPage'
+import AboutPage from './pages/AboutPage'
+import TermsPage from './pages/TermsPage'
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
+import AntiFraudPage from './pages/AntiFraudPage'
+import ContentPolicyPage from './pages/ContentPolicyPage'
+import BetaTermsPage from './pages/BetaTermsPage'
+import HelpCenterPage from './pages/HelpCenterPage'
 import Sidebar from './components/Sidebar'
 import PullToRefresh from './components/PullToRefresh'
 import AssistantChat from './components/AssistantChat'
@@ -144,6 +151,13 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/careers" element={<CareersPage />} />
           <Route path="/investors" element={<InvestorsPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPolicyPage />} />
+          <Route path="/anti-fraud" element={<AntiFraudPage />} />
+          <Route path="/content-policy" element={<ContentPolicyPage />} />
+          <Route path="/beta-terms" element={<BetaTermsPage />} />
+          <Route path="/help" element={<HelpCenterPage />} />
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
           <Route path="/guide" element={<UserGuidePage />} />
           <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
