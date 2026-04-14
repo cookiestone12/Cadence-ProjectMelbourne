@@ -184,6 +184,10 @@ class SongDetailResponse(BaseModel):
     is_invoiced: Optional[str] = None
     is_paid: Optional[str] = None
     is_released: bool
+    release_status: Optional[str] = "unreleased"
+    entry_type: Optional[str] = "Song"
+    parent_song_id: Optional[int] = None
+    parent_song_title: Optional[str] = None
     spotify_link: Optional[str] = None
     label: Optional[str]
     publishing_percentage: Optional[float]
@@ -900,6 +904,15 @@ def update_song(
             song.release_status = "released"
         else:
             song.release_status = "unreleased"
+
+    if 'is_released' in update_data and 'release_date' not in update_data:
+        if song.is_released:
+            song.release_status = "released"
+        else:
+            song.release_status = "unreleased"
+
+    if 'release_status' in update_data and 'is_released' not in update_data and 'release_date' not in update_data:
+        song.is_released = (song.release_status == "released")
 
     # Cross-field sync: payment_status <-> is_paid / master_paid
     if 'payment_status' in update_data:
