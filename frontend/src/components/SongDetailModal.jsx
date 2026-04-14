@@ -69,6 +69,9 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [streamingData, setStreamingData] = useState(null)
   const [streamingLoading, setStreamingLoading] = useState(false)
   const streamingRequestRef = useRef(null)
+  const [historyEntries, setHistoryEntries] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyTotal, setHistoryTotal] = useState(0)
   
   useEffect(() => {
     setActiveTab('overview')
@@ -80,6 +83,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     loadSongSplits()
     loadSplitCreators()
     loadDirectoryContacts()
+    loadHistory()
   }, [song.id])
 
   useEffect(() => {
@@ -99,6 +103,9 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     }
     if (activeTab === 'streaming') {
       loadStreamingData()
+    }
+    if (activeTab === 'history') {
+      loadHistory()
     }
   }, [activeTab, song.id])
 
@@ -126,6 +133,44 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     }
   }
   
+  async function loadHistory() {
+    setHistoryLoading(true)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get(`/api/songs/${song.id}/history`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setHistoryEntries(response.data.entries || [])
+      setHistoryTotal(response.data.total || 0)
+    } catch (error) {
+      console.error('Failed to load history:', error)
+      setHistoryEntries([])
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  async function handleExportHistory() {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get(`/api/songs/${song.id}/history/export`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+        responseType: 'blob'
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `Edit_History_${(song.title || 'Song').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to export history:', error)
+      alert('Failed to export edit history PDF')
+    }
+  }
+
   async function loadSongDetails() {
     try {
       const token = localStorage.getItem('token')
@@ -880,6 +925,11 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   </span>
                 )}
               </div>
+              {historyEntries.length > 0 && historyEntries[0]?.created_at && (
+                <p className="mt-1.5 text-[11px] text-[#A0A8A3]">
+                  Last edited {new Date(historyEntries[0].created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} by {historyEntries[0].user_name}
+                </p>
+              )}
               {songDetails.parent_song_id && songDetails.parent_song_title && (
                 <p className="mt-2 text-[13px] text-[#7A8580]">
                   Linked to: <Link to={`/catalog?songId=${songDetails.parent_song_id}`} onClick={onClose} className="text-[#5B8A72] hover:underline font-medium">{songDetails.parent_song_title}</Link>
@@ -956,7 +1006,8 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
               { id: 'rights', label: 'Rights & Splits', icon: ScaleIcon },
               { id: 'streaming', label: 'Streaming & Valuation', icon: ChartBarIcon },
               { id: 'links', label: 'Credits & Links', icon: LinkIcon },
-              { id: 'audio', label: 'Audio', icon: SpeakerWaveIcon }
+              { id: 'audio', label: 'Audio', icon: SpeakerWaveIcon },
+              { id: 'history', label: 'History', icon: DocumentTextIcon }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -2810,6 +2861,119 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'history' && (
+            <div className="space-y-4">
+              <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-[16px] font-semibold text-[#3D4A44]">Edit History</h3>
+                    <p className="text-[13px] text-[#7A8580] mt-0.5">{historyTotal} change{historyTotal !== 1 ? 's' : ''} recorded</p>
+                  </div>
+                  {historyEntries.length > 0 && (
+                    <button
+                      onClick={handleExportHistory}
+                      className="flex items-center space-x-1.5 px-3 py-1.5 bg-[rgba(91,138,114,0.08)] text-[#5B8A72] rounded-[10px] text-[13px] font-medium hover:bg-[rgba(91,138,114,0.15)] transition-colors"
+                    >
+                      <ArrowDownTrayIcon className="w-4 h-4" />
+                      <span>Export PDF</span>
+                    </button>
+                  )}
+                </div>
+
+                {historyLoading ? (
+                  <div className="text-center py-8 text-[#7A8580] text-[14px]">Loading history...</div>
+                ) : historyEntries.length === 0 ? (
+                  <div className="text-center py-12">
+                    <DocumentTextIcon className="w-10 h-10 text-[#C8CEC9] mx-auto mb-3" />
+                    <p className="text-[14px] text-[#7A8580]">No edit history yet</p>
+                    <p className="text-[12px] text-[#A0A8A3] mt-1">Changes to this song will appear here</p>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="absolute left-[18px] top-0 bottom-0 w-[2px] bg-[rgba(91,138,114,0.12)]" />
+                    <div className="space-y-0">
+                      {historyEntries.map((entry, idx) => {
+                        const changeLabels = {
+                          create: 'Created',
+                          update: 'Updated',
+                          add_contributor: 'Added contributor',
+                          remove_contributor: 'Removed contributor',
+                          split_change: 'Split changed',
+                          delete: 'Deleted',
+                        }
+                        const changeColors = {
+                          create: 'bg-[#5B8A72]',
+                          update: 'bg-[#3B82F6]',
+                          add_contributor: 'bg-[#8B5CF6]',
+                          remove_contributor: 'bg-[#EF4444]',
+                          split_change: 'bg-[#F59E0B]',
+                          delete: 'bg-[#EF4444]',
+                        }
+                        const dotColor = changeColors[entry.change_type] || 'bg-[#7A8580]'
+
+                        let description = ''
+                        if (entry.change_type === 'create') {
+                          description = 'Song created'
+                        } else if (entry.change_type === 'add_contributor') {
+                          const val = entry.new_value
+                          const name = typeof val === 'object' ? val?.name : val
+                          const role = typeof val === 'object' ? val?.role : ''
+                          description = `Added ${name || 'contributor'}${role ? ` as ${role}` : ''}`
+                        } else if (entry.change_type === 'remove_contributor') {
+                          const val = entry.old_value
+                          const name = typeof val === 'object' ? val?.name : val
+                          description = `Removed ${name || 'contributor'}`
+                        } else if (entry.change_type === 'split_change') {
+                          const oldVal = entry.old_value
+                          const newVal = entry.new_value
+                          const holder = typeof newVal === 'object' ? newVal?.holder : ''
+                          const oldPct = typeof oldVal === 'object' ? oldVal?.percentage : oldVal
+                          const newPct = typeof newVal === 'object' ? newVal?.percentage : newVal
+                          description = `${holder ? holder + ': ' : ''}${entry.field_name?.replace('split.', '')} ${oldPct ?? '—'}% \u2192 ${newPct ?? '—'}%`
+                        } else {
+                          const fieldLabel = (entry.field_name || '').replace(/_/g, ' ')
+                          const oldStr = entry.old_value != null ? String(entry.old_value) : '(empty)'
+                          const newStr = entry.new_value != null ? String(entry.new_value) : '(empty)'
+                          if (typeof entry.old_value === 'object' && entry.old_value?.name) {
+                            description = `${fieldLabel}: ${entry.old_value.name} ${entry.old_value.value ?? ''} \u2192 ${entry.new_value?.value ?? ''}`
+                          } else {
+                            description = `${fieldLabel}: ${oldStr.length > 40 ? oldStr.slice(0, 40) + '...' : oldStr} \u2192 ${newStr.length > 40 ? newStr.slice(0, 40) + '...' : newStr}`
+                          }
+                        }
+
+                        const ts = entry.created_at ? new Date(entry.created_at) : null
+                        const timeStr = ts ? ts.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + ts.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : ''
+
+                        return (
+                          <div key={entry.id} className="relative pl-10 pb-5">
+                            <div className={`absolute left-[14px] top-[6px] w-[10px] h-[10px] rounded-full ${dotColor} ring-2 ring-white`} />
+                            <div className="bg-[rgba(91,138,114,0.03)] rounded-[12px] px-4 py-3 border border-[rgba(59,77,67,0.06)]">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium text-white ${dotColor}`}>
+                                      {changeLabels[entry.change_type] || entry.change_type}
+                                    </span>
+                                    <span className="text-[12px] text-[#7A8580]">{entry.user_name}</span>
+                                  </div>
+                                  <p className="text-[13px] text-[#3D4A44] mt-1.5 break-words">{description}</p>
+                                  {entry.notes && (
+                                    <p className="text-[12px] text-[#7A8580] mt-1 italic">"{entry.notes}"</p>
+                                  )}
+                                </div>
+                                <span className="text-[11px] text-[#A0A8A3] whitespace-nowrap flex-shrink-0">{timeStr}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

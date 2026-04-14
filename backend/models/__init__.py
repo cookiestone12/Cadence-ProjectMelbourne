@@ -34,6 +34,7 @@ from .models import (
     AIUsageLog,
     TicketCategory, TicketStatus, SupportTicket, SupportTicketAttachment,
     LeadType, Lead,
+    SongEditHistory,
 )
 
 __all__ = [
@@ -71,4 +72,5 @@ __all__ = [
     "AIUsageLog",
     "TicketCategory", "TicketStatus", "SupportTicket", "SupportTicketAttachment",
     "LeadType", "Lead",
+    "SongEditHistory",
 ]

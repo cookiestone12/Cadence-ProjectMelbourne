@@ -2398,6 +2398,29 @@ class Lead(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class SongEditHistory(Base):
+    __tablename__ = "song_edit_history"
+    __table_args__ = (
+        Index('ix_song_edit_history_song_id', 'song_id'),
+        Index('ix_song_edit_history_org_id', 'organization_id'),
+        Index('ix_song_edit_history_created_at', 'created_at'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    song_id = Column(Integer, ForeignKey("songs.id", ondelete="CASCADE"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    field_name = Column(String, nullable=False)
+    old_value = Column(JSON, nullable=True)
+    new_value = Column(JSON, nullable=True)
+    change_type = Column(String, nullable=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    song = relationship("Song", foreign_keys=[song_id])
+    user = relationship("User", foreign_keys=[user_id])
+
+
 class SupportTicket(Base):
     __tablename__ = "support_tickets"
     __table_args__ = (

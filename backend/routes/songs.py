@@ -265,6 +265,7 @@ class SongUpdateRequest(BaseModel):
     media_url: Optional[str] = None
     audio_file_url: Optional[str] = None
     lyrics: Optional[str] = None
+    edit_notes: Optional[str] = None
 
     @validator('release_date', pre=True)
     def parse_release_date(cls, v):
@@ -524,6 +525,170 @@ def _get_also_represented(db: Session, song) -> list:
     return result
 
 
+@router.get("/{song_id}/history")
+def get_song_history(
+    song_id: int,
+    limit: int = Query(100, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import SongEditHistory
+
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == song.organization_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    total = db.query(func.count(SongEditHistory.id)).filter(
+        SongEditHistory.song_id == song_id
+    ).scalar()
+
+    entries = db.query(SongEditHistory).filter(
+        SongEditHistory.song_id == song_id
+    ).order_by(SongEditHistory.created_at.desc()).offset(offset).limit(limit).all()
+
+    results = []
+    user_cache = {}
+    for e in entries:
+        if e.user_id not in user_cache:
+            u = db.query(User).filter(User.id == e.user_id).first()
+            user_cache[e.user_id] = u.username if u else "Unknown"
+        results.append({
+            "id": e.id,
+            "field_name": e.field_name,
+            "old_value": e.old_value,
+            "new_value": e.new_value,
+            "change_type": e.change_type,
+            "notes": e.notes,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+            "user_name": user_cache[e.user_id],
+        })
+
+    return {"total": total, "entries": results}
+
+
+@router.get("/{song_id}/history/export")
+def export_song_history_pdf(
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from ..models import SongEditHistory
+    from fastapi.responses import Response
+
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == song.organization_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    entries = db.query(SongEditHistory).filter(
+        SongEditHistory.song_id == song_id
+    ).order_by(SongEditHistory.created_at.desc()).all()
+
+    user_cache = {}
+    for e in entries:
+        if e.user_id not in user_cache:
+            u = db.query(User).filter(User.id == e.user_id).first()
+            user_cache[e.user_id] = u.username if u else "Unknown"
+
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        import io
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        styles = getSampleStyleSheet()
+
+        sage = colors.HexColor('#5B8A72')
+        title_style = ParagraphStyle('CustomTitle', parent=styles['Title'], fontSize=16, textColor=colors.HexColor('#3D4A44'))
+        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#7A8580'))
+        cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=7, leading=9)
+        header_cell_style = ParagraphStyle('HeaderCell', parent=styles['Normal'], fontSize=7, leading=9, textColor=colors.white)
+
+        elements = []
+        elements.append(Paragraph(f"Edit History — {song.title}", title_style))
+        elements.append(Paragraph(f"ISRC: {song.isrc or 'N/A'} | Total changes: {len(entries)}", subtitle_style))
+        elements.append(Spacer(1, 12))
+
+        if entries:
+            header = [
+                Paragraph("<b>Date</b>", header_cell_style),
+                Paragraph("<b>User</b>", header_cell_style),
+                Paragraph("<b>Type</b>", header_cell_style),
+                Paragraph("<b>Field</b>", header_cell_style),
+                Paragraph("<b>Old Value</b>", header_cell_style),
+                Paragraph("<b>New Value</b>", header_cell_style),
+                Paragraph("<b>Notes</b>", header_cell_style),
+            ]
+            data = [header]
+            for e in entries:
+                ts = e.created_at.strftime("%Y-%m-%d %H:%M") if e.created_at else ""
+                old_v = str(e.old_value) if e.old_value is not None else ""
+                new_v = str(e.new_value) if e.new_value is not None else ""
+                data.append([
+                    Paragraph(ts, cell_style),
+                    Paragraph(user_cache.get(e.user_id, ""), cell_style),
+                    Paragraph(e.change_type or "", cell_style),
+                    Paragraph(e.field_name or "", cell_style),
+                    Paragraph(old_v[:80], cell_style),
+                    Paragraph(new_v[:80], cell_style),
+                    Paragraph((e.notes or "")[:80], cell_style),
+                ])
+
+            col_widths = [1.1*inch, 0.9*inch, 0.8*inch, 0.9*inch, 1.2*inch, 1.2*inch, 1.4*inch]
+            table = Table(data, colWidths=col_widths)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), sage),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('FONTSIZE', (0, 0), (-1, -1), 7),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#EEF1EC')]),
+                ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#D1D5DB')),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('TOPPADDING', (0, 0), (-1, -1), 3),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+            ]))
+            elements.append(table)
+        else:
+            elements.append(Paragraph("No edit history found.", subtitle_style))
+
+        elements.append(Spacer(1, 20))
+        footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#7A8580'), alignment=1)
+        elements.append(Paragraph("Cadence — Catalog Intelligence | Confidential", footer_style))
+
+        doc.build(elements)
+        buffer.seek(0)
+        pdf_bytes = buffer.getvalue()
+
+        import re
+        safe_title = re.sub(r'[^\w\s-]', '', song.title or 'Song').replace(' ', '_')[:60]
+        filename = f"Edit_History_{safe_title}.pdf"
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    except ImportError:
+        raise HTTPException(status_code=500, detail="PDF generation not available")
+
+
 @router.get("/{song_id}", response_model=SongDetailResponse)
 def get_song(
     song_id: int,
@@ -775,6 +940,9 @@ def delete_song(
         from ..services.audit_service import log_action
         log_action(db, song.organization_id, current_user.id, "DELETE", "SONG", song.id, song.title)
 
+        from ..utils.edit_history import record_edit
+        record_edit(db, song.id, song.organization_id, current_user.id, "song", song.title, None, change_type="delete")
+
         _cleanup_song_dependencies(db, [song_id])
 
         from sqlalchemy import text
@@ -920,6 +1088,10 @@ def create_song(
 
         from ..services.audit_service import log_action
         log_action(db, org_id, current_user.id, "CREATE", "SONG", song.id, song.title)
+
+        from ..utils.edit_history import record_song_create
+        record_song_create(db, song, current_user.id)
+
         db.commit()
         db.refresh(song)
         
@@ -968,6 +1140,8 @@ async def update_song(
     
     update_data = request.dict(exclude_unset=True)
 
+    edit_notes = update_data.pop("edit_notes", None)
+
     bool_fields = {"has_contract_sent", "has_contract_executed", "is_registered_with_pro"}
     for key in bool_fields:
         if key in update_data:
@@ -980,6 +1154,9 @@ async def update_song(
                     update_data[key] = False
                 else:
                     update_data[key] = None
+
+    from ..utils.edit_history import record_song_update
+    old_values = {key: getattr(song, key, None) for key in update_data}
 
     for key, value in update_data.items():
         setattr(song, key, value)
@@ -1036,6 +1213,9 @@ async def update_song(
     changed_fields = list(update_data.keys())
     log_action(db, song.organization_id, current_user.id, "UPDATE", "SONG", song.id, song.title,
                details={"changed_fields": changed_fields})
+
+    for key in changed_fields:
+        record_song_update(db, song, current_user.id, key, old_values.get(key), update_data[key], notes=edit_notes)
 
     health_fields = {"isrc", "iswc", "has_contract_sent", "has_contract_executed",
                      "is_registered_with_pro", "is_registered_with_dsp", "is_invoiced", "is_paid",

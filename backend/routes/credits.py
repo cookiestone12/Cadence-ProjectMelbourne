@@ -31,12 +31,14 @@ class CreditCreateRequest(BaseModel):
     share_percentage: Optional[float] = None
     pub_share: Optional[float] = None
     master_share: Optional[float] = None
+    edit_notes: Optional[str] = None
 
 class CreditUpdateRequest(BaseModel):
     role: Optional[str] = None
     share_percentage: Optional[float] = None
     pub_share: Optional[float] = None
     master_share: Optional[float] = None
+    edit_notes: Optional[str] = None
 
 class DSPLinkCreateRequest(BaseModel):
     platform: str
@@ -135,6 +137,9 @@ def create_credit(
     if request.pub_share is not None or request.master_share is not None:
         sync_credit_to_splits(db, song, creator.id, request.pub_share, request.master_share, request.role, current_user.id)
 
+    from ..utils.edit_history import record_contributor_add
+    record_contributor_add(db, song_id, song.organization_id, current_user.id, creator.display_name, request.role, notes=request.edit_notes)
+
     db.commit()
     db.refresh(credit)
     
@@ -181,7 +186,22 @@ def update_credit(
         raise HTTPException(status_code=404, detail="Credit not found")
     
     update_data = request.dict(exclude_unset=True)
+    edit_notes = update_data.pop("edit_notes", None)
+
+    from ..models import Creator as CreatorModel
+    credit_creator = db.query(CreatorModel).filter(CreatorModel.id == credit.creator_id).first()
+    creator_name = credit_creator.display_name if credit_creator else str(credit.creator_id)
+
+    from ..utils.edit_history import record_contributor_edit, record_split_change
     for key, value in update_data.items():
+        old_val = getattr(credit, key, None)
+        if old_val == value:
+            continue
+        if key in ("pub_share", "master_share", "share_percentage"):
+            rtype = {"pub_share": "PUBLISHING", "master_share": "MASTER", "share_percentage": "SHARE"}.get(key, key)
+            record_split_change(db, song_id, song.organization_id, current_user.id, creator_name, rtype, old_val, value, notes=edit_notes)
+        elif key == "role":
+            record_contributor_edit(db, song_id, song.organization_id, current_user.id, creator_name, "role", old_val, value, notes=edit_notes)
         setattr(credit, key, value)
 
     if "pub_share" in update_data or "master_share" in update_data:
@@ -242,6 +262,13 @@ def delete_credit(
     creator_id = credit.creator_id
     had_splits = credit.pub_share is not None or credit.master_share is not None
     was_unmatched = credit.needs_review
+
+    from ..models import Creator as CreatorModel
+    credit_creator = db.query(CreatorModel).filter(CreatorModel.id == credit.creator_id).first()
+    creator_name = credit_creator.display_name if credit_creator else str(credit.creator_id)
+    from ..utils.edit_history import record_contributor_remove
+    record_contributor_remove(db, song_id, song.organization_id, current_user.id, creator_name, credit.role)
+
     db.delete(credit)
     db.flush()
 
