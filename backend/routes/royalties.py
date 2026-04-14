@@ -217,11 +217,12 @@ def normalize_source_name(source_name: str) -> str:
     return KNOWN_SOURCE_NAMES.get(lookup, source_name.strip())
 
 
-def detect_pro_source(headers: List[str], source_name: str = "") -> Optional[str]:
+def detect_pro_source(headers: List[str], source_name: str = "", filename: str = "") -> Optional[str]:
     all_text = " ".join(headers).lower() + " " + source_name.lower()
+    fname_lower = filename.lower() if filename else ""
     for pro_name, config in PRO_SOURCE_TYPES.items():
         for keyword in config["keywords"]:
-            if keyword in all_text:
+            if keyword in all_text or keyword in fname_lower:
                 return pro_name
     return None
 
@@ -607,7 +608,7 @@ async def preview_statement(
     verify_org_access(current_user, org_id, db)
     content = await file.read()
     headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)
-    detected_source = detect_pro_source(headers, source_name or "")
+    detected_source = detect_pro_source(headers, source_name or "", file.filename or "")
     suggested = pdf_metadata.get("suggested_mapping") if pdf_metadata else None
     mapping = suggested if suggested else suggest_column_mapping(headers, source_name or "")
     preview = rows[:10]
@@ -830,6 +831,10 @@ async def upload_statement(
     source_name = normalize_source_name(source_name)
     content = await file.read()
     headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)
+
+    detected_pro = detect_pro_source(headers, source_name or "", file.filename or "")
+    if detected_pro and not source_type:
+        source_type = detected_pro
 
     suggested = pdf_metadata.get("suggested_mapping") if pdf_metadata else None
     if suggested:

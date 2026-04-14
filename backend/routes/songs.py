@@ -1,6 +1,6 @@
 import logging
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from pydantic import BaseModel, validator
@@ -928,12 +928,24 @@ def create_song(
         raise HTTPException(status_code=500, detail="Failed to create song. Please try again.")
 
 @router.patch("/{song_id}", response_model=SongResponse)
-def update_song(
+async def update_song(
     song_id: int,
     request: SongUpdateRequest,
+    raw_request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    try:
+        raw_body = await raw_request.json()
+    except Exception:
+        raw_body = {}
+    if isinstance(raw_body, dict):
+        if "publishing_percentage" in raw_body or "master_percentage" in raw_body:
+            raise HTTPException(
+                status_code=400,
+                detail="publishing_percentage and master_percentage are read-only fields derived from credit-level splits"
+            )
+
     song = db.query(Song).filter(Song.id == song_id).first()
     
     if not song:
@@ -951,12 +963,6 @@ def update_song(
             raise HTTPException(status_code=403, detail="Not authorized to access this song")
     
     update_data = request.dict(exclude_unset=True)
-
-    if "publishing_percentage" in update_data or "master_percentage" in update_data:
-        raise HTTPException(
-            status_code=400,
-            detail="publishing_percentage and master_percentage are read-only fields derived from credit-level splits"
-        )
 
     bool_fields = {"has_contract_sent", "has_contract_executed", "is_registered_with_pro"}
     for key in bool_fields:
