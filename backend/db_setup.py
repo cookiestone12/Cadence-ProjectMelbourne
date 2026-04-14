@@ -576,16 +576,19 @@ def sync_release_status():
     from sqlalchemy import text as sa_text
     db = SessionLocal()
     try:
+        spotify_fixed = db.execute(sa_text(
+            "UPDATE songs SET is_released = true WHERE spotify_link IS NOT NULL AND spotify_link != '' AND is_released = false"
+        ))
         fixed = db.execute(sa_text(
-            "UPDATE songs SET is_released = true WHERE release_status = 'released' AND is_released = false"
+            "UPDATE songs SET release_status = 'released' WHERE is_released = true AND release_status != 'released'"
         ))
         fixed2 = db.execute(sa_text(
-            "UPDATE songs SET is_released = false WHERE release_status = 'unreleased' AND is_released = true"
+            "UPDATE songs SET release_status = 'unreleased' WHERE is_released = false AND release_status != 'unreleased'"
         ))
-        total = fixed.rowcount + fixed2.rowcount
+        total = spotify_fixed.rowcount + fixed.rowcount + fixed2.rowcount
         if total > 0:
             db.commit()
-            logger.info(f"Synced is_released flag for {total} songs")
+            logger.info(f"Synced release_status for {total} songs")
         else:
             db.rollback()
     except Exception as e:

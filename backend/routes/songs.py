@@ -1178,6 +1178,10 @@ async def update_song(
     if 'release_status' in update_data and 'is_released' not in update_data and 'release_date' not in update_data:
         song.is_released = (song.release_status == "released")
 
+    if 'spotify_link' in update_data and song.spotify_link and not song.is_released:
+        song.is_released = True
+        song.release_status = "released"
+
     # Cross-field sync: payment_status <-> is_paid / master_paid
     if 'payment_status' in update_data:
         ps = (update_data['payment_status'] or '').strip().upper()
