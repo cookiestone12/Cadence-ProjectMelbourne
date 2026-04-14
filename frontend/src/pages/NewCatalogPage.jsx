@@ -517,7 +517,12 @@ export default function NewCatalogPage() {
   }
 
   const selectAllSongs = () => {
-    setSelectedSongIds(new Set(filteredSongs.map(s => s.id)))
+    if (activeTab === 'all') {
+      const recordingIds = unifiedItems.filter(i => i._itemType === 'recording').map(i => i.id)
+      setSelectedSongIds(new Set(recordingIds))
+    } else {
+      setSelectedSongIds(new Set(filteredSongs.map(s => s.id)))
+    }
   }
 
   const clearSelection = () => {
@@ -632,7 +637,8 @@ export default function NewCatalogPage() {
 
   const openMergeForGroup = (group) => {
     setMergeGroupSongs(group)
-    setMergePrimaryId(group[0]?.id || null)
+    const releasedSong = group.find(s => s.is_released === true)
+    setMergePrimaryId(releasedSong ? releasedSong.id : (group[0]?.id || null))
     setShowMergeModal(true)
   }
 
@@ -889,6 +895,20 @@ export default function NewCatalogPage() {
             <table className="w-full min-w-[700px]">
               <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
                 <tr>
+                  <th className="px-2 sm:px-3 py-3 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={unifiedItems.filter(i => i._itemType === 'recording').length > 0 && unifiedItems.filter(i => i._itemType === 'recording').every(i => selectedSongIds.has(i.id))}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          selectAllSongs()
+                        } else {
+                          clearSelection()
+                        }
+                      }}
+                      className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
+                    />
+                  </th>
                   {[
                     { key: '_sortType', label: 'Type', align: 'left', w: 'w-24' },
                     { key: 'title', label: 'Title', align: 'left' },
@@ -924,8 +944,21 @@ export default function NewCatalogPage() {
                         navigate(`/catalog/unreleased?workId=${item.id}`)
                       }
                     }}
-                    className="group hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
+                    className={`group hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors ${
+                      item._itemType === 'recording' && selectedSongIds.has(item.id) ? 'bg-[rgba(91,138,114,0.08)]' : ''
+                    }`}
                   >
+                    <td className="px-2 sm:px-3 py-3 text-center">
+                      {item._itemType === 'recording' ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedSongIds.has(item.id)}
+                          onChange={(e) => toggleSongSelection(e, item.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72]"
+                        />
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3">
                       {item._itemType === 'recording' ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
@@ -976,7 +1009,7 @@ export default function NewCatalogPage() {
                 ))}
                 {unifiedItems.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-[#7A8580]">
+                    <td colSpan={6} className="px-6 py-12 text-center text-[#7A8580]">
                       No catalog items found
                     </td>
                   </tr>
