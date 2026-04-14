@@ -1,0 +1,78 @@
+Fix the splits normalization bug and rework how multi-client songs and MLC 
+statements are handled.
+
+SPLITS NORMALIZATION BUG FIX:
+1. There is currently a bug where splits can be entered at two levels: 
+   (a) when creating a song under a client, and (b) in the metadata section 
+   for master/publishing. Remove the organizational-level split layer 
+   entirely. Splits should be normalized strictly to the CLIENT level.
+
+2. Audit songs.py, credits.py, and contracts_mgmt.py for any 
+   organization-level split fields. Remove them from the schema (migration 
+   in db_setup.py to drop org-level split columns), the API responses, and 
+   the frontend forms in SongDetail.jsx and the song creation flow in 
+   NewCatalogPage.jsx.
+
+3. After this change, song creation should ask for splits in ONE place only: 
+   the credits/splits section tied to client/contributor entries. The 
+   metadata section should display the resulting normalized splits read-only.
+
+4. Auto-populate metadata: when client splits are entered during song 
+   creation, the master/publishing split breakdown in the metadata view 
+   should be derived from the credits, not stored separately.
+
+MULTI-CLIENT CATALOG ENTRIES:
+5. When a single song applies to multiple clients managed by the same org, 
+   create SEPARATE catalog entries for each client. Each client's entry 
+   reflects only their portion of the song, not the full song.
+
+6. Add a `shared_song_group_id` (nullable UUID) to the songs table. When 
+   the system detects (or the user indicates) that two song entries 
+   represent the same underlying composition/recording across different 
+   clients, group them via this ID. Splits across grouped entries should 
+   mirror each other consistently — if Client A has 50% and Client B has 
+   50% on the same underlying song, they each get their own catalog entry 
+   showing their 50%.
+
+7. Add UI on SongDetail.jsx to show "Also represented for: [Client B, 
+   Client C]" when shared_song_group_id is populated, with links to those 
+   client entries.
+
+8. When adding a writer/producer to a song who isn't in the system, 
+   automatically create a directory entry for that person (creator/contact 
+   record) so they can be referenced on future songs. This should already 
+   partially exist in creators.py — confirm and extend.
+
+9. If an organization (not an individual) owns a share in a song, the 
+   organization should be set up as its OWN roster client entry. Don't 
+   create a separate "org-level split" concept. Just treat orgs as clients 
+   for split purposes.
+
+MLC ROYALTY PROCESSING LOGIC:
+10. In royalty_processing.py, add a dedicated handler for MLC statements. 
+    When a royalty statement is uploaded and detected as an MLC statement 
+    (by source field or filename pattern), treat it differently from 
+    BMI/ASCAP statements:
+
+    - MLC statements may contain line items that apply to MULTIPLE clients 
+      managed by the same org, even if the statement was uploaded under one 
+      client's account.
+    - For each line item, the system should look up the song, check whether 
+      multiple clients in the org have catalog entries for that song 
+      (via shared_song_group_id or matching ISRC/ISWC), and split the line 
+      item earnings across those clients according to their respective 
+      mirrored splits.
+    - If only one client in the org is on the song, the full line item 
+      goes to that client (standard behavior).
+
+11. For non-MLC statements (BMI, ASCAP, SoundExchange, distributor 
+    statements), keep the existing single-client behavior. Those should 
+    only ever contain earnings for the client they were uploaded under.
+
+12. Add a flag/source detector in royalties.py preview endpoint to identify 
+    MLC statements early in the pipeline so the correct processing path is 
+    chosen.
+
+DO NOT touch catalog UI navigation or audit trail in this prompt. Run all 
+existing royalty tests and add new tests for the multi-client MLC scenario 
+before finishing.
