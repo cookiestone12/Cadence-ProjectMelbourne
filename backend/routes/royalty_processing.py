@@ -1335,6 +1335,10 @@ async def upload_and_parse_statement(
         logger.error(f"File parsing crashed: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
 
+    detected_source = detect_pro_source(headers, source_name or "", file.filename or "")
+    if detected_source and not source_type:
+        source_type = detected_source
+
     suggested = pdf_metadata.get("suggested_mapping") if pdf_metadata else None
     if suggested:
         mapping = suggested
@@ -1344,7 +1348,6 @@ async def upload_and_parse_statement(
         except Exception:
             mapping = suggest_column_mapping(headers, source_name or "")
     else:
-        detected_source = detect_pro_source(headers, source_name or "")
         mapping = suggest_column_mapping(headers, source_name or "")
 
     p_start = None
