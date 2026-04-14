@@ -386,6 +386,11 @@ def ensure_schema_updates():
             except Exception as e:
                 conn.rollback()
                 logger.debug(f"song_edit_history FK update (may already be correct): {e}")
+            try:
+                conn.execute(text("ALTER TABLE song_edit_history ADD COLUMN IF NOT EXISTS song_title VARCHAR"))
+                conn.commit()
+            except Exception:
+                conn.rollback()
 
         if 'registration_reports' not in inspector.get_table_names():
             try:

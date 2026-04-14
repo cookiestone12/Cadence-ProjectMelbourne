@@ -14,8 +14,9 @@ def record_edit(
     new_value,
     change_type: str = "update",
     notes: str = None,
+    song_title: str = None,
 ):
-    from ..models.models import SongEditHistory
+    from ..models.models import SongEditHistory, Song
     from datetime import date, datetime
     try:
         def serialize(v):
@@ -29,8 +30,15 @@ def record_edit(
                 return v.isoformat()
             return str(v)
 
+        title = song_title
+        if not title and song_id:
+            song = db.query(Song.title).filter(Song.id == song_id).first()
+            if song:
+                title = song[0]
+
         entry = SongEditHistory(
             song_id=song_id,
+            song_title=title,
             organization_id=organization_id,
             user_id=user_id,
             field_name=field_name,

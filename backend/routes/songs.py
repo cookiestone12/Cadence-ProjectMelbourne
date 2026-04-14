@@ -567,6 +567,7 @@ def get_song_history(
             "new_value": e.new_value,
             "change_type": e.change_type,
             "notes": e.notes,
+            "song_title": e.song_title,
             "created_at": e.created_at.isoformat() if e.created_at else None,
             "user_name": user_cache[e.user_id],
         })
