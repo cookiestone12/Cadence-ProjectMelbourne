@@ -469,7 +469,7 @@ export default function NewCatalogPage() {
       try {
         await axios.put(`/api/songs/${song.id}`, { is_released: newReleasedState })
         setSongs(prev => prev.map(s => 
-          s.id === song.id ? { ...s, is_released: newReleasedState } : s
+          s.id === song.id ? { ...s, is_released: newReleasedState, release_status: newReleasedState ? 'released' : 'unreleased' } : s
         ))
       } catch (error) {
         console.error('Failed to update released status:', error)
@@ -487,7 +487,7 @@ export default function NewCatalogPage() {
       })
       setSongs(prev => prev.map(s => 
         s.id === spotifyModal.song.id 
-          ? { ...s, is_released: true, spotify_link: spotifyModal.link || null } 
+          ? { ...s, is_released: true, release_status: 'released', spotify_link: spotifyModal.link || null } 
           : s
       ))
       setSpotifyModal({ open: false, song: null, link: '' })
