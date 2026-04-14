@@ -49,6 +49,12 @@ def _deferred_startup_tasks():
 
     _backfill_publishing_percentages(log, traceback)
 
+    try:
+        from .db_setup import sync_release_status
+        sync_release_status()
+    except Exception as e:
+        log.warning(f"Release status sync failed: {e}")
+
     log.info("Deferred startup tasks completed")
 
 
