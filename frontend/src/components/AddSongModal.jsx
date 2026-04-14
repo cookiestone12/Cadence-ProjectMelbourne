@@ -57,6 +57,7 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
     iswc: '',
     project_title: '',
     release_date: '',
+    entry_type: 'Song',
     label: '',
     publishing_percentage: '',
     master_percentage: '',
@@ -124,6 +125,7 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
         iswc: formData.iswc || null,
         project_title: formData.project_title || null,
         release_date: formData.release_date || null,
+        entry_type: formData.entry_type || 'Song',
         label: formData.label || null,
         publishing_percentage: formData.publishing_percentage ? parseFloat(formData.publishing_percentage) : null,
         master_percentage: formData.master_percentage ? parseFloat(formData.master_percentage) : null,
@@ -329,6 +331,18 @@ export default function AddSongModal({ onClose, onSuccess, organizationId, defau
                   onChange={(e) => handleChange('release_date', e.target.value)}
                   className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
                 />
+              </div>
+              <div>
+                <label className="block text-[15px] font-medium text-[#3D4A44] mb-1">Entry Type</label>
+                <select
+                  value={formData.entry_type}
+                  onChange={(e) => handleChange('entry_type', e.target.value)}
+                  className="w-full px-4 py-3 bg-white border border-[rgba(59,77,67,0.08)] rounded-xl focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
+                >
+                  {['Song', 'Instrumental', 'Remix', 'Sample', 'Demo'].map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>

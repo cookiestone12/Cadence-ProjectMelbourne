@@ -193,7 +193,8 @@ function App() {
                 <Route path="/roster/:id" element={<CreatorDetailPage />} />
                 <Route path="/directory" element={<CreativeDirectoryPage />} />
                 <Route path="/catalog" element={<NewCatalogPage />} />
-                <Route path="/works" element={<WorksPage />} />
+                <Route path="/catalog/unreleased" element={<WorksPage />} />
+                <Route path="/works" element={<Navigate to="/catalog/unreleased" replace />} />
                 <Route path="/releases" element={<ReleasesPage />} />
                 <Route path="/contracts" element={<ContractsPage />} />
                 <Route path="/actions" element={<ActionItemsPage />} />

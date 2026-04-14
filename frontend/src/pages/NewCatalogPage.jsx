@@ -63,6 +63,8 @@ export default function NewCatalogPage() {
   const [merging, setMerging] = useState(false)
   const [duplicateLoading, setDuplicateLoading] = useState(false)
 
+  const [entryTypeFilter, setEntryTypeFilter] = useState('')
+
   const [audioData, setAudioData] = useState({})
   const [audioColumnsEnabled, setAudioColumnsEnabled] = useState(false)
   const [audioDataLoading, setAudioDataLoading] = useState(false)
@@ -317,12 +319,16 @@ export default function NewCatalogPage() {
       (song.project_title && song.project_title.toLowerCase().includes(searchTerm.toLowerCase()))
     )
     
-    const matchesTab = activeTab === 'all' || activeTab === 'recordings' || activeTab === 'compositions'
+    const matchesTab = activeTab === 'all' || activeTab === 'released' || activeTab === 'unreleased'
     
     let matchesSubFilter = true
-    if (activeTab === 'recordings') {
-      if (recordingsSubFilter === 'released') matchesSubFilter = song.is_released
-      else if (recordingsSubFilter === 'unreleased') matchesSubFilter = !song.is_released
+    if (activeTab === 'released') {
+      matchesSubFilter = (song.release_status || (song.is_released ? 'released' : 'unreleased')) === 'released'
+    } else if (activeTab === 'unreleased') {
+      matchesSubFilter = (song.release_status || (song.is_released ? 'released' : 'unreleased')) === 'unreleased'
+      if (matchesSubFilter && entryTypeFilter) {
+        matchesSubFilter = (song.entry_type || 'Song') === entryTypeFilter
+      }
     }
 
     let matchesAudio = true
@@ -449,8 +455,8 @@ export default function NewCatalogPage() {
 
   const hasActiveFilters = Object.values(filters).some(v => v !== '')
   
-  const releasedCount = songs.filter(s => s.is_released).length
-  const unreleasedCount = songs.filter(s => !s.is_released).length
+  const releasedCount = songs.filter(s => (s.release_status || (s.is_released ? 'released' : 'unreleased')) === 'released').length
+  const unreleasedCount = songs.filter(s => (s.release_status || (s.is_released ? 'released' : 'unreleased')) === 'unreleased').length
 
   
   const handleReleasedToggle = async (e, song) => {
@@ -816,51 +822,51 @@ export default function NewCatalogPage() {
       <div className="mb-6 border-b border-[rgba(59,77,67,0.08)] overflow-x-auto">
         <div className="flex space-x-4 sm:space-x-8 min-w-max">
           <button
-            onClick={() => setActiveTab('all')}
+            onClick={() => { setActiveTab('all'); setEntryTypeFilter('') }}
             className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
               activeTab === 'all'
                 ? 'border-[#5B8A72] text-[#5B8A72]'
                 : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
           >
-            All ({songs.length + works.length})
+            All ({songs.length})
           </button>
           <button
-            onClick={() => setActiveTab('recordings')}
+            onClick={() => { setActiveTab('released'); setEntryTypeFilter('') }}
             className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
-              activeTab === 'recordings'
+              activeTab === 'released'
                 ? 'border-[#5B8A72] text-[#5B8A72]'
                 : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
           >
-            Recordings ({songs.length})
+            Released ({releasedCount})
           </button>
           <button
-            onClick={() => setActiveTab('compositions')}
+            onClick={() => setActiveTab('unreleased')}
             className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
-              activeTab === 'compositions'
+              activeTab === 'unreleased'
                 ? 'border-[#5B8A72] text-[#5B8A72]'
                 : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
           >
-            Compositions ({works.length})
+            Unreleased ({unreleasedCount})
           </button>
         </div>
       </div>
 
-      {activeTab === 'recordings' && (
-        <div className="mb-4 flex items-center gap-2">
-          {['all', 'released', 'unreleased'].map(sub => (
+      {activeTab === 'unreleased' && (
+        <div className="mb-4 flex items-center gap-2 flex-wrap">
+          {['', 'Song', 'Instrumental', 'Remix', 'Sample', 'Demo'].map(type => (
             <button
-              key={sub}
-              onClick={() => setRecordingsSubFilter(sub)}
+              key={type}
+              onClick={() => setEntryTypeFilter(type)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                recordingsSubFilter === sub
+                entryTypeFilter === type
                   ? 'bg-[#5B8A72] text-white'
                   : 'bg-[#EEF1EC] text-[#3D4A44] hover:bg-[#E4E8E2]'
               }`}
             >
-              {sub === 'all' ? `All (${songs.length})` : sub === 'released' ? `Released (${releasedCount})` : `Unreleased (${unreleasedCount})`}
+              {type || 'All Types'}
             </button>
           ))}
         </div>
@@ -916,7 +922,7 @@ export default function NewCatalogPage() {
                       if (item._itemType === 'recording') {
                         setSelectedSong(item)
                       } else {
-                        navigate(`/works?workId=${item.id}`)
+                        navigate(`/catalog/unreleased?workId=${item.id}`)
                       }
                     }}
                     className="group hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
@@ -982,7 +988,7 @@ export default function NewCatalogPage() {
         </div>
       )}
 
-      {activeTab === 'recordings' && (<>
+      {(activeTab === 'released' || activeTab === 'unreleased') && (<>
       <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
         <div className="flex items-center space-x-4 mb-3 sm:mb-0">
           <div className="flex-1 relative">
@@ -1565,7 +1571,7 @@ export default function NewCatalogPage() {
                 {filteredWorks.map(work => (
                   <tr
                     key={work.id}
-                    onClick={() => navigate(`/works?workId=${work.id}`)}
+                    onClick={() => navigate(`/catalog/unreleased?workId=${work.id}`)}
                     className="group hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-3">

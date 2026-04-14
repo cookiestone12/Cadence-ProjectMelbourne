@@ -170,6 +170,26 @@ def ensure_schema_updates():
         except Exception:
             pass
 
+        song_cols_refreshed = {c['name'] for c in inspector.get_columns('songs')}
+        if 'release_status' not in song_cols_refreshed:
+            conn.execute(text("ALTER TABLE songs ADD COLUMN release_status VARCHAR NOT NULL DEFAULT 'unreleased'"))
+            conn.commit()
+            logger.info("Added release_status column to songs")
+            conn.execute(text(
+                "UPDATE songs SET release_status = 'released' "
+                "WHERE is_released = true OR (release_date IS NOT NULL AND release_date <= CURRENT_DATE)"
+            ))
+            conn.commit()
+            logger.info("Backfilled release_status for existing songs")
+        if 'entry_type' not in song_cols_refreshed:
+            conn.execute(text("ALTER TABLE songs ADD COLUMN entry_type VARCHAR NOT NULL DEFAULT 'Song'"))
+            conn.commit()
+            logger.info("Added entry_type column to songs")
+        if 'parent_song_id' not in song_cols_refreshed:
+            conn.execute(text("ALTER TABLE songs ADD COLUMN parent_song_id INTEGER REFERENCES songs(id)"))
+            conn.commit()
+            logger.info("Added parent_song_id column to songs")
+
         om_cols = [c['name'] for c in inspector.get_columns('organization_members')]
         if 'can_manage_roster' not in om_cols:
             conn.execute(text("ALTER TABLE organization_members ADD COLUMN can_manage_roster BOOLEAN DEFAULT FALSE"))

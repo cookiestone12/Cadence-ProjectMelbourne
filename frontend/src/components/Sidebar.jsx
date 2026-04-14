@@ -55,6 +55,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
 
   const isActive = (path) => {
     if (path === '/') return location.pathname === '/'
+    if (path === '/catalog') return location.pathname === '/catalog'
     return location.pathname.startsWith(path)
   }
   
@@ -69,7 +70,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     { path: '/roster', label: 'Roster', icon: UsersIcon, requiresRoster: true },
     { path: '/directory', label: 'Directory', icon: UserGroupIcon },
     { path: '/catalog', label: 'Catalog', icon: MusicalNoteIcon },
-    { path: '/works', label: 'Works', icon: DocumentTextIcon },
+    { path: '/catalog/unreleased', label: 'Unreleased', icon: DocumentTextIcon, indent: true },
     { path: '/releases', label: 'Artist Releases', icon: RectangleStackIcon },
     { path: '/contracts', label: 'Contracts', icon: ClipboardDocumentListIcon },
     { path: '/actions', label: 'Actions', icon: ClipboardDocumentCheckIcon },
@@ -144,7 +145,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
                   to={item.path}
                   onClick={() => window.innerWidth < 1024 && onClose()}
                   className={`
-                    flex items-center gap-3 px-3 py-2.5 rounded-xl
+                    flex items-center gap-3 ${item.indent ? 'pl-8 pr-3' : 'px-3'} py-2.5 rounded-xl
                     transition-all duration-150 ease-am
                     ${active 
                       ? 'bg-gradient-to-r from-am-accent to-am-accent-light text-white shadow-am-button' 
@@ -152,8 +153,8 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
                     }
                   `}
                 >
-                  <Icon className={`w-[22px] h-[22px] ${active ? 'stroke-[1.8]' : 'stroke-[1.5]'}`} />
-                  <span className={`text-[15px] ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                  <Icon className={`${item.indent ? 'w-[18px] h-[18px]' : 'w-[22px] h-[22px]'} ${active ? 'stroke-[1.8]' : 'stroke-[1.5]'}`} />
+                  <span className={`${item.indent ? 'text-[13px]' : 'text-[15px]'} ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
                 </Link>
               )
             })}

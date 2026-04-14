@@ -163,6 +163,48 @@ def run_scheduled_scans():
             logger.error(f"Scheduled scan failed for link {link_id}: {e}")
 
 
+def flip_released_songs():
+    from ..models.database import SessionLocal
+    from ..models.models import Song
+    from .audit_service import log_action
+    from datetime import date as date_type
+
+    db = SessionLocal()
+    try:
+        today = date_type.today()
+        songs = db.query(Song).filter(
+            Song.release_date <= today,
+            Song.release_status == "unreleased",
+        ).all()
+
+        for song in songs:
+            song.release_status = "released"
+            song.is_released = True
+            try:
+                from ..models.models import AuditLog
+                entry = AuditLog(
+                    organization_id=song.organization_id,
+                    user_id=None,
+                    action="AUTO_RELEASED",
+                    entity_type="SONG",
+                    entity_id=song.id,
+                    entity_name=song.title,
+                    details={"trigger": "scheduled_release_date"},
+                )
+                db.add(entry)
+            except Exception as e:
+                logger.warning(f"Audit log failed for auto-release song {song.id}: {e}")
+
+        if songs:
+            db.commit()
+            logger.info(f"Auto-released {len(songs)} songs based on release_date")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to flip released songs: {e}")
+    finally:
+        db.close()
+
+
 def start_scheduler():
     global _scheduler
     if _scheduler is not None:
@@ -192,10 +234,20 @@ def start_scheduler():
         replace_existing=True,
         next_run_time=datetime.now() + timedelta(minutes=5),
     )
+    _scheduler.add_job(
+        flip_released_songs,
+        "cron",
+        hour=0,
+        minute=5,
+        timezone="UTC",
+        id="daily_release_flip",
+        replace_existing=True,
+    )
     _scheduler.start()
     logger.info("Email digest scheduler started (15-minute interval)")
     logger.info("Storage scan scheduler started (hourly check)")
     logger.info("Chart ingestion scheduler started (4-hour interval)")
+    logger.info("Daily release flip scheduler started (00:05 UTC)")
 
 
 def shutdown_scheduler():

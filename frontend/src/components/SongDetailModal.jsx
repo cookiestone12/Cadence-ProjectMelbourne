@@ -791,15 +791,34 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
             <div className="flex-1 min-w-0">
               <h2 className="text-[20px] sm:text-[28px] font-semibold text-[#3D4A44] mb-2 leading-tight break-words">{songDetails.title}</h2>
               <p className="text-[15px] sm:text-[17px] text-[#7A8580] mb-3">{songDetails.primary_artist}</p>
-              <div className="flex flex-wrap gap-2">
-                {songDetails.is_released && (
+              <div className="flex flex-wrap gap-2 items-center">
+                {(songDetails.release_status || (songDetails.is_released ? 'released' : 'unreleased')) === 'released' ? (
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-medium bg-[rgba(91,154,110,0.15)] text-[#5B9A6E]">
                     Released
                   </span>
+                ) : (
+                  <>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-medium bg-[rgba(196,149,107,0.15)] text-[#C4956B]">
+                      Unreleased
+                    </span>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const token = localStorage.getItem('token')
+                          await axios.post(`/api/songs/${song.id}/mark-released`, {}, { headers: { 'Authorization': `Bearer ${token}` } })
+                          await loadSongDetails()
+                          if (onSongUpdated) onSongUpdated()
+                        } catch (err) { console.error('Failed to mark released:', err) }
+                      }}
+                      className="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-medium bg-[rgba(91,138,114,0.08)] text-[#5B8A72] hover:bg-[rgba(91,138,114,0.15)] transition-colors"
+                    >
+                      Mark as Released
+                    </button>
+                  </>
                 )}
-                {!songDetails.is_released && (
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-medium bg-[rgba(196,149,107,0.15)] text-[#C4956B]">
-                    Unreleased
+                {songDetails.entry_type && songDetails.entry_type !== 'Song' && (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-[13px] font-medium bg-[rgba(91,138,114,0.08)] text-[#5B8A72]">
+                    {songDetails.entry_type}
                   </span>
                 )}
                 {songDetails.payment_status === 'PAID' && (
@@ -813,6 +832,11 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   </span>
                 )}
               </div>
+              {songDetails.parent_song_id && songDetails.parent_song_title && (
+                <p className="mt-2 text-[13px] text-[#7A8580]">
+                  Linked to: <Link to={`/catalog?songId=${songDetails.parent_song_id}`} onClick={onClose} className="text-[#5B8A72] hover:underline font-medium">{songDetails.parent_song_title}</Link>
+                </p>
+              )}
             </div>
             <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               <button
@@ -1386,6 +1410,18 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                         <PencilSquareIcon className="w-3.5 h-3.5 text-[#7A8580] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
                       </p>
                     )}
+                  </div>
+                  <div>
+                    <label className="text-[13px] font-medium text-[#7A8580]">Entry Type</label>
+                    <select
+                      value={songDetails.entry_type || 'Song'}
+                      onChange={(e) => saveStatusField('entry_type', e.target.value)}
+                      className="w-full mt-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-[10px] text-[#3D4A44] text-[15px] focus:outline-none focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white"
+                    >
+                      {['Song', 'Instrumental', 'Remix', 'Sample', 'Demo'].map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Recording Code</label>

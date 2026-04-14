@@ -308,6 +308,9 @@ class Song(Base):
     is_paid = Column(String, nullable=True)
     
     is_released = Column(Boolean, default=False)
+    release_status = Column(String, default="unreleased", nullable=False)
+    entry_type = Column(String, default="Song", nullable=False)
+    parent_song_id = Column(Integer, ForeignKey("songs.id"), nullable=True)
     spotify_link = Column(String, nullable=True)
     label = Column(String, nullable=True)
     publishing_percentage = Column(Float, nullable=True)
@@ -341,6 +344,7 @@ class Song(Base):
     contracts = relationship("SongContract", back_populates="song", cascade="all, delete-orphan")
     work_tracks = relationship("WorkTrack", back_populates="song", cascade="all, delete-orphan")
     release_tracks = relationship("ReleaseTrack", back_populates="song", cascade="all, delete-orphan")
+    parent_song = relationship("Song", remote_side="Song.id", foreign_keys=[parent_song_id])
 
 
 class Work(Base):

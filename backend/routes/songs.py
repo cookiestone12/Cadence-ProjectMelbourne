@@ -25,6 +25,7 @@ def _cleanup_song_dependencies(db: Session, song_ids: list):
     db.execute(text("UPDATE royalty_transactions SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
     db.execute(text("UPDATE audio_assets SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
     db.execute(text("UPDATE action_items SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
+    db.execute(text("UPDATE songs SET parent_song_id = NULL WHERE parent_song_id = ANY(:ids)"), {"ids": id_list})
     db.execute(text("UPDATE contract_documents SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
     db.execute(text("UPDATE expenses SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
     db.execute(text("UPDATE fees SET song_id = NULL WHERE song_id = ANY(:ids)"), {"ids": id_list})
@@ -61,6 +62,10 @@ class SongResponse(BaseModel):
     is_invoiced: Optional[str] = None
     is_paid: Optional[str] = None
     is_released: bool
+    release_status: Optional[str] = "unreleased"
+    entry_type: Optional[str] = "Song"
+    parent_song_id: Optional[int] = None
+    parent_song_title: Optional[str] = None
     spotify_link: Optional[str] = None
     label: Optional[str]
     publishing_percentage: Optional[float]
@@ -85,6 +90,9 @@ class SongResponse(BaseModel):
 
 
 def _song_to_response(song) -> dict:
+    parent_title = None
+    if song.parent_song_id and song.parent_song:
+        parent_title = song.parent_song.title
     return {
         "id": song.id,
         "title": song.title,
@@ -101,6 +109,10 @@ def _song_to_response(song) -> dict:
         "is_invoiced": song.is_invoiced,
         "is_paid": song.is_paid,
         "is_released": song.is_released or False,
+        "release_status": getattr(song, 'release_status', None) or "unreleased",
+        "entry_type": getattr(song, 'entry_type', None) or "Song",
+        "parent_song_id": song.parent_song_id,
+        "parent_song_title": parent_title,
         "spotify_link": song.spotify_link,
         "label": song.label,
         "publishing_percentage": song.publishing_percentage,
@@ -201,6 +213,7 @@ class SongCreateRequest(BaseModel):
     iswc: Optional[str] = None
     project_title: Optional[str] = None
     release_date: Optional[date] = None
+    entry_type: Optional[str] = "Song"
     label: Optional[str] = None
     publishing_percentage: Optional[float] = None
     master_percentage: Optional[float] = None
@@ -226,6 +239,7 @@ class SongUpdateRequest(BaseModel):
     iswc: Optional[str] = None
     project_title: Optional[str] = None
     release_date: Optional[date] = None
+    entry_type: Optional[str] = None
     has_contract_sent: Optional[Any] = None
     has_contract_executed: Optional[Any] = None
     is_registered_with_pro: Optional[Any] = None
@@ -485,6 +499,10 @@ def get_song(
         "is_invoiced": song.is_invoiced,
         "is_paid": song.is_paid,
         "is_released": song.is_released,
+        "release_status": getattr(song, 'release_status', None) or "unreleased",
+        "entry_type": getattr(song, 'entry_type', None) or "Song",
+        "parent_song_id": song.parent_song_id,
+        "parent_song_title": song.parent_song.title if song.parent_song_id and song.parent_song else None,
         "spotify_link": song.spotify_link,
         "label": song.label,
         "publishing_percentage": song.publishing_percentage,
@@ -785,7 +803,9 @@ def create_song(
             iswc=request.iswc,
             project_title=request.project_title,
             release_date=request.release_date,
-            is_released=(request.release_date is not None),
+            is_released=(request.release_date is not None and request.release_date <= date.today()),
+            release_status="released" if (request.release_date and request.release_date <= date.today()) else "unreleased",
+            entry_type=request.entry_type or "Song",
             label=request.label,
             publishing_percentage=request.publishing_percentage,
             master_percentage=request.master_percentage,
@@ -874,9 +894,12 @@ def update_song(
     for key, value in update_data.items():
         setattr(song, key, value)
     
-    # Auto-update is_released if release_date changes
     if 'release_date' in update_data:
-        song.is_released = (song.release_date is not None)
+        song.is_released = (song.release_date is not None and song.release_date <= date.today())
+        if song.release_date is not None and song.release_date <= date.today():
+            song.release_status = "released"
+        else:
+            song.release_status = "unreleased"
 
     # Cross-field sync: payment_status <-> is_paid / master_paid
     if 'payment_status' in update_data:
@@ -1053,6 +1076,7 @@ def merge_songs(
         db.execute(text("DELETE FROM song_contracts WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
         db.execute(text("DELETE FROM work_tracks WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
         db.execute(text("DELETE FROM release_tracks WHERE song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
+        db.execute(text("UPDATE songs SET parent_song_id = NULL WHERE parent_song_id = ANY(CAST(:ids AS INTEGER[]))"), ids_param)
 
         for merge_song in merge_songs_list:
             db.delete(merge_song)
@@ -1115,8 +1139,11 @@ def duplicate_song(
         asset_type=source.asset_type,
         primary_artist=source.primary_artist,
         project_title=source.project_title,
-        release_date=source.release_date,
-        is_released=source.is_released,
+        release_date=None,
+        is_released=False,
+        release_status="unreleased",
+        entry_type=getattr(source, 'entry_type', None) or "Song",
+        parent_song_id=source.id,
         label=source.label,
         publishing_percentage=source.publishing_percentage,
         master_percentage=source.master_percentage,
@@ -1172,3 +1199,31 @@ def duplicate_song(
     db.refresh(new_song)
 
     return _song_to_response(new_song)
+
+
+@router.post("/{song_id}/mark-released")
+def mark_song_released(
+    song_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    song = db.query(Song).filter(Song.id == song_id).first()
+    if not song:
+        raise HTTPException(status_code=404, detail="Song not found")
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == song.organization_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    song.release_status = "released"
+    song.is_released = True
+
+    from ..services.audit_service import log_action
+    log_action(db, song.organization_id, current_user.id, "MARK_RELEASED", "SONG", song.id, song.title)
+    db.commit()
+    db.refresh(song)
+
+    return _song_to_response(song)

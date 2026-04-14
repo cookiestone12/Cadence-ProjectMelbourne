@@ -480,7 +480,7 @@ export default function ActionItemsPage() {
       links.push({ label: `Song: ${action.song_title}`, path: `/catalog?songId=${action.song_id}`, icon: MusicalNoteIcon })
     }
     if (action.work_id && action.work_title) {
-      links.push({ label: `Work: ${action.work_title}`, path: '/works', icon: DocumentTextIcon })
+      links.push({ label: `Work: ${action.work_title}`, path: `/catalog/unreleased?workId=${action.work_id}`, icon: DocumentTextIcon })
     }
     if (action.release_id && action.release_title) {
       links.push({ label: `Release: ${action.release_title}`, path: '/releases', icon: FolderIcon })
