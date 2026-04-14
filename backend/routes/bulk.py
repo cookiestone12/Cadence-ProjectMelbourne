@@ -25,7 +25,7 @@ class BulkAssignCredit(BaseModel):
 
 
 ALLOWED_BULK_FIELDS = {
-    "label", "publishing_percentage", "master_percentage",
+    "label",
     "is_released", "notes", "project_title",
     "is_registered_with_pro", "is_registered_with_dsp",
     "has_contract_sent", "has_contract_executed",

@@ -539,10 +539,9 @@ export default function NewCatalogPage() {
     Object.entries(bulkEditFields).forEach(([key, val]) => {
       if (val !== '' && val !== undefined && val !== null) {
         if (key === 'publishing_percentage' || key === 'master_percentage') {
-          updates[key] = parseFloat(val)
-        } else {
-          updates[key] = val
+          return
         }
+        updates[key] = val
       }
     })
     if (Object.keys(updates).length === 0) return
@@ -1748,32 +1747,6 @@ export default function NewCatalogPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Publishing %</label>
-                  <input
-                    type="number"
-                    value={bulkEditFields.publishing_percentage ?? ''}
-                    onChange={(e) => handleBulkEditFieldChange('publishing_percentage', e.target.value)}
-                    placeholder="0-100"
-                    min="0"
-                    max="100"
-                    className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Master %</label>
-                  <input
-                    type="number"
-                    value={bulkEditFields.master_percentage ?? ''}
-                    onChange={(e) => handleBulkEditFieldChange('master_percentage', e.target.value)}
-                    placeholder="0-100"
-                    min="0"
-                    max="100"
-                    className="w-full px-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent text-[#3D4A44]"
-                  />
-                </div>
-              </div>
 
               <div>
                 <label className="block text-sm font-medium text-[#3D4A44] mb-1">Notes</label>

@@ -952,8 +952,11 @@ def update_song(
     
     update_data = request.dict(exclude_unset=True)
 
-    update_data.pop("publishing_percentage", None)
-    update_data.pop("master_percentage", None)
+    if "publishing_percentage" in update_data or "master_percentage" in update_data:
+        raise HTTPException(
+            status_code=400,
+            detail="publishing_percentage and master_percentage are read-only fields derived from credit-level splits"
+        )
 
     bool_fields = {"has_contract_sent", "has_contract_executed", "is_registered_with_pro"}
     for key in bool_fields:

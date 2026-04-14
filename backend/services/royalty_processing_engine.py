@@ -610,15 +610,32 @@ def _find_multi_client_songs(db: Session, org_id: int, song_id: int) -> list:
     if not song:
         return [song_id]
     group_id = getattr(song, 'shared_song_group_id', None)
-    if not group_id:
-        return [song_id]
-    sibling_ids = [
-        s.id for s in db.query(Song).filter(
-            Song.shared_song_group_id == group_id,
+    if group_id:
+        sibling_ids = [
+            s.id for s in db.query(Song).filter(
+                Song.shared_song_group_id == group_id,
+                Song.organization_id == org_id,
+            ).all()
+        ]
+        if sibling_ids:
+            return sibling_ids
+
+    matched_ids = {song_id}
+    if song.isrc:
+        isrc_matches = db.query(Song.id).filter(
+            Song.isrc == song.isrc,
             Song.organization_id == org_id,
+            Song.id != song_id,
         ).all()
-    ]
-    return sibling_ids if sibling_ids else [song_id]
+        matched_ids.update(s.id for s in isrc_matches)
+    if song.iswc:
+        iswc_matches = db.query(Song.id).filter(
+            Song.iswc == song.iswc,
+            Song.organization_id == org_id,
+            Song.id != song_id,
+        ).all()
+        matched_ids.update(s.id for s in iswc_matches)
+    return list(matched_ids)
 
 
 def process_statement(db: Session, statement_id: int, org_id: int, user_id: int) -> int:
