@@ -651,7 +651,7 @@ def add_song_split(
     db.flush()
 
     from ..utils.edit_history import record_split_change
-    record_split_change(db, song_id, song.organization_id, current_user.id, holder_name, data.rights_type, None, data.share_percentage)
+    record_split_change(db, song_id, song.organization_id, current_user.id, holder_name, data.rights_type, None, data.share_percentage, notes=data.notes)
 
     _sync_song_pub_percentage(db, song_id)
     if data.rights_holder_id and data.rights_type in ("PUBLISHING", "MASTER"):

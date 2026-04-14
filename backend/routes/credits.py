@@ -230,6 +230,7 @@ def update_credit(
 def delete_credit(
     song_id: int,
     credit_id: int,
+    notes: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -267,7 +268,7 @@ def delete_credit(
     credit_creator = db.query(CreatorModel).filter(CreatorModel.id == credit.creator_id).first()
     creator_name = credit_creator.display_name if credit_creator else str(credit.creator_id)
     from ..utils.edit_history import record_contributor_remove
-    record_contributor_remove(db, song_id, song.organization_id, current_user.id, creator_name, credit.role)
+    record_contributor_remove(db, song_id, song.organization_id, current_user.id, creator_name, credit.role, notes=notes)
 
     db.delete(credit)
     db.flush()

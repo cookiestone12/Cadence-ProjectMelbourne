@@ -370,6 +370,22 @@ def ensure_schema_updates():
                 logger.info("Created song_edit_history table")
             except Exception as e:
                 logger.warning(f"Could not create song_edit_history table: {e}")
+        else:
+            try:
+                conn.execute(text("ALTER TABLE song_edit_history ALTER COLUMN song_id DROP NOT NULL"))
+                conn.execute(text("""
+                    DO $$ BEGIN
+                        IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'song_edit_history_song_id_fkey') THEN
+                            ALTER TABLE song_edit_history DROP CONSTRAINT song_edit_history_song_id_fkey;
+                            ALTER TABLE song_edit_history ADD CONSTRAINT song_edit_history_song_id_fkey FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE SET NULL;
+                        END IF;
+                    END $$;
+                """))
+                conn.commit()
+                logger.info("Updated song_edit_history FK to SET NULL")
+            except Exception as e:
+                conn.rollback()
+                logger.debug(f"song_edit_history FK update (may already be correct): {e}")
 
         if 'registration_reports' not in inspector.get_table_names():
             try:

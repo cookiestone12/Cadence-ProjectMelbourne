@@ -2407,7 +2407,7 @@ class SongEditHistory(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    song_id = Column(Integer, ForeignKey("songs.id", ondelete="CASCADE"), nullable=False)
+    song_id = Column(Integer, ForeignKey("songs.id", ondelete="SET NULL"), nullable=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     field_name = Column(String, nullable=False)
