@@ -6,8 +6,9 @@ import {
   PencilIcon, MusicalNoteIcon, UserGroupIcon, LinkIcon,
   FolderIcon, FolderOpenIcon, ChevronDownIcon,
   EllipsisVerticalIcon, ArrowsUpDownIcon, CheckCircleIcon,
-  XCircleIcon
+  XCircleIcon, DocumentTextIcon
 } from '@heroicons/react/24/outline'
+import SongDetailModal from '../components/SongDetailModal'
 
 export default function WorksPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -45,6 +46,8 @@ export default function WorksPage() {
   const [tracksFilter, setTracksFilter] = useState('')
   const [sortOption, setSortOption] = useState('title_asc')
   const [isOrgAdmin, setIsOrgAdmin] = useState(false)
+  const [selectedSong, setSelectedSong] = useState(null)
+  const [itemTypeFilter, setItemTypeFilter] = useState('all')
 
   const folderMenuRef = useRef(null)
 
@@ -144,6 +147,61 @@ export default function WorksPage() {
 
     return result
   }, [works, workTypeFilter, genreFilter, creditsFilter, tracksFilter, activeFolderId, searchTerm, sortOption])
+
+  function isSongUnreleased(song) {
+    return song.is_released === false || song.release_status === 'unreleased'
+  }
+
+  const unreleasedRecordings = useMemo(() => {
+    let result = songs.filter(song => {
+      if (!isSongUnreleased(song)) return false
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        return (
+          (song.title && song.title.toLowerCase().includes(term)) ||
+          (song.primary_artist && song.primary_artist.toLowerCase().includes(term)) ||
+          (song.isrc && song.isrc.toLowerCase().includes(term))
+        )
+      }
+      return true
+    })
+
+    result.sort((a, b) => {
+      switch (sortOption) {
+        case 'title_desc': return (b.title || '').localeCompare(a.title || '')
+        case 'newest': return (b.created_at || '').localeCompare(a.created_at || '')
+        case 'oldest': return (a.created_at || '').localeCompare(b.created_at || '')
+        default: return (a.title || '').localeCompare(b.title || '')
+      }
+    })
+
+    return result
+  }, [songs, searchTerm, sortOption])
+
+  const unifiedItems = useMemo(() => {
+    const compositionItems = (itemTypeFilter === 'all' || itemTypeFilter === 'compositions')
+      ? filteredWorks.map(w => ({ ...w, _itemType: 'composition' }))
+      : []
+    const showRecordings = (itemTypeFilter === 'all' || itemTypeFilter === 'recordings')
+      && (activeFolderId === 'all')
+    const recordingItems = showRecordings
+      ? unreleasedRecordings.map(s => ({ ...s, _itemType: 'recording' }))
+      : []
+    const combined = [...compositionItems, ...recordingItems]
+
+    combined.sort((a, b) => {
+      switch (sortOption) {
+        case 'title_desc': return (b.title || '').localeCompare(a.title || '')
+        case 'newest': return (b.created_at || '').localeCompare(a.created_at || '')
+        case 'oldest': return (a.created_at || '').localeCompare(b.created_at || '')
+        default: return (a.title || '').localeCompare(b.title || '')
+      }
+    })
+
+    return combined
+  }, [filteredWorks, unreleasedRecordings, itemTypeFilter, activeFolderId, sortOption])
+
+  const totalUnreleasedCount = works.length + songs.filter(s => isSongUnreleased(s)).length
 
   async function openWorkDetail(work) {
     setSelectedWork(work)
@@ -370,7 +428,7 @@ export default function WorksPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Unreleased</h1>
-          <p className="text-[#7A8580]">{works.length} total unreleased</p>
+          <p className="text-[#7A8580]">{totalUnreleasedCount} total unreleased</p>
         </div>
         <div className="flex items-center space-x-3">
           <button
@@ -395,7 +453,7 @@ export default function WorksPage() {
           >
             <FolderIcon className="w-4 h-4" />
             <span>All Unreleased</span>
-            <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeFolderId === 'all' ? 'bg-white/20' : 'bg-[rgba(59,77,67,0.08)]'}`}>{works.length}</span>
+            <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeFolderId === 'all' ? 'bg-white/20' : 'bg-[rgba(59,77,67,0.08)]'}`}>{totalUnreleasedCount}</span>
           </button>
           <button
             onClick={() => setActiveFolderId('unfiled')}
@@ -509,21 +567,35 @@ export default function WorksPage() {
             <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-[#7A8580]" />
             <input
               type="text"
-              placeholder="Search by title or ISWC..."
+              placeholder="Search by title, artist, or ISWC..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-[rgba(59,77,67,0.12)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
             />
           </div>
           <select
+            value={itemTypeFilter}
+            onChange={(e) => {
+              setItemTypeFilter(e.target.value)
+              if (e.target.value === 'recordings') setActiveFolderId('all')
+            }}
+            className="border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44] text-sm"
+          >
+            <option value="all">All Items</option>
+            <option value="compositions">Compositions</option>
+            <option value="recordings">Recordings</option>
+          </select>
+          {itemTypeFilter !== 'recordings' && (
+          <select
             value={workTypeFilter}
             onChange={(e) => setWorkTypeFilter(e.target.value)}
             className="border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44] text-sm"
           >
-            <option value="">All Types</option>
+            <option value="">All Work Types</option>
             <option value="DEMO">Demo</option>
             <option value="TRACK">Track</option>
           </select>
+          )}
           <select
             value={genreFilter}
             onChange={(e) => setGenreFilter(e.target.value)}
@@ -571,86 +643,116 @@ export default function WorksPage() {
           <table className="w-full table-fixed">
             <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
-                <th className="w-[35%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
                 <th className="w-[10%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Type</th>
-                <th className="w-[15%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">ISWC</th>
-                <th className="w-[15%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Genre</th>
-                <th className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Folder</th>
-                <th className="w-[7%] px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Tracks</th>
-                <th className="w-[6%] px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Credits</th>
+                <th className="w-[28%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Title</th>
+                <th className="w-[15%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Artist / Details</th>
+                <th className="w-[15%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">ISRC / ISWC</th>
+                <th className="w-[12%] px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Genre / Folder</th>
+                <th className="w-[10%] px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Status</th>
+                <th className="w-[10%] px-4 py-3 text-center text-xs font-semibold text-[#3D4A44]">Info</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
-              {filteredWorks.map((work) => {
-                const workFolder = folders.find(f => f.id === work.folder_id)
-                return (
-                  <tr
-                    key={work.id}
-                    onClick={() => openWorkDetail(work)}
-                    className="hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
-                  >
-                    <td className="px-4 py-3 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-[#3D4A44] truncate">{work.title}</span>
-                        {work.status === 'APPROVED' ? (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 flex-shrink-0">
-                            Approved
-                          </span>
-                        ) : work.status === 'REJECTED' ? (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 text-red-700 flex-shrink-0">
-                            Rejected
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-700 flex-shrink-0">
-                            Pending
+              {unifiedItems.map((item) => {
+                if (item._itemType === 'composition') {
+                  const workFolder = folders.find(f => f.id === item.folder_id)
+                  return (
+                    <tr
+                      key={`composition-${item.id}`}
+                      onClick={() => openWorkDetail(item)}
+                      className="hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700">
+                          <DocumentTextIcon className="w-3 h-3 mr-1" />
+                          Composition
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 min-w-0">
+                        <div className="font-medium text-[#3D4A44] truncate">{item.title}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580]">
+                        <span className="truncate block">{item.track_count} track{item.track_count !== 1 ? 's' : ''}, {item.credit_count} credit{item.credit_count !== 1 ? 's' : ''}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580] font-mono min-w-0">
+                        <span className="truncate block">{item.iswc || '-'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580] min-w-0">
+                        <div className="truncate">{item.genre || '-'}</div>
+                        {workFolder && (
+                          <span className="inline-flex items-center space-x-1 text-xs bg-[#EEF1EC] px-2 py-0.5 rounded-full truncate mt-0.5">
+                            <FolderIcon className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{workFolder.name}</span>
                           </span>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                        (work.work_type || 'TRACK') === 'DEMO'
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-sky-100 text-sky-700'
-                      }`}>
-                        {(work.work_type || 'TRACK') === 'DEMO' ? 'Demo' : 'Track'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-[#7A8580] min-w-0">
-                      <span className="truncate block">{work.iswc || '-'}</span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-[#7A8580] min-w-0">
-                      <span className="truncate block">{work.genre || '-'}</span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-[#7A8580] min-w-0">
-                      {workFolder ? (
-                        <span className="inline-flex items-center space-x-1 text-xs bg-[#EEF1EC] px-2 py-0.5 rounded-full truncate">
-                          <FolderIcon className="w-3 h-3 flex-shrink-0" />
-                          <span className="truncate">{workFolder.name}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {item.status === 'APPROVED' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700">Approved</span>
+                        ) : item.status === 'REJECTED' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-700">Rejected</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">Pending</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                          (item.work_type || 'TRACK') === 'DEMO' ? 'bg-amber-100 text-amber-700' : 'bg-sky-100 text-sky-700'
+                        }`}>
+                          {(item.work_type || 'TRACK') === 'DEMO' ? 'Demo' : 'Track'}
                         </span>
-                      ) : (
-                        <span className="text-xs text-[#7A8580]">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center space-x-1 text-sm text-[#7A8580]">
-                        <MusicalNoteIcon className="w-4 h-4" />
-                        <span>{work.track_count}</span>
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center space-x-1 text-sm text-[#7A8580]">
-                        <UserGroupIcon className="w-4 h-4" />
-                        <span>{work.credit_count}</span>
-                      </span>
-                    </td>
-                  </tr>
-                )
+                      </td>
+                    </tr>
+                  )
+                } else {
+                  return (
+                    <tr
+                      key={`recording-${item.id}`}
+                      onClick={() => setSelectedSong(item)}
+                      className="hover:bg-[rgba(91,138,114,0.06)] cursor-pointer transition-colors"
+                    >
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                          <MusicalNoteIcon className="w-3 h-3 mr-1" />
+                          Recording
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 min-w-0">
+                        <div className="font-medium text-[#3D4A44] truncate">{item.title}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580]">
+                        <span className="truncate block">{item.primary_artist || '-'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580] font-mono min-w-0">
+                        <span className="truncate block">{item.isrc || '-'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-[#7A8580] min-w-0">
+                        <span className="truncate block">{item.genre || '-'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Unreleased</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {item.health_score != null ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                            item.health_score >= 80 ? 'bg-green-50 text-green-700' :
+                            item.health_score >= 50 ? 'bg-amber-50 text-amber-700' :
+                            'bg-red-50 text-red-700'
+                          }`}>
+                            {item.health_score}%
+                          </span>
+                        ) : (
+                          <span className="text-xs text-[#7A8580]">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                }
               })}
-              {filteredWorks.length === 0 && (
+              {unifiedItems.length === 0 && (
                 <tr>
                   <td colSpan="7" className="px-6 py-12 text-center text-[#7A8580]">
-                    No unreleased found
+                    No unreleased items found
                   </td>
                 </tr>
               )}
@@ -1178,6 +1280,16 @@ export default function WorksPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedSong && (
+        <SongDetailModal
+          song={selectedSong}
+          onClose={() => setSelectedSong(null)}
+          onSongUpdated={() => {
+            loadData()
+          }}
+        />
       )}
     </div>
   )
