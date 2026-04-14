@@ -190,6 +190,23 @@ def ensure_schema_updates():
             conn.commit()
             logger.info("Added parent_song_id column to songs")
 
+        try:
+            conn.execute(text(
+                "ALTER TABLE songs ADD CONSTRAINT chk_release_status "
+                "CHECK (release_status IN ('unreleased', 'released'))"
+            ))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        try:
+            conn.execute(text(
+                "ALTER TABLE songs ADD CONSTRAINT chk_entry_type "
+                "CHECK (entry_type IN ('Song', 'Instrumental', 'Remix', 'Sample', 'Demo'))"
+            ))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
         om_cols = [c['name'] for c in inspector.get_columns('organization_members')]
         if 'can_manage_roster' not in om_cols:
             conn.execute(text("ALTER TABLE organization_members ADD COLUMN can_manage_roster BOOLEAN DEFAULT FALSE"))
