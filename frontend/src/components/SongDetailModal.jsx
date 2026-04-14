@@ -387,6 +387,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const [groupSearchQuery, setGroupSearchQuery] = useState('')
   const [orgSongs, setOrgSongs] = useState([])
   const [groupLinking, setGroupLinking] = useState(false)
+  const [selectedLinkSongIds, setSelectedLinkSongIds] = useState(new Set())
 
   async function handleDuplicate() {
     setDuplicating(true)
@@ -408,23 +409,28 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   async function openGroupLink() {
     setShowGroupLink(true)
     setGroupSearchQuery('')
+    setSelectedLinkSongIds(new Set())
     try {
       const orgResponse = await axios.get('/api/organizations/current')
       const res = await axios.get(`/api/songs/org/${orgResponse.data.id}?limit=1000`)
-      setOrgSongs((res.data || []).filter(s => s.id !== song.id))
+      const currentGroupId = songDetails?.shared_song_group_id
+      setOrgSongs((res.data || []).filter(s => s.id !== song.id && (!currentGroupId || s.shared_song_group_id !== currentGroupId)))
     } catch (e) {
       console.error('Failed to load org songs:', e)
     }
   }
 
-  async function handleGroupLink(targetSongId) {
+  async function handleGroupLink(targetSongIds) {
+    const ids = Array.isArray(targetSongIds) ? targetSongIds : [targetSongIds]
+    if (ids.length === 0) return
     setGroupLinking(true)
     try {
       const token = localStorage.getItem('token')
-      await axios.post('/api/songs/group', { song_ids: [song.id, targetSongId] }, {
+      await axios.post('/api/songs/group', { song_ids: [song.id, ...ids] }, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       setShowGroupLink(false)
+      setSelectedLinkSongIds(new Set())
       await loadSongDetails()
       if (onSongUpdated) onSongUpdated()
     } catch (err) {
@@ -433,6 +439,15 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     } finally {
       setGroupLinking(false)
     }
+  }
+
+  function toggleLinkSongSelection(songId) {
+    setSelectedLinkSongIds(prev => {
+      const next = new Set(prev)
+      if (next.has(songId)) next.delete(songId)
+      else next.add(songId)
+      return next
+    })
   }
 
   async function handleUngroup() {
@@ -974,7 +989,15 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                 <DocumentDuplicateIcon className="w-5 h-5" />
                 <span className="hidden sm:inline">{duplicating ? 'Duplicating...' : 'Duplicate'}</span>
               </button>
-              {songDetails?.shared_song_group_id ? (
+              <button
+                onClick={openGroupLink}
+                className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#7A6B9A] hover:bg-[rgba(122,107,154,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
+                title="Link to another catalog entry"
+              >
+                <LinkIcon className="w-5 h-5" />
+                <span className="hidden sm:inline">Link</span>
+              </button>
+              {songDetails?.shared_song_group_id && (
                 <button
                   onClick={handleUngroup}
                   className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#9A7A5A] hover:bg-[rgba(154,122,90,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
@@ -982,15 +1005,6 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                 >
                   <LinkIcon className="w-5 h-5" />
                   <span className="hidden sm:inline">Unlink</span>
-                </button>
-              ) : (
-                <button
-                  onClick={openGroupLink}
-                  className="flex items-center gap-1.5 p-2 sm:px-4 sm:py-2 text-[#7A6B9A] hover:bg-[rgba(122,107,154,0.08)] rounded-[12px] font-medium text-[14px] transition-colors"
-                  title="Link to another client's catalog entry"
-                >
-                  <LinkIcon className="w-5 h-5" />
-                  <span className="hidden sm:inline">Link</span>
                 </button>
               )}
               <button
@@ -3056,11 +3070,11 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
         />
       )}
       {showGroupLink && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70]" onClick={() => setShowGroupLink(false)}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70]" onClick={() => { setShowGroupLink(false); setSelectedLinkSongIds(new Set()) }}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[rgba(59,77,67,0.08)]">
-              <h3 className="text-lg font-semibold text-[#3D4A44]">Link to Another Catalog Entry</h3>
-              <p className="text-[13px] text-[#7A8580] mt-1">Select a song to share the same catalog group (e.g., same song represented for different clients).</p>
+              <h3 className="text-lg font-semibold text-[#3D4A44]">Link to Catalog Entries</h3>
+              <p className="text-[13px] text-[#7A8580] mt-1">Select one or more songs to share the same catalog group (e.g., same song represented for different clients).</p>
             </div>
             <div className="px-6 py-3">
               <input
@@ -3075,26 +3089,46 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
             <div className="max-h-[300px] overflow-y-auto px-6 pb-4">
               {orgSongs
                 .filter(s => !groupSearchQuery || s.title.toLowerCase().includes(groupSearchQuery.toLowerCase()) || (s.primary_artist || '').toLowerCase().includes(groupSearchQuery.toLowerCase()) || (s.client_name || '').toLowerCase().includes(groupSearchQuery.toLowerCase()))
-                .slice(0, 20)
+                .slice(0, 30)
                 .map(s => (
                   <button
                     key={s.id}
-                    onClick={() => handleGroupLink(s.id)}
+                    onClick={() => toggleLinkSongSelection(s.id)}
                     disabled={groupLinking}
-                    className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[rgba(91,138,114,0.06)] transition-colors flex items-center justify-between disabled:opacity-50"
+                    className={`w-full text-left px-3 py-2.5 rounded-xl transition-colors flex items-center gap-3 disabled:opacity-50 ${
+                      selectedLinkSongIds.has(s.id) ? 'bg-[rgba(91,138,114,0.1)]' : 'hover:bg-[rgba(91,138,114,0.06)]'
+                    }`}
                   >
-                    <div>
-                      <p className="text-[14px] font-medium text-[#3D4A44]">{s.title}</p>
-                      <p className="text-[12px] text-[#7A8580]">{s.primary_artist}{s.client_name ? ` \u00B7 ${s.client_name}` : ''}</p>
+                    <input
+                      type="checkbox"
+                      checked={selectedLinkSongIds.has(s.id)}
+                      readOnly
+                      className="w-4 h-4 rounded border-[#7A8580] text-[#5B8A72] focus:ring-[#5B8A72] flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[14px] font-medium text-[#3D4A44] truncate">{s.title}</p>
+                      <p className="text-[12px] text-[#7A8580] truncate">{s.primary_artist}{s.client_name ? ` \u00B7 ${s.client_name}` : ''}</p>
                     </div>
-                    <LinkIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                    {selectedLinkSongIds.has(s.id) && <LinkIcon className="w-4 h-4 text-[#5B8A72] flex-shrink-0" />}
                   </button>
                 ))
               }
-              {orgSongs.length === 0 && <p className="text-[13px] text-[#7A8580] text-center py-4">No songs found</p>}
+              {orgSongs.filter(s => !groupSearchQuery || s.title.toLowerCase().includes(groupSearchQuery.toLowerCase()) || (s.primary_artist || '').toLowerCase().includes(groupSearchQuery.toLowerCase()) || (s.client_name || '').toLowerCase().includes(groupSearchQuery.toLowerCase())).length === 0 && <p className="text-[13px] text-[#7A8580] text-center py-4">No songs found</p>}
             </div>
-            <div className="px-6 py-3 border-t border-[rgba(59,77,67,0.08)] flex justify-end">
-              <button onClick={() => setShowGroupLink(false)} className="px-4 py-2 text-[14px] text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
+            <div className="px-6 py-3 border-t border-[rgba(59,77,67,0.08)] flex items-center justify-between">
+              <span className="text-[13px] text-[#7A8580]">
+                {selectedLinkSongIds.size > 0 ? `${selectedLinkSongIds.size} selected` : ''}
+              </span>
+              <div className="flex items-center gap-2">
+                <button onClick={() => { setShowGroupLink(false); setSelectedLinkSongIds(new Set()) }} className="px-4 py-2 text-[14px] text-[#7A8580] hover:text-[#3D4A44] transition-colors">Cancel</button>
+                <button
+                  onClick={() => handleGroupLink(Array.from(selectedLinkSongIds))}
+                  disabled={groupLinking || selectedLinkSongIds.size === 0}
+                  className="px-4 py-2 bg-[#5B8A72] text-white rounded-xl text-[14px] font-medium hover:bg-[#4A7A62] transition-colors disabled:opacity-50"
+                >
+                  {groupLinking ? 'Linking...' : `Link ${selectedLinkSongIds.size > 0 ? selectedLinkSongIds.size + ' ' : ''}Song${selectedLinkSongIds.size !== 1 ? 's' : ''}`}
+                </button>
+              </div>
             </div>
           </div>
         </div>
