@@ -360,7 +360,7 @@ export default function WorksPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-[#7A8580]">Loading works...</div>
+        <div className="text-[#7A8580]">Loading unreleased...</div>
       </div>
     )
   }
@@ -369,8 +369,8 @@ export default function WorksPage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-full">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Works</h1>
-          <p className="text-[#7A8580]">{works.length} total works</p>
+          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Unreleased</h1>
+          <p className="text-[#7A8580]">{works.length} total unreleased</p>
         </div>
         <div className="flex items-center space-x-3">
           <button
@@ -378,7 +378,7 @@ export default function WorksPage() {
             onClick={() => setShowAddModal(true)}
           >
             <PlusIcon className="w-5 h-5" />
-            <span>Add Work</span>
+            <span>Add Unreleased</span>
           </button>
         </div>
       </div>
@@ -394,7 +394,7 @@ export default function WorksPage() {
             }`}
           >
             <FolderIcon className="w-4 h-4" />
-            <span>All Works</span>
+            <span>All Unreleased</span>
             <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeFolderId === 'all' ? 'bg-white/20' : 'bg-[rgba(59,77,67,0.08)]'}`}>{works.length}</span>
           </button>
           <button
@@ -650,7 +650,7 @@ export default function WorksPage() {
               {filteredWorks.length === 0 && (
                 <tr>
                   <td colSpan="7" className="px-6 py-12 text-center text-[#7A8580]">
-                    No works found
+                    No unreleased found
                   </td>
                 </tr>
               )}
@@ -663,7 +663,7 @@ export default function WorksPage() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md mx-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-[#3D4A44]">Add New Work</h3>
+              <h3 className="text-lg font-semibold text-[#3D4A44]">Add New Unreleased</h3>
               <button onClick={() => setShowAddModal(false)} className="text-[#7A8580] hover:text-[#3D4A44]">
                 <XMarkIcon className="w-5 h-5" />
               </button>
@@ -676,7 +676,7 @@ export default function WorksPage() {
                   value={addForm.title}
                   onChange={(e) => setAddForm(prev => ({ ...prev, title: e.target.value }))}
                   className="w-full border border-[rgba(59,77,67,0.12)] rounded-lg px-3 py-2 focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent bg-white text-[#3D4A44]"
-                  placeholder="Work title"
+                  placeholder="Title"
                 />
               </div>
               <div>
@@ -743,7 +743,7 @@ export default function WorksPage() {
                 disabled={!addForm.title.trim()}
                 className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Create Work
+                Create Unreleased
               </button>
             </div>
           </div>
