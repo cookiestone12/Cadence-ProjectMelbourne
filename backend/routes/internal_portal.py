@@ -29,8 +29,10 @@ from ..models import get_db, User, Organization, OrganizationMember, UserSession
 from ..models.models import AuditLog, Song, Creator
 from ..utils.auth import (
     get_current_staff_from_cookie as get_current_staff_or_admin,
+    decode_access_token,
     verify_password,
     create_access_token,
+    get_password_hash,
     hash_token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
@@ -61,6 +63,26 @@ def _all_table_names(db: Session) -> list[str]:
     )
 
 
+def _resolve_audit_org_id(db: Session, user: User) -> Optional[int]:
+    """Internal portal actions span all orgs, but AuditLog.organization_id
+    is a non-null FK. Pick the actor's first organization membership; fall
+    back to the lowest-id real organization in the table. Returns None
+    only when no organizations exist (fresh install), in which case the
+    audit row is skipped instead of failing the request."""
+    membership = (
+        db.query(OrganizationMember.organization_id)
+        .filter(OrganizationMember.user_id == user.id)
+        .order_by(OrganizationMember.organization_id.asc())
+        .first()
+    )
+    if membership and membership[0]:
+        return int(membership[0])
+    fallback = (
+        db.query(Organization.id).order_by(Organization.id.asc()).first()
+    )
+    return int(fallback[0]) if fallback else None
+
+
 def _audit(
     db: Session,
     user: User,
@@ -69,13 +91,25 @@ def _audit(
     entity_id: Optional[int] = None,
     entity_name: Optional[str] = None,
     details: Optional[dict] = None,
+    *,
+    required: bool = False,
 ) -> None:
-    """Best-effort audit log. Internal portal events are stamped
-    against organization_id=0 so they're easy to segregate from
-    real org activity in queries."""
+    """Write an AuditLog row for an internal-portal action. INTERNAL_*
+    actions never belong to one specific tenant, so we stamp them against
+    the actor's primary org (or the lowest org id) to satisfy the FK.
+    When `required=True` (DB views/exports), insert failures bubble up
+    as a 500 instead of being swallowed."""
+    org_id = _resolve_audit_org_id(db, user)
+    if org_id is None:
+        if required:
+            raise HTTPException(
+                status_code=500,
+                detail="Audit log unavailable: no organizations exist",
+            )
+        return
     try:
         db.add(AuditLog(
-            organization_id=0,
+            organization_id=org_id,
             user_id=user.id,
             action=action,
             entity_type=entity_type,
@@ -86,6 +120,9 @@ def _audit(
         db.commit()
     except Exception:
         db.rollback()
+        if required:
+            logger.exception("required audit insert failed action=%s", action)
+            raise HTTPException(status_code=500, detail="Failed to record audit log")
         logger.warning("audit insert failed", exc_info=True)
 
 
@@ -434,6 +471,7 @@ def database_table_page(
         entity_type="table",
         entity_name=table,
         details={"limit": limit, "offset": offset, "row_count": len(rows)},
+        required=True,
     )
     return {
         "table": table,
@@ -471,6 +509,7 @@ def database_table_export(
         entity_type="table",
         entity_name=table,
         details={"row_count": len(rows)},
+        required=True,
     )
 
     def stream():
@@ -518,8 +557,12 @@ def logs(
 # --- cookie login -----------------------------------------------------
 
 class CookieLoginRequest(BaseModel):
-    username: str
-    password: str
+    # /api/auth/login -> /cookie-login handoff: pass the JWT in
+    # access_token. Direct username+password login is still accepted
+    # so curl-based smoke tests don't need two round-trips.
+    username: Optional[str] = None
+    password: Optional[str] = None
+    access_token: Optional[str] = None
 
 
 @router.post(
@@ -535,33 +578,60 @@ def cookie_login(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(
-        func.lower(User.username) == payload.username.lower()
-    ).first()
-    if not user or not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    user: Optional[User] = None
+    token: Optional[str] = None
+
+    if payload.access_token:
+        # Handoff path: caller already authenticated via /api/auth/login
+        # and a UserSession row already exists. Just verify the token,
+        # confirm staff role, and re-cookie it.
+        decoded = decode_access_token(payload.access_token)
+        if not decoded or "sub" not in decoded:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = db.query(User).filter(
+            func.lower(User.username) == str(decoded["sub"]).lower()
+        ).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        existing = db.query(UserSession).filter(
+            UserSession.token_hash == hash_token(payload.access_token)
+        ).first()
+        if existing is None or existing.is_revoked:
+            raise HTTPException(status_code=401, detail="Session revoked")
+        token = payload.access_token
+    else:
+        if not (payload.username and payload.password):
+            raise HTTPException(status_code=400, detail="Missing credentials")
+        user = db.query(User).filter(
+            func.lower(User.username) == payload.username.lower()
+        ).first()
+        if not user or not verify_password(payload.password, user.hashed_password):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    assert user is not None
     if not (user.is_super_admin or getattr(user, "is_cadence_staff", False)):
         raise HTTPException(status_code=403, detail="Cadence staff access required")
     if hasattr(user, "is_active") and not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
 
-    token = create_access_token(data={"sub": user.username})
-    expires_at = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    user.last_login_at = datetime.utcnow()
-    db.add(UserSession(
-        user_id=user.id,
-        token_hash=hash_token(token),
-        ip_address=getattr(getattr(request, "client", None), "host", None),
-        user_agent=(request.headers.get("user-agent") or "")[:512],
-        expires_at=expires_at,
-    ))
-    db.commit()
+    if token is None:
+        token = create_access_token(data={"sub": user.username})
+        expires_at = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        user.last_login_at = datetime.utcnow()
+        db.add(UserSession(
+            user_id=user.id,
+            token_hash=hash_token(token),
+            ip_address=getattr(getattr(request, "client", None), "host", None),
+            user_agent=(request.headers.get("user-agent") or "")[:512],
+            expires_at=expires_at,
+        ))
+        db.commit()
 
-    # Cookie has to cover BOTH /internal (the SPA shell) and
-    # /api/internal/portal/* (the API the SPA calls), so it lives at
-    # path=/. httpOnly + SameSite=Lax keeps it out of JS reach. Secure
-    # is set in production only; in dev the workspace runs over plain
-    # HTTP and the browser would silently drop a Secure cookie.
+    # Scope cookie to the API paths the SPA actually calls
+    # (/api/internal/portal/* and /api/internal/*). The /internal SPA
+    # shell is purely client-side React Router and never reads the
+    # cookie itself, so we don't need it on path=/. Narrowing the path
+    # reduces the cookie's exposure surface across other app routes.
     response.set_cookie(
         key="cadence_internal_token",
         value=token,
@@ -569,7 +639,7 @@ def cookie_login(
         httponly=True,
         secure=os.getenv("APP_ENV", "development").lower() == "production",
         samesite="lax",
-        path="/",
+        path="/api/internal",
     )
     return {
         "token_type": "cookie",
@@ -603,11 +673,167 @@ def cookie_logout(
             sess.is_revoked = True
             sess.revoked_at = datetime.utcnow()
             db.commit()
-    response.delete_cookie(key="cadence_internal_token", path="/")
+    response.delete_cookie(key="cadence_internal_token", path="/api/internal")
     return {"ok": True}
 
 
 # --- organization access code ----------------------------------------
+
+# --- staff onboarding (staff OR master admin) ------------------------
+
+class OnboardOrgRequest(BaseModel):
+    name: str
+    type: str = "MANAGER"  # MANAGER | LABEL | PUBLISHER
+
+
+@router.post(
+    "/onboarding/organization",
+    summary="Create a new organization (staff or master admin)",
+    description="Staff-capable wrapper around the master-admin org create flow. Audited "
+                "as INTERNAL_ORG_CREATED.",
+)
+def onboarding_create_org(
+    payload: OnboardOrgRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff_or_admin),
+):
+    name = (payload.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name required")
+    org_type = (payload.type or "MANAGER").upper()
+    if org_type not in {"MANAGER", "LABEL", "PUBLISHER"}:
+        raise HTTPException(status_code=400, detail="Invalid org type")
+    if db.query(Organization).filter(Organization.name == name).first():
+        raise HTTPException(status_code=409, detail="Organization name already exists")
+    org = Organization(name=name, type=org_type.lower())
+    db.add(org); db.commit(); db.refresh(org)
+    _audit(
+        db, current_user,
+        action="INTERNAL_ORG_CREATED",
+        entity_type="organization",
+        entity_id=org.id,
+        entity_name=org.name,
+        details={"type": org_type},
+    )
+    return {"id": org.id, "name": org.name, "type": org.type}
+
+
+class OnboardOwnerRequest(BaseModel):
+    organization_id: int
+    username: str
+    email: str
+    password: str
+    role: str = "OWNER"  # OWNER | ADMIN | MEMBER | VIEWER
+
+
+@router.post(
+    "/onboarding/owner-user",
+    summary="Create a user and add them to an organization (staff or master admin)",
+    description="Staff-capable wrapper that creates a User and an OrganizationMember "
+                "row. Audited as INTERNAL_USER_CREATED.",
+)
+def onboarding_create_owner(
+    payload: OnboardOwnerRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff_or_admin),
+):
+    role = (payload.role or "OWNER").upper()
+    if role not in {"OWNER", "ADMIN", "MEMBER", "VIEWER"}:
+        raise HTTPException(status_code=400, detail="Invalid role")
+    org = db.query(Organization).filter(Organization.id == payload.organization_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if db.query(User).filter(func.lower(User.username) == payload.username.lower()).first():
+        raise HTTPException(status_code=409, detail="Username already exists")
+    if db.query(User).filter(func.lower(User.email) == payload.email.lower()).first():
+        raise HTTPException(status_code=409, detail="Email already exists")
+    user = User(
+        username=payload.username,
+        email=payload.email,
+        hashed_password=get_password_hash(payload.password),
+        is_admin=False,
+        is_super_admin=False,
+        is_active=True,
+    )
+    db.add(user); db.commit(); db.refresh(user)
+    db.add(OrganizationMember(
+        organization_id=org.id,
+        user_id=user.id,
+        role=role,
+    ))
+    db.commit()
+    _audit(
+        db, current_user,
+        action="INTERNAL_USER_CREATED",
+        entity_type="user",
+        entity_id=user.id,
+        entity_name=user.username,
+        details={"organization_id": org.id, "role": role},
+    )
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "organization_id": org.id,
+        "role": role,
+    }
+
+
+class SetAccessCodeRequest(BaseModel):
+    access_code: Optional[str] = None  # if None -> rotate to a fresh random one
+
+
+@router.post(
+    "/organizations/{org_id}/access-code",
+    summary="Set or rotate an organization's join access code",
+    description="Either rotates the org's access code to a fresh random 8-char value "
+                "(if access_code is omitted) or sets it to the value provided. Audited "
+                "as INTERNAL_ACCESS_CODE_SET.",
+)
+def set_org_access_code(
+    org_id: int,
+    payload: SetAccessCodeRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff_or_admin),
+):
+    import string, random
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    if payload.access_code:
+        code = payload.access_code.strip().upper()
+        if len(code) < 4 or len(code) > 32 or not code.isalnum():
+            raise HTTPException(
+                status_code=400,
+                detail="Access code must be 4-32 alphanumeric chars",
+            )
+        clash = (
+            db.query(Organization)
+            .filter(Organization.access_code == code, Organization.id != org_id)
+            .first()
+        )
+        if clash:
+            raise HTTPException(status_code=409, detail="Access code already in use")
+        action = "INTERNAL_ACCESS_CODE_SET"
+    else:
+        chars = string.ascii_uppercase + string.digits
+        code = "".join(random.choices(chars, k=8))
+        while db.query(Organization).filter(Organization.access_code == code).first():
+            code = "".join(random.choices(chars, k=8))
+        action = "INTERNAL_ACCESS_CODE_ROTATED"
+
+    org.access_code = code
+    db.commit()
+    _audit(
+        db, current_user,
+        action=action,
+        entity_type="organization",
+        entity_id=org.id,
+        entity_name=org.name,
+    )
+    return {"organization_id": org.id, "access_code": org.access_code}
+
 
 @router.get(
     "/organizations/{org_id}/access-code",

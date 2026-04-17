@@ -22,17 +22,20 @@ export default function Onboarding() {
   }
 
   const createOrg = () => wrap(async () => {
-    const { data } = await internal.post('/api/admin/organizations', {
+    // Goes through the staff-capable internal portal endpoint so
+    // is_cadence_staff users (not just master admin) can complete
+    // onboarding.
+    const { data } = await internal.post('/api/internal/portal/onboarding/organization', {
       name: orgName, type: orgType,
     })
     setOrg(data); setStep(2)
   })
 
   const createOwner = () => wrap(async () => {
-    const { data } = await internal.post('/api/admin/users', {
+    const { data } = await internal.post('/api/internal/portal/onboarding/owner-user', {
       username, email, password,
       organization_id: org.id,
-      organization_role: 'OWNER',
+      role: 'OWNER',
     })
     setUser(data); setStep(3)
   })

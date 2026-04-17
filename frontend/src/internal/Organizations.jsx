@@ -49,15 +49,46 @@ export default function Organizations() {
     }
   }
 
+  const setCustomAccessCode = async () => {
+    if (!selected) return
+    const v = window.prompt('Set a custom access code (4-32 alphanumeric)')
+    if (!v) return
+    try {
+      const { data } = await internal.post(
+        `/api/internal/portal/organizations/${selected}/access-code`,
+        { access_code: v }
+      )
+      setAccessCode(data.access_code)
+    } catch (e) {
+      alert(e?.response?.data?.detail || 'Failed to set access code')
+    }
+  }
+
+  const rotateAccessCode = async () => {
+    if (!selected) return
+    if (!window.confirm('Rotate to a new random access code? The old code will stop working.')) return
+    try {
+      const { data } = await internal.post(
+        `/api/internal/portal/organizations/${selected}/access-code`,
+        {}
+      )
+      setAccessCode(data.access_code)
+    } catch (e) {
+      alert(e?.response?.data?.detail || 'Rotate failed')
+    }
+  }
+
   const createOrg = async () => {
     const name = window.prompt('Organization name?')
     if (!name) return
     const orgType = window.prompt('Type (MANAGER, LABEL, PUBLISHER):', 'MANAGER') || 'MANAGER'
     try {
-      await internal.post('/api/admin/organizations', { name, type: orgType })
+      await internal.post('/api/internal/portal/onboarding/organization', {
+        name, type: orgType,
+      })
       load()
     } catch (e) {
-      alert(e?.response?.data?.detail || 'Create failed (master admin only)')
+      alert(e?.response?.data?.detail || 'Create failed')
     }
   }
 
@@ -185,6 +216,20 @@ export default function Organizations() {
                     Show access code
                   </button>
                 )}
+                <div className="flex gap-2 mt-2">
+                  <button
+                    onClick={setCustomAccessCode}
+                    className="text-xs px-2 py-1 bg-slate-200 rounded"
+                  >
+                    Set custom code
+                  </button>
+                  <button
+                    onClick={rotateAccessCode}
+                    className="text-xs px-2 py-1 bg-amber-200 rounded"
+                  >
+                    Rotate
+                  </button>
+                </div>
               </div>
               <div>
                 <div className="font-medium mb-1">Members</div>

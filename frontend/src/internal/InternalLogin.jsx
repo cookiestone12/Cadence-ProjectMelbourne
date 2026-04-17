@@ -13,12 +13,18 @@ export default function InternalLogin() {
     e.preventDefault()
     setErr(''); setLoading(true)
     try {
-      // cookie-login sets the JWT as an httpOnly cookie; we only
-      // persist a minimal display profile in localStorage so the
-      // sidebar can show the staff member's name.
+      // Two-step login per spec:
+      //   1. POST /api/auth/login to verify credentials and create a
+      //      regular UserSession row (returns the JWT in the body).
+      //   2. Hand the token off to /cookie-login which re-uses the same
+      //      session and sets the cadence_internal_token httpOnly
+      //      cookie. The token never lives in localStorage on this side.
+      const auth = await internal.post('/api/auth/login', { username, password })
+      const accessToken = auth?.data?.access_token
+      if (!accessToken) throw new Error('Login response missing token')
       const { data } = await internal.post(
         '/api/internal/portal/cookie-login',
-        { username, password }
+        { access_token: accessToken }
       )
       localStorage.setItem('internal_user', JSON.stringify(data.user))
       navigate('/internal/dashboard')
