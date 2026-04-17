@@ -137,13 +137,9 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
       const formData = new FormData()
       formData.append('file', file)
       
-      const isDoc = isDocumentFile(file.name)
-      const endpoint = isDoc 
-        ? `/api/csv/document-preview/${organizationId}`
-        : `/api/csv/preview/${organizationId}?all_rows=true`
-      
+      // Single ingestion entry point — backend dispatches by file type
       const response = await axios.post(
-        endpoint,
+        `/api/csv/document-preview/${organizationId}`,
         formData,
         {
           headers: {
@@ -283,12 +279,24 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
           title: 'title',
           primary_artist: 'primary_artist',
           publishing_percentage: 'publishing_percentage',
+          master_percentage: 'master_percentage',
+          advance_amount: 'advance_amount',
+          label: 'label',
+          isrc: 'isrc',
+          iswc: 'iswc',
+          release_date: 'release_date',
           notes: 'notes',
         }
         importRows = importRows.map(row => ({
           title: row.title || '',
           primary_artist: row.primary_artist || '',
           publishing_percentage: row.publishing_percentage || '',
+          master_percentage: row.master_percentage || '',
+          advance_amount: row.advance_amount || '',
+          label: row.label || '',
+          isrc: row.isrc || '',
+          iswc: row.iswc || '',
+          release_date: row.release_date || '',
           notes: row.notes || '',
         }))
       }

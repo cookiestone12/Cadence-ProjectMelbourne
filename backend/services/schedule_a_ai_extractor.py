@@ -289,16 +289,36 @@ def extract_from_text(text: str, org_id: Optional[int] = None) -> Dict[str, Any]
     }
 
 
+def _sniff_mime(data: bytes) -> str:
+    """Detect image MIME from magic bytes; default to png."""
+    if not data or len(data) < 12:
+        return "image/png"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:4] == b"GIF8":
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[:2] == b"BM":
+        return "image/bmp"
+    if data[:4] in (b"II*\x00", b"MM\x00*"):
+        return "image/tiff"
+    return "image/png"
+
+
 def _images_to_payload(images: List[bytes]) -> List[Dict[str, Any]]:
     payload: List[Dict[str, Any]] = [
         {"type": "text", "text": "Extract all songs from these Schedule A pages."}
     ]
     for img in images[:6]:
         b64 = base64.b64encode(img).decode("ascii")
+        mime = _sniff_mime(img)
         payload.append(
             {
                 "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{b64}", "detail": "high"},
+                "image_url": {"url": f"data:{mime};base64,{b64}", "detail": "high"},
             }
         )
     return payload
