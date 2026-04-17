@@ -639,12 +639,11 @@ def cookie_login(
         ))
         db.commit()
 
-    # Scope cookie to /api so the portal can also call existing
-    # tenant endpoints (e.g. POST /api/organizations,
-    # /api/organizations/{id}/access-code) reusing the same staff
-    # session. The /internal React shell never reads the cookie
-    # itself (httpOnly), and /api scoping keeps it off public/
-    # marketing routes served from /.
+    # Cookie is scoped strictly to /api/internal — the only API
+    # surface the staff portal speaks to. Tenant endpoints reused by
+    # the portal (org create, access-code) are exposed as portal
+    # proxies under /api/internal/portal/* that delegate to the
+    # underlying handlers in routes/organizations.py.
     response.set_cookie(
         key="cadence_internal_token",
         value=token,
@@ -652,7 +651,7 @@ def cookie_login(
         httponly=True,
         secure=os.getenv("APP_ENV", "development").lower() == "production",
         samesite="lax",
-        path="/api",
+        path="/api/internal",
     )
     return {
         "token_type": "cookie",
@@ -686,7 +685,7 @@ def cookie_logout(
             sess.is_revoked = True
             sess.revoked_at = datetime.utcnow()
             db.commit()
-    response.delete_cookie(key="cadence_internal_token", path="/api")
+    response.delete_cookie(key="cadence_internal_token", path="/api/internal")
     return {"ok": True}
 
 

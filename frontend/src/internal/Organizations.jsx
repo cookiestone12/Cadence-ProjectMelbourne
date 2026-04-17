@@ -37,14 +37,17 @@ export default function Organizations() {
     setDetail(data)
   }
 
-  // Access-code actions go through the existing org endpoints
-  // (/api/organizations/{id}/access-code, .../regenerate-access-code)
-  // which were extended to allow Cadence staff in addition to
-  // OWNER/ADMIN members. Same for org create — POST /api/organizations.
+  // The portal calls /api/internal/portal/* proxy endpoints that
+  // delegate to the underlying tenant logic in routes/organizations.py
+  // (create org, access-code read/set/rotate). This keeps the staff
+  // cookie scoped strictly to /api/internal while preserving the
+  // single source of truth for the org/access-code business rules.
   const fetchAccessCode = async () => {
     if (!selected) return
     try {
-      const { data } = await internal.get(`/api/organizations/${selected}/access-code`)
+      const { data } = await internal.get(
+        `/api/internal/portal/organizations/${selected}/access-code`
+      )
       setAccessCode(data.access_code)
     } catch (e) {
       alert(e?.response?.data?.detail || 'Failed to fetch access code')
@@ -57,7 +60,8 @@ export default function Organizations() {
     if (!v) return
     try {
       const { data } = await internal.post(
-        `/api/organizations/${selected}/access-code`, { access_code: v }
+        `/api/internal/portal/organizations/${selected}/access-code`,
+        { access_code: v }
       )
       setAccessCode(data.access_code)
     } catch (e) {
@@ -70,7 +74,8 @@ export default function Organizations() {
     if (!window.confirm('Rotate to a new random access code? The old code will stop working.')) return
     try {
       const { data } = await internal.post(
-        `/api/organizations/${selected}/regenerate-access-code`
+        `/api/internal/portal/organizations/${selected}/access-code`,
+        {}
       )
       setAccessCode(data.access_code)
     } catch (e) {
@@ -83,8 +88,8 @@ export default function Organizations() {
     if (!name) return
     const orgType = window.prompt('Type (MANAGER, LABEL, PUBLISHER):', 'MANAGER') || 'MANAGER'
     try {
-      await internal.post('/api/organizations/', {
-        name, type: orgType.toLowerCase(),
+      await internal.post('/api/internal/portal/onboarding/organization', {
+        name, type: orgType,
       })
       load()
     } catch (e) {

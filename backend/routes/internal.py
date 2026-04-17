@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func as sa_func
 
 from ..models import get_db, User, UserSession, Organization
-from ..utils.auth import get_current_super_admin, get_current_staff_or_admin, get_password_hash
+from ..utils.auth import (
+    get_current_super_admin,
+    get_current_staff_or_admin,
+    get_current_staff_from_cookie,
+    get_password_hash,
+)
 from ..services.audit_service import log_action
 from ..services.email_provider import get_email_provider
 
@@ -75,7 +80,7 @@ def _require_audit(db: Session, actor: User, **kwargs) -> None:
 def provision_staff_user(
     payload: ProvisionStaffRequest,
     db: Session = Depends(get_db),
-    actor: User = Depends(get_current_staff_or_admin),
+    actor: User = Depends(get_current_staff_from_cookie),
 ):
     if db.query(User).filter(sa_func.lower(User.username) == payload.username.lower()).first():
         raise HTTPException(status_code=400, detail="Username already exists")
@@ -133,7 +138,7 @@ def provision_staff_user(
 def deprovision_staff_user(
     payload: DeprovisionStaffRequest,
     db: Session = Depends(get_db),
-    actor: User = Depends(get_current_staff_or_admin),
+    actor: User = Depends(get_current_staff_from_cookie),
 ):
     if payload.user_id == actor.id:
         raise HTTPException(status_code=400, detail="Cannot deprovision yourself")
