@@ -1,31 +1,17 @@
-"""Programmatic Alembic upgrade with the migration lock.
-
-Wraps `alembic upgrade heads` so it can be invoked from `db_setup.py`
-during boot rather than only from the CLI.
-
-Why `heads` (plural): the project currently has more than one Alembic
-head revision (multiple parallel branches that have not yet been
-merged). `alembic upgrade head` is ambiguous in that case; `heads`
-applies all of them.
+"""Programmatic Alembic runner. The project has multiple heads, so
+we always upgrade with `heads` (plural) — `head` would be ambiguous.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from alembic.runtime.migration import MigrationContext
 from alembic import command as alembic_command
-
 from sqlalchemy.engine import Engine
 
 from .logging_config import logger
-from .migration_lock import (
-    bootstrap_migration_lock_table,
-    acquire_migration_lock,
-    release_migration_lock,
-)
 
 
 def _alembic_cfg() -> Config:

@@ -598,130 +598,118 @@ def sync_release_status():
         db.close()
 
 
-def _run_schema_setup_under_lock():
-    """All schema-mutating work (Alembic + idempotent DDL backstop)
-    happens INSIDE the migration lock. If we can't acquire the
-    lock, we skip ALL schema mutations — the leader will finish.
-
-    Order (per Task #73 spec):
-      1. Bootstrap migration_lock table (raw DDL)
-      2. Acquire lock (or skip schema work entirely on contention)
-      3. alembic upgrade heads
-      4. Base.metadata.create_all + ensure_schema_updates (drift backstop)
-      5. Release lock in finally
+def _run_alembic_under_lock():
+    """Per Task #73 spec, the order is:
+      1. Bootstrap migration_lock table
+      2. Acquire lock (retry-poll if held by another process; abort
+         startup non-zero if wait exceeds ceiling)
+      3. alembic upgrade heads (FATAL on failure — must not fall
+         through to backstop with partial state)
+      4. Release lock in finally
+    The idempotent DDL backstop runs AFTER this, outside the lock.
     """
-    from backend.utils.migration_runner import upgrade_to_heads
+    from backend.utils.migration_runner import (
+        upgrade_to_heads,
+        get_alembic_revision_info,
+    )
     from backend.utils.migration_lock import (
         bootstrap_migration_lock_table,
         acquire_migration_lock,
         release_migration_lock,
     )
-    from backend.utils.migration_runner import get_alembic_revision_info
+    import time as _time
 
     bootstrap_migration_lock_table(engine)
 
-    # Bounded wait: if another process holds the lock, poll until
-    # it releases and the schema reaches head, then proceed without
-    # acquiring (no schema mutation needed). If the wait exceeds the
-    # ceiling, abort startup with non-zero so the orchestrator can
-    # restart us cleanly — never let a follower come up against an
-    # unmigrated schema.
-    WAIT_CEILING_SECONDS = 600  # 10 min — matches stale-lock threshold
+    WAIT_CEILING_SECONDS = 600
     POLL_INTERVAL_SECONDS = 2
-    import time as _time
+    deadline = _time.monotonic() + WAIT_CEILING_SECONDS
+    acquired = acquire_migration_lock(engine, revision_label="pending")
 
-    if not acquire_migration_lock(engine, revision_label="pending"):
+    if not acquired:
         logger.warning(
-            "Migration lock held by another process; waiting up to "
-            f"{WAIT_CEILING_SECONDS}s for leader to finish."
+            f"Migration lock held; will retry every {POLL_INTERVAL_SECONDS}s "
+            f"for up to {WAIT_CEILING_SECONDS}s."
         )
-        deadline = _time.monotonic() + WAIT_CEILING_SECONDS
-        while _time.monotonic() < deadline:
-            _time.sleep(POLL_INTERVAL_SECONDS)
+        while not acquired and _time.monotonic() < deadline:
             try:
                 info = get_alembic_revision_info(engine)
+                if info["is_up_to_date"]:
+                    logger.info(
+                        "Leader finished; schema at head "
+                        f"({','.join(info['head_revisions'])}). Continuing without lock."
+                    )
+                    return
             except Exception as e:
                 logger.warning(f"Wait-poll: revision check failed: {e}")
-                continue
-            if info["is_up_to_date"]:
-                logger.info(
-                    "Leader finished; schema is at head "
-                    f"({','.join(info['head_revisions'])}). Continuing startup "
-                    "without acquiring lock."
-                )
-                return
-        # Timed out — fail hard. Exiting non-zero is the right thing
-        # here; the orchestrator/run_backend.sh will see the failure.
-        logger.error(
-            f"Migration lock wait exceeded {WAIT_CEILING_SECONDS}s; aborting "
-            "startup so this process does not serve traffic against an "
-            "unmigrated schema."
-        )
-        raise SystemExit(2)
+            _time.sleep(POLL_INTERVAL_SECONDS)
+            acquired = acquire_migration_lock(engine, revision_label="pending")
+            if acquired:
+                logger.info("Lock released by previous owner; this process will migrate.")
+
+        if not acquired:
+            logger.error(
+                f"Migration lock wait exceeded {WAIT_CEILING_SECONDS}s; aborting "
+                "startup so this process does not serve traffic against an "
+                "unmigrated schema."
+            )
+            raise SystemExit(2)
 
     try:
-        # Step A: Alembic owns forward schema changes. Failure is
-        # FATAL — partial migration state must not silently fall
-        # through to the drift backstop, which could mask a broken
-        # revision and start the app against an unknown schema.
         upgrade_to_heads(engine)
-
-        # Step B: Idempotent DDL backstop — anything created here
-        # that wasn't applied by Alembic above represents drift.
-        # Every block in ensure_schema_updates() that fires emits a
-        # WARNING with `[DDL drift]` so we can incrementally pull
-        # the drift into Alembic over time.
-        try:
-            Base.metadata.create_all(bind=engine, checkfirst=True)
-            logger.info("Database tables created/verified")
-        except Exception as e:
-            logger.warning(f"Table creation warning (may be benign): {e}")
-            from sqlalchemy import inspect
-            inspector = inspect(engine)
-            existing = set(inspector.get_table_names())
-            logger.info(f"Existing tables: {len(existing)}")
-            for table in Base.metadata.sorted_tables:
-                if table.name not in existing:
-                    try:
-                        table.create(bind=engine, checkfirst=True)
-                        logger.info(f"Created missing table: {table.name}")
-                    except Exception as te:
-                        logger.warning(f"Failed to create table {table.name}: {te}")
-
-        try:
-            ensure_schema_updates()
-            logger.info("Schema updates completed")
-        except Exception as e:
-            logger.warning(f"Schema update check: {e}")
     finally:
-        # Release MUST happen even if revision introspection fails.
-        # Best-effort revision label, then guaranteed unlock.
         revision_label = "unknown"
         try:
             post = get_alembic_revision_info(engine)
             revision_label = ",".join(post["current_revisions"]) or "unknown"
         except Exception as e:
             logger.warning(
-                f"Could not introspect revision after schema setup: {e}. "
-                f"Releasing lock with revision_label='unknown'."
+                f"Could not introspect revision after upgrade: {e}. "
+                "Releasing lock with revision_label='unknown'."
             )
         try:
             release_migration_lock(engine, revision_label=revision_label)
         except Exception as e:
             logger.error(
-                f"release_migration_lock raised (lock will auto-clear after "
-                f"stale timeout): {e}"
+                f"release_migration_lock raised (will auto-clear after stale "
+                f"timeout): {e}"
             )
+
+
+def _run_ddl_backstop():
+    """Idempotent DDL backstop — runs OUTSIDE the migration lock per
+    Task #73 spec (lock -> alembic -> release -> backstop). Each
+    block in ensure_schema_updates() emits a [DDL drift] WARNING so
+    operators can pull the drift into Alembic over time.
+    """
+    try:
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+        logger.info("Database tables created/verified")
+    except Exception as e:
+        logger.warning(f"Table creation warning (may be benign): {e}")
+        from sqlalchemy import inspect
+        inspector = inspect(engine)
+        existing = set(inspector.get_table_names())
+        logger.info(f"Existing tables: {len(existing)}")
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing:
+                try:
+                    table.create(bind=engine, checkfirst=True)
+                    logger.info(f"Created missing table: {table.name}")
+                except Exception as te:
+                    logger.warning(f"Failed to create table {table.name}: {te}")
+
+    try:
+        ensure_schema_updates()
+        logger.info("Schema updates completed")
+    except Exception as e:
+        logger.warning(f"Schema update check: {e}")
 
 
 def main():
     logger.info("Starting database setup...")
-
-    # All schema-mutating work runs inside the migration lock.
-    _run_schema_setup_under_lock()
-
-    # Data seeds and backfills are safe to run on every boot; they
-    # are idempotent and don't touch DDL.
+    _run_alembic_under_lock()
+    _run_ddl_backstop()
     seed_super_admin()
     seed_checklist_items()
     sync_stale_health_scores()
