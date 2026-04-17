@@ -62,6 +62,11 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
   const [mapping, setMapping] = useState({})
   const [previewRows, setPreviewRows] = useState([])
   const [allRows, setAllRows] = useState([])
+
+  const updateRow = (index, field, value) => {
+    setAllRows(prev => prev.map((r, i) => i === index ? { ...r, [field]: value } : r))
+    setPreviewRows(prev => prev.map((r, i) => i === index ? { ...r, [field]: value } : r))
+  }
   const [totalRows, setTotalRows] = useState(0)
   const [isDocImport, setIsDocImport] = useState(false)
   const [documentInfo, setDocumentInfo] = useState(null)
@@ -273,7 +278,17 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
       
       let importMapping = mapping
       let importRows = allRows.length > 0 ? allRows : previewRows
-      
+
+      // Drop rows the user unchecked in the review step, and any rows that
+      // ended up with an empty title after editing.
+      importRows = importRows.filter(r => !r._skip && (r.title || '').trim().length > 0)
+
+      if (importRows.length === 0) {
+        setError('No rows selected for import. Check at least one row to keep.')
+        setImporting(false)
+        return
+      }
+
       if (isDocImport) {
         importMapping = {
           title: 'title',
@@ -563,23 +578,30 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                 </div>
               )}
 
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
                 <span className="text-sm font-medium text-[#3D4A44]">
-                  {totalRows} songs parsed
+                  {allRows.filter(r => !r._skip).length} of {totalRows} songs will be imported
                 </span>
-                <span className="text-xs text-[#7A8580]">
-                  {allRows.filter(r => r.section === 'Schedule A').length} released, {allRows.filter(r => r.section !== 'Schedule A').length} pipeline
-                </span>
+                <div className="flex items-center gap-3 text-xs text-[#7A8580]">
+                  <span>
+                    {allRows.filter(r => !r._skip && r.section === 'Schedule A').length} released, {allRows.filter(r => !r._skip && r.section !== 'Schedule A').length} pipeline
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[#E0B85A]" />
+                    Needs review
+                  </span>
+                </div>
               </div>
-              
+
               <div className="border border-[rgba(59,77,67,0.1)] rounded-lg overflow-hidden">
                 <div className="overflow-x-auto max-h-[340px] overflow-y-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-[rgba(59,77,67,0.03)] sticky top-0">
                       <tr>
+                        <th className="px-2 py-2 text-center font-medium text-[#5B8A72] w-10">Keep</th>
                         <th className="px-3 py-2 text-left font-medium text-[#5B8A72]">Artist</th>
                         <th className="px-3 py-2 text-left font-medium text-[#5B8A72]">Song Title</th>
-                        <th className="px-3 py-2 text-center font-medium text-[#5B8A72]">Pub %</th>
+                        <th className="px-3 py-2 text-center font-medium text-[#5B8A72] w-20">Pub %</th>
                         <th className="px-3 py-2 text-left font-medium text-[#5B8A72]">Section</th>
                         <th className="px-3 py-2 text-center font-medium text-[#5B8A72]">Confidence</th>
                         <th className="px-3 py-2 text-left font-medium text-[#5B8A72]">Notes</th>
@@ -588,15 +610,62 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                     <tbody>
                       {allRows.map((row, idx) => {
                         const cb = confidenceBadge(row._confidence)
+                        const lowConf = typeof row._confidence === 'number' && row._confidence < 0.6
+                        const skipped = !!row._skip
+                        const inputBase = "w-full px-2 py-1 text-xs bg-transparent border border-transparent rounded focus:bg-white focus:border-[#5B8A72] focus:ring-1 focus:ring-[#5B8A72] focus:outline-none transition-colors"
+                        const rowClass = [
+                          "border-t border-[rgba(59,77,67,0.05)]",
+                          skipped ? "opacity-40" : "",
+                          !skipped && lowConf ? "bg-[rgba(224,184,90,0.10)]" : "",
+                          !skipped && !lowConf && row.section !== 'Schedule A' ? "bg-[rgba(196,149,107,0.05)]" : "",
+                        ].filter(Boolean).join(" ")
                         return (
-                        <tr key={idx} className={`border-t border-[rgba(59,77,67,0.05)] ${row.section !== 'Schedule A' ? 'bg-[rgba(196,149,107,0.05)]' : ''}`}>
-                          <td className="px-3 py-2 text-[#3D4A44]">{row.primary_artist || '-'}</td>
-                          <td className="px-3 py-2 text-[#3D4A44] font-medium">{row.title || '-'}</td>
-                          <td className="px-3 py-2 text-center text-[#3D4A44]">{row.publishing_percentage ? `${row.publishing_percentage}%` : '-'}</td>
+                        <tr key={idx} className={rowClass}>
+                          <td className="px-2 py-1 text-center">
+                            <input
+                              type="checkbox"
+                              checked={!skipped}
+                              onChange={(e) => updateRow(idx, '_skip', !e.target.checked)}
+                              title="Uncheck to skip this row at import"
+                              className="cursor-pointer accent-[#5B8A72]"
+                            />
+                          </td>
+                          <td className="px-1 py-1">
+                            <input
+                              type="text"
+                              value={row.primary_artist || ''}
+                              onChange={(e) => updateRow(idx, 'primary_artist', e.target.value)}
+                              placeholder="Artist"
+                              autoFocus={lowConf && idx === allRows.findIndex(r => typeof r._confidence === 'number' && r._confidence < 0.6)}
+                              className={inputBase + " text-[#3D4A44]"}
+                              disabled={skipped}
+                            />
+                          </td>
+                          <td className="px-1 py-1">
+                            <input
+                              type="text"
+                              value={row.title || ''}
+                              onChange={(e) => updateRow(idx, 'title', e.target.value)}
+                              placeholder="Title"
+                              className={inputBase + " text-[#3D4A44] font-medium"}
+                              disabled={skipped}
+                            />
+                          </td>
+                          <td className="px-1 py-1">
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              value={row.publishing_percentage || ''}
+                              onChange={(e) => updateRow(idx, 'publishing_percentage', e.target.value.replace(/[^\d.]/g, ''))}
+                              placeholder="0"
+                              className={inputBase + " text-center text-[#3D4A44]"}
+                              disabled={skipped}
+                            />
+                          </td>
                           <td className="px-3 py-2">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                              row.section === 'Schedule A' 
-                                ? 'bg-[rgba(91,154,110,0.15)] text-[#4A8A5A]' 
+                              row.section === 'Schedule A'
+                                ? 'bg-[rgba(91,154,110,0.15)] text-[#4A8A5A]'
                                 : 'bg-[rgba(196,149,107,0.15)] text-[#8A6B4A]'
                             }`}>
                               {row.section === 'Schedule A' ? 'Released' : 'Pipeline'}
@@ -612,7 +681,16 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                               </span>
                             ) : <span className="text-[#7A8580]">-</span>}
                           </td>
-                          <td className="px-3 py-2 text-[#7A8580] text-[11px]">{row.notes || ''}</td>
+                          <td className="px-1 py-1">
+                            <input
+                              type="text"
+                              value={row.notes || ''}
+                              onChange={(e) => updateRow(idx, 'notes', e.target.value)}
+                              placeholder=""
+                              className={inputBase + " text-[#7A8580] text-[11px]"}
+                              disabled={skipped}
+                            />
+                          </td>
                         </tr>
                       )})}
                     </tbody>
