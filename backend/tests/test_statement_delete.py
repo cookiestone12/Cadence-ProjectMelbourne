@@ -312,6 +312,92 @@ def test_delete_unwinds_payout_item_paid_at(db, org_user, client):
     assert details.get("linkage") == "fk"
 
 
+# ---------- T066: notify users when statement delete unwinds paid payouts ----------
+
+def test_delete_notifies_payout_creator_and_admins(db, org_user, client, monkeypatch):
+    """When PAYMENT ledger entries are unwound, the user who created
+    the payout batch and all org OWNERs/ADMINs (excluding the deleter)
+    must receive an in-app notification linking to the payouts page."""
+    org, deleter = org_user
+
+    # A second admin user (should be notified) and a separate user
+    # who created the payout batch (should also be notified).
+    admin2 = User(username="admin2", email="admin2@x.com", hashed_password="x", is_active=True)
+    batch_creator = User(username="batchcreator", email="bc@x.com", hashed_password="x", is_active=True)
+    bystander = User(username="bystander", email="bs@x.com", hashed_password="x", is_active=True)
+    db.add_all([admin2, batch_creator, bystander])
+    db.commit()
+    db.refresh(admin2); db.refresh(batch_creator); db.refresh(bystander)
+
+    db.add(OrganizationMember(organization_id=org.id, user_id=admin2.id, role="ADMIN"))
+    db.add(OrganizationMember(organization_id=org.id, user_id=batch_creator.id, role="MEMBER"))
+    db.add(OrganizationMember(organization_id=org.id, user_id=bystander.id, role="MEMBER"))
+    db.commit()
+
+    stmt = _make_statement(db, org.id)
+    payee = _make_payee(db, org.id)
+    run = _make_run(db, org.id, stmt.id)
+
+    batch = PayoutBatch(
+        org_id=org.id, name="Q1 batch", currency="USD", status="PAID",
+        created_by_user_id=batch_creator.id,
+    )
+    db.add(batch); db.commit(); db.refresh(batch)
+    paid_at = datetime(2026, 2, 1, 12, 0, 0)
+    payout = PayoutItem(
+        org_id=org.id, batch_id=batch.id, payee_id=payee.id,
+        amount_cents=50_000, paid_at=paid_at,
+    )
+    db.add(payout); db.commit(); db.refresh(payout)
+
+    db.add(RoyaltyLedgerEntry(
+        org_id=org.id, statement_id=stmt.id, processing_run_id=run.id,
+        payee_id=payee.id, entry_type="PAYMENT", amount_cents=-50_000,
+        memo="Payment via batch", payout_item_id=payout.id, created_at=paid_at,
+    ))
+    db.commit()
+
+    res = client.delete(f"/api/royalties/statements/{org.id}/{stmt.id}")
+    assert res.status_code == 200, res.text
+
+    from backend.models.models import Notification
+    notes = db.query(Notification).filter(
+        Notification.notification_type == "PAYOUT_UNWOUND_BY_STATEMENT_DELETE",
+    ).all()
+    notified_uids = {n.user_id for n in notes}
+
+    # Deleter (also OWNER) must NOT be notified.
+    assert deleter.id not in notified_uids
+    # Bystander (MEMBER, didn't create batch) must NOT be notified.
+    assert bystander.id not in notified_uids
+    # Batch creator and the other ADMIN must be notified.
+    assert batch_creator.id in notified_uids
+    assert admin2.id in notified_uids
+
+    sample = notes[0]
+    assert stmt.source_name in sample.message
+    assert deleter.username in sample.message
+    assert sample.link and "payouts" in sample.link
+    assert sample.organization_id == org.id
+    assert sample.extra_data.get("statement_id") == stmt.id
+    assert payout.id in (sample.extra_data.get("payout_item_ids") or [])
+
+
+def test_delete_no_notifications_when_no_payments_unwound(db, org_user, client):
+    """If a statement has no PAYMENT ledger entries, deleting it
+    should not produce PAYOUT_UNWOUND notifications."""
+    org, _ = org_user
+    stmt = _make_statement(db, org.id)
+    res = client.delete(f"/api/royalties/statements/{org.id}/{stmt.id}")
+    assert res.status_code == 200
+
+    from backend.models.models import Notification
+    notes = db.query(Notification).filter(
+        Notification.notification_type == "PAYOUT_UNWOUND_BY_STATEMENT_DELETE",
+    ).count()
+    assert notes == 0
+
+
 # ---------- T002.7: anchored ActionItem title match (no #1 → #10 leak) ----------
 
 def test_action_item_delete_does_not_leak_to_neighboring_ids(db, org_user, client):

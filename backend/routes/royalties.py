@@ -1246,6 +1246,124 @@ def delete_statement_preview(
     return _build_statement_delete_summary(db, stmt)
 
 
+def _notify_payouts_unwound(
+    db: Session,
+    org_id: int,
+    stmt,
+    deleted_by: User,
+    affected_payouts: list,
+):
+    """Notify users that paid payouts were unwound by a statement
+    delete. Recipients:
+      - The user who created each affected PayoutBatch (PayoutItem
+        has no direct created_by; the batch is the closest proxy).
+      - All org OWNER and ADMIN members.
+    The user who performed the delete is excluded.
+    Each recipient gets an in-app notification; users with
+    email_enabled for this notification type also get an email.
+    """
+    from .notifications import create_notification
+    from ..models.models import (
+        PayoutBatch, NotificationPreference, NotificationType,
+    )
+
+    batch_ids = sorted({p.batch_id for p in affected_payouts if p.batch_id})
+    payout_ids = sorted({p.id for p in affected_payouts})
+
+    creator_user_ids: set[int] = set()
+    if batch_ids:
+        rows = db.query(PayoutBatch.created_by_user_id).filter(
+            PayoutBatch.org_id == org_id,
+            PayoutBatch.id.in_(batch_ids),
+            PayoutBatch.created_by_user_id.isnot(None),
+        ).all()
+        creator_user_ids = {r[0] for r in rows if r[0] is not None}
+
+    admin_rows = db.query(OrganizationMember.user_id).filter(
+        OrganizationMember.organization_id == org_id,
+        OrganizationMember.role.in_(["OWNER", "ADMIN"]),
+    ).all()
+    admin_user_ids = {r[0] for r in admin_rows}
+
+    recipient_ids = (creator_user_ids | admin_user_ids) - {deleted_by.id}
+    if not recipient_ids:
+        return
+
+    deleter_label = deleted_by.username or deleted_by.email or f"User #{deleted_by.id}"
+    source_name = stmt.source_name or f"Statement #{stmt.id}"
+    n_payouts = len(payout_ids)
+    payout_word = "payout" if n_payouts == 1 else "payouts"
+    title = "Paid payout undone by statement delete"
+    message = (
+        f"{deleter_label} deleted statement \u201C{source_name}\u201D, "
+        f"undoing {n_payouts} paid {payout_word}. The payout record "
+        f"is preserved but is no longer marked paid."
+    )
+    if batch_ids:
+        link = f"/royalties?tab=payouts&batch_id={batch_ids[0]}"
+    else:
+        link = "/royalties?tab=payouts"
+    extra = {
+        "statement_id": stmt.id,
+        "statement_source_name": source_name,
+        "deleted_by_user_id": deleted_by.id,
+        "deleted_by_username": deleter_label,
+        "payout_item_ids": payout_ids,
+        "payout_batch_ids": batch_ids,
+    }
+    ntype = NotificationType.PAYOUT_UNWOUND_BY_STATEMENT_DELETE.value
+
+    email_provider = None
+    for uid in recipient_ids:
+        try:
+            create_notification(
+                db=db,
+                user_id=uid,
+                notification_type=ntype,
+                title=title,
+                message=message,
+                link=link,
+                organization_id=org_id,
+                extra_data=extra,
+            )
+        except Exception as e:
+            logger.warning(f"in-app payout-unwind notify failed for user {uid}: {e}")
+
+        try:
+            pref = db.query(NotificationPreference).filter(
+                NotificationPreference.user_id == uid,
+                NotificationPreference.notification_type == ntype,
+            ).first()
+            if not pref or not pref.email_enabled:
+                continue
+            recipient = db.query(User).filter(User.id == uid).first()
+            if not recipient or not recipient.email:
+                continue
+            if email_provider is None:
+                from ..services.email_provider import get_email_provider
+                email_provider = get_email_provider()
+            html = (
+                f"<p>Hi {recipient.username or 'there'},</p>"
+                f"<p><strong>{deleter_label}</strong> deleted the royalty "
+                f"statement <strong>{source_name}</strong>, which undid "
+                f"<strong>{n_payouts}</strong> paid {payout_word} in your "
+                f"organization.</p>"
+                f"<p>The payout record itself is preserved, but its paid "
+                f"status has been cleared so it will reappear as unpaid "
+                f"in your payout history.</p>"
+                f"<p><a href=\"{link}\">View affected payout(s)</a></p>"
+                f"<p>You're getting this because you created the payout "
+                f"batch or you're an OWNER/ADMIN of the organization.</p>"
+            )
+            email_provider.send_email(
+                to=recipient.email,
+                subject=f"Cadence: paid payout undone ({source_name})",
+                html_body=html,
+            )
+        except Exception as e:
+            logger.warning(f"email payout-unwind notify failed for user {uid}: {e}")
+
+
 def _perform_statement_delete(
     db: Session,
     stmt: "RoyaltyStatement",
@@ -1289,7 +1407,8 @@ def _perform_statement_delete(
     #    ledger_entry_id, linkage). Payments with no resolvable
     #    PayoutItem still get an audit row (entity_id=None) so the
     #    ledger-only history is preserved.
-    from ..models.models import PayoutItem
+    from ..models.models import PayoutItem, PayoutBatch
+    affected_payouts = []
     for pmt in summary["payments_unwound"]:
         po_id = pmt.get("payout_item_id")
         po = None
@@ -1300,6 +1419,7 @@ def _perform_statement_delete(
             ).first()
         if po is not None:
             po.paid_at = None
+            affected_payouts.append(po)
         log_action(
             db, org_id, current_user.id,
             "PAYOUT_UNWOUND_BY_STATEMENT_DELETE",
@@ -1317,6 +1437,19 @@ def _perform_statement_delete(
                 "linkage": pmt.get("linkage", "none"),
             },
         )
+
+    # 2b. Notify affected users that their paid payouts have been
+    #     unwound. Recipients = the user who created each affected
+    #     PayoutBatch (closest available proxy for "who created the
+    #     payout") plus all org OWNERs/ADMINs. The user performing
+    #     the delete is excluded so they don't ping themselves.
+    if affected_payouts:
+        try:
+            _notify_payouts_unwound(
+                db, org_id, stmt, current_user, affected_payouts,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to send payout-unwind notifications: {e}")
 
     # 3. Delete ActionItems pointing at this statement or its lines.
     #    Prefer the deterministic entity_id column; for legacy rows
