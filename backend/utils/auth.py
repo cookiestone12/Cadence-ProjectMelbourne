@@ -7,6 +7,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sa_func
 from ..models import get_db, User
+from .request_context import set_user_id
 import os
 
 SECRET_KEY = os.environ["SESSION_SECRET"]
@@ -71,7 +72,12 @@ def get_current_user(
     user = db.query(User).filter(sa_func.lower(User.username) == username.lower()).first()
     if user is None:
         raise credentials_exception
-    
+
+    try:
+        set_user_id(user.id)
+    except Exception:
+        pass
+
     return user
 
 def get_current_admin_user(current_user: User = Depends(get_current_user)):

@@ -2,6 +2,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from jose import JWTError
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from .routes import (
     auth, catalog, settings,
     organizations, creators, songs, credits,
@@ -14,10 +17,19 @@ from .routes import (
     document_sharing, support, assistant, schedule_a_imports
 )
 from .utils.logging_config import logger
+from .utils.settings import (
+    APP_ENV, IS_PRODUCTION, IS_DEVELOPMENT, BUILD_VERSION, parse_cors_origins,
+)
+from .utils.request_context import (
+    set_request_id, set_route, request_id_var, user_id_var, org_id_var, route_var,
+)
 import os
+import re
 import time
 import uuid
 import logging
+import traceback as tb_mod
+from datetime import datetime, timezone
 from pathlib import Path
 
 if not os.getenv("SESSION_SECRET"):
@@ -190,20 +202,22 @@ def shutdown_event():
     except Exception:
         pass
 
-allowed_origins = os.getenv("CORS_ORIGINS", "*").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 app_logger = logging.getLogger("cadence")
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-class LoggingMiddleware:
+
+class RequestContextMiddleware:
+    """Generates a request_id, exposes it via ContextVar so downstream
+    log calls inherit it, sets X-Request-ID on every response, and
+    logs request start/end with duration_ms.
+
+    Bypasses logging for noisy static asset paths so the ring buffer
+    stays useful."""
+
+    _SKIP_LOG_PREFIXES = ("/assets/", "/uploads/")
+    _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9_\-]{1,128}$")
+
     def __init__(self, app: ASGIApp):
         self.app = app
 
@@ -212,28 +226,173 @@ class LoggingMiddleware:
             await self.app(scope, receive, send)
             return
 
-        from starlette.requests import Request
-        request = Request(scope)
-        request_id = str(uuid.uuid4())[:8]
+        from starlette.requests import Request as _Req
+        request = _Req(scope)
+        path = request.url.path
+        method = request.method
+
+        incoming_id = request.headers.get("x-request-id")
+        if incoming_id and self._REQUEST_ID_PATTERN.match(incoming_id):
+            request_id = incoming_id
+        else:
+            request_id = uuid.uuid4().hex
+        rid_token = request_id_var.set(request_id)
+        rt_token = route_var.set(path)
+        uid_token = user_id_var.set(None)
+        oid_token = org_id_var.set(None)
+
         start = time.time()
         status_code = 0
+        skip_log = any(path.startswith(p) for p in self._SKIP_LOG_PREFIXES)
 
         async def send_wrapper(message):
             nonlocal status_code
             if message["type"] == "http.response.start":
                 status_code = message.get("status", 0)
+                headers = list(message.get("headers", []))
+                headers.append((b"x-request-id", request_id.encode("ascii")))
+                message["headers"] = headers
             await send(message)
 
-        await self.app(scope, receive, send_wrapper)
-
-        duration = round((time.time() - start) * 1000, 2)
-        if not request.url.path.startswith("/assets"):
+        if not skip_log:
             app_logger.info(
-                f"{request.method} {request.url.path} -> {status_code} ({duration}ms)",
-                extra={"request_id": request_id}
+                f"{method} {path} started",
+                extra={"method": method, "path": path},
             )
 
-app.add_middleware(LoggingMiddleware)
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            duration_ms = round((time.time() - start) * 1000, 2)
+            if not skip_log:
+                app_logger.info(
+                    f"{method} {path} -> {status_code} ({duration_ms}ms)",
+                    extra={
+                        "method": method,
+                        "path": path,
+                        "status_code": status_code,
+                        "duration_ms": duration_ms,
+                    },
+                )
+            request_id_var.reset(rid_token)
+            route_var.reset(rt_token)
+            user_id_var.reset(uid_token)
+            org_id_var.reset(oid_token)
+
+
+class HTTPSEnforcementMiddleware:
+    """In production, reject any request that arrived as plain HTTP.
+    Replit's proxy terminates TLS and forwards the original scheme via
+    X-Forwarded-Proto, so we trust that header rather than the raw
+    scheme (which would be 'http' for every proxied request).
+
+    Skipped for /health so internal probes can hit it over HTTP."""
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    _HEALTH_PATHS = ("/health", "/api/health")
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http" or not IS_PRODUCTION:
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        if any(path == p or path.startswith(p + "/") for p in self._HEALTH_PATHS):
+            await self.app(scope, receive, send)
+            return
+
+        proto = None
+        for name, value in scope.get("headers", []):
+            if name == b"x-forwarded-proto":
+                proto = value.decode("latin-1").split(",")[0].strip().lower()
+                break
+
+        # Fail-closed: if the proto header is missing in production, we
+        # cannot prove the request arrived over TLS. Reject rather than
+        # assume HTTPS. (Replit's proxy always sets this header.)
+        if proto != "https":
+            response = JSONResponse(
+                {"error": "HTTPS required", "request_id": request_id_var.get()},
+                status_code=426,
+            )
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
+
+
+cors_origins = parse_cors_origins()
+if IS_PRODUCTION and ("*" in cors_origins or not cors_origins):
+    app_logger.warning(
+        "APP_ENV=production but CORS origins are not locked down "
+        f"(got {cors_origins!r}). Set CORS_ORIGINS to an explicit "
+        "comma-separated list of allowed origins."
+    )
+    if "*" in cors_origins:
+        cors_origins = [o for o in cors_origins if o != "*"]
+
+app_logger.info(
+    f"Starting Cadence API: env={APP_ENV} build={BUILD_VERSION} "
+    f"cors_origins={cors_origins or '(none)'}"
+)
+
+app.add_middleware(RequestContextMiddleware)
+app.add_middleware(HTTPSEnforcementMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
+)
+
+
+@app.exception_handler(SQLAlchemyError)
+async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
+    app_logger.error(
+        f"Database error on {request.method} {request.url.path}: {exc}",
+        exc_info=True,
+    )
+    body = {"error": "Database error", "request_id": request_id_var.get()}
+    if IS_DEVELOPMENT:
+        body["detail"] = str(exc)
+    return JSONResponse(body, status_code=503)
+
+
+@app.exception_handler(JWTError)
+async def jwt_exception_handler(request: Request, exc: JWTError):
+    return JSONResponse(
+        {
+            "error": "Invalid or expired token",
+            "request_id": request_id_var.get(),
+        },
+        status_code=401,
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    app_logger.error(
+        f"Unhandled exception on {request.method} {request.url.path}: {exc}",
+        exc_info=True,
+    )
+    if IS_PRODUCTION:
+        body = {
+            "error": "An unexpected error occurred",
+            "request_id": request_id_var.get(),
+        }
+    else:
+        body = {
+            "error": "An unexpected error occurred",
+            "request_id": request_id_var.get(),
+            "detail": str(exc),
+            "traceback": tb_mod.format_exception(type(exc), exc, exc.__traceback__),
+        }
+    return JSONResponse(body, status_code=500)
+
 
 @app.get("/")
 async def serve_root(request: Request):
@@ -246,9 +405,39 @@ async def serve_root(request: Request):
         return FileResponse(index_file, headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
     return JSONResponse({"status": "healthy", "service": "Cadence Catalog Intelligence"})
 
-@app.get("/api/health")
+
+def _check_db_connectivity() -> str:
+    """Run SELECT 1 against the primary database. Returns 'connected'
+    or 'unreachable'. Never raises."""
+    try:
+        from .models.database import engine
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return "connected"
+    except Exception as e:
+        app_logger.warning(f"Health check DB probe failed: {e}")
+        return "unreachable"
+
+
+@app.get("/health", tags=["Infrastructure"], summary="Liveness + DB connectivity probe")
+def health_root():
+    """Unauthenticated health endpoint for uptime monitors and load
+    balancer probes. Reports real DB connectivity (executes SELECT 1)."""
+    db_status = _check_db_connectivity()
+    return {
+        "status": "ok" if db_status == "connected" else "degraded",
+        "version": BUILD_VERSION,
+        "env": APP_ENV,
+        "db": db_status,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.get("/api/health", tags=["Infrastructure"], summary="Legacy health endpoint")
 def health_check():
-    return {"status": "healthy", "service": "Cadence Catalog Intelligence"}
+    """Legacy alias of /health kept for backward compatibility with
+    existing frontend probes."""
+    return health_root()
 
 app.include_router(auth.router)
 app.include_router(catalog.router)

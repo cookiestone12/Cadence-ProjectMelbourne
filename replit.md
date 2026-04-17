@@ -70,6 +70,7 @@ The frontend adopts an Apple Music-style aesthetic, featuring a collapsible side
 - **Support Ticket System**: User-facing support page for submitting tickets with image attachments and annotation tools. Admin interface for managing tickets.
 - **AI Assistant Chat**: Floating chat button providing natural language guidance about the app, powered by OpenAI `gpt-4o-mini`, with role-aware responses.
 - **Public Website Pages**: Landing page with waitlist/demo forms, Careers page, and Investor Relations page with inquiry forms.
+- **Production Infrastructure Foundation**: APP_ENV-driven environment separation (development vs production), `/health` endpoint with real DB connectivity probe, hardened CORS (locks down `*` in production), per-request `X-Request-ID` propagated via ContextVar through structured JSON logs (request_id, user_id, route, duration_ms), HTTPS enforcement via `X-Forwarded-Proto` (fail-closed, /health exempt), in-process ring buffer log handler (last 10k records, accessible via `tail_logs()`) for the upcoming internal logs viewer, and global exception handlers (SQLAlchemyError→503, JWTError→401, generic→500 with traceback hidden in production).
 
 ## External Dependencies
 - PostgreSQL
