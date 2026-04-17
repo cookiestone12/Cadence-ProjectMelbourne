@@ -246,7 +246,7 @@ def suggest_column_mapping(headers: List[str], source_type: str = "") -> Dict[st
     field_disqualifiers = {
         "artist": ["share", "%", "percent", "percentage", "ownership", "split"],
         "track_title": ["share", "%", "percent", "percentage"],
-        "revenue": ["%", "percent", "percentage", "share", "rate", "exchange"],
+        "revenue": ["%", "percent", "percentage", "share", "exchange rate"],
     }
 
     # Process share_percentage and publisher BEFORE artist so a column
