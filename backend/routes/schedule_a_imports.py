@@ -58,7 +58,7 @@ def _file_available(rec: ScheduleAImport) -> bool:
     if not rec.stored_path:
         return False
     try:
-        return schedule_a_storage.open_bytes(rec.stored_path) is not None
+        return schedule_a_storage.exists(rec.stored_path)
     except Exception:
         return False
 

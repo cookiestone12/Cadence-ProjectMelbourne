@@ -206,6 +206,19 @@ def delete(key: str) -> bool:
     return False
 
 
+def exists(key: str) -> bool:
+    """Cheap existence check — does NOT download the object body."""
+    if not key:
+        return False
+    client = _get_object_client()
+    if client is not None:
+        try:
+            return bool(client.exists(key))
+        except Exception as e:
+            logger.info(f"object_storage.exists failed for {key}: {e}")
+    return _local_path_for_key(key).exists()
+
+
 def open_bytes(key: str) -> Optional[bytes]:
     """Read the bytes for a stored key, or None if missing."""
     if not key:
