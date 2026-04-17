@@ -620,16 +620,44 @@ def _run_schema_setup_under_lock():
 
     bootstrap_migration_lock_table(engine)
 
+    # Bounded wait: if another process holds the lock, poll until
+    # it releases and the schema reaches head, then proceed without
+    # acquiring (no schema mutation needed). If the wait exceeds the
+    # ceiling, abort startup with non-zero so the orchestrator can
+    # restart us cleanly — never let a follower come up against an
+    # unmigrated schema.
+    WAIT_CEILING_SECONDS = 600  # 10 min — matches stale-lock threshold
+    POLL_INTERVAL_SECONDS = 2
+    import time as _time
+
     if not acquire_migration_lock(engine, revision_label="pending"):
-        # Another live process owns the lock. Skip ALL schema work
-        # (both Alembic AND the idempotent DDL backstop) so we don't
-        # run ALTER/CREATE in parallel with the leader. Postgres
-        # MVCC means we'll see the leader's schema once it commits.
         logger.warning(
-            "Skipping ALL schema setup (Alembic + DDL backstop) because another "
-            "process holds the migration lock. Data seeds will still run."
+            "Migration lock held by another process; waiting up to "
+            f"{WAIT_CEILING_SECONDS}s for leader to finish."
         )
-        return
+        deadline = _time.monotonic() + WAIT_CEILING_SECONDS
+        while _time.monotonic() < deadline:
+            _time.sleep(POLL_INTERVAL_SECONDS)
+            try:
+                info = get_alembic_revision_info(engine)
+            except Exception as e:
+                logger.warning(f"Wait-poll: revision check failed: {e}")
+                continue
+            if info["is_up_to_date"]:
+                logger.info(
+                    "Leader finished; schema is at head "
+                    f"({','.join(info['head_revisions'])}). Continuing startup "
+                    "without acquiring lock."
+                )
+                return
+        # Timed out — fail hard. Exiting non-zero is the right thing
+        # here; the orchestrator/run_backend.sh will see the failure.
+        logger.error(
+            f"Migration lock wait exceeded {WAIT_CEILING_SECONDS}s; aborting "
+            "startup so this process does not serve traffic against an "
+            "unmigrated schema."
+        )
+        raise SystemExit(2)
 
     try:
         # Step A: Alembic owns forward schema changes. Failure is
