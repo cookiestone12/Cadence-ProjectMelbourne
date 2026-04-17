@@ -492,3 +492,156 @@ def test_delete_preview_is_non_mutating_and_matches_summary(db, org_user, client
     assert s["ledger_entry_count"] == p["ledger_entry_count"]
     assert s["action_items_to_remove"] == p["action_items_to_remove"]
     assert s["advance_restores"][0]["restore_cents"] == p["advance_restores"][0]["restore_cents"]
+
+
+# ---------- Task #67: performance regression guard ----------
+#
+# Budgets are intentionally generous (3x typical observed runtime on the
+# in-memory SQLite test runner). They exist so a future regression that
+# turns one of the per-statement delete queries into an O(N) loop will
+# trip the test instead of silently timing out a real request.
+#
+# Observed local runtime (SQLite :memory:, ~10k tx + ~50k ledger entries):
+#   delete-preview  ~1.5s
+#   delete          ~3-4s
+# Budgets:
+#   PREVIEW_BUDGET_S = 6.0
+#   DELETE_BUDGET_S  = 12.0
+PREVIEW_BUDGET_S = 6.0
+DELETE_BUDGET_S = 12.0
+
+
+def _seed_large_statement(db, org_id, *, num_tx=10_000, num_ledger=50_000):
+    """Bulk-seed a statement with the requested number of transactions
+    and ledger entries (mix of EARNING / RECOUPMENT_APPLIED / PAYMENT)
+    using SQLAlchemy core inserts so seeding stays well under a minute."""
+    stmt = _make_statement(db, org_id, total_revenue_cents=num_tx * 100)
+    payee = _make_payee(db, org_id)
+    run = _make_run(db, org_id, stmt.id)
+
+    # A handful of advances so RECOUPMENT_APPLIED rows distribute across
+    # multiple advance_id values (exercises the GROUP BY in the summary).
+    advances = []
+    for i in range(20):
+        a = AdvanceV2(
+            org_id=org_id, payee_id=payee.id,
+            advance_name=f"Adv {i}",
+            advance_date=date(2026, 1, 1), currency="USD",
+            principal_amount_cents=1_000_000, recoupable=True,
+            recoupment_pool="GLOBAL",
+            outstanding_balance_cents=1_000_000,
+        )
+        db.add(a)
+    db.commit()
+    advances = db.query(AdvanceV2).filter(AdvanceV2.org_id == org_id).all()
+    advance_ids = [a.id for a in advances]
+
+    # Bulk-insert transactions
+    tx_rows = [
+        {
+            "statement_id": stmt.id,
+            "organization_id": org_id,
+            "original_track_title": f"Track {i}",
+            "original_artist": "Artist",
+            "revenue_cents": 100,
+            "currency": "USD",
+            "match_status": "MATCHED" if i % 2 else "UNMATCHED",
+        }
+        for i in range(num_tx)
+    ]
+    db.bulk_insert_mappings(RoyaltyTransaction, tx_rows)
+    db.commit()
+
+    # Mix: 60% EARNING, 30% RECOUPMENT_APPLIED, 10% PAYMENT
+    n_earn = int(num_ledger * 0.6)
+    n_recoup = int(num_ledger * 0.3)
+    n_pay = num_ledger - n_earn - n_recoup
+    base_dt = datetime(2026, 2, 1, 12, 0, 0)
+
+    ledger_rows = []
+    for i in range(n_earn):
+        ledger_rows.append({
+            "org_id": org_id, "statement_id": stmt.id,
+            "processing_run_id": run.id, "payee_id": payee.id,
+            "entry_type": "EARNING", "amount_cents": 100,
+            "created_at": base_dt,
+        })
+    for i in range(n_recoup):
+        ledger_rows.append({
+            "org_id": org_id, "statement_id": stmt.id,
+            "processing_run_id": run.id, "payee_id": payee.id,
+            "entry_type": "RECOUPMENT_APPLIED", "amount_cents": -50,
+            "advance_id": advance_ids[i % len(advance_ids)],
+            "recoupment_pool": "GLOBAL",
+            "created_at": base_dt,
+        })
+    for i in range(n_pay):
+        ledger_rows.append({
+            "org_id": org_id, "statement_id": stmt.id,
+            "processing_run_id": run.id, "payee_id": payee.id,
+            "entry_type": "PAYMENT", "amount_cents": -200,
+            "memo": f"Payment {i}", "created_at": base_dt,
+        })
+
+    # Insert ledger entries in chunks to keep memory bounded.
+    CHUNK = 5000
+    for i in range(0, len(ledger_rows), CHUNK):
+        db.bulk_insert_mappings(RoyaltyLedgerEntry, ledger_rows[i:i + CHUNK])
+    db.commit()
+
+    return stmt, n_pay
+
+
+def test_delete_preview_and_delete_stay_within_budget_for_huge_statement(db, org_user, client):
+    """Performance guard for the new delete-preview + delete pipeline.
+
+    Seeds ~10k transactions and ~50k ledger entries (mix of EARNING /
+    RECOUPMENT_APPLIED / PAYMENT) and asserts both endpoints stay
+    within a documented time budget. Also asserts zero residue after
+    the delete.
+    """
+    import time
+    org, _ = org_user
+    stmt, n_pay = _seed_large_statement(db, org.id, num_tx=10_000, num_ledger=50_000)
+    stmt_id = stmt.id
+
+    # delete-preview ----------------------------------------------------
+    t0 = time.perf_counter()
+    res = client.get(f"/api/royalties/statements/{org.id}/{stmt_id}/delete-preview")
+    preview_elapsed = time.perf_counter() - t0
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["transaction_count"] == 10_000
+    assert body["ledger_entry_count"] == 50_000
+    assert len(body["advance_restores"]) == 20
+    assert len(body["payments_unwound"]) == n_pay
+    assert preview_elapsed < PREVIEW_BUDGET_S, (
+        f"delete-preview took {preview_elapsed:.2f}s, budget {PREVIEW_BUDGET_S}s. "
+        f"A regression likely turned one of the summary queries into an O(N) loop."
+    )
+
+    # delete ------------------------------------------------------------
+    t0 = time.perf_counter()
+    res = client.delete(f"/api/royalties/statements/{org.id}/{stmt_id}")
+    delete_elapsed = time.perf_counter() - t0
+    assert res.status_code == 200, res.text
+    assert delete_elapsed < DELETE_BUDGET_S, (
+        f"delete took {delete_elapsed:.2f}s, budget {DELETE_BUDGET_S}s. "
+        f"A regression likely turned the per-ledger-entry audit-log loop "
+        f"or one of the cascade deletes into an O(N) round-trip."
+    )
+
+    # Zero residue ------------------------------------------------------
+    db.expire_all()
+    assert db.query(RoyaltyStatement).filter(RoyaltyStatement.id == stmt_id).first() is None
+    assert db.query(RoyaltyLedgerEntry).filter(RoyaltyLedgerEntry.statement_id == stmt_id).count() == 0
+    assert db.query(RoyaltyTransaction).filter(RoyaltyTransaction.statement_id == stmt_id).count() == 0
+    assert db.query(RoyaltyProcessingRun).filter(RoyaltyProcessingRun.statement_id == stmt_id).count() == 0
+
+    # Advance balances were restored: each advance got back 30%/20 of the
+    # 50k ledger entries * 50 cents = 37_500 cents per advance on top of
+    # its starting 1_000_000.
+    adv_balances = [a.outstanding_balance_cents for a in db.query(AdvanceV2).filter(AdvanceV2.org_id == org.id).all()]
+    assert all(b > 1_000_000 for b in adv_balances), (
+        f"advance balances were not restored after delete: {adv_balances}"
+    )
