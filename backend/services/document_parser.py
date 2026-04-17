@@ -211,10 +211,17 @@ def _row_words_to_record(
 
     pct_raw = " ".join(buckets.get("publishing_percentage", [])).strip()
     pct_match = PCT_RE.search(pct_raw) if pct_raw else None
-    if not pct_match and pct_raw:
+    pct_value: str = ""
+    if pct_match:
+        pct_value = pct_match.group(1)
+    elif pct_raw:
         bare = re.match(r'^(\d+(?:\.\d+)?)\s*$', pct_raw)
         if bare:
-            pct_match = bare
+            try:
+                if 0.0 <= float(bare.group(1)) <= 100.0:
+                    pct_value = bare.group(1)
+            except ValueError:
+                pass
 
     isrc_raw = " ".join(buckets.get("isrc", [])).strip()
     isrc_match = ISRC_RE.search(isrc_raw) if isrc_raw else None
@@ -238,7 +245,7 @@ def _row_words_to_record(
     return {
         "primary_artist": artist,
         "title": title,
-        "publishing_percentage": pct_match.group(1) if pct_match else "",
+        "publishing_percentage": pct_value,
         "isrc": isrc_match.group(1) if isrc_match else "",
         "iswc": iswc_match.group(1) if iswc_match else "",
         "notes": " | ".join([n for n in notes_parts if n]),
