@@ -20,7 +20,7 @@ from backend.models.models import (
     User, Organization, OrganizationMember,
     RoyaltyStatement, RoyaltyStatementLine, RoyaltyTransaction,
     RoyaltyLedgerEntry, RoyaltyProcessingRun,
-    AdvanceV2, ActionItem, Payee,
+    AdvanceV2, ActionItem, Payee, PayoutBatch, PayoutItem,
 )
 from backend.utils.auth import get_current_user
 from backend.models.database import get_db as original_get_db
@@ -253,6 +253,98 @@ def test_delete_unwinds_payment_ledger_entries(db, org_user, client):
         AuditLog.action == "PAYOUT_UNWOUND_BY_STATEMENT_DELETE",
     ).all()
     assert len(unwind_logs) == 1
+
+
+# ---------- T002.6: PayoutItem.paid_at unwound + audited per payout ----------
+
+def test_delete_unwinds_payout_item_paid_at(db, org_user, client):
+    """When a PAYMENT ledger entry is deleted, the matching PayoutItem
+    (matched by payee + amount + paid_at within ±5min of ledger
+    created_at) must have paid_at cleared and an audit entry written
+    for the payout id specifically (not just the ledger entry)."""
+    org, _ = org_user
+    stmt = _make_statement(db, org.id)
+    payee = _make_payee(db, org.id)
+    run = _make_run(db, org.id, stmt.id)
+
+    batch = PayoutBatch(org_id=org.id, name="Q1 batch", currency="USD", status="PAID")
+    db.add(batch); db.commit(); db.refresh(batch)
+    paid_at = datetime(2026, 2, 1, 12, 0, 0)
+    payout = PayoutItem(
+        org_id=org.id, batch_id=batch.id, payee_id=payee.id,
+        amount_cents=50_000, paid_at=paid_at,
+    )
+    db.add(payout); db.commit(); db.refresh(payout)
+
+    # PAYMENT ledger entry created at the same instant as the payout
+    # (mirroring record_payment_ledger which stamps both in the same tx)
+    ledger = RoyaltyLedgerEntry(
+        org_id=org.id, statement_id=stmt.id, processing_run_id=run.id,
+        payee_id=payee.id, entry_type="PAYMENT", amount_cents=-50_000,
+        memo=f"Payment via payout batch '{batch.name}'",
+        created_at=paid_at,
+    )
+    db.add(ledger); db.commit()
+
+    res = client.delete(f"/api/royalties/statements/{org.id}/{stmt.id}")
+    assert res.status_code == 200, res.text
+
+    db.expire_all()
+    po = db.query(PayoutItem).filter(PayoutItem.id == payout.id).first()
+    assert po is not None, "PayoutItem itself must NOT be deleted"
+    assert po.paid_at is None, "paid_at must be cleared so the payout flows back to unpaid"
+
+    from backend.models.models import AuditLog
+    per_payout_logs = db.query(AuditLog).filter(
+        AuditLog.organization_id == org.id,
+        AuditLog.action == "PAYOUT_ITEM_UNWOUND_BY_STATEMENT_DELETE",
+        AuditLog.entity_id == po.id,
+    ).all()
+    assert len(per_payout_logs) == 1, "must audit-log per affected payout id"
+
+
+# ---------- T002.7: anchored ActionItem title match (no #1 → #10 leak) ----------
+
+def test_action_item_delete_does_not_leak_to_neighboring_ids(db, org_user, client):
+    """Deleting Statement #1 must NOT also delete action items that
+    point at Statement #10 / #100 (i.e. title.contains('#1') used to
+    over-match — we now use anchored LIKE patterns)."""
+    org, _ = org_user
+    stmt1 = _make_statement(db, org.id)
+    stmt_other = RoyaltyStatement(
+        organization_id=org.id, source_name="Other", source_type="DSP",
+        period_start=date(2026, 1, 1), period_end=date(2026, 3, 31),
+        currency="USD", status="PROCESSED",
+    )
+    db.add(stmt_other); db.commit(); db.refresh(stmt_other)
+
+    # Sibling action items with overlapping numeric prefixes
+    db.add(ActionItem(
+        organization_id=org.id, entity_type="STATEMENT",
+        action_type="STATEMENT_READY",
+        title=f"Statement #{stmt1.id}: ready to process",
+        is_auto_generated=True,
+    ))
+    sibling_title = f"Statement #{stmt1.id}{stmt_other.id} is ready"
+    db.add(ActionItem(
+        organization_id=org.id, entity_type="STATEMENT",
+        action_type="STATEMENT_READY",
+        title=sibling_title,
+        is_auto_generated=True,
+    ))
+    db.commit()
+
+    res = client.delete(f"/api/royalties/statements/{org.id}/{stmt1.id}")
+    assert res.status_code == 200, res.text
+
+    remaining = db.query(ActionItem).filter(
+        ActionItem.organization_id == org.id,
+    ).all()
+    titles = [a.title for a in remaining]
+    assert sibling_title in titles, (
+        f"Sibling action item must NOT be deleted. Titles remaining: {titles}"
+    )
+    assert all(not t.startswith(f"Statement #{stmt1.id}:") for t in titles)
 
 
 # ---------- T002.5: preview is non-mutating + matches delete ----------
