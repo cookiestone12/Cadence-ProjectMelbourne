@@ -44,7 +44,7 @@ def check_linked_access(db: Session, user_id: int, target_org_id: int, permissio
     
     return False
 
-router = APIRouter(prefix="/api/contracts", tags=["contracts"])
+router = APIRouter(prefix="/api/contracts", tags=["Contracts"])
 
 UPLOAD_DIR = Path("uploads/contracts")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -62,7 +62,7 @@ class ContractResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.post("/upload/{song_id}", response_model=ContractResponse)
+@router.post("/upload/{song_id}", response_model=ContractResponse, summary="Upload a contract document for a song", description="Uploads a PDF/DOCX, persists the binary, and runs AI parsing to extract terms (parties, dates, splits, advances).")
 async def upload_contract(
     song_id: int,
     file: UploadFile = File(...),
@@ -126,7 +126,7 @@ async def upload_contract(
     
     return contract
 
-@router.get("/song/{song_id}", response_model=List[ContractResponse])
+@router.get("/song/{song_id}", response_model=List[ContractResponse], summary="List contracts for a song", description="Returns every contract linked to the song, newest first.")
 def get_contracts_for_song(
     song_id: int, 
     db: Session = Depends(get_db),
@@ -149,7 +149,7 @@ def get_contracts_for_song(
     contracts = db.query(SongContract).filter(SongContract.song_id == song_id).all()
     return contracts
 
-@router.get("/download/{contract_id}")
+@router.get("/download/{contract_id}", summary="Download contract file", description="Streams the original uploaded contract document.")
 def download_contract(
     contract_id: int, 
     db: Session = Depends(get_db),
@@ -190,7 +190,7 @@ def download_contract(
         media_type="application/pdf"
     )
 
-@router.delete("/{contract_id}")
+@router.delete("/{contract_id}", summary="Delete contract", description="Removes a contract record and its stored file.")
 def delete_contract(
     contract_id: int, 
     db: Session = Depends(get_db),

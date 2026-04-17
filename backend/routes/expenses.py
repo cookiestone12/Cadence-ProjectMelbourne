@@ -11,7 +11,7 @@ from ..utils.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/expenses", tags=["expenses"])
+router = APIRouter(prefix="/api/expenses", tags=["Expenses"])
 
 
 def verify_org_membership(db: Session, user_id: int, org_id: int):

@@ -47,7 +47,7 @@ def _record_session(db: Session, user_id: int, token: str, request: Optional[Req
     ))
 
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 class LoginRequest(BaseModel):
     username: str
@@ -67,7 +67,7 @@ class TokenResponse(BaseModel):
     token_type: str
     user: dict
 
-@router.post("/register", response_model=TokenResponse)
+@router.post("/register", response_model=TokenResponse, summary="Register new user", description="Create a new user account. The very first user in a fresh deployment is automatically promoted to admin. Returns a Bearer JWT and the new user record. Also opens a UserSession row so the token can be revoked server-side.")
 def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     # Check if user exists
     if db.query(User).filter(func.lower(User.username) == payload.username.lower()).first():
@@ -107,7 +107,7 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
         }
     }
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, summary="Log in (username + password)", description="Username login is case-insensitive. Returns a Bearer JWT plus the user payload. Use the token in the `Authorization: Bearer <token>` header on every other endpoint. Records a UserSession row so the token can be revoked mid-flight.")
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(func.lower(User.username) == payload.username.lower()).first()
     
@@ -150,7 +150,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     }
 
 
-@router.put("/change-password")
+@router.put("/change-password", summary="Change current user's password", description="Verifies the supplied current_password before rotating to new_password. Existing sessions are not invalidated by a password change.")
 def change_password(
     request: ChangePasswordRequest,
     db: Session = Depends(get_db),

@@ -19,7 +19,7 @@ try:
 except ImportError:
     EXCEL_SUPPORT = False
 
-router = APIRouter(prefix="/api/csv", tags=["csv"])
+router = APIRouter(prefix="/api/csv", tags=["CSV Import"])
 
 
 class ColumnMapping(BaseModel):

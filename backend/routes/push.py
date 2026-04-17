@@ -10,7 +10,7 @@ from ..models import get_db, PushSubscription, User
 from ..utils.auth import get_current_user
 
 logger = logging.getLogger("cadence")
-router = APIRouter(prefix="/api/push", tags=["push-notifications"])
+router = APIRouter(prefix="/api/push", tags=["Push Notifications"])
 
 
 class SubscriptionKeys(BaseModel):

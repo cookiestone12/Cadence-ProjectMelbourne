@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -35,7 +35,60 @@ from pathlib import Path
 if not os.getenv("SESSION_SECRET"):
     raise RuntimeError("SESSION_SECRET environment variable must be set for production use")
 
-app = FastAPI(title="Cadence Catalog Intelligence API")
+from .utils.docs_auth import require_docs_auth
+
+# We disable the built-in /docs, /redoc, /openapi.json URLs and
+# re-register them below with require_docs_auth as a dependency
+# (Basic Auth in production, no-op in development). The FastAPI
+# constructor's `dependencies=` argument does NOT apply to these
+# built-in handlers, so wrapping them is the only way to gate them.
+app = FastAPI(
+    title="Cadence Catalog Intelligence API",
+    description=(
+        "Multi-tenant rights, royalty, and catalog administration "
+        "platform for music publishers, labels, and managers. "
+        "Endpoints are grouped by domain (Auth, Catalog, Royalties, "
+        "Creators, Songs, Contracts, Placements, ...). All "
+        "non-public endpoints require a Bearer JWT obtained from "
+        "POST /api/auth/login."
+    ),
+    version=os.getenv("BUILD_VERSION", "1.0.0"),
+    swagger_ui_parameters={"docExpansion": "none", "filter": True},
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
+)
+
+
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.openapi.utils import get_openapi
+
+
+@app.get("/openapi.json", include_in_schema=False)
+def _openapi_json(_: None = Depends(require_docs_auth)):
+    return get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+
+
+@app.get("/docs", include_in_schema=False)
+def _swagger_docs(_: None = Depends(require_docs_auth)):
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json",
+        title=f"{app.title} — Swagger UI",
+        swagger_ui_parameters=app.swagger_ui_parameters,
+    )
+
+
+@app.get("/redoc", include_in_schema=False)
+def _redoc_docs(_: None = Depends(require_docs_auth)):
+    return get_redoc_html(
+        openapi_url="/openapi.json",
+        title=f"{app.title} — ReDoc",
+    )
 
 
 @app.on_event("startup")
@@ -506,6 +559,12 @@ app.include_router(schedule_a_imports.router)
 from .routes import leads
 app.include_router(leads.router)
 app.include_router(leads.admin_router)
+
+# Synthesize a one-line summary on every route that doesn't already
+# have a hand-written one so /docs and /redoc are scannable instead
+# of being 482 bare function names.
+from .utils.openapi_backfill import backfill_route_summaries
+backfill_route_summaries(app)
 
 uploads_dir = Path(__file__).parent / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)

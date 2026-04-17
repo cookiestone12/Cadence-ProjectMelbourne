@@ -14,7 +14,7 @@ from ..utils.auth import get_current_user
 logger = logging.getLogger("cadence")
 _push_executor = ThreadPoolExecutor(max_workers=3, thread_name_prefix="push")
 
-router = APIRouter(prefix="/api/notifications", tags=["notifications"])
+router = APIRouter(prefix="/api/notifications", tags=["Notifications"])
 
 class NotificationResponse(BaseModel):
     id: int

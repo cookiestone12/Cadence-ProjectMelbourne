@@ -13,7 +13,7 @@ from ..utils.auth import get_current_user
 from .client_sharing import has_shared_access
 from ..services.spotify_service import lookup_release_metadata, SpotifyAuthError, SpotifyNotFoundError
 
-router = APIRouter(prefix="/api/releases", tags=["releases"])
+router = APIRouter(prefix="/api/releases", tags=["Releases"])
 
 
 class ReleaseCreate(BaseModel):
@@ -259,7 +259,7 @@ def _build_track_export_data(release: Release, tracks: list, db: Session) -> lis
     return rows
 
 
-@router.get("/org/{org_id}")
+@router.get("/org/{org_id}", summary="List releases in an organization", description="Returns the org's releases with filters for status, type, and creator.")
 def list_releases(
     org_id: int,
     search: Optional[str] = None,
@@ -317,7 +317,7 @@ def list_releases(
     return {"releases": results, "total": total}
 
 
-@router.get("/{release_id}")
+@router.get("/{release_id}", summary="Get release detail", description="Returns the release with ordered tracks, artwork, distribution metadata, and readiness state.")
 def get_release(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -379,7 +379,7 @@ def get_release(release_id: int, db: Session = Depends(get_db), current_user: Us
     }
 
 
-@router.post("/org/{org_id}")
+@router.post("/org/{org_id}", summary="Create a release", description="Creates a new release shell. Tracks are added separately via /tracks.")
 def create_release(org_id: int, data: ReleaseCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(current_user, org_id, db)
 
@@ -408,7 +408,7 @@ def create_release(org_id: int, data: ReleaseCreate, db: Session = Depends(get_d
     return {"id": release.id, "title": release.title, "message": "Release created successfully"}
 
 
-@router.put("/{release_id}")
+@router.put("/{release_id}", summary="Update release", description="Patches release fields (title, type, release date, label, etc.).")
 def update_release(release_id: int, data: ReleaseUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -423,7 +423,7 @@ def update_release(release_id: int, data: ReleaseUpdate, db: Session = Depends(g
     return {"id": release.id, "title": release.title, "message": "Release updated successfully"}
 
 
-@router.delete("/{release_id}")
+@router.delete("/{release_id}", summary="Delete release", description="Removes the release and detaches its track links.")
 def delete_release(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -435,7 +435,7 @@ def delete_release(release_id: int, db: Session = Depends(get_db), current_user:
     return {"message": "Release deleted successfully"}
 
 
-@router.post("/{release_id}/tracks")
+@router.post("/{release_id}/tracks", summary="Add a track to a release", description="Appends a song to the release as a new ReleaseTrack with a track / disc number.")
 def add_track_to_release(release_id: int, data: ReleaseTrackAdd, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -471,7 +471,7 @@ def add_track_to_release(release_id: int, data: ReleaseTrackAdd, db: Session = D
     return {"message": "Track added to release", "track_number": track_number}
 
 
-@router.delete("/{release_id}/tracks/{song_id}")
+@router.delete("/{release_id}/tracks/{song_id}", summary="Remove a track from a release", description="Detaches a track from the release without deleting the underlying song.")
 def remove_track_from_release(release_id: int, song_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -523,7 +523,7 @@ def check_release_health(release_id: int, db: Session = Depends(get_db), current
     return get_release_health(release, release_tracks, db)
 
 
-@router.get("/{release_id}/readiness")
+@router.get("/{release_id}/readiness", summary="Release distribution readiness", description="Computes the readiness checklist for distribution: metadata completeness, artwork, splits, ISRCs, etc.")
 def check_distribution_readiness(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:

@@ -14,7 +14,7 @@ import logging
 
 logger = logging.getLogger("cadence")
 
-router = APIRouter(prefix="/api/sharing", tags=["sharing"])
+router = APIRouter(prefix="/api/sharing", tags=["Document Sharing"])
 
 
 class ShareViaEmailRequest(BaseModel):

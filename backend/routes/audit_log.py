@@ -8,7 +8,7 @@ from ..models import get_db, User, OrganizationMember
 from ..models.models import AuditLog
 from ..utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/audit-log", tags=["audit_log"])
+router = APIRouter(prefix="/api/audit-log", tags=["Audit Log"])
 
 
 def verify_org_access(user: User, org_id: int, db: Session):

@@ -22,7 +22,7 @@ import io
 import json
 import os
 
-router = APIRouter(prefix="/api/catalog", tags=["catalog"])
+router = APIRouter(prefix="/api/catalog", tags=["Catalog"])
 
 class ValuationResponse(BaseModel):
     estimated_revenue: float

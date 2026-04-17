@@ -5,7 +5,7 @@ from typing import List
 from ..models import get_db, Settings, User
 from ..utils.auth import get_current_admin_user
 
-router = APIRouter(prefix="/api/settings", tags=["settings"])
+router = APIRouter(prefix="/api/settings", tags=["Settings"])
 
 class SettingRequest(BaseModel):
     key: str

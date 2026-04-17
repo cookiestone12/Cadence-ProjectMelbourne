@@ -12,7 +12,7 @@ from ..models import (
 )
 from ..utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/brief-builder", tags=["brief-builder"])
+router = APIRouter(prefix="/api/brief-builder", tags=["Brief Builder"])
 logger = logging.getLogger("cadence")
 
 

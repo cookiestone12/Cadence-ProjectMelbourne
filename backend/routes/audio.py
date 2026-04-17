@@ -16,7 +16,7 @@ from ..models.database import SessionLocal
 from ..utils.auth import get_current_user
 from ..services import storage_service
 
-router = APIRouter(prefix="/api/audio", tags=["audio"])
+router = APIRouter(prefix="/api/audio", tags=["Audio Files"])
 logger = logging.getLogger("cadence")
 
 

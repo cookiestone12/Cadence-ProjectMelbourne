@@ -7,7 +7,7 @@ from ..models import get_db, User, OrganizationMember, IntegrationAccount
 from ..utils.auth import get_current_user
 from ..services import storage_service
 
-router = APIRouter(prefix="/api/integrations", tags=["integrations"])
+router = APIRouter(prefix="/api/integrations", tags=["Integrations"])
 
 
 class OAuthCallbackRequest(BaseModel):

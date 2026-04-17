@@ -15,7 +15,7 @@ from pathlib import Path
 
 logger = logging.getLogger("cadence")
 
-router = APIRouter(prefix="/api/creators", tags=["creators"])
+router = APIRouter(prefix="/api/creators", tags=["Creators"])
 
 class CreatorResponse(BaseModel):
     id: int
@@ -118,7 +118,7 @@ class CreatorDetailResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.get("/org/{org_id}", response_model=List[CreatorResponse])
+@router.get("/org/{org_id}", response_model=List[CreatorResponse], summary="List creators in an organization", description="Returns the creator roster for the org. Optional filters narrow by status, type, or text search.")
 def get_organization_creators(
     org_id: int,
     db: Session = Depends(get_db),
@@ -239,7 +239,7 @@ def check_roster_permission(membership):
         return True
     return getattr(membership, 'can_manage_roster', False) or False
 
-@router.post("/org/{org_id}", response_model=CreatorResponse)
+@router.post("/org/{org_id}", response_model=CreatorResponse, summary="Create a creator", description="Creates a new creator (writer / artist / producer / etc.) under the organization.")
 def create_creator(
     org_id: int,
     request: CreatorCreateRequest,
@@ -316,7 +316,7 @@ def create_creator(
         "roster_export_fields": creator.roster_export_fields or [],
     }
 
-@router.get("/{creator_id}", response_model=CreatorDetailResponse)
+@router.get("/{creator_id}", response_model=CreatorDetailResponse, summary="Get creator detail", description="Returns the full creator profile, including songs, credits, contacts, and aggregate stats.")
 def get_creator(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -414,7 +414,7 @@ def get_creator(
         "is_shared": is_shared,
     }
 
-@router.put("/{creator_id}", response_model=CreatorResponse)
+@router.put("/{creator_id}", response_model=CreatorResponse, summary="Update creator", description="Patch creator fields (name, bio, links, type, status, etc.).")
 def update_creator(
     creator_id: int,
     request: CreatorUpdateRequest,
@@ -529,7 +529,7 @@ def update_creator(
     }
 
 
-@router.delete("/{creator_id}")
+@router.delete("/{creator_id}", summary="Delete creator", description="Permanently removes the creator record. Linked credits are detached.")
 def delete_creator(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -923,7 +923,7 @@ class CreatorContactResponse(BaseModel):
         from_attributes = True
 
 
-@router.get("/{creator_id}/contacts")
+@router.get("/{creator_id}/contacts", summary="List creator's contacts", description="Returns every contact assigned to the creator with their role and primary flag.")
 async def get_creator_contacts(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -962,7 +962,7 @@ async def get_creator_contacts(
     return result
 
 
-@router.post("/{creator_id}/contacts")
+@router.post("/{creator_id}/contacts", summary="Attach a contact to a creator", description="Links an existing creative-directory contact to the creator with a specific role (e.g. MANAGER, LAWYER).")
 async def add_creator_contact(
     creator_id: int,
     data: CreatorContactCreate,
@@ -1025,7 +1025,7 @@ async def add_creator_contact(
     }
 
 
-@router.delete("/{creator_id}/contacts/{contact_link_id}")
+@router.delete("/{creator_id}/contacts/{contact_link_id}", summary="Remove a contact from a creator", description="Detaches a contact-role link. Does not delete the underlying contact.")
 async def remove_creator_contact(
     creator_id: int,
     contact_link_id: int,

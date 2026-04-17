@@ -13,7 +13,7 @@ from ..models import (
 from ..utils.auth import get_current_user
 from ..services import scan_service, storage_service
 
-router = APIRouter(prefix="/api/storage-scan", tags=["storage-scan"])
+router = APIRouter(prefix="/api/storage-scan", tags=["Storage Scan"])
 logger = logging.getLogger("cadence")
 
 

@@ -13,7 +13,7 @@ def _generate_access_code():
     chars = string.ascii_uppercase + string.digits
     return ''.join(random.choices(chars, k=8))
 
-router = APIRouter(prefix="/api/organizations", tags=["organizations"])
+router = APIRouter(prefix="/api/organizations", tags=["Organizations"])
 
 class OrganizationResponse(BaseModel):
     id: int
@@ -45,7 +45,7 @@ class OrganizationMemberResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.get("/current", response_model=OrganizationResponse)
+@router.get("/current", response_model=OrganizationResponse, summary="Get the current user's organization", description="Returns the organization the authenticated user is currently scoped to. Cadence staff and master admin see organization 1 by default if they are not a member of any org.")
 def get_current_organization(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -84,7 +84,7 @@ def get_current_organization(
         "account_type": org.account_type,
     }
 
-@router.get("/current/membership")
+@router.get("/current/membership", summary="Get current user's role in their org", description="Returns the role (OWNER/ADMIN/MEMBER) of the current user inside their current organization.")
 def get_current_membership(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -112,7 +112,7 @@ def get_current_membership(
         "linked_creator_id": getattr(membership, 'linked_creator_id', None),
     }
 
-@router.get("/{org_id}", response_model=OrganizationResponse)
+@router.get("/{org_id}", response_model=OrganizationResponse, summary="Get organization by id", description="Fetch an organization the caller is a member of. Master admin and is_cadence_staff users have cross-org read.")
 def get_organization(
     org_id: int,
     db: Session = Depends(get_db),
@@ -144,7 +144,7 @@ def get_organization(
         "created_at": org.created_at.isoformat() if org.created_at else ""
     }
 
-@router.post("/", response_model=OrganizationResponse)
+@router.post("/", response_model=OrganizationResponse, summary="Create a new organization", description="Creates an organization owned by the current user. The caller is added as the OWNER member.")
 def create_organization(
     request: OrganizationCreateRequest,
     db: Session = Depends(get_db),
@@ -175,7 +175,7 @@ def create_organization(
         "created_at": org.created_at.isoformat() if org.created_at else ""
     }
 
-@router.get("/{org_id}/access-code")
+@router.get("/{org_id}/access-code", summary="Get the org's join access code", description="Returns the access code other users can redeem to join this organization. Owner/admin only.")
 def get_access_code(
     org_id: int,
     db: Session = Depends(get_db),
@@ -200,7 +200,7 @@ def get_access_code(
     return {"access_code": org.access_code}
 
 
-@router.post("/{org_id}/regenerate-access-code")
+@router.post("/{org_id}/regenerate-access-code", summary="Regenerate the org access code", description="Rotates the organization's join code, invalidating the previous one. Owner/admin only.")
 def regenerate_access_code(
     org_id: int,
     db: Session = Depends(get_db),
@@ -224,7 +224,7 @@ def regenerate_access_code(
     return {"access_code": org.access_code}
 
 
-@router.get("/{org_id}/members", response_model=List[OrganizationMemberResponse])
+@router.get("/{org_id}/members", response_model=List[OrganizationMemberResponse], summary="List organization members", description="Returns every user attached to the organization with their role.")
 def get_organization_members(
     org_id: int,
     db: Session = Depends(get_db),

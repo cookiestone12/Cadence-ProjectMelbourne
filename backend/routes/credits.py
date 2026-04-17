@@ -22,7 +22,7 @@ def _refresh_creator_credits_async(creator_id: int, org_id: int):
     except Exception as e:
         logger.warning(f"Background credits refresh failed for creator {creator_id}: {e}")
 
-router = APIRouter(prefix="/api/songs", tags=["credits"])
+router = APIRouter(prefix="/api/songs", tags=["Credits"])
 
 class CreditCreateRequest(BaseModel):
     creator_id: Optional[int] = None
@@ -65,7 +65,7 @@ class DSPLinkResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.post("/{song_id}/credits", response_model=CreditResponse)
+@router.post("/{song_id}/credits", response_model=CreditResponse, summary="Add a credit to a song", description="Adds a creator credit (writer / producer / featured / etc.) with a publishing % and master % share.")
 def create_credit(
     song_id: int,
     request: CreditCreateRequest,
@@ -151,7 +151,7 @@ def create_credit(
     
     return credit
 
-@router.patch("/{song_id}/credits/{credit_id}")
+@router.patch("/{song_id}/credits/{credit_id}", summary="Update a song credit", description="Patches a credit's role, publishing %, master %, or notes.")
 def update_credit(
     song_id: int,
     credit_id: int,
@@ -226,7 +226,7 @@ def update_credit(
         "master_share": credit.master_share
     }
 
-@router.delete("/{song_id}/credits/{credit_id}")
+@router.delete("/{song_id}/credits/{credit_id}", summary="Delete a song credit", description="Removes a credit from the song. Splits totals are recomputed.")
 def delete_credit(
     song_id: int,
     credit_id: int,

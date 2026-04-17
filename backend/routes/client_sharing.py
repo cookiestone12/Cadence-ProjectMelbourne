@@ -10,7 +10,7 @@ from .notifications import create_notification
 
 logger = logging.getLogger("cadence")
 
-router = APIRouter(prefix="/api/client-sharing", tags=["client-sharing"])
+router = APIRouter(prefix="/api/client-sharing", tags=["Client Sharing"])
 
 
 def has_shared_access(db: Session, user_id: int, creator_id: int, required_module: str = None):

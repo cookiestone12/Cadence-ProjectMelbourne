@@ -12,8 +12,8 @@ from ..routes.auth import get_current_user
 
 logger = logging.getLogger("cadence")
 
-router = APIRouter(prefix="/api/account-merge", tags=["account_merge"])
-admin_router = APIRouter(prefix="/api/admin/merge-requests", tags=["admin_merge"])
+router = APIRouter(prefix="/api/account-merge", tags=["Account Merge"])
+admin_router = APIRouter(prefix="/api/admin/merge-requests", tags=["Account Merge"])
 
 
 def get_current_super_admin(current_user: User = Depends(get_current_user)):

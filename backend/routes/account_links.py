@@ -7,7 +7,7 @@ from datetime import datetime
 from ..models import get_db, Organization, AccountLink, User, OrganizationMember
 from ..utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/account-links", tags=["account_links"])
+router = APIRouter(prefix="/api/account-links", tags=["Account Links"])
 
 class CreateLinkRequest(BaseModel):
     individual_org_id: int

@@ -14,7 +14,7 @@ from ..models import (
 from ..utils.auth import get_current_user
 
 logger = logging.getLogger("cadence")
-router = APIRouter(prefix="/api/support", tags=["support"])
+router = APIRouter(prefix="/api/support", tags=["Support"])
 
 UPLOAD_DIR = Path("uploads/support")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

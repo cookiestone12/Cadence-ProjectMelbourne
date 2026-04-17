@@ -11,7 +11,7 @@ from ..models import get_db, User, OrganizationMember
 from ..utils.auth import get_current_user
 
 logger = logging.getLogger("cadence")
-router = APIRouter(prefix="/api/assistant", tags=["assistant"])
+router = APIRouter(prefix="/api/assistant", tags=["AI Assistant"])
 
 CADENCE_SYSTEM_PROMPT = """You are Cadence, the built-in AI guide for Cadence — Catalog Intelligence, a music industry platform for managing catalogs, rights, creators, and royalties.
 

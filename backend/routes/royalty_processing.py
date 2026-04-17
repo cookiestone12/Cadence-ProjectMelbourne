@@ -50,7 +50,7 @@ from .royalties import parse_uploaded_file, suggest_column_mapping, detect_pro_s
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/royalty-processing", tags=["royalty-processing"])
+router = APIRouter(prefix="/api/royalty-processing", tags=["Royalty Processing"])
 
 
 def verify_org_access(user: User, org_id: int, db: Session):

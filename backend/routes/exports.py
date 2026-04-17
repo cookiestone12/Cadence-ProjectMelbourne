@@ -6,7 +6,7 @@ from ..models import get_db, Creator, OrganizationMember, User
 from ..utils.auth import get_current_user
 from ..services.schedule_a_service import generate_schedule_a_csv
 
-router = APIRouter(prefix="/api/creators", tags=["exports"])
+router = APIRouter(prefix="/api/creators", tags=["Exports"])
 
 @router.get("/{creator_id}/schedule-a")
 def export_schedule_a(

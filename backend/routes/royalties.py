@@ -33,7 +33,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/royalties", tags=["royalties"])
+router = APIRouter(prefix="/api/royalties", tags=["Royalties"])
 
 
 def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = None, required_module: str = None):
@@ -750,7 +750,7 @@ def assign_unassigned_statements(
     return {"assigned": updated, "creator_id": creator_id, "creator_name": creator.display_name}
 
 
-@router.get("/statements/{org_id}")
+@router.get("/statements/{org_id}", summary="List royalty statements", description="Returns every statement ingested for the organization with paging and status filters.")
 def list_statements(
     org_id: int,
     status: Optional[str] = None,
@@ -807,7 +807,7 @@ def list_statements(
     }
 
 
-@router.get("/statements/{org_id}/{statement_id}")
+@router.get("/statements/{org_id}/{statement_id}", summary="Get royalty statement detail", description="Returns the statement header plus a paged view of its transactions.")
 def get_statement(
     org_id: int,
     statement_id: int,
@@ -853,7 +853,7 @@ def get_statement(
     }
 
 
-@router.post("/statements/{org_id}/upload")
+@router.post("/statements/{org_id}/upload", summary="Upload royalty statement", description="Ingests a CSV / XLSX / PDF royalty statement, normalizes columns, and stages it for matching. Supports DSP, label, publisher, and PRO statement formats.")
 async def upload_statement(
     org_id: int,
     file: UploadFile = File(...),
@@ -1529,7 +1529,7 @@ class BulkDeleteStatementsRequest(BaseModel):
     statement_ids: List[int]
 
 
-@router.delete("/statements/{org_id}/{statement_id}")
+@router.delete("/statements/{org_id}/{statement_id}", summary="Delete a royalty statement", description="Hard-deletes the statement and all linked transactions. Use the preview endpoint first.")
 def delete_statement(
     org_id: int,
     statement_id: int,
@@ -1805,7 +1805,7 @@ def rematch_transactions(
     }
 
 
-@router.post("/calculate/{org_id}/{statement_id}")
+@router.post("/calculate/{org_id}/{statement_id}", summary="Calculate royalties for a statement", description="Runs the royalty engine: matches transactions to assets, applies rights splits and contract terms, and produces creator-level allocations.")
 def calculate_royalties(
     org_id: int,
     statement_id: int,
@@ -1957,7 +1957,7 @@ def list_allocations(
     return {"total": total, "skip": skip, "limit": limit, "allocations": results}
 
 
-@router.get("/dashboard/{org_id}")
+@router.get("/dashboard/{org_id}", summary="Royalties dashboard summary", description="Aggregate financial overview: gross revenue, net to creators, fees, advances, and outstanding balances.")
 def royalties_dashboard(
     org_id: int,
     creator_id: Optional[int] = None,
@@ -2512,7 +2512,7 @@ def earnings_by_track(
     return {"earnings": earnings}
 
 
-@router.get("/payments/{org_id}")
+@router.get("/payments/{org_id}", summary="List royalty payments", description="Returns recorded payments out to creators with status and amounts.")
 def list_payments(
     org_id: int,
     status: Optional[str] = None,
@@ -2558,7 +2558,7 @@ def list_payments(
     return {"total": total, "skip": skip, "limit": limit, "payments": results}
 
 
-@router.post("/payments/{org_id}")
+@router.post("/payments/{org_id}", summary="Record a royalty payment", description="Records a cash disbursement to a creator. Updates outstanding balances accordingly.")
 def create_payment(
     org_id: int,
     body: PaymentCreate,
@@ -2961,7 +2961,7 @@ def confirm_contract_payment(
     return {"status": "confirmed", "contract_id": contract_id}
 
 
-@router.get("/creator-accounting/{org_id}/{creator_id}")
+@router.get("/creator-accounting/{org_id}/{creator_id}", summary="Per-creator accounting view", description="Full earnings + payments + advances + fees rollup for a single creator across all statements.")
 def get_creator_accounting(
     org_id: int,
     creator_id: int,

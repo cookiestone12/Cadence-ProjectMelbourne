@@ -16,7 +16,7 @@ from ..utils.auth import get_current_super_admin, get_password_hash
 from ..services.audit_service import log_action
 from ..services.email_provider import get_email_provider
 
-router = APIRouter(prefix="/api/internal", tags=["internal"])
+router = APIRouter(prefix="/api/internal", tags=["Internal Staff"])
 
 
 class ProvisionStaffRequest(BaseModel):

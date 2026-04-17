@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from ..models import get_db, ActionItem, Song, Creator, OrganizationMember, User, Work, Release, Contract, Placement
 from ..utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/actions", tags=["actions"])
+router = APIRouter(prefix="/api/actions", tags=["Action Items"])
 
 class ActionItemCreate(BaseModel):
     creator_id: Optional[int] = None

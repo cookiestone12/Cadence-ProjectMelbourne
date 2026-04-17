@@ -15,7 +15,7 @@ from ..models import (
 from ..utils.auth import get_current_user
 from ..services.audit_service import log_action
 
-router = APIRouter(prefix="/api/registration-reports", tags=["registration-reports"])
+router = APIRouter(prefix="/api/registration-reports", tags=["Registration Reports"])
 
 
 def verify_org_access(user: User, org_id: int, db: Session):

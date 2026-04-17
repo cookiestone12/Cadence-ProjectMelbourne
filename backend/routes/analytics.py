@@ -14,7 +14,7 @@ from ..models import (
 )
 from ..utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 
 
 def verify_org_access(db: Session, user_id: int, org_id: int):

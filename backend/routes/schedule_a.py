@@ -16,7 +16,7 @@ from .client_sharing import has_shared_access
 
 logger = logging.getLogger("cadence")
 
-router = APIRouter(prefix="/api/schedule-a", tags=["schedule-a"])
+router = APIRouter(prefix="/api/schedule-a", tags=["Schedule A"])
 
 
 @router.post("/upload/{org_id}")

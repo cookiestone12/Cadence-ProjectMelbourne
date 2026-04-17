@@ -9,7 +9,7 @@ from ..models import (
 )
 from ..utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/songs", tags=["checklist"])
+router = APIRouter(prefix="/api/songs", tags=["Checklist"])
 
 class ChecklistItemResponse(BaseModel):
     id: int

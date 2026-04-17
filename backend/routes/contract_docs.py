@@ -10,7 +10,7 @@ from pathlib import Path
 from ..models import get_db, Contract, ContractDocument, OrganizationMember, User, Song, Work, Release
 from ..utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/rights", tags=["contract-documents"])
+router = APIRouter(prefix="/api/rights", tags=["Contracts"])
 
 UPLOAD_DIR = Path("uploads/contract_docs")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

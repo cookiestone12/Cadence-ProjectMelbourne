@@ -10,7 +10,7 @@ from ..services import spotify_service
 
 logger = logging.getLogger("cadence")
 
-router = APIRouter(prefix="/api/spotify", tags=["spotify"])
+router = APIRouter(prefix="/api/spotify", tags=["Spotify"])
 
 
 class PlaylistImportRequest(BaseModel):

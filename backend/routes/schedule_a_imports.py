@@ -17,7 +17,7 @@ from ..services import schedule_a_storage
 
 logger = logging.getLogger("cadence")
 
-router = APIRouter(prefix="/api/schedule-a-imports", tags=["schedule-a-imports"])
+router = APIRouter(prefix="/api/schedule-a-imports", tags=["Schedule A"])
 
 
 class ScheduleAImportSummary(BaseModel):

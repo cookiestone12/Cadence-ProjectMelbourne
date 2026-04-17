@@ -6,7 +6,7 @@ from datetime import datetime
 from ..models import get_db, SongValuationSnapshot, Song, OrganizationMember, User
 from ..utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/songs", tags=["valuations"])
+router = APIRouter(prefix="/api/songs", tags=["Valuations"])
 
 class ValuationResponse(BaseModel):
     id: int

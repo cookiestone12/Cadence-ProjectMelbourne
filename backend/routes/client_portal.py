@@ -11,7 +11,7 @@ from ..models import (
 )
 from ..utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/client-portal", tags=["client-portal"])
+router = APIRouter(prefix="/api/client-portal", tags=["Client Portal"])
 
 
 def get_client_context(db: Session, current_user: User):

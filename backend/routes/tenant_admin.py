@@ -9,7 +9,7 @@ import base64
 from ..models import get_db, User, Organization, OrganizationMember, Creator
 from ..utils.auth import get_current_user, get_password_hash
 
-router = APIRouter(prefix="/api/tenant-admin", tags=["tenant-admin"])
+router = APIRouter(prefix="/api/tenant-admin", tags=["Tenant Admin"])
 
 
 def get_org_admin(db: Session, current_user: User):

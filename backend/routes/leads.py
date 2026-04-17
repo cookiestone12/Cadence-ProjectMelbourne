@@ -15,8 +15,8 @@ from ..utils.auth import get_current_super_admin
 
 logger = logging.getLogger("cadence")
 
-router = APIRouter(prefix="/api/public", tags=["leads"])
-admin_router = APIRouter(prefix="/api/admin", tags=["admin-leads"])
+router = APIRouter(prefix="/api/public", tags=["Public Leads"])
+admin_router = APIRouter(prefix="/api/admin", tags=["Public Leads"])
 
 
 class WaitlistRequest(BaseModel):

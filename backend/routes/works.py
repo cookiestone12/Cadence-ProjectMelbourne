@@ -10,7 +10,7 @@ from ..utils.auth import get_current_user
 
 logger = logging.getLogger("cadence")
 
-router = APIRouter(prefix="/api/works", tags=["works"])
+router = APIRouter(prefix="/api/works", tags=["Works"])
 
 
 class WorkCreate(BaseModel):
@@ -69,7 +69,7 @@ def verify_org_access(user: User, org_id: int, db: Session):
     return membership
 
 
-@router.get("/org/{org_id}")
+@router.get("/org/{org_id}", summary="List works in an organization", description="Returns the org's compositions (Works) with optional text search.")
 def list_works(
     org_id: int,
     search: Optional[str] = None,
@@ -125,7 +125,7 @@ def list_works(
     return {"works": results, "total": total}
 
 
-@router.get("/{work_id}")
+@router.get("/{work_id}", summary="Get work detail", description="Returns the work, its tracks, credit splits, and approval status.")
 def get_work(work_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -178,7 +178,7 @@ def get_work(work_id: int, db: Session = Depends(get_db), current_user: User = D
     }
 
 
-@router.post("/org/{org_id}")
+@router.post("/org/{org_id}", summary="Create a work", description="Creates a new composition (Work). Defaults to PENDING approval.")
 def create_work(org_id: int, data: WorkCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(current_user, org_id, db)
 
@@ -212,7 +212,7 @@ def create_work(org_id: int, data: WorkCreate, db: Session = Depends(get_db), cu
     return {"id": work.id, "title": work.title, "message": "Work created successfully"}
 
 
-@router.put("/{work_id}")
+@router.put("/{work_id}", summary="Update work", description="Patches work fields. Mutating an APPROVED work generates an audit row.")
 def update_work(work_id: int, data: WorkUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -227,7 +227,7 @@ def update_work(work_id: int, data: WorkUpdate, db: Session = Depends(get_db), c
     return {"id": work.id, "title": work.title, "message": "Work updated successfully"}
 
 
-@router.delete("/{work_id}")
+@router.delete("/{work_id}", summary="Delete work", description="Removes the work and its associated track / credit links.")
 def delete_work(work_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -413,7 +413,7 @@ def _is_work_admin(db: Session, current_user: User, work: Work) -> bool:
     return False
 
 
-@router.post("/{work_id}/approve")
+@router.post("/{work_id}/approve", summary="Approve a work", description="Owner/Admin marks a PENDING work APPROVED and clears the related action item.")
 def approve_work(work_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -442,7 +442,7 @@ def approve_work(work_id: int, db: Session = Depends(get_db), current_user: User
     return {"message": "Work approved successfully", "id": work.id, "status": "APPROVED"}
 
 
-@router.post("/{work_id}/reject")
+@router.post("/{work_id}/reject", summary="Reject a work", description="Owner/Admin rejects a PENDING work with a reason; notifies the submitter.")
 def reject_work(work_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:

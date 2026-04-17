@@ -15,7 +15,7 @@ from ..services.underwriting_engine import run_underwriting
 from ..services.underwriting_controls import run_reconciliation_controls
 import json
 
-router = APIRouter(prefix="/api/valuation", tags=["valuation_reports"])
+router = APIRouter(prefix="/api/valuation", tags=["Valuations"])
 
 class SongValuationDetail(BaseModel):
     song_id: int

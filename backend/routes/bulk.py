@@ -9,7 +9,7 @@ from ..models import (
 )
 from ..utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/bulk", tags=["bulk"])
+router = APIRouter(prefix="/api/bulk", tags=["Bulk Operations"])
 
 
 class BulkSongUpdate(BaseModel):

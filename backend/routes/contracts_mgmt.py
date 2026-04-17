@@ -17,7 +17,7 @@ import logging
 
 logger = logging.getLogger("cadence")
 
-router = APIRouter(prefix="/api/rights", tags=["rights-management"])
+router = APIRouter(prefix="/api/rights", tags=["Rights Management"])
 
 
 def _sync_song_pub_percentage(db: Session, song_id: int):

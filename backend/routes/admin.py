@@ -14,12 +14,12 @@ from ..utils.auth import get_current_super_admin, get_password_hash
 logger = logging.getLogger("cadence")
 
 
-router = APIRouter(prefix="/api/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["Master Admin"])
 
 # Separate router for /api/internal/* — staff/master-admin only
 # operational endpoints. Mounted via the same include in main.py
 # (see bottom of this file: `internal_router`).
-internal_router = APIRouter(prefix="/api/internal", tags=["internal"])
+internal_router = APIRouter(prefix="/api/internal", tags=["Master Admin"])
 
 class CreateUserRequest(BaseModel):
     username: str

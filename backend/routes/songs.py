@@ -45,7 +45,7 @@ def _cleanup_song_dependencies(db: Session, song_ids: list):
     db.execute(text("DELETE FROM work_tracks WHERE song_id = ANY(:ids)"), {"ids": id_list})
     db.execute(text("DELETE FROM release_tracks WHERE song_id = ANY(:ids)"), {"ids": id_list})
 
-router = APIRouter(prefix="/api/songs", tags=["songs"])
+router = APIRouter(prefix="/api/songs", tags=["Songs"])
 
 class SongResponse(BaseModel):
     id: int
@@ -302,7 +302,7 @@ class SongUpdateRequest(BaseModel):
                 return False
         return v
 
-@router.get("/org/{org_id}", response_model=List[SongResponse])
+@router.get("/org/{org_id}", response_model=List[SongResponse], summary="List songs in an organization", description="Returns the org's songs. Supports text search, release-status filter, type filter, and pagination.")
 def get_organization_songs(
     org_id: int,
     db: Session = Depends(get_db),
@@ -528,7 +528,7 @@ def _get_also_represented(db: Session, song) -> list:
     return result
 
 
-@router.get("/{song_id}/history")
+@router.get("/{song_id}/history", summary="Get song edit history", description="Returns the full audit trail of field-level changes on a song with user attribution and timestamps.")
 def get_song_history(
     song_id: int,
     limit: int = Query(100, le=500),
@@ -693,7 +693,7 @@ def export_song_history_pdf(
         raise HTTPException(status_code=500, detail="PDF generation not available")
 
 
-@router.get("/{song_id}", response_model=SongDetailResponse)
+@router.get("/{song_id}", response_model=SongDetailResponse, summary="Get song detail", description="Returns the full song record, including credits, splits, contracts, releases, and health score.")
 def get_song(
     song_id: int,
     db: Session = Depends(get_db),
@@ -883,7 +883,7 @@ def get_song_streaming(
 class BulkDeleteRequest(BaseModel):
     song_ids: List[int]
 
-@router.post("/bulk-delete")
+@router.post("/bulk-delete", summary="Bulk delete songs", description="Deletes multiple songs in a single transaction. Only songs the caller's organization owns are removed.")
 def bulk_delete_songs(
     request: BulkDeleteRequest,
     db: Session = Depends(get_db),
@@ -923,7 +923,7 @@ def bulk_delete_songs(
         logging.getLogger("cadence").error(f"Failed to delete songs {request.song_ids}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete songs: {str(e)}")
 
-@router.delete("/{song_id}")
+@router.delete("/{song_id}", summary="Delete song", description="Permanently removes the song. Linked credits, splits, and contract assets are cleaned up.")
 def delete_song(
     song_id: int,
     db: Session = Depends(get_db),
@@ -1030,7 +1030,7 @@ def find_duplicates(
     
     return {"groups": duplicate_groups, "total_groups": len(duplicate_groups)}
 
-@router.post("/org/{org_id}", response_model=SongResponse)
+@router.post("/org/{org_id}", response_model=SongResponse, summary="Create a song", description="Adds a new song to the catalog. Creator credits can be supplied at creation; missing creators are auto-created.")
 def create_song(
     org_id: int,
     request: SongCreateRequest,
@@ -1107,7 +1107,7 @@ def create_song(
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to create song. Please try again.")
 
-@router.patch("/{song_id}", response_model=SongResponse)
+@router.patch("/{song_id}", response_model=SongResponse, summary="Update song", description="Patches song metadata (title, ISRC, ISWC, release_status, etc.). Edit history captures every field change.")
 async def update_song(
     song_id: int,
     request: SongUpdateRequest,
@@ -1403,7 +1403,7 @@ def merge_songs(
         "merged_count": len(merge_ids),
     }
 
-@router.post("/{song_id}/duplicate")
+@router.post("/{song_id}/duplicate", summary="Duplicate a song", description="Creates a duplicate entry that links back to the original via parent_song_id.")
 def duplicate_song(
     song_id: int,
     db: Session = Depends(get_db),
@@ -1519,7 +1519,7 @@ def ungroup_song(
     return {"msg": "Song removed from group"}
 
 
-@router.post("/{song_id}/mark-released")
+@router.post("/{song_id}/mark-released", summary="Mark song as released", description="Flips release_status to RELEASED and stamps the release date.")
 def mark_song_released(
     song_id: int,
     db: Session = Depends(get_db),

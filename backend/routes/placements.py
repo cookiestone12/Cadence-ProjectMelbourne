@@ -10,7 +10,7 @@ import os
 from ..models import get_db, Placement, Song, Work, Contract, OrganizationMember, User, Release, ReleaseTrack, Creator, SongCredit, WorkCredit
 from ..utils.auth import get_current_user
 
-router = APIRouter(prefix="/api/placements", tags=["placements"])
+router = APIRouter(prefix="/api/placements", tags=["Placements"])
 
 PLACEMENT_TYPES = ["SYNC", "ADVERTISING", "FILM", "TV", "GAMING", "TRAILER", "OTHER"]
 PLACEMENT_STATUSES = ["PITCHED", "IN_REVIEW", "IN_NEGOTIATION", "SECURED", "DELIVERED", "AIRED", "PAID", "DECLINED", "CANCELLED"]
@@ -301,7 +301,7 @@ def placements_to_dicts(placements: List[Placement], db: Session) -> List[dict]:
     return result
 
 
-@router.get("/org/{org_id}")
+@router.get("/org/{org_id}", summary="List sync placements", description="Returns the org's sync licensing pipeline (PITCHED → APPROVED → CONFIRMED → INVOICED → PAID).")
 def get_placements(
     org_id: int,
     status: Optional[str] = None,
@@ -420,7 +420,7 @@ def search_releases(
     return [{"id": r.id, "title": r.title, "primary_artist": r.primary_artist, "upc": r.upc} for r in releases]
 
 
-@router.get("/{placement_id}")
+@router.get("/{placement_id}", summary="Get placement detail", description="Returns full placement data including financials, project metadata, and linked song(s).")
 def get_placement(
     placement_id: int,
     db: Session = Depends(get_db),
@@ -435,7 +435,7 @@ def get_placement(
     return placement_to_dict(placement, db)
 
 
-@router.post("/org/{org_id}")
+@router.post("/org/{org_id}", summary="Create a placement", description="Adds a new sync placement to the pipeline.")
 def create_placement(
     org_id: int,
     data: PlacementCreate,
@@ -484,7 +484,7 @@ def create_placement(
     return placement_to_dict(placement, db)
 
 
-@router.put("/{placement_id}")
+@router.put("/{placement_id}", summary="Update placement", description="Patches placement fields (project, status, fees, dates).")
 def update_placement(
     placement_id: int,
     data: PlacementUpdate,
@@ -511,7 +511,7 @@ def update_placement(
     return placement_to_dict(placement, db)
 
 
-@router.post("/{placement_id}/transition")
+@router.post("/{placement_id}/transition", summary="Transition placement status", description="Moves a placement to the next pipeline status with validation; emits notifications.")
 def transition_placement(
     placement_id: int,
     target_status: str,
@@ -591,7 +591,7 @@ def transition_placement(
     return placement_to_dict(placement, db)
 
 
-@router.delete("/{placement_id}")
+@router.delete("/{placement_id}", summary="Delete placement", description="Permanently removes a placement record.")
 def delete_placement(
     placement_id: int,
     db: Session = Depends(get_db),
@@ -627,7 +627,7 @@ def list_placement_clients(
     return [c[0] for c in clients]
 
 
-@router.get("/org/{org_id}/sync-report")
+@router.get("/org/{org_id}/sync-report", summary="Sync placement report", description="Aggregated, branded sync report for the organization. Supports CSV / PDF export downstream.")
 def generate_sync_report(
     org_id: int,
     client_name: Optional[str] = None,
