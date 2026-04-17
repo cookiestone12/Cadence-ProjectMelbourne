@@ -911,9 +911,22 @@ def parse_document_unified(
                 return _result_from_ai(ai_payload, "ai_text_pdf")
 
         # 4. AI vision fallback for scanned / image-only PDFs
-        images = render_pdf_pages_to_png(content)
+        render_cap = 60
+        images = render_pdf_pages_to_png(content, max_pages=render_cap)
         if images:
             payload = ai_vision(images, org_id=org_id)
+            try:
+                import pdfplumber
+                with pdfplumber.open(BytesIO(content)) as _pdf:
+                    total_pdf_pages = len(_pdf.pages)
+            except Exception:
+                total_pdf_pages = len(images)
+            if total_pdf_pages > len(images):
+                payload.setdefault("warnings", []).insert(
+                    0,
+                    f"⚠ Truncation: PDF has {total_pdf_pages} pages but only the first "
+                    f"{len(images)} were rendered for vision extraction.",
+                )
             return _result_from_ai(payload, "ai_vision_pdf")
 
         result = DocumentParseResult()

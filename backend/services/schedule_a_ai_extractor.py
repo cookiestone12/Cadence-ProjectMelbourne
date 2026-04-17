@@ -254,19 +254,77 @@ def _parse_response(text: str) -> Dict[str, Any]:
     return json.loads(s)
 
 
-def extract_from_text(text: str, org_id: Optional[int] = None) -> Dict[str, Any]:
-    """Run the AI extractor against raw text input."""
-    if not text or not text.strip():
-        return {"rows": [], "header": {}, "method": "ai_text", "warnings": ["No text supplied"]}
+_TEXT_CHUNK_SIZE = 15000
+_TEXT_CHUNK_OVERLAP = 400
+_MAX_TEXT_CHUNKS = 12
 
-    truncated = text[:18000]
+
+def _chunk_text(text: str, chunk_size: int = _TEXT_CHUNK_SIZE,
+                overlap: int = _TEXT_CHUNK_OVERLAP) -> List[str]:
+    """Split text into overlapping chunks, preferring line breaks for cuts."""
+    if len(text) <= chunk_size:
+        return [text]
+    chunks: List[str] = []
+    start = 0
+    n = len(text)
+    while start < n:
+        end = min(start + chunk_size, n)
+        if end < n:
+            nl = text.rfind("\n", start + chunk_size // 2, end)
+            if nl != -1 and nl > start:
+                end = nl
+        chunks.append(text[start:end])
+        if end >= n:
+            break
+        start = max(end - overlap, start + 1)
+    return chunks
+
+
+def _row_dedupe_key(row: Dict[str, Any]) -> tuple:
+    """Stable key for deduplicating rows across chunks/batches."""
+    isrc = (row.get("isrc") or "").strip().upper()
+    if isrc:
+        return ("isrc", isrc)
+    iswc = (row.get("iswc") or "").strip().upper()
+    if iswc:
+        return ("iswc", iswc)
+    title = (row.get("title") or "").strip().lower()
+    artist = (row.get("primary_artist") or "").strip().lower()
+    return ("title", title, artist)
+
+
+def _merge_rows(existing: List[Dict[str, Any]],
+                new_rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Append rows that aren't already present (by dedupe key)."""
+    seen = {_row_dedupe_key(r) for r in existing}
+    for r in new_rows:
+        key = _row_dedupe_key(r)
+        if key in seen:
+            continue
+        seen.add(key)
+        existing.append(r)
+    return existing
+
+
+def _merge_header(base: Dict[str, Any], extra: Dict[str, Any]) -> Dict[str, Any]:
+    """Prefer non-empty values from base; backfill from extra."""
+    out = dict(base or {})
+    for k, v in (extra or {}).items():
+        if v in (None, "") or out.get(k):
+            continue
+        out[k] = v
+    return out
+
+
+def _ai_text_call(text: str, org_id: Optional[int]) -> Dict[str, Any]:
+    """Single AI text call. Returns {rows, header, error}."""
     try:
         client = _client()
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": f"DOCUMENT TEXT:\n---\n{truncated}\n---"},
+                {"role": "user", "content": f"DOCUMENT TEXT:\n---\n{text}\n---"},
             ],
             response_format={"type": "json_object"},
             temperature=0.1,
@@ -274,18 +332,68 @@ def extract_from_text(text: str, org_id: Optional[int] = None) -> Dict[str, Any]
         )
         _log_usage(response.usage, "schedule_a_ai_text", org_id)
         body = response.choices[0].message.content or "{}"
-        data = _parse_response(body)
+        return {"data": _parse_response(body), "error": None}
     except Exception as e:
         logger.error(f"AI text extraction failed: {e}")
-        return {"rows": [], "header": {}, "method": "ai_text", "warnings": [f"AI extraction failed: {e}"]}
+        return {"data": {}, "error": str(e)}
 
-    raw_rows = data.get("rows") or []
-    rows = [r for r in (_normalize_row(r) for r in raw_rows) if r]
+
+def extract_from_text(text: str, org_id: Optional[int] = None) -> Dict[str, Any]:
+    """Run the AI extractor against raw text input.
+
+    Long inputs are split into overlapping chunks, extracted in pieces, and
+    merged with deduplication so large catalogs are not silently truncated.
+    """
+    if not text or not text.strip():
+        return {"rows": [], "header": {}, "method": "ai_text", "warnings": ["No text supplied"]}
+
+    chunks = _chunk_text(text)
+    warnings: List[str] = []
+    capped = False
+    if len(chunks) > _MAX_TEXT_CHUNKS:
+        capped = True
+        chunks = chunks[:_MAX_TEXT_CHUNKS]
+
+    if len(chunks) > 1:
+        warnings.append(
+            f"Long document: {len(text):,} characters processed in "
+            f"{len(chunks)} chunk(s) and merged."
+        )
+    if capped:
+        warnings.append(
+            f"⚠ Truncated: document exceeded the {_MAX_TEXT_CHUNKS}-chunk safety cap; "
+            "only the first portion was extracted. Some rows may be missing."
+        )
+
+    merged_rows: List[Dict[str, Any]] = []
+    merged_header: Dict[str, Any] = {}
+    failures = 0
+
+    for idx, chunk in enumerate(chunks):
+        result = _ai_text_call(chunk, org_id)
+        if result["error"]:
+            failures += 1
+            warnings.append(f"Chunk {idx + 1}/{len(chunks)} failed: {result['error']}")
+            continue
+        data = result["data"] or {}
+        merged_header = _merge_header(merged_header, data.get("header") or {})
+        raw_rows = data.get("rows") or []
+        norm = [r for r in (_normalize_row(r) for r in raw_rows) if r]
+        _merge_rows(merged_rows, norm)
+
+    if failures and not merged_rows:
+        return {
+            "rows": [],
+            "header": merged_header,
+            "method": "ai_text",
+            "warnings": warnings or [f"AI extraction failed across {failures} chunk(s)"],
+        }
+
     return {
-        "rows": rows,
-        "header": data.get("header") or {},
+        "rows": merged_rows,
+        "header": merged_header,
         "method": "ai_text",
-        "warnings": [],
+        "warnings": warnings,
     }
 
 
@@ -308,11 +416,17 @@ def _sniff_mime(data: bytes) -> str:
     return "image/png"
 
 
-def _images_to_payload(images: List[bytes]) -> List[Dict[str, Any]]:
-    payload: List[Dict[str, Any]] = [
-        {"type": "text", "text": "Extract all songs from these Schedule A pages."}
-    ]
-    for img in images[:6]:
+_VISION_BATCH_SIZE = 4
+_MAX_VISION_BATCHES = 15
+
+
+def _images_to_payload(images: List[bytes], page_offset: int = 0) -> List[Dict[str, Any]]:
+    label = (
+        f"Extract every song from these Schedule A pages "
+        f"(pages {page_offset + 1}-{page_offset + len(images)})."
+    )
+    payload: List[Dict[str, Any]] = [{"type": "text", "text": label}]
+    for img in images:
         b64 = base64.b64encode(img).decode("ascii")
         mime = _sniff_mime(img)
         payload.append(
@@ -324,18 +438,16 @@ def _images_to_payload(images: List[bytes]) -> List[Dict[str, Any]]:
     return payload
 
 
-def extract_from_images(images: List[bytes], org_id: Optional[int] = None) -> Dict[str, Any]:
-    """Run the AI extractor against one or more page images (vision OCR)."""
-    if not images:
-        return {"rows": [], "header": {}, "method": "ai_vision", "warnings": ["No image data"]}
-
+def _ai_vision_call(images: List[bytes], page_offset: int,
+                    org_id: Optional[int]) -> Dict[str, Any]:
+    """Single vision call over a small batch of page images."""
     try:
         client = _client()
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": _images_to_payload(images)},
+                {"role": "user", "content": _images_to_payload(images, page_offset)},
             ],
             response_format={"type": "json_object"},
             temperature=0.1,
@@ -343,22 +455,78 @@ def extract_from_images(images: List[bytes], org_id: Optional[int] = None) -> Di
         )
         _log_usage(response.usage, "schedule_a_ai_vision", org_id)
         body = response.choices[0].message.content or "{}"
-        data = _parse_response(body)
+        return {"data": _parse_response(body), "error": None}
     except Exception as e:
         logger.error(f"AI vision extraction failed: {e}")
-        return {"rows": [], "header": {}, "method": "ai_vision", "warnings": [f"AI vision failed: {e}"]}
+        return {"data": {}, "error": str(e)}
 
-    raw_rows = data.get("rows") or []
-    rows = [r for r in (_normalize_row(r) for r in raw_rows) if r]
+
+def extract_from_images(images: List[bytes], org_id: Optional[int] = None) -> Dict[str, Any]:
+    """Run the AI extractor against one or more page images (vision OCR).
+
+    Long page lists are processed in batches and merged with deduplication
+    so multi-page scanned PDFs are not silently truncated at the first batch.
+    """
+    if not images:
+        return {"rows": [], "header": {}, "method": "ai_vision", "warnings": ["No image data"]}
+
+    warnings: List[str] = []
+    total_pages = len(images)
+    capped_pages = _VISION_BATCH_SIZE * _MAX_VISION_BATCHES
+    images_to_process = images
+    if total_pages > capped_pages:
+        warnings.append(
+            f"⚠ Truncated: document has {total_pages} pages; only the first "
+            f"{capped_pages} were sent to the vision extractor. Some rows may be missing."
+        )
+        images_to_process = images[:capped_pages]
+
+    batches = [
+        images_to_process[i:i + _VISION_BATCH_SIZE]
+        for i in range(0, len(images_to_process), _VISION_BATCH_SIZE)
+    ]
+
+    if len(batches) > 1:
+        warnings.append(
+            f"Long document: {len(images_to_process)} pages processed in "
+            f"{len(batches)} vision batch(es) and merged."
+        )
+
+    merged_rows: List[Dict[str, Any]] = []
+    merged_header: Dict[str, Any] = {}
+    failures = 0
+    for bidx, batch in enumerate(batches):
+        offset = bidx * _VISION_BATCH_SIZE
+        result = _ai_vision_call(batch, offset, org_id)
+        if result["error"]:
+            failures += 1
+            warnings.append(
+                f"Vision batch {bidx + 1}/{len(batches)} failed: {result['error']}"
+            )
+            continue
+        data = result["data"] or {}
+        merged_header = _merge_header(merged_header, data.get("header") or {})
+        raw_rows = data.get("rows") or []
+        norm = [r for r in (_normalize_row(r) for r in raw_rows) if r]
+        _merge_rows(merged_rows, norm)
+
+    if failures and not merged_rows:
+        return {
+            "rows": [],
+            "header": merged_header,
+            "method": "ai_vision",
+            "warnings": warnings or [f"AI vision failed across {failures} batch(es)"],
+        }
+
     return {
-        "rows": rows,
-        "header": data.get("header") or {},
+        "rows": merged_rows,
+        "header": merged_header,
         "method": "ai_vision",
-        "warnings": [],
+        "warnings": warnings,
     }
 
 
-def render_pdf_pages_to_png(content: bytes, max_pages: int = 6) -> List[bytes]:
+def render_pdf_pages_to_png(content: bytes, max_pages: Optional[int] = 60) -> List[bytes]:
     """Render PDF pages to PNG bytes for vision extraction.
 
     Uses pdfplumber (which uses pdfminer + Wand/PIL fallbacks) when available.
@@ -371,7 +539,8 @@ def render_pdf_pages_to_png(content: bytes, max_pages: int = 6) -> List[bytes]:
     images: List[bytes] = []
     try:
         with pdfplumber.open(BytesIO(content)) as pdf:
-            for page in pdf.pages[:max_pages]:
+            pages = pdf.pages if max_pages is None else pdf.pages[:max_pages]
+            for page in pages:
                 try:
                     img = page.to_image(resolution=150)
                     buf = BytesIO()

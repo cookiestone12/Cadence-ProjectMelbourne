@@ -561,13 +561,37 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                 </div>
               )}
               
-              {previewData.warnings?.length > 0 && (
-                <div className="mb-3 space-y-1">
-                  {previewData.warnings.map((w, i) => (
-                    <p key={i} className="text-xs text-[#5A8A6A]">{w}</p>
-                  ))}
-                </div>
-              )}
+              {previewData.warnings?.length > 0 && (() => {
+                const isTruncation = (w) =>
+                  typeof w === 'string' && (w.includes('⚠') || /^Truncated:/i.test(w));
+                const truncationWarnings = previewData.warnings.filter(isTruncation);
+                const otherWarnings = previewData.warnings.filter((w) => !isTruncation(w));
+                return (
+                  <>
+                    {truncationWarnings.length > 0 && (
+                      <div className="mb-3 p-3 rounded-lg border border-[#E0B05C] bg-[rgba(224,176,92,0.12)]">
+                        <p className="text-xs font-semibold text-[#7A5A1A] mb-1">
+                          Heads up — large document
+                        </p>
+                        {truncationWarnings.map((w, i) => (
+                          <p key={i} className="text-xs text-[#7A5A1A]">{w}</p>
+                        ))}
+                        <p className="text-xs text-[#7A5A1A] mt-1 italic">
+                          Review the rows below carefully and confirm nothing is missing
+                          before importing.
+                        </p>
+                      </div>
+                    )}
+                    {otherWarnings.length > 0 && (
+                      <div className="mb-3 space-y-1">
+                        {otherWarnings.map((w, i) => (
+                          <p key={i} className="text-xs text-[#5A8A6A]">{w}</p>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {extractionMethod && (
                 <div className="mb-3 flex items-center gap-2 text-xs text-[#5A7A6A]">
