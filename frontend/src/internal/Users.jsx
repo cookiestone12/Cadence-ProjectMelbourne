@@ -80,6 +80,7 @@ export default function Users() {
                 <th className="px-3 py-2">User</th>
                 <th className="px-3 py-2">Email</th>
                 <th className="px-3 py-2">Roles</th>
+                <th className="px-3 py-2">Org memberships</th>
                 <th className="px-3 py-2">Last login</th>
                 <th className="px-3 py-2"></th>
               </tr>
@@ -94,6 +95,20 @@ export default function Users() {
                     {u.is_cadence_staff && <span className="mr-1 px-1.5 py-0.5 bg-sky-100 text-sky-800 rounded">Staff</span>}
                     {u.is_admin && <span className="mr-1 px-1.5 py-0.5 bg-violet-100 text-violet-800 rounded">Admin</span>}
                     {!u.is_active && <span className="px-1.5 py-0.5 bg-red-100 text-red-700 rounded">Disabled</span>}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    {(u.organizations || []).length === 0 ? (
+                      <span className="text-slate-400">—</span>
+                    ) : (
+                      <ul className="space-y-0.5">
+                        {u.organizations.map((o) => (
+                          <li key={`${u.id}-${o.id}`}>
+                            <span className="font-medium">{o.name}</span>
+                            <span className="text-slate-500"> · {o.role}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-xs">{u.last_login_at?.slice(0, 16) || '—'}</td>
                   <td className="px-3 py-2 text-xs space-x-2">

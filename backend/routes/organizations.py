@@ -181,12 +181,14 @@ def get_access_code(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id,
-        OrganizationMember.organization_id == org_id
-    ).first()
-    if not membership or membership.role not in ("OWNER", "ADMIN"):
-        raise HTTPException(status_code=403, detail="Only admins can view the access code")
+    is_staff = current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False)
+    if not is_staff:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == org_id
+        ).first()
+        if not membership or membership.role not in ("OWNER", "ADMIN"):
+            raise HTTPException(status_code=403, detail="Only admins can view the access code")
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
@@ -200,18 +202,61 @@ def get_access_code(
     return {"access_code": org.access_code}
 
 
+class _AccessCodeSetRequest(BaseModel):
+    access_code: str
+
+
+@router.post(
+    "/{org_id}/access-code",
+    summary="Set the org's join access code to a custom value",
+    description="Sets the organization's join code to the supplied value. Owner/admin "
+                "of the org OR Cadence staff/master admin.",
+)
+def set_access_code(
+    org_id: int,
+    payload: _AccessCodeSetRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    is_staff = current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False)
+    if not is_staff:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == org_id
+        ).first()
+        if not membership or membership.role not in ("OWNER", "ADMIN"):
+            raise HTTPException(status_code=403, detail="Only admins can set the access code")
+    code = (payload.access_code or "").strip().upper()
+    if len(code) < 4 or len(code) > 32 or not code.isalnum():
+        raise HTTPException(status_code=400, detail="Access code must be 4-32 alphanumeric chars")
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    clash = db.query(Organization).filter(
+        Organization.access_code == code, Organization.id != org_id
+    ).first()
+    if clash:
+        raise HTTPException(status_code=409, detail="Access code already in use")
+    org.access_code = code
+    db.commit()
+    db.refresh(org)
+    return {"access_code": org.access_code}
+
+
 @router.post("/{org_id}/regenerate-access-code", summary="Regenerate the org access code", description="Rotates the organization's join code, invalidating the previous one. Owner/admin only.")
 def regenerate_access_code(
     org_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id,
-        OrganizationMember.organization_id == org_id
-    ).first()
-    if not membership or membership.role not in ("OWNER", "ADMIN"):
-        raise HTTPException(status_code=403, detail="Only admins can regenerate the access code")
+    is_staff = current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False)
+    if not is_staff:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == org_id
+        ).first()
+        if not membership or membership.role not in ("OWNER", "ADMIN"):
+            raise HTTPException(status_code=403, detail="Only admins can regenerate the access code")
     org = db.query(Organization).filter(Organization.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")

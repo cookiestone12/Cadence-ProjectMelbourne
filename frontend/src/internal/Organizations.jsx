@@ -37,12 +37,14 @@ export default function Organizations() {
     setDetail(data)
   }
 
+  // Access-code actions go through the existing org endpoints
+  // (/api/organizations/{id}/access-code, .../regenerate-access-code)
+  // which were extended to allow Cadence staff in addition to
+  // OWNER/ADMIN members. Same for org create — POST /api/organizations.
   const fetchAccessCode = async () => {
     if (!selected) return
     try {
-      const { data } = await internal.get(
-        `/api/internal/portal/organizations/${selected}/access-code`
-      )
+      const { data } = await internal.get(`/api/organizations/${selected}/access-code`)
       setAccessCode(data.access_code)
     } catch (e) {
       alert(e?.response?.data?.detail || 'Failed to fetch access code')
@@ -55,8 +57,7 @@ export default function Organizations() {
     if (!v) return
     try {
       const { data } = await internal.post(
-        `/api/internal/portal/organizations/${selected}/access-code`,
-        { access_code: v }
+        `/api/organizations/${selected}/access-code`, { access_code: v }
       )
       setAccessCode(data.access_code)
     } catch (e) {
@@ -69,8 +70,7 @@ export default function Organizations() {
     if (!window.confirm('Rotate to a new random access code? The old code will stop working.')) return
     try {
       const { data } = await internal.post(
-        `/api/internal/portal/organizations/${selected}/access-code`,
-        {}
+        `/api/organizations/${selected}/regenerate-access-code`
       )
       setAccessCode(data.access_code)
     } catch (e) {
@@ -83,8 +83,8 @@ export default function Organizations() {
     if (!name) return
     const orgType = window.prompt('Type (MANAGER, LABEL, PUBLISHER):', 'MANAGER') || 'MANAGER'
     try {
-      await internal.post('/api/internal/portal/onboarding/organization', {
-        name, type: orgType,
+      await internal.post('/api/organizations/', {
+        name, type: orgType.toLowerCase(),
       })
       load()
     } catch (e) {

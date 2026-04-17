@@ -71,6 +71,7 @@ export default function Dashboard() {
             <thead className="bg-slate-100 text-left">
               <tr>
                 <th className="px-3 py-2">Job</th>
+                <th className="px-3 py-2">Last run</th>
                 <th className="px-3 py-2">Next run</th>
               </tr>
             </thead>
@@ -78,7 +79,8 @@ export default function Dashboard() {
               {data.scheduler_jobs.map((j) => (
                 <tr key={j.id} className="border-t border-slate-200">
                   <td className="px-3 py-2 font-mono text-xs">{j.name}</td>
-                  <td className="px-3 py-2">{j.next_run_time || '—'}</td>
+                  <td className="px-3 py-2 text-xs">{j.last_run_time || '—'}</td>
+                  <td className="px-3 py-2 text-xs">{j.next_run_time || '—'}</td>
                 </tr>
               ))}
             </tbody>

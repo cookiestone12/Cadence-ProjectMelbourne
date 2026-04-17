@@ -639,11 +639,12 @@ def cookie_login(
         ))
         db.commit()
 
-    # Scope cookie to the API paths the SPA actually calls
-    # (/api/internal/portal/* and /api/internal/*). The /internal SPA
-    # shell is purely client-side React Router and never reads the
-    # cookie itself, so we don't need it on path=/. Narrowing the path
-    # reduces the cookie's exposure surface across other app routes.
+    # Scope cookie to /api so the portal can also call existing
+    # tenant endpoints (e.g. POST /api/organizations,
+    # /api/organizations/{id}/access-code) reusing the same staff
+    # session. The /internal React shell never reads the cookie
+    # itself (httpOnly), and /api scoping keeps it off public/
+    # marketing routes served from /.
     response.set_cookie(
         key="cadence_internal_token",
         value=token,
@@ -651,7 +652,7 @@ def cookie_login(
         httponly=True,
         secure=os.getenv("APP_ENV", "development").lower() == "production",
         samesite="lax",
-        path="/api/internal",
+        path="/api",
     )
     return {
         "token_type": "cookie",
@@ -685,7 +686,7 @@ def cookie_logout(
             sess.is_revoked = True
             sess.revoked_at = datetime.utcnow()
             db.commit()
-    response.delete_cookie(key="cadence_internal_token", path="/api/internal")
+    response.delete_cookie(key="cadence_internal_token", path="/api")
     return {"ok": True}
 
 

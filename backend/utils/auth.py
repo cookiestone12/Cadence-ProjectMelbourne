@@ -57,9 +57,12 @@ def verify_token(token: str) -> Optional[str]:
         return None
     return username
 
+_optional_bearer = HTTPBearer(auto_error=False)
+
+
 def get_current_user(
     request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_bearer),
     db: Session = Depends(get_db),
 ):
     # Per-request cache so multiple Depends(get_current_user) usages
@@ -74,7 +77,16 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    token = credentials.credentials
+    # Accept either a Bearer header (apps, mobile, smoke tests) or
+    # the internal portal's httpOnly cookie. The cookie is scoped to
+    # /api so it covers tenant endpoints reused by the staff portal.
+    token: Optional[str] = None
+    if credentials and credentials.credentials:
+        token = credentials.credentials
+    if not token:
+        token = request.cookies.get("cadence_internal_token")
+    if not token:
+        raise credentials_exception
     payload = decode_access_token(token)
 
     if payload is None:
