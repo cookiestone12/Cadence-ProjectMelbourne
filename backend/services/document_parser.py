@@ -256,6 +256,7 @@ def extract_tabular_rows_from_pdf(content: bytes) -> Optional[Dict[str, Any]]:
     all_rows: List[Dict[str, str]] = []
     header_text_lines: List[str] = []
     found_header = False
+    page_columns: Optional[List[Tuple[str, float, float]]] = None
 
     with pdfplumber.open(BytesIO(content)) as pdf:
         for page in pdf.pages:
@@ -266,7 +267,6 @@ def extract_tabular_rows_from_pdf(content: bytes) -> Optional[Dict[str, Any]]:
             if not words:
                 continue
             lines = _group_words_into_lines(words)
-            page_columns: Optional[List[Tuple[str, float, float]]] = None
 
             for line_words in lines:
                 line_text = " ".join(w["text"] for w in line_words)
