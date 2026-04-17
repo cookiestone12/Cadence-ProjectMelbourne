@@ -130,6 +130,23 @@ def test_column_mapping_does_not_steal_revenue_type_for_revenue():
     assert mapping["revenue_type"] == "REVENUE TYPE", mapping
 
 
+def test_column_mapping_type_permutations():
+    """Hardening: assorted Type/Category + money column combinations
+    must always resolve revenue to the money column, not the type."""
+    from backend.routes.royalties import suggest_column_mapping
+    cases = [
+        (["Title", "Income Type", "Net Amount"], "Net Amount", "Income Type"),
+        (["Title", "Royalty Type", "Amount"], "Amount", "Royalty Type"),
+        (["Title", "Performance Type", "Royalty Amount"], "Royalty Amount", "Performance Type"),
+        (["Title", "Category", "Earnings"], "Earnings", "Category"),
+        (["Title", "Sale Type", "Total Earned"], "Total Earned", "Sale Type"),
+    ]
+    for headers, expected_revenue, expected_type in cases:
+        m = suggest_column_mapping(headers, "")
+        assert m["revenue"] == expected_revenue, (headers, m)
+        assert m["revenue_type"] == expected_type, (headers, m)
+
+
 def test_column_mapping_revenue_with_only_revenue_header():
     """Plain 'Revenue' header (no Type column) still resolves."""
     from backend.routes.royalties import suggest_column_mapping
