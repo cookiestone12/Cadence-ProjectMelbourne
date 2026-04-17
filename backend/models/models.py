@@ -2020,7 +2020,6 @@ class StorageScanResult(Base):
     __tablename__ = "storage_scan_results"
     __table_args__ = (
         Index('ix_storage_scan_results_org_id', 'org_id'),
-        Index('ix_storage_scan_results_scan_batch_id', 'scan_batch_id'),
     )
 
     id = Column(Integer, primary_key=True, index=True)

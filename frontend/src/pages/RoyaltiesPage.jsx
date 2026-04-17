@@ -33,6 +33,7 @@ import ProcessingInboxPanel from '../components/ProcessingInboxPanel'
 import StatementDetailView from '../components/StatementDetailView'
 import PayablesTab from '../components/PayablesTab'
 import RoyaltyAnalyticsDashboard from '../components/RoyaltyAnalyticsDashboard'
+import DeleteStatementDialog from '../components/DeleteStatementDialog'
 
 const TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: ChartBarIcon },
@@ -288,6 +289,7 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
   const [showUpload, setShowUpload] = useState(false)
   const [shareStatement, setShareStatement] = useState(null)
   const [selectedStatement, setSelectedStatement] = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [transactions, setTransactions] = useState([])
   const [txLoading, setTxLoading] = useState(false)
   const [uploadStep, setUploadStep] = useState(1)
@@ -413,15 +415,14 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
     }
   }
 
-  const handleDelete = async (stmtId) => {
-    if (!window.confirm('Delete this statement? This cannot be undone.')) return
-    try {
-      await axios.delete(`/api/royalties/statements/${orgId}/${stmtId}`)
-      loadStatements()
-      if (selectedStatement?.id === stmtId) setSelectedStatement(null)
-    } catch (err) {
-      console.error('Delete failed:', err)
-    }
+  const handleDelete = (stmt) => {
+    setDeleteTarget(stmt)
+  }
+
+  const handleDeleted = () => {
+    const removedId = deleteTarget?.id
+    loadStatements()
+    if (removedId && selectedStatement?.id === removedId) setSelectedStatement(null)
   }
 
   const handleManualMatch = async (txId) => {
@@ -620,7 +621,7 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                       <button onClick={() => setShareStatement(stmt)} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors" title="Share">
                         <ShareIcon className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(stmt.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                      <button onClick={() => handleDelete(stmt)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
                         <TrashIcon className="w-4 h-4" />
                       </button>
                     </div>
@@ -986,6 +987,16 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
           itemId={shareStatement.id}
           itemName={`${shareStatement.source_name || 'Statement'} (${formatDate(shareStatement.period_start)} — ${formatDate(shareStatement.period_end)})`}
           onClose={() => setShareStatement(null)}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteStatementDialog
+          orgId={orgId}
+          statementId={deleteTarget.id}
+          statementName={deleteTarget.source_name}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={handleDeleted}
         />
       )}
     </div>
@@ -2116,6 +2127,7 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
   const [statements, setStatements] = useState([])
   const [statementsLoading, setStatementsLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [uploadForm, setUploadForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD', creator_id: selectedCreatorId || '' })
@@ -2289,12 +2301,14 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
             {filteredStatements.slice(0, 20).map(stmt => {
               const colors = STATEMENT_STATUS_COLORS[stmt.status] || { bg: 'bg-gray-100', text: 'text-gray-700' }
               return (
-                <button
+                <div
                   key={stmt.id}
-                  onClick={() => setSelectedStatementId(stmt.id)}
-                  className="w-full text-left px-6 py-4 hover:bg-[rgba(91,138,114,0.04)] transition-colors flex items-center justify-between"
+                  className="w-full px-6 py-4 hover:bg-[rgba(91,138,114,0.04)] transition-colors flex items-center justify-between gap-3"
                 >
-                  <div className="flex-1 min-w-0">
+                  <button
+                    onClick={() => setSelectedStatementId(stmt.id)}
+                    className="flex-1 min-w-0 text-left"
+                  >
                     <div className="flex items-center gap-3">
                       <p className="text-sm font-medium text-[#3D4A44] truncate">{stmt.source_name || 'Statement'}</p>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
@@ -2306,14 +2320,31 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
                         ? `${new Date(stmt.period_start).toLocaleDateString()} — ${new Date(stmt.period_end).toLocaleDateString()}`
                         : stmt.file_name || '—'}
                     </p>
-                  </div>
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(stmt) }}
+                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                    title="Delete statement"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
                   <ChevronRightIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
-                </button>
+                </div>
               )
             })}
           </div>
         )}
       </div>
+
+      {deleteTarget && (
+        <DeleteStatementDialog
+          orgId={orgId}
+          statementId={deleteTarget.id}
+          statementName={deleteTarget.source_name}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={() => loadStatements()}
+        />
+      )}
     </div>
   )
 }

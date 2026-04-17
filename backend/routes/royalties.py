@@ -7,6 +7,7 @@ from datetime import date, datetime
 from difflib import SequenceMatcher
 import csv
 import io
+import os
 import re
 import logging
 
@@ -1044,6 +1045,162 @@ async def upload_statement(
     return result
 
 
+def _build_statement_delete_summary(db: Session, stmt: "RoyaltyStatement") -> Dict[str, Any]:
+    """Build a non-mutating summary of everything that will be removed
+    (and balances that will be restored) when this statement is deleted.
+
+    Used by both the delete endpoint (to write into the audit log and
+    drive the actual cleanup) and the delete-preview endpoint (so the
+    frontend can show a confirmation dialog with real numbers).
+    """
+    from ..models.models import (
+        RoyaltyLedgerEntry, RoyaltyProcessingRun, RoyaltyStatementLine,
+        AdvanceV2, ActionItem,
+    )
+
+    statement_id = stmt.id
+    org_id = stmt.organization_id
+
+    tx_count = db.query(func.count(RoyaltyTransaction.id)).filter(
+        RoyaltyTransaction.statement_id == statement_id
+    ).scalar() or 0
+    line_count = db.query(func.count(RoyaltyStatementLine.id)).filter(
+        RoyaltyStatementLine.statement_id == statement_id
+    ).scalar() or 0
+    run_count = db.query(func.count(RoyaltyProcessingRun.id)).filter(
+        RoyaltyProcessingRun.statement_id == statement_id
+    ).scalar() or 0
+
+    tx_ids = [t.id for t in db.query(RoyaltyTransaction.id).filter(
+        RoyaltyTransaction.statement_id == statement_id
+    ).all()]
+    alloc_count = 0
+    if tx_ids:
+        alloc_count = db.query(func.count(RoyaltyAllocation.id)).filter(
+            RoyaltyAllocation.transaction_id.in_(tx_ids)
+        ).scalar() or 0
+
+    # Per-advance restore amounts (RECOUPMENT_APPLIED entries only).
+    recoup_rows = db.query(
+        RoyaltyLedgerEntry.advance_id,
+        func.sum(func.abs(RoyaltyLedgerEntry.amount_cents)),
+    ).filter(
+        RoyaltyLedgerEntry.statement_id == statement_id,
+        RoyaltyLedgerEntry.entry_type == "RECOUPMENT_APPLIED",
+        RoyaltyLedgerEntry.advance_id.isnot(None),
+    ).group_by(RoyaltyLedgerEntry.advance_id).all()
+
+    advance_restores = []
+    for adv_id, restore_cents in recoup_rows:
+        adv = db.query(AdvanceV2).filter(AdvanceV2.id == adv_id).first()
+        advance_restores.append({
+            "advance_id": adv_id,
+            "advance_name": adv.advance_name if adv else None,
+            "restore_cents": int(restore_cents or 0),
+            "restore_dollars": int(restore_cents or 0) / 100.0,
+        })
+
+    # PAYMENT ledger entries that reference this statement (the
+    # underlying PayoutItem stays — this only "unwinds" the ledger
+    # link; the actual payment in the real world is unchanged).
+    payment_rows = db.query(RoyaltyLedgerEntry).filter(
+        RoyaltyLedgerEntry.statement_id == statement_id,
+        RoyaltyLedgerEntry.entry_type == "PAYMENT",
+    ).all()
+    payments = [{
+        "ledger_entry_id": p.id,
+        "payee_id": p.payee_id,
+        "amount_cents": p.amount_cents,
+        "amount_dollars": (p.amount_cents or 0) / 100.0,
+        "memo": p.memo,
+    } for p in payment_rows]
+
+    ledger_count = db.query(func.count(RoyaltyLedgerEntry.id)).filter(
+        RoyaltyLedgerEntry.statement_id == statement_id
+    ).scalar() or 0
+
+    # Auto-generated action items pointing at this statement, plus any
+    # action items pointing at one of the statement's lines.
+    line_ids = [r[0] for r in db.query(RoyaltyStatementLine.id).filter(
+        RoyaltyStatementLine.statement_id == statement_id
+    ).all()]
+
+    title_marker = f"Statement #{statement_id}"
+    action_q = db.query(ActionItem).filter(
+        ActionItem.organization_id == org_id,
+        ActionItem.entity_type == "STATEMENT",
+        ActionItem.title.contains(title_marker),
+    )
+    action_items_to_remove = action_q.count()
+    line_action_items_to_remove = 0
+    if line_ids:
+        line_action_items_to_remove = db.query(func.count(ActionItem.id)).filter(
+            ActionItem.organization_id == org_id,
+            ActionItem.entity_type == "STATEMENT_LINE",
+            ActionItem.entity_label.in_([str(i) for i in line_ids]),
+        ).scalar() or 0
+
+    file_path = stmt.file_path
+    file_will_be_deleted = bool(file_path) and _safe_under_uploads(file_path) and os.path.exists(file_path)
+
+    return {
+        "statement_id": statement_id,
+        "source_name": stmt.source_name,
+        "transaction_count": int(tx_count),
+        "line_count": int(line_count),
+        "allocation_count": int(alloc_count),
+        "processing_run_count": int(run_count),
+        "ledger_entry_count": int(ledger_count),
+        "total_revenue_cents": int(stmt.total_revenue_cents or 0),
+        "total_revenue_dollars": int(stmt.total_revenue_cents or 0) / 100.0,
+        "advance_restores": advance_restores,
+        "payments_unwound": payments,
+        "action_items_to_remove": int(action_items_to_remove + line_action_items_to_remove),
+        "file_path": file_path if file_will_be_deleted else None,
+        "file_will_be_deleted": file_will_be_deleted,
+    }
+
+
+def _safe_under_uploads(path: str) -> bool:
+    """Path-traversal guard: only allow removing files that resolve
+    inside the project's uploads directory."""
+    if not path:
+        return False
+    try:
+        # Project layout: backend/uploads/ (created by upload routes
+        # that persist files). Use realpath to resolve any symlinks.
+        project_root = os.path.realpath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        uploads_root = os.path.realpath(os.path.join(project_root, "backend", "uploads"))
+        target = os.path.realpath(path)
+        return target.startswith(uploads_root + os.sep) or target == uploads_root
+    except Exception:
+        return False
+
+
+@router.get("/statements/{org_id}/{statement_id}/delete-preview")
+def delete_statement_preview(
+    org_id: int,
+    statement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return a non-mutating summary of what `DELETE` would remove.
+
+    The frontend uses this to populate the confirmation dialog so the
+    user knows exactly what's about to disappear (transactions, lines,
+    advance balances that will be restored, payment links that will
+    be unwound, action items, file on disk).
+    """
+    verify_org_access(current_user, org_id, db)
+    stmt = db.query(RoyaltyStatement).filter(
+        RoyaltyStatement.id == statement_id,
+        RoyaltyStatement.organization_id == org_id,
+    ).first()
+    if not stmt:
+        raise HTTPException(status_code=404, detail="Statement not found")
+    return _build_statement_delete_summary(db, stmt)
+
+
 @router.delete("/statements/{org_id}/{statement_id}")
 def delete_statement(
     org_id: int,
@@ -1059,8 +1216,63 @@ def delete_statement(
     if not stmt:
         raise HTTPException(status_code=404, detail="Statement not found")
 
-    from ..models.models import RoyaltyLedgerEntry, RoyaltyProcessingRun, RoyaltyStatementLine
+    from ..models.models import (
+        RoyaltyLedgerEntry, RoyaltyProcessingRun, RoyaltyStatementLine,
+        AdvanceV2, ActionItem,
+    )
+    from ..services.audit_service import log_action
 
+    summary = _build_statement_delete_summary(db, stmt)
+
+    # 1. Restore advance balances for every RECOUPMENT_APPLIED entry
+    #    on this statement BEFORE the ledger entry is deleted. This
+    #    mirrors the reprocess-reversal logic in
+    #    royalty_processing_engine.py and is the gap that was causing
+    #    advance balances to "stick" after a duplicate was deleted.
+    for restore in summary["advance_restores"]:
+        adv = db.query(AdvanceV2).filter(
+            AdvanceV2.id == restore["advance_id"],
+            AdvanceV2.org_id == org_id,
+        ).first()
+        if adv:
+            adv.outstanding_balance_cents = (adv.outstanding_balance_cents or 0) + restore["restore_cents"]
+
+    # 2. Audit-log each unwound payment ledger entry separately so
+    #    the audit trail captures who paid what before the link to
+    #    this statement disappeared. The PayoutItem itself is NOT
+    #    modified (the real-world payment still happened).
+    for pmt in summary["payments_unwound"]:
+        log_action(
+            db, org_id, current_user.id,
+            "PAYOUT_UNWOUND_BY_STATEMENT_DELETE",
+            "STATEMENT", statement_id, stmt.source_name,
+            details={
+                "ledger_entry_id": pmt["ledger_entry_id"],
+                "payee_id": pmt["payee_id"],
+                "amount_cents": pmt["amount_cents"],
+                "memo": pmt["memo"],
+            },
+        )
+
+    # 3. Delete ActionItems pointing at this statement or its lines.
+    line_ids = [r[0] for r in db.query(RoyaltyStatementLine.id).filter(
+        RoyaltyStatementLine.statement_id == statement_id
+    ).all()]
+    title_marker = f"Statement #{statement_id}"
+    db.query(ActionItem).filter(
+        ActionItem.organization_id == org_id,
+        ActionItem.entity_type == "STATEMENT",
+        ActionItem.title.contains(title_marker),
+    ).delete(synchronize_session=False)
+    if line_ids:
+        db.query(ActionItem).filter(
+            ActionItem.organization_id == org_id,
+            ActionItem.entity_type == "STATEMENT_LINE",
+            ActionItem.entity_label.in_([str(i) for i in line_ids]),
+        ).delete(synchronize_session=False)
+
+    # 4. Delete ledger entries (this removes both PAYMENT and
+    #    RECOUPMENT_APPLIED entries we just audited / restored from).
     db.query(RoyaltyLedgerEntry).filter(
         RoyaltyLedgerEntry.statement_id == statement_id
     ).delete(synchronize_session=False)
@@ -1085,12 +1297,23 @@ def delete_statement(
         RoyaltyTransaction.statement_id == statement_id
     ).delete(synchronize_session=False)
 
-    from ..services.audit_service import log_action
-    log_action(db, org_id, current_user.id, "DELETE", "STATEMENT", stmt.id, stmt.source_name)
+    # 5. Remove the uploaded file from disk if it lives under the
+    #    uploads directory. Path-traversal guard prevents removing
+    #    arbitrary paths if file_path was somehow tampered with.
+    if summary["file_will_be_deleted"]:
+        try:
+            os.remove(summary["file_path"])
+        except OSError as e:
+            logger.warning(f"Could not remove statement file {summary['file_path']}: {e}")
+
+    log_action(
+        db, org_id, current_user.id, "DELETE", "STATEMENT", stmt.id, stmt.source_name,
+        details=summary,
+    )
 
     db.delete(stmt)
     db.commit()
-    return {"detail": "Statement deleted"}
+    return {"detail": "Statement deleted", "summary": summary}
 
 
 @router.get("/statements/{org_id}/{statement_id}/transactions")
