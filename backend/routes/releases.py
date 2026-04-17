@@ -74,7 +74,7 @@ def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = No
         OrganizationMember.user_id == user.id,
         OrganizationMember.organization_id == org_id
     ).first()
-    if not membership and not user.is_super_admin:
+    if not membership and not user.is_super_admin and not getattr(user, "is_cadence_staff", False):
         if creator_id and has_shared_access(db, user.id, creator_id, required_module="catalog"):
             return None
         raise HTTPException(status_code=403, detail="Access denied")

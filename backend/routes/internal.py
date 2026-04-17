@@ -56,31 +56,19 @@ def _audit_org_id(db: Session, actor: User) -> Optional[int]:
     return fallback[0] if fallback else None
 
 
-def _safe_audit(db: Session, actor: User, **kwargs) -> None:
-    """Write an audit row without poisoning the outer transaction.
-    Uses a SAVEPOINT so a missing FK target (zero-org bootstrap)
-    doesn't roll back the staff provisioning itself. Logs a
-    warning if the audit row can't be written.
+def _require_audit(db: Session, actor: User, **kwargs) -> None:
+    """Write an audit row or fail the whole operation. Per spec,
+    staff provision/deprovision MUST leave an audit trail; if we
+    can't persist one, we refuse the operation rather than silently
+    succeed.
     """
     org_id = _audit_org_id(db, actor)
     if org_id is None:
-        # No orgs exist — can't satisfy the FK. Log loudly so an
-        # operator notices, but don't fail the operation.
-        import logging
-        logging.getLogger("cadence").warning(
-            "AuditLog skipped (no orgs in DB): action=%s actor_id=%s",
-            kwargs.get("action"), actor.id,
+        raise HTTPException(
+            status_code=500,
+            detail="Cannot audit staff operation: no organizations exist yet",
         )
-        return
-    try:
-        with db.begin_nested():
-            log_action(db, organization_id=org_id, user_id=actor.id, **kwargs)
-    except Exception:
-        import logging
-        logging.getLogger("cadence").exception(
-            "AuditLog write failed: action=%s actor_id=%s",
-            kwargs.get("action"), actor.id,
-        )
+    log_action(db, organization_id=org_id, user_id=actor.id, **kwargs)
 
 
 @router.post("/provision-staff-user", response_model=StaffUserResponse, status_code=201)
@@ -104,7 +92,7 @@ def provision_staff_user(
     db.add(user)
     db.flush()
 
-    _safe_audit(
+    _require_audit(
         db, actor,
         action="STAFF_PROVISIONED",
         entity_type="USER",
@@ -159,7 +147,7 @@ def deprovision_staff_user(
         synchronize_session=False,
     )
 
-    _safe_audit(
+    _require_audit(
         db, actor,
         action="STAFF_DEPROVISIONED",
         entity_type="USER",

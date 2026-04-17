@@ -130,18 +130,20 @@ def get_organization_creators(
     ).first()
     
     if not membership:
-        user_membership = db.query(OrganizationMember).filter(
-            OrganizationMember.user_id == current_user.id
-        ).first()
-        has_share = False
-        if user_membership:
-            has_share = db.query(ClientShare).filter(
-                ClientShare.recipient_org_id == user_membership.organization_id,
-                ClientShare.primary_org_id == org_id,
-                ClientShare.status == "ACCEPTED"
-            ).first() is not None
-        if not has_share:
-            raise HTTPException(status_code=403, detail="Not authorized to access this organization")
+        # Cadence staff and master admins get cross-org read access (Task #74).
+        if not (current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False)):
+            user_membership = db.query(OrganizationMember).filter(
+                OrganizationMember.user_id == current_user.id
+            ).first()
+            has_share = False
+            if user_membership:
+                has_share = db.query(ClientShare).filter(
+                    ClientShare.recipient_org_id == user_membership.organization_id,
+                    ClientShare.primary_org_id == org_id,
+                    ClientShare.status == "ACCEPTED"
+                ).first() is not None
+            if not has_share:
+                raise HTTPException(status_code=403, detail="Not authorized to access this organization")
     
     creators = db.query(Creator).filter(Creator.organization_id == org_id).all()
     
@@ -332,10 +334,14 @@ def get_creator(
     
     is_shared = False
     if not membership:
-        share = has_shared_access(db, current_user.id, creator_id)
-        if not share:
-            raise HTTPException(status_code=403, detail="Not authorized to access this creator")
-        is_shared = True
+        # Cadence staff and master admins get cross-org read access (Task #74).
+        if current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False):
+            pass
+        else:
+            share = has_shared_access(db, current_user.id, creator_id)
+            if not share:
+                raise HTTPException(status_code=403, detail="Not authorized to access this creator")
+            is_shared = True
     
     song_count = db.query(func.count(SongCredit.id)).join(
         Song, Song.id == SongCredit.song_id
@@ -926,7 +932,7 @@ async def get_creator_contacts(
     creator = db.query(Creator).filter(Creator.id == creator_id).first()
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
-    if not current_user.is_super_admin:
+    if not current_user.is_super_admin and not getattr(current_user, "is_cadence_staff", False):
         membership = db.query(OrganizationMember).filter(
             OrganizationMember.user_id == current_user.id,
             OrganizationMember.organization_id == creator.organization_id
@@ -966,7 +972,7 @@ async def add_creator_contact(
     creator = db.query(Creator).filter(Creator.id == creator_id).first()
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
-    if not current_user.is_super_admin:
+    if not current_user.is_super_admin and not getattr(current_user, "is_cadence_staff", False):
         membership = db.query(OrganizationMember).filter(
             OrganizationMember.user_id == current_user.id,
             OrganizationMember.organization_id == creator.organization_id
@@ -1028,7 +1034,7 @@ async def remove_creator_contact(
     creator = db.query(Creator).filter(Creator.id == creator_id).first()
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
-    if not current_user.is_super_admin:
+    if not current_user.is_super_admin and not getattr(current_user, "is_cadence_staff", False):
         membership = db.query(OrganizationMember).filter(
             OrganizationMember.user_id == current_user.id,
             OrganizationMember.organization_id == creator.organization_id
@@ -1058,7 +1064,7 @@ async def get_creator_contact_by_role(
     creator = db.query(Creator).filter(Creator.id == creator_id).first()
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
-    if not current_user.is_super_admin:
+    if not current_user.is_super_admin and not getattr(current_user, "is_cadence_staff", False):
         membership = db.query(OrganizationMember).filter(
             OrganizationMember.user_id == current_user.id,
             OrganizationMember.organization_id == creator.organization_id

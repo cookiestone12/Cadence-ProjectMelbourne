@@ -321,7 +321,10 @@ def get_organization_songs(
     ).first()
     
     if not membership:
-        if creator_id and has_shared_access(db, current_user.id, creator_id, required_module="catalog"):
+        # Cadence staff and master admins get cross-org read access (Task #74).
+        if current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False):
+            pass
+        elif creator_id and has_shared_access(db, current_user.id, creator_id, required_module="catalog"):
             pass
         else:
             raise HTTPException(status_code=403, detail="Not authorized to access this organization")
@@ -706,7 +709,7 @@ def get_song(
         OrganizationMember.organization_id == song.organization_id
     ).first()
     
-    if not membership:
+    if not membership and not current_user.is_super_admin and not getattr(current_user, "is_cadence_staff", False):
         raise HTTPException(status_code=403, detail="Not authorized to access this song")
     
     credits = db.query(SongCredit, Creator).outerjoin(

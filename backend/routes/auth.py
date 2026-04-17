@@ -9,6 +9,7 @@ from ..utils.auth import (
     verify_password,
     get_password_hash,
     create_access_token,
+    decode_access_token,
     get_current_user,
     hash_token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -29,12 +30,21 @@ def _record_session(db: Session, user_id: int, token: str, request: Optional[Req
                 ua = ua[:512]
         except Exception:
             pass
+    # Pull expires_at directly from the JWT 'exp' claim so the
+    # session row matches the token even if ACCESS_TOKEN_EXPIRE_MINUTES
+    # is changed at runtime or a custom expires_delta was passed.
+    payload = decode_access_token(token) or {}
+    exp = payload.get("exp")
+    if exp:
+        expires_at = datetime.utcfromtimestamp(int(exp))
+    else:
+        expires_at = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     db.add(UserSession(
         user_id=user_id,
         token_hash=hash_token(token),
         ip_address=ip,
         user_agent=ua,
-        expires_at=datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        expires_at=expires_at,
     ))
 
 
