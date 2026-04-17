@@ -1491,18 +1491,24 @@ def earnings_by_holder(
 ):
     verify_org_access(current_user, org_id, db)
 
-    alloc_filters = [RoyaltyAllocation.organization_id == org_id]
-    if creator_id is not None:
-        alloc_filters.append(RoyaltyAllocation.rights_holder_id == creator_id)
-    alloc_results = db.query(
+    alloc_query = db.query(
         Creator.id, Creator.display_name,
         func.sum(RoyaltyAllocation.allocated_cents).label("total_cents"),
         func.sum(RoyaltyAllocation.recouped_cents).label("total_recouped"),
     ).join(
         RoyaltyAllocation, RoyaltyAllocation.rights_holder_id == Creator.id
     ).filter(
-        *alloc_filters
-    ).group_by(Creator.id, Creator.display_name).order_by(desc("total_cents")).all()
+        RoyaltyAllocation.organization_id == org_id,
+    )
+    if creator_id is not None:
+        alloc_query = alloc_query.join(
+            RoyaltyTransaction, RoyaltyTransaction.id == RoyaltyAllocation.transaction_id
+        ).join(
+            RoyaltyStatement, RoyaltyStatement.id == RoyaltyTransaction.statement_id
+        ).filter(RoyaltyStatement.creator_id == creator_id)
+    alloc_results = alloc_query.group_by(
+        Creator.id, Creator.display_name
+    ).order_by(desc("total_cents")).all()
 
     alloc_map = {}
     for r in alloc_results:

@@ -545,11 +545,29 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
 
   if (selectedStatement) {
     return (
-      <StatementDetailView
-        orgId={orgId}
-        statementId={selectedStatement.id}
-        onBack={() => { setSelectedStatement(null); loadStatements() }}
-      />
+      <div className="space-y-3">
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => handleRematch(selectedStatement.id)}
+            className="px-3 py-1.5 text-sm bg-[rgba(91,138,114,0.1)] text-[#5B8A72] rounded-xl hover:bg-[rgba(91,138,114,0.2)] transition-colors font-medium"
+          >
+            <ArrowPathIcon className="w-4 h-4 inline mr-1" /> Re-match
+          </button>
+          <button
+            onClick={() => handleCalculate(selectedStatement.id)}
+            disabled={calculating[selectedStatement.id]}
+            className="px-3 py-1.5 text-sm bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all font-medium disabled:opacity-50"
+          >
+            <CalculatorIcon className="w-4 h-4 inline mr-1" />
+            {calculating[selectedStatement.id] ? 'Calculating...' : 'Calculate Royalties'}
+          </button>
+        </div>
+        <StatementDetailView
+          orgId={orgId}
+          statementId={selectedStatement.id}
+          onBack={() => { setSelectedStatement(null); loadStatements() }}
+        />
+      </div>
     )
   }
 
