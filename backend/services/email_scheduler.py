@@ -163,6 +163,32 @@ def run_scheduled_scans():
             logger.error(f"Scheduled scan failed for link {link_id}: {e}")
 
 
+def cleanup_user_sessions():
+    """Nightly: delete UserSession rows past expires_at OR
+    (revoked AND >30 days old). Keeps the table small and removes
+    long-tail revoked rows used for audit lookback.
+    """
+    from ..models.database import SessionLocal
+    from ..models import UserSession
+
+    db = SessionLocal()
+    try:
+        now = datetime.utcnow()
+        thirty_days_ago = now - timedelta(days=30)
+        deleted = db.query(UserSession).filter(
+            (UserSession.expires_at < now)
+            | ((UserSession.is_revoked == True) & (UserSession.revoked_at < thirty_days_ago))
+        ).delete(synchronize_session=False)
+        db.commit()
+        if deleted:
+            logger.info(f"UserSession cleanup: deleted {deleted} stale rows")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"UserSession cleanup failed: {e}")
+    finally:
+        db.close()
+
+
 def flip_released_songs():
     from ..models.database import SessionLocal
     from ..models.models import Song
@@ -243,11 +269,21 @@ def start_scheduler():
         id="daily_release_flip",
         replace_existing=True,
     )
+    _scheduler.add_job(
+        cleanup_user_sessions,
+        "cron",
+        hour=3,
+        minute=0,
+        timezone="UTC",
+        id="nightly_user_session_cleanup",
+        replace_existing=True,
+    )
     _scheduler.start()
     logger.info("Email digest scheduler started (15-minute interval)")
     logger.info("Storage scan scheduler started (hourly check)")
     logger.info("Chart ingestion scheduler started (4-hour interval)")
     logger.info("Daily release flip scheduler started (00:05 UTC)")
+    logger.info("Nightly user-session cleanup scheduler started (03:00 UTC)")
 
 
 def shutdown_scheduler():

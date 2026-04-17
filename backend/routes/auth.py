@@ -1,9 +1,42 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
-from ..models import get_db, User, OrganizationMember
-from ..utils.auth import verify_password, get_password_hash, create_access_token, get_current_user
+from datetime import datetime, timedelta
+from ..models import get_db, User, OrganizationMember, UserSession
+from ..utils.auth import (
+    verify_password,
+    get_password_hash,
+    create_access_token,
+    get_current_user,
+    hash_token,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+)
+
+
+def _record_session(db: Session, user_id: int, token: str, request: Optional[Request] = None) -> None:
+    """Insert a UserSession row for an issued JWT so it can be
+    revoked mid-flight via the session table.
+    """
+    ip = None
+    ua = None
+    if request is not None:
+        try:
+            ip = request.client.host if request.client else None
+            ua = request.headers.get("user-agent")
+            if ua and len(ua) > 512:
+                ua = ua[:512]
+        except Exception:
+            pass
+    db.add(UserSession(
+        user_id=user_id,
+        token_hash=hash_token(token),
+        ip_address=ip,
+        user_agent=ua,
+        expires_at=datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    ))
+
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -64,12 +97,10 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     }
 
 @router.post("/login", response_model=TokenResponse)
-def login(request: LoginRequest, db: Session = Depends(get_db)):
-    from datetime import datetime
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    user = db.query(User).filter(func.lower(User.username) == payload.username.lower()).first()
     
-    user = db.query(User).filter(func.lower(User.username) == request.username.lower()).first()
-    
-    if not user or not verify_password(request.password, user.hashed_password):
+    if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password"
@@ -82,9 +113,10 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
         )
     
     user.last_login_at = datetime.utcnow()
-    db.commit()
     
     access_token = create_access_token(data={"sub": user.username})
+    _record_session(db, user.id, access_token, request)
+    db.commit()
     
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id

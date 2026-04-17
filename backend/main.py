@@ -467,6 +467,8 @@ app.include_router(contract_docs.router)
 app.include_router(account_links.router)
 app.include_router(admin.router)
 app.include_router(admin.internal_router)
+from .routes import internal as internal_routes
+app.include_router(internal_routes.router)
 app.include_router(notifications.router)
 app.include_router(actions.router)
 app.include_router(csv_upload.router)

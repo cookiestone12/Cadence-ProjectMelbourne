@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional
+import hashlib
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
@@ -9,6 +10,13 @@ from sqlalchemy import func as sa_func
 from ..models import get_db, User
 from .request_context import set_user_id
 import os
+
+
+def hash_token(token: str) -> str:
+    """SHA-256 hex digest used as the storage key for UserSession.
+    We never store the raw JWT, just its hash.
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 SECRET_KEY = os.environ["SESSION_SECRET"]
 ALGORITHM = "HS256"
@@ -71,6 +79,17 @@ def get_current_user(
     
     user = db.query(User).filter(sa_func.lower(User.username) == username.lower()).first()
     if user is None:
+        raise credentials_exception
+
+    # Session enforcement: every JWT must have a matching, non-revoked
+    # UserSession row. Tokens issued before this feature shipped (or
+    # whose session row was pruned) get rejected here so deprovisioned
+    # staff can't keep using a stolen JWT.
+    from ..models import UserSession
+    session = db.query(UserSession).filter(
+        UserSession.token_hash == hash_token(token)
+    ).first()
+    if session is None or session.is_revoked:
         raise credentials_exception
 
     set_user_id(user.id)
