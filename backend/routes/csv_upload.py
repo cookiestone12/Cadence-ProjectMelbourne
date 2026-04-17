@@ -57,6 +57,13 @@ class CSVImportRequest(BaseModel):
     creator_id: Optional[int] = None
     create_new_creator: bool = False
     new_creator_name: Optional[str] = None
+    staged_file_id: Optional[str] = None
+    staged_filename: Optional[str] = None
+    staged_mime: Optional[str] = None
+    extraction_method: Optional[str] = None
+    contract_terms: Optional[Dict[str, Any]] = None
+    document_info: Optional[Dict[str, Any]] = None
+    is_text_paste: bool = False
 
 
 class ImportResult(BaseModel):
@@ -264,6 +271,20 @@ async def preview_document(
 
     content = await file.read()
 
+    # Stash the raw upload so it can be persisted alongside the import for
+    # audit / re-extraction. The staged_file_id is opaque and only useful when
+    # echoed back to /import.
+    from ..services import schedule_a_storage
+    staged_id, staged_path = schedule_a_storage.stage_upload(org_id, content, filename)
+    sha256 = schedule_a_storage.hash_bytes(content)
+    staging_meta = {
+        "staged_file_id": staged_id,
+        "staged_filename": filename,
+        "staged_size": len(content),
+        "staged_mime": file.content_type or None,
+        "staged_sha256": sha256,
+    }
+
     # Tabular formats (CSV/Excel) go through the existing column-mapping
     # parser, then are wrapped in the unified preview shape so callers see one
     # consistent response regardless of input type.
@@ -284,7 +305,7 @@ async def preview_document(
             r2.setdefault("_confidence", 0.95)
             r2.setdefault("_source", "spreadsheet row")
             tagged.append(r2)
-        return {
+        resp = {
             "success": True,
             "extraction_method": "tabular_excel" if lower.endswith(('.xlsx', '.xls')) else "tabular_csv",
             "schedule_a_songs": [],
@@ -299,13 +320,23 @@ async def preview_document(
             "warnings": [],
             "errors": [],
         }
+        resp.update(staging_meta)
+        return resp
 
     result = parse_document_unified(content, filename, org_id=org_id)
 
     if result.errors and not result.schedule_a_songs and not result.schedule_b_songs:
+        # Don't leave the file staged if we're rejecting the upload outright
+        try:
+            from pathlib import Path as _P
+            _P(staged_path).unlink(missing_ok=True)
+        except Exception:
+            pass
         raise HTTPException(status_code=400, detail=result.errors[0])
 
-    return result.to_preview_response()
+    payload = result.to_preview_response()
+    payload.update(staging_meta)
+    return payload
 
 
 @router.post("/text-preview/{org_id}")
@@ -330,11 +361,31 @@ async def preview_pasted_text(
     if len(text) > 200_000:
         raise HTTPException(status_code=400, detail="Pasted text is too long (200K char max).")
 
+    from ..services import schedule_a_storage
+    encoded = text.encode("utf-8")
+    staged_id, staged_path = schedule_a_storage.stage_upload(org_id, encoded, "pasted.txt")
+    sha256 = schedule_a_storage.hash_bytes(encoded)
+    staging_meta = {
+        "staged_file_id": staged_id,
+        "staged_filename": "pasted.txt",
+        "staged_size": len(encoded),
+        "staged_mime": "text/plain",
+        "staged_sha256": sha256,
+        "is_text_paste": True,
+    }
+
     result = parse_document_unified(None, "pasted.txt", pasted_text=text, org_id=org_id)
     if result.errors and not result.schedule_a_songs and not result.schedule_b_songs:
+        try:
+            from pathlib import Path as _P
+            _P(staged_path).unlink(missing_ok=True)
+        except Exception:
+            pass
         raise HTTPException(status_code=400, detail=result.errors[0])
 
-    return result.to_preview_response()
+    out = result.to_preview_response()
+    out.update(staging_meta)
+    return out
 
 
 @router.post("/import/{org_id}", response_model=ImportResult)
@@ -479,7 +530,67 @@ async def import_csv(
         db.rollback()
         logger.error(f"CSV import commit failed: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to save imported songs: {str(e)}")
-    
+
+    # Persist the original Schedule A upload for audit / re-extraction.
+    if request.staged_file_id:
+        try:
+            from ..services import schedule_a_storage
+            from ..models.models import ScheduleAImport
+            from ..services.audit_service import log_action
+
+            staged = schedule_a_storage.find_staged(org_id, request.staged_file_id)
+            if staged is not None:
+                size = staged.stat().st_size
+                with open(staged, "rb") as f:
+                    sha = schedule_a_storage.hash_bytes(f.read())
+                rec = ScheduleAImport(
+                    organization_id=org_id,
+                    user_id=current_user.id,
+                    creator_id=creator.id if creator else None,
+                    creator_name=creator.display_name if creator else None,
+                    original_filename=request.staged_filename or staged.name,
+                    stored_path=str(staged),
+                    file_size=size,
+                    mime_type=request.staged_mime,
+                    sha256=sha,
+                    extraction_method=request.extraction_method,
+                    songs_created=songs_created,
+                    songs_failed=len(validation["invalid_rows"]) + (len(validation["valid_rows"]) - songs_created),
+                    contract_terms=request.contract_terms or {},
+                    document_info=request.document_info or {},
+                    is_text_paste=bool(request.is_text_paste),
+                )
+                db.add(rec)
+                db.flush()
+                final_path = schedule_a_storage.promote_staged(org_id, str(staged), rec.id)
+                rec.stored_path = final_path
+                log_action(
+                    db,
+                    organization_id=org_id,
+                    user_id=current_user.id,
+                    action="SCHEDULE_A_IMPORTED",
+                    entity_type="schedule_a_import",
+                    entity_id=rec.id,
+                    entity_name=rec.original_filename,
+                    details={
+                        "songs_created": songs_created,
+                        "extraction_method": request.extraction_method,
+                        "creator_id": creator.id if creator else None,
+                        "is_text_paste": bool(request.is_text_paste),
+                        "sha256": sha,
+                    },
+                )
+                db.commit()
+            else:
+                logger.warning(
+                    f"Staged file {request.staged_file_id} not found for org {org_id}; "
+                    "skipping Schedule A import audit record."
+                )
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Failed to persist ScheduleAImport audit record: {e}", exc_info=True)
+            # Do NOT fail the import if audit persistence fails.
+
     return ImportResult(
         songs_created=songs_created,
         songs_failed=len(validation["invalid_rows"]) + (len(validation["valid_rows"]) - songs_created),

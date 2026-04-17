@@ -11,7 +11,7 @@ from .routes import (
     tenant_admin, creative_directory, registration_reports, audit_log, expenses,
     client_sharing, integrations, audio, brief_builder, royalty_processing,
     push, storage_scan, client_portal, account_merge, streaming_credits,
-    document_sharing, support, assistant
+    document_sharing, support, assistant, schedule_a_imports
 )
 from .utils.logging_config import logger
 import os
@@ -54,6 +54,14 @@ def _deferred_startup_tasks():
         sync_release_status()
     except Exception as e:
         log.warning(f"Release status sync failed: {e}")
+
+    try:
+        from .services import schedule_a_storage
+        removed = schedule_a_storage.cleanup_stale_staged()
+        if removed:
+            log.info(f"Cleaned up {removed} stale staged Schedule A uploads")
+    except Exception as e:
+        log.warning(f"Staged Schedule A cleanup failed: {e}")
 
     log.info("Deferred startup tasks completed")
 
@@ -291,6 +299,7 @@ app.include_router(streaming_credits.admin_chart_router)
 app.include_router(document_sharing.router)
 app.include_router(support.router)
 app.include_router(assistant.router)
+app.include_router(schedule_a_imports.router)
 
 from .routes import leads
 app.include_router(leads.router)

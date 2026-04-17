@@ -2460,3 +2460,40 @@ class SupportTicketAttachment(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     ticket = relationship("SupportTicket", back_populates="attachments")
+
+
+class ScheduleAImport(Base):
+    """Persists the original Schedule A upload (PDF/image/text) so admins can
+    audit what was ingested, download the source later, or re-run extraction
+    with a newer model.
+    """
+    __tablename__ = "schedule_a_imports"
+    __table_args__ = (
+        Index('ix_schedule_a_imports_org_id', 'organization_id'),
+        Index('ix_schedule_a_imports_created_at', 'created_at'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    creator_id = Column(Integer, ForeignKey("creators.id", ondelete="SET NULL"), nullable=True)
+    creator_name = Column(String, nullable=True)
+
+    original_filename = Column(String, nullable=False)
+    stored_path = Column(String, nullable=False)
+    file_size = Column(Integer, nullable=True)
+    mime_type = Column(String, nullable=True)
+    sha256 = Column(String(64), nullable=True)
+
+    extraction_method = Column(String, nullable=True)
+    songs_created = Column(Integer, default=0)
+    songs_failed = Column(Integer, default=0)
+    contract_terms = Column(JSON, nullable=True)
+    document_info = Column(JSON, nullable=True)
+    is_text_paste = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    organization = relationship("Organization")
+    user = relationship("User")
+    creator = relationship("Creator")

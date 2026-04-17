@@ -72,6 +72,7 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
   const [documentInfo, setDocumentInfo] = useState(null)
   const [contractTerms, setContractTerms] = useState(null)
   const [extractionMethod, setExtractionMethod] = useState(null)
+  const [stagedFile, setStagedFile] = useState(null)
   const [inputMode, setInputMode] = useState('file') // 'file' | 'text'
   const [pastedText, setPastedText] = useState('')
   
@@ -161,7 +162,15 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
       setPreviewRows(allRowsData.slice(0, 5))
       setTotalRows(response.data.row_count || 0)
       setExtractionMethod(response.data.extraction_method || null)
-      
+      if (response.data.staged_file_id) {
+        setStagedFile({
+          id: response.data.staged_file_id,
+          filename: response.data.staged_filename || file.name,
+          mime: response.data.staged_mime || file.type || null,
+          isTextPaste: false,
+        })
+      }
+
       if (response.data.is_document_import) {
         setIsDocImport(true)
         setDocumentInfo(response.data.document_info || null)
@@ -214,6 +223,14 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
       setPreviewRows(allRowsData.slice(0, 5))
       setTotalRows(response.data.row_count || 0)
       setExtractionMethod(response.data.extraction_method || 'ai_text')
+      if (response.data.staged_file_id) {
+        setStagedFile({
+          id: response.data.staged_file_id,
+          filename: response.data.staged_filename || 'pasted.txt',
+          mime: response.data.staged_mime || 'text/plain',
+          isTextPaste: true,
+        })
+      }
       setIsDocImport(true)
       setDocumentInfo(response.data.document_info || null)
       setContractTerms(response.data.contract_terms || null)
@@ -323,7 +340,14 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
           rows: importRows,
           creator_id: createNewCreator ? null : parseInt(selectedCreatorId),
           create_new_creator: createNewCreator,
-          new_creator_name: createNewCreator ? newCreatorName.trim() : null
+          new_creator_name: createNewCreator ? newCreatorName.trim() : null,
+          staged_file_id: stagedFile?.id || null,
+          staged_filename: stagedFile?.filename || null,
+          staged_mime: stagedFile?.mime || null,
+          extraction_method: extractionMethod || null,
+          contract_terms: contractTerms || null,
+          document_info: documentInfo || null,
+          is_text_paste: stagedFile?.isTextPaste || false,
         },
         {
           headers: {
