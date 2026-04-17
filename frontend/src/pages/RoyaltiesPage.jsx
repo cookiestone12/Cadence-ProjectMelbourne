@@ -2185,7 +2185,7 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
     : statements
 
   const STATUS_OPTIONS = [
-    { key: '', label: 'All' },
+    { key: '', label: 'Show all statuses' },
     { key: 'UPLOADED', label: 'Uploaded' },
     { key: 'PARTIALLY_MATCHED', label: 'Partially Matched' },
     { key: 'REVIEW_REQUIRED', label: 'Review Required' },
