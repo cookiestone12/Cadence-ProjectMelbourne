@@ -45,15 +45,42 @@ class StaffUserResponse(BaseModel):
 def _audit_org_id(db: Session, actor: User) -> Optional[int]:
     """Pick a representative org for the audit row. Staff
     provision/deprovision is platform-level, so we prefer the
-    actor's first org but fall back to any org in the database.
-    Since migration d3e4f5a6b7c8 made audit_logs.organization_id
-    nullable, returning None is fine — the audit row is still
-    written.
+    actor's first org and fall back to any org in the database.
+    audit_logs.organization_id is non-nullable, so callers must
+    use _safe_audit() which guards the insert with a savepoint
+    when no org exists at all (zero-org bootstrap case only).
     """
     if actor.organization_memberships:
         return actor.organization_memberships[0].organization_id
     fallback = db.query(Organization.id).order_by(Organization.id).first()
     return fallback[0] if fallback else None
+
+
+def _safe_audit(db: Session, actor: User, **kwargs) -> None:
+    """Write an audit row without poisoning the outer transaction.
+    Uses a SAVEPOINT so a missing FK target (zero-org bootstrap)
+    doesn't roll back the staff provisioning itself. Logs a
+    warning if the audit row can't be written.
+    """
+    org_id = _audit_org_id(db, actor)
+    if org_id is None:
+        # No orgs exist — can't satisfy the FK. Log loudly so an
+        # operator notices, but don't fail the operation.
+        import logging
+        logging.getLogger("cadence").warning(
+            "AuditLog skipped (no orgs in DB): action=%s actor_id=%s",
+            kwargs.get("action"), actor.id,
+        )
+        return
+    try:
+        with db.begin_nested():
+            log_action(db, organization_id=org_id, user_id=actor.id, **kwargs)
+    except Exception:
+        import logging
+        logging.getLogger("cadence").exception(
+            "AuditLog write failed: action=%s actor_id=%s",
+            kwargs.get("action"), actor.id,
+        )
 
 
 @router.post("/provision-staff-user", response_model=StaffUserResponse, status_code=201)
@@ -77,10 +104,8 @@ def provision_staff_user(
     db.add(user)
     db.flush()
 
-    log_action(
-        db,
-        organization_id=_audit_org_id(db, actor),
-        user_id=actor.id,
+    _safe_audit(
+        db, actor,
         action="STAFF_PROVISIONED",
         entity_type="USER",
         entity_id=user.id,
@@ -134,10 +159,8 @@ def deprovision_staff_user(
         synchronize_session=False,
     )
 
-    log_action(
-        db,
-        organization_id=_audit_org_id(db, actor),
-        user_id=actor.id,
+    _safe_audit(
+        db, actor,
         action="STAFF_DEPROVISIONED",
         entity_type="USER",
         entity_id=user.id,
