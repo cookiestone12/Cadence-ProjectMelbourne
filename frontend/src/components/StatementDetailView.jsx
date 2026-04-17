@@ -707,6 +707,7 @@ function LinesPane({ lines, total, loading, filter, setFilter, search, setSearch
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Source</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">ISRC</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Net Amount</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Qty</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase tracking-wider">Matched Song</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase tracking-wider">Confidence</th>
@@ -722,6 +723,7 @@ function LinesPane({ lines, total, loading, filter, setFilter, search, setSearch
                       <td className="px-4 py-3 text-sm text-[#7A8580]">{line.store || '—'}</td>
                       <td className="px-4 py-3 text-sm text-[#7A8580] font-mono text-xs">{line.isrc || '—'}</td>
                       <td className="px-4 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatDollars(line.net_amount)}</td>
+                      <td className="px-4 py-3 text-sm text-right text-[#7A8580]">{(line.unit_count || 0).toLocaleString()}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
                           {line.match_status}
@@ -735,7 +737,7 @@ function LinesPane({ lines, total, loading, filter, setFilter, search, setSearch
                   )
                 })}
                 {lines.length === 0 && (
-                  <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-[#7A8580]">No lines found.</td></tr>
+                  <tr><td colSpan={8} className="px-6 py-12 text-center text-sm text-[#7A8580]">No statement lines or transactions found for this statement.</td></tr>
                 )}
               </tbody>
             </table>
