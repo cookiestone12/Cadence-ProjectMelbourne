@@ -75,17 +75,48 @@ def _resolve_staging_url() -> str:
     return staging_url
 
 
+def _sanitize_db_url(url: str) -> str:
+    """Strip credentials so we can safely log the resolved target."""
+    try:
+        from urllib.parse import urlparse, urlunparse
+        p = urlparse(url)
+        netloc = p.hostname or ""
+        if p.port:
+            netloc += f":{p.port}"
+        if p.username:
+            netloc = f"***@{netloc}"
+        return urlunparse((p.scheme, netloc, p.path, "", "", ""))
+    except Exception:
+        return "<unparseable>"
+
+
 def _run_alembic(staging_url: str) -> None:
-    """Bring the staging schema to head using the project's alembic config."""
+    """Bring the staging schema to head against STAGING_DATABASE_URL.
+
+    ``alembic/env.py`` in this repo imports ``DATABASE_URL`` from
+    ``backend.models.database`` at import time and ignores the
+    ``sqlalchemy.url`` set on the Alembic Config. We therefore MUST
+    overwrite ``os.environ["DATABASE_URL"]`` before invoking Alembic
+    to guarantee migrations land on staging, not whatever URL the
+    operator's shell happens to have set.
+    """
     from alembic import command
     from alembic.config import Config
 
-    cfg = Config(str(REPO_ROOT / "alembic.ini"))
-    # Override sqlalchemy.url so we never accidentally hit DATABASE_URL.
-    cfg.set_main_option("sqlalchemy.url", staging_url)
-    print("[seed_staging] Running 'alembic upgrade heads' against staging…")
-    command.upgrade(cfg, "heads")
-    print("[seed_staging] Alembic upgrade complete.")
+    print(f"[seed_staging] Alembic target: {_sanitize_db_url(staging_url)}")
+    original = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = staging_url
+    try:
+        cfg = Config(str(REPO_ROOT / "alembic.ini"))
+        cfg.set_main_option("sqlalchemy.url", staging_url)
+        print("[seed_staging] Running 'alembic upgrade heads' against staging…")
+        command.upgrade(cfg, "heads")
+        print("[seed_staging] Alembic upgrade complete.")
+    finally:
+        if original is not None:
+            os.environ["DATABASE_URL"] = original
+        else:
+            os.environ.pop("DATABASE_URL", None)
 
 
 def _seed(staging_url: str) -> None:
