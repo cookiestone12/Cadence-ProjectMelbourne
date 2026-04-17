@@ -289,7 +289,7 @@ async def preview_document(
             "extraction_method": "tabular_excel" if lower.endswith(('.xlsx', '.xls')) else "tabular_csv",
             "schedule_a_songs": [],
             "schedule_b_songs": [],
-            "preview_rows": tagged[:50],
+            "preview_rows": tagged,
             "preview_total": len(tagged),
             "headers": headers,
             "mapping": initial_mapping,
