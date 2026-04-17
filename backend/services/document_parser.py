@@ -98,6 +98,206 @@ def extract_text_from_pdf(content: bytes) -> str:
     return "\n".join(text_parts)
 
 
+COLUMN_ALIASES = {
+    "title": ["title", "composition", "song", "track", "work"],
+    "isrc": ["isrc"],
+    "iswc": ["iswc"],
+    "publishing_percentage": ["%", "writer", "pub", "publishing", "share", "split"],
+    "year": ["year"],
+    "era": ["era"],
+    "status": ["status"],
+    "primary_artist": ["artist"],
+    "row_num": ["#", "no", "no.", "num"],
+    "notes": ["notes", "note"],
+}
+
+
+def _classify_header_token(token: str) -> Optional[str]:
+    t = token.lower().strip().rstrip(":").strip()
+    if not t:
+        return None
+    for field, aliases in COLUMN_ALIASES.items():
+        for alias in aliases:
+            if t == alias or alias in t:
+                return field
+    return None
+
+
+def _group_words_into_lines(words: List[Dict[str, Any]], y_tol: float = 3.0) -> List[List[Dict[str, Any]]]:
+    """Group pdfplumber words into visual lines based on y-coordinate."""
+    if not words:
+        return []
+    sorted_words = sorted(words, key=lambda w: (w["top"], w["x0"]))
+    lines: List[List[Dict[str, Any]]] = []
+    for w in sorted_words:
+        placed = False
+        for line in lines:
+            if abs(line[0]["top"] - w["top"]) <= y_tol:
+                line.append(w)
+                placed = True
+                break
+        if not placed:
+            lines.append([w])
+    for line in lines:
+        line.sort(key=lambda w: w["x0"])
+    return lines
+
+
+def _detect_columns_from_header(line_words: List[Dict[str, Any]]) -> Optional[List[Tuple[str, float, float]]]:
+    """Return list of (field_name, x_start, x_end) describing each column.
+
+    Adjacent header tokens that map to the same field are merged. Column
+    x-ranges extend to halfway between adjacent column centers, with the
+    first and last extending to the page edges (None x_end means open end).
+    """
+    classified: List[Tuple[str, float, float]] = []
+    for w in line_words:
+        field = _classify_header_token(w["text"])
+        if field:
+            classified.append((field, w["x0"], w["x1"]))
+
+    if not classified:
+        return None
+
+    has_title = any(c[0] in ("title",) for c in classified)
+    has_anchor = any(c[0] in ("isrc", "iswc", "publishing_percentage") for c in classified)
+    if not (has_title and has_anchor):
+        return None
+
+    merged: List[List[Any]] = []
+    for field, x0, x1 in classified:
+        if merged and merged[-1][0] == field and (x0 - merged[-1][2]) < 30:
+            merged[-1][2] = x1
+        else:
+            merged.append([field, x0, x1])
+
+    merged.sort(key=lambda c: c[1])
+
+    columns: List[Tuple[str, float, float]] = []
+    for i, (field, x0, x1) in enumerate(merged):
+        if i == 0:
+            left_bound = 0.0
+        else:
+            prev_x1 = merged[i - 1][2]
+            left_bound = (prev_x1 + x0) / 2.0
+        if i == len(merged) - 1:
+            right_bound = float("inf")
+        else:
+            next_x0 = merged[i + 1][1]
+            right_bound = (x1 + next_x0) / 2.0
+        columns.append((field, left_bound, right_bound))
+
+    return columns
+
+
+def _row_words_to_record(
+    row_words: List[Dict[str, Any]],
+    columns: List[Tuple[str, float, float]],
+) -> Optional[Dict[str, str]]:
+    """Bucket each word into a column by x-coordinate center."""
+    buckets: Dict[str, List[str]] = {col[0]: [] for col in columns}
+    for w in row_words:
+        cx = (w["x0"] + w["x1"]) / 2.0
+        for field, lo, hi in columns:
+            if lo <= cx < hi:
+                buckets[field].append(w["text"])
+                break
+
+    title = " ".join(buckets.get("title", [])).strip()
+    if not title:
+        return None
+    if re.fullmatch(r'\d+', title):
+        return None
+
+    pct_raw = " ".join(buckets.get("publishing_percentage", [])).strip()
+    pct_match = PCT_RE.search(pct_raw) if pct_raw else None
+    if not pct_match and pct_raw:
+        bare = re.match(r'^(\d+(?:\.\d+)?)\s*$', pct_raw)
+        if bare:
+            pct_match = bare
+
+    isrc_raw = " ".join(buckets.get("isrc", [])).strip()
+    isrc_match = ISRC_RE.search(isrc_raw) if isrc_raw else None
+
+    iswc_raw = " ".join(buckets.get("iswc", [])).strip()
+    iswc_match = ISWC_RE.search(iswc_raw) if iswc_raw else None
+
+    notes_parts: List[str] = []
+    status_text = " ".join(buckets.get("status", [])).strip()
+    if status_text:
+        notes_parts.append(status_text)
+    era_text = " ".join(buckets.get("era", [])).strip()
+    if era_text and era_text.lower() not in ("active", ""):
+        notes_parts.append(era_text)
+    extra_notes = " ".join(buckets.get("notes", [])).strip()
+    if extra_notes:
+        notes_parts.append(extra_notes)
+
+    artist = " ".join(buckets.get("primary_artist", [])).strip()
+
+    return {
+        "primary_artist": artist,
+        "title": title,
+        "publishing_percentage": pct_match.group(1) if pct_match else "",
+        "isrc": isrc_match.group(1) if isrc_match else "",
+        "iswc": iswc_match.group(1) if iswc_match else "",
+        "notes": " | ".join([n for n in notes_parts if n]),
+    }
+
+
+def extract_tabular_rows_from_pdf(content: bytes) -> Optional[Dict[str, Any]]:
+    """Column-aware tabular extraction using pdfplumber word x-coordinates.
+
+    Returns a dict with keys 'rows' (list[dict]), 'header_text' (str of all
+    pre-table lines so creator/PRO info can still be parsed) on success,
+    or None if no tabular header is detected on any page.
+    """
+    import pdfplumber
+    all_rows: List[Dict[str, str]] = []
+    header_text_lines: List[str] = []
+    found_header = False
+
+    with pdfplumber.open(BytesIO(content)) as pdf:
+        for page in pdf.pages:
+            try:
+                words = page.extract_words(use_text_flow=False, keep_blank_chars=False)
+            except Exception:
+                words = []
+            if not words:
+                continue
+            lines = _group_words_into_lines(words)
+            page_columns: Optional[List[Tuple[str, float, float]]] = None
+
+            for line_words in lines:
+                line_text = " ".join(w["text"] for w in line_words)
+
+                if page_columns is None:
+                    columns = _detect_columns_from_header(line_words)
+                    if columns:
+                        page_columns = columns
+                        found_header = True
+                        continue
+                    header_text_lines.append(line_text)
+                else:
+                    if any(re.search(p, line_text, re.IGNORECASE) for p in [
+                        r'^\s*total\s+(controlled|compositions|songs)',
+                        r'^\s*effective\s+date',
+                        r'\bpage\s+\d+\s*\|',
+                    ]):
+                        continue
+                    record = _row_words_to_record(line_words, page_columns)
+                    if record:
+                        all_rows.append(record)
+
+    if not found_header:
+        return None
+
+    return {
+        "rows": all_rows,
+        "header_text": "\n".join(header_text_lines),
+    }
+
+
 def extract_text_from_docx(content: bytes) -> str:
     from docx import Document
     doc = Document(BytesIO(content))
@@ -457,6 +657,27 @@ def parse_document_text(text: str) -> DocumentParseResult:
 
 def parse_document(content: bytes, filename: str) -> DocumentParseResult:
     lower = filename.lower()
+
+    if lower.endswith('.pdf'):
+        try:
+            tabular = extract_tabular_rows_from_pdf(content)
+        except Exception as e:
+            logger.warning(f"Column-aware PDF extraction failed for {filename}: {e}; falling back to text parser.")
+            tabular = None
+        if tabular and tabular.get("rows"):
+            result = DocumentParseResult()
+            creator_name, bmi_ipi, bmi_id, pro_name = parse_creator_info(tabular.get("header_text", ""))
+            result.creator_name = creator_name
+            result.bmi_ipi = bmi_ipi
+            result.bmi_id = bmi_id
+            result.pro_name = pro_name
+            result.schedule_a_songs = tabular["rows"]
+            if creator_name:
+                result.warnings.append(f"Detected creator: {creator_name}")
+            if bmi_ipi:
+                result.warnings.append(f"Detected {pro_name or 'PRO'} IPI#: {bmi_ipi}")
+            return result
+
     try:
         if lower.endswith('.pdf'):
             text = extract_text_from_pdf(content)
