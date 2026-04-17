@@ -1114,6 +1114,7 @@ def record_payment_ledger(db: Session, payout_item_id: int, org_id: int, user_id
             entry_type="PAYMENT",
             amount_cents=-payout_item.amount_cents,
             memo=f"Payment via payout batch '{batch.name}'" if batch else f"Payment for payout item {payout_item_id}",
+            payout_item_id=payout_item_id,
             created_by_user_id=user_id,
         )
         db.add(payment_entry)
@@ -1153,6 +1154,7 @@ def generate_statement_action_items(db: Session, statement_id: int, org_id: int)
                 action = ActionItem(
                     organization_id=org_id,
                     entity_type="STATEMENT",
+                    entity_id=statement_id,
                     entity_label=f"{statement.source_name} - {statement.period_start} to {statement.period_end}",
                     action_type="STATEMENT_UNMATCHED",
                     title=f"Statement #{statement_id}: {unmatched_count} unmatched lines need review",
@@ -1186,6 +1188,7 @@ def generate_statement_action_items(db: Session, statement_id: int, org_id: int)
                     action = ActionItem(
                         organization_id=org_id,
                         entity_type="STATEMENT",
+                        entity_id=statement_id,
                         entity_label=f"{statement.source_name}",
                         action_type="STATEMENT_READY",
                         title=f"Statement #{statement_id} is ready for processing",

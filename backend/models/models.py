@@ -859,7 +859,8 @@ class ActionItem(Base):
     
     entity_type = Column(String, nullable=True)
     entity_label = Column(String, nullable=True)
-    
+    entity_id = Column(Integer, nullable=True, index=True)
+
     action_type = Column(String, nullable=False)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
@@ -1902,6 +1903,7 @@ class RoyaltyLedgerEntry(Base):
     advance_id = Column(Integer, ForeignKey("advance_pools.id"), nullable=True)
     recoupment_pool = Column(String, nullable=True)
     memo = Column(Text, nullable=True)
+    payout_item_id = Column(Integer, ForeignKey("payout_items.id"), nullable=True, index=True)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

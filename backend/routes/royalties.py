@@ -1101,34 +1101,34 @@ def _build_statement_delete_summary(db: Session, stmt: "RoyaltyStatement") -> Di
             "restore_dollars": int(restore_cents or 0) / 100.0,
         })
 
-    # PAYMENT ledger entries that reference this statement. We match
-    # each one back to its originating PayoutItem deterministically by
-    # (payee_id, +amount, paid_at within ±5min of the ledger entry's
-    # created_at) — record_payment_ledger() in
-    # royalty_processing_engine.py creates the ledger entry and stamps
-    # PayoutItem.paid_at in the same transaction, so the temporal
-    # window is tight. Clearing paid_at lets the payout flow back into
-    # the "unpaid" bucket so the user knows the link to its source
-    # statement is gone.
+    # PAYMENT ledger entries that reference this statement. We use
+    # the deterministic FK RoyaltyLedgerEntry.payout_item_id (set by
+    # record_payment_ledger). For legacy ledger entries written before
+    # that column existed, fall back to a (payee_id, amount, paid_at
+    # ±5min) heuristic so historic data still unwinds correctly.
     payment_rows = db.query(RoyaltyLedgerEntry).filter(
         RoyaltyLedgerEntry.statement_id == statement_id,
         RoyaltyLedgerEntry.entry_type == "PAYMENT",
     ).all()
     payments = []
-    payouts_to_unwind_ids = []
     for p in payment_rows:
-        positive_cents = abs(p.amount_cents or 0)
-        match_window = timedelta(minutes=5)
-        candidate = db.query(PayoutItem).filter(
-            PayoutItem.org_id == org_id,
-            PayoutItem.payee_id == p.payee_id,
-            PayoutItem.amount_cents == positive_cents,
-            PayoutItem.paid_at.isnot(None),
-            PayoutItem.paid_at >= (p.created_at - match_window) if p.created_at else PayoutItem.paid_at.isnot(None),
-            PayoutItem.paid_at <= (p.created_at + match_window) if p.created_at else PayoutItem.paid_at.isnot(None),
-        ).order_by(PayoutItem.paid_at.desc()).first()
-        if candidate and candidate.id not in payouts_to_unwind_ids:
-            payouts_to_unwind_ids.append(candidate.id)
+        candidate = None
+        if p.payout_item_id:
+            candidate = db.query(PayoutItem).filter(
+                PayoutItem.id == p.payout_item_id,
+                PayoutItem.org_id == org_id,
+            ).first()
+        if candidate is None:
+            positive_cents = abs(p.amount_cents or 0)
+            match_window = timedelta(minutes=5)
+            candidate = db.query(PayoutItem).filter(
+                PayoutItem.org_id == org_id,
+                PayoutItem.payee_id == p.payee_id,
+                PayoutItem.amount_cents == positive_cents,
+                PayoutItem.paid_at.isnot(None),
+                PayoutItem.paid_at >= (p.created_at - match_window) if p.created_at else PayoutItem.paid_at.isnot(None),
+                PayoutItem.paid_at <= (p.created_at + match_window) if p.created_at else PayoutItem.paid_at.isnot(None),
+            ).order_by(PayoutItem.paid_at.desc()).first()
         payments.append({
             "ledger_entry_id": p.id,
             "payee_id": p.payee_id,
@@ -1137,6 +1137,7 @@ def _build_statement_delete_summary(db: Session, stmt: "RoyaltyStatement") -> Di
             "memo": p.memo,
             "payout_item_id": candidate.id if candidate else None,
             "payout_batch_id": candidate.batch_id if candidate else None,
+            "linkage": "fk" if (p.payout_item_id and candidate) else ("heuristic" if candidate else "none"),
         })
 
     ledger_count = db.query(func.count(RoyaltyLedgerEntry.id)).filter(
@@ -1149,19 +1150,27 @@ def _build_statement_delete_summary(db: Session, stmt: "RoyaltyStatement") -> Di
         RoyaltyStatementLine.statement_id == statement_id
     ).all()]
 
-    # Anchored title patterns so that "Statement #1" doesn't also
-    # match "Statement #10", "Statement #100", etc. The auto-generator
-    # in royalty_processing_engine.generate_statement_action_items
-    # always writes one of these two prefixes.
+    # Action items pointing at this statement. We use the new
+    # deterministic ActionItem.entity_id column (populated by
+    # generate_statement_action_items). For rows written before that
+    # column existed, fall back to anchored title patterns so we
+    # still catch legacy auto-generated items without false-matching
+    # neighboring statement ids (#1 vs #10).
     title_pattern_colon = f"Statement #{statement_id}:%"
     title_pattern_space = f"Statement #{statement_id} %"
-    from sqlalchemy import or_ as _or
+    from sqlalchemy import or_ as _or, and_ as _and
     action_q = db.query(ActionItem).filter(
         ActionItem.organization_id == org_id,
         ActionItem.entity_type == "STATEMENT",
         _or(
-            ActionItem.title.like(title_pattern_colon),
-            ActionItem.title.like(title_pattern_space),
+            ActionItem.entity_id == statement_id,
+            _and(
+                ActionItem.entity_id.is_(None),
+                _or(
+                    ActionItem.title.like(title_pattern_colon),
+                    ActionItem.title.like(title_pattern_space),
+                ),
+            ),
         ),
     )
     action_items_to_remove = action_q.count()
@@ -1270,28 +1279,50 @@ def delete_statement(
         if adv:
             adv.outstanding_balance_cents = (adv.outstanding_balance_cents or 0) + restore["restore_cents"]
 
-    # 2. Audit-log each unwound payment ledger entry separately so
-    #    the audit trail captures who paid what before the link to
-    #    this statement disappeared. The PayoutItem itself is NOT
-    #    modified (the real-world payment still happened).
+    # 2. Unwind PayoutItem.paid_at for every payout linked (FK or
+    #    legacy heuristic) to a PAYMENT ledger entry on this
+    #    statement, and audit-log each affected payout under the
+    #    single contract action PAYOUT_UNWOUND_BY_STATEMENT_DELETE
+    #    (entity_type=PAYOUT_ITEM, entity_id=payout.id, details
+    #    include statement_id, payee_id, amount_cents, batch_id,
+    #    ledger_entry_id, linkage). Payments with no resolvable
+    #    PayoutItem still get an audit row (entity_id=None) so the
+    #    ledger-only history is preserved.
+    from ..models.models import PayoutItem
     for pmt in summary["payments_unwound"]:
+        po_id = pmt.get("payout_item_id")
+        po = None
+        if po_id:
+            po = db.query(PayoutItem).filter(
+                PayoutItem.id == po_id,
+                PayoutItem.org_id == org_id,
+            ).first()
+        if po is not None:
+            po.paid_at = None
         log_action(
             db, org_id, current_user.id,
             "PAYOUT_UNWOUND_BY_STATEMENT_DELETE",
-            "STATEMENT", statement_id, stmt.source_name,
+            "PAYOUT_ITEM" if po else "STATEMENT",
+            po.id if po else statement_id,
+            f"Payout item {po.id}" if po else stmt.source_name,
             details={
+                "statement_id": statement_id,
                 "ledger_entry_id": pmt["ledger_entry_id"],
                 "payee_id": pmt["payee_id"],
                 "amount_cents": pmt["amount_cents"],
+                "payout_item_id": po.id if po else None,
+                "batch_id": po.batch_id if po else None,
                 "memo": pmt["memo"],
+                "linkage": pmt.get("linkage", "none"),
             },
         )
 
     # 3. Delete ActionItems pointing at this statement or its lines.
-    #    Use anchored title patterns so #1 doesn't accidentally match
-    #    #10/#100 etc. (auto-gen always emits "Statement #{id}:" or
-    #    "Statement #{id} ").
-    from sqlalchemy import or_ as _or
+    #    Prefer the deterministic entity_id column; for legacy rows
+    #    written before that column existed, fall back to anchored
+    #    title patterns ("Statement #{id}:" / "Statement #{id} ")
+    #    so #1 doesn't accidentally match #10/#100.
+    from sqlalchemy import or_ as _or, and_ as _and
     line_ids = [r[0] for r in db.query(RoyaltyStatementLine.id).filter(
         RoyaltyStatementLine.statement_id == statement_id
     ).all()]
@@ -1299,8 +1330,14 @@ def delete_statement(
         ActionItem.organization_id == org_id,
         ActionItem.entity_type == "STATEMENT",
         _or(
-            ActionItem.title.like(f"Statement #{statement_id}:%"),
-            ActionItem.title.like(f"Statement #{statement_id} %"),
+            ActionItem.entity_id == statement_id,
+            _and(
+                ActionItem.entity_id.is_(None),
+                _or(
+                    ActionItem.title.like(f"Statement #{statement_id}:%"),
+                    ActionItem.title.like(f"Statement #{statement_id} %"),
+                ),
+            ),
         ),
     ).delete(synchronize_session=False)
     if line_ids:
@@ -1309,35 +1346,6 @@ def delete_statement(
             ActionItem.entity_type == "STATEMENT_LINE",
             ActionItem.entity_label.in_([str(i) for i in line_ids]),
         ).delete(synchronize_session=False)
-
-    # 3b. Unwind PayoutItem.paid_at for any payout we matched to a
-    #     PAYMENT ledger entry on this statement, and audit-log per
-    #     payout (not just per ledger entry) so each affected payout
-    #     id appears explicitly in the audit trail.
-    from ..models.models import PayoutItem
-    for pmt in summary["payments_unwound"]:
-        po_id = pmt.get("payout_item_id")
-        if not po_id:
-            continue
-        po = db.query(PayoutItem).filter(
-            PayoutItem.id == po_id,
-            PayoutItem.org_id == org_id,
-        ).first()
-        if not po:
-            continue
-        po.paid_at = None
-        log_action(
-            db, org_id, current_user.id,
-            "PAYOUT_ITEM_UNWOUND_BY_STATEMENT_DELETE",
-            "PAYOUT_ITEM", po.id, f"Payout item {po.id}",
-            details={
-                "statement_id": statement_id,
-                "payee_id": po.payee_id,
-                "amount_cents": po.amount_cents,
-                "batch_id": po.batch_id,
-                "ledger_entry_id": pmt["ledger_entry_id"],
-            },
-        )
 
     # 4. Delete ledger entries (this removes both PAYMENT and
     #    RECOUPMENT_APPLIED entries we just audited / restored from).

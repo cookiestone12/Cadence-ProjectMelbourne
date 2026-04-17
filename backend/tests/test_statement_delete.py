@@ -275,13 +275,16 @@ def test_delete_unwinds_payout_item_paid_at(db, org_user, client):
         amount_cents=50_000, paid_at=paid_at,
     )
     db.add(payout); db.commit(); db.refresh(payout)
+    stmt_id_local = stmt.id  # capture before delete (statement row will be removed)
 
     # PAYMENT ledger entry created at the same instant as the payout
     # (mirroring record_payment_ledger which stamps both in the same tx)
+    # Ledger entry uses the deterministic FK column (the modern path).
     ledger = RoyaltyLedgerEntry(
         org_id=org.id, statement_id=stmt.id, processing_run_id=run.id,
         payee_id=payee.id, entry_type="PAYMENT", amount_cents=-50_000,
         memo=f"Payment via payout batch '{batch.name}'",
+        payout_item_id=payout.id,
         created_at=paid_at,
     )
     db.add(ledger); db.commit()
@@ -297,10 +300,16 @@ def test_delete_unwinds_payout_item_paid_at(db, org_user, client):
     from backend.models.models import AuditLog
     per_payout_logs = db.query(AuditLog).filter(
         AuditLog.organization_id == org.id,
-        AuditLog.action == "PAYOUT_ITEM_UNWOUND_BY_STATEMENT_DELETE",
+        AuditLog.action == "PAYOUT_UNWOUND_BY_STATEMENT_DELETE",
+        AuditLog.entity_type == "PAYOUT_ITEM",
         AuditLog.entity_id == po.id,
     ).all()
     assert len(per_payout_logs) == 1, "must audit-log per affected payout id"
+    details = per_payout_logs[0].details or {}
+    assert details.get("payout_item_id") == po.id
+    assert details.get("amount_cents") == -50_000
+    assert details.get("statement_id") == stmt_id_local
+    assert details.get("linkage") == "fk"
 
 
 # ---------- T002.7: anchored ActionItem title match (no #1 → #10 leak) ----------
