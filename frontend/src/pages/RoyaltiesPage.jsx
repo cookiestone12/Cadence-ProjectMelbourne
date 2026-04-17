@@ -282,7 +282,7 @@ function DashboardTab({ orgId, creatorId }) {
   )
 }
 
-function StatementsTab({ orgId, songs }) {
+function StatementsTab({ orgId, songs, selectedCreatorId }) {
   const [statements, setStatements] = useState([])
   const [loading, setLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
@@ -325,14 +325,17 @@ function StatementsTab({ orgId, songs }) {
   const loadStatements = useCallback(async () => {
     if (!orgId) return
     try {
-      const res = await axios.get(`/api/royalties/statements/${orgId}`)
+      const params = new URLSearchParams()
+      if (selectedCreatorId) params.append('creator_id', selectedCreatorId)
+      const qs = params.toString()
+      const res = await axios.get(`/api/royalties/statements/${orgId}${qs ? `?${qs}` : ''}`)
       setStatements(Array.isArray(res.data) ? res.data : res.data.statements || [])
     } catch (err) {
       console.error('Failed to load statements:', err)
     } finally {
       setLoading(false)
     }
-  }, [orgId])
+  }, [orgId, selectedCreatorId])
 
   useEffect(() => { loadStatements() }, [loadStatements])
 
@@ -754,7 +757,7 @@ function StatementsTab({ orgId, songs }) {
                 </tr>
               ))}
               {statements.length === 0 && (
-                <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-[#7A8580]">No statements uploaded yet.</td></tr>
+                <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-[#7A8580]">{selectedCreatorId ? 'No statements for this client yet.' : 'No statements uploaded yet.'}</td></tr>
               )}
             </tbody>
           </table>
@@ -2250,7 +2253,10 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
   const loadStatements = useCallback(async () => {
     if (!orgId) return
     try {
-      const res = await axios.get(`/api/royalties/statements/${orgId}`)
+      const params = new URLSearchParams()
+      if (selectedCreatorId) params.append('creator_id', selectedCreatorId)
+      const qs = params.toString()
+      const res = await axios.get(`/api/royalties/statements/${orgId}${qs ? `?${qs}` : ''}`)
       const data = Array.isArray(res.data) ? res.data : res.data.statements || []
       setStatements(data)
     } catch (err) {
@@ -2258,7 +2264,7 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
     } finally {
       setStatementsLoading(false)
     }
-  }, [orgId])
+  }, [orgId, selectedCreatorId])
 
   useEffect(() => { loadStatements() }, [loadStatements])
 
@@ -2401,7 +2407,7 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
         ) : filteredStatements.length === 0 ? (
           <div className="text-center py-12">
             <DocumentTextIcon className="w-12 h-12 text-[#7A8580] mx-auto mb-3 opacity-40" />
-            <p className="text-sm text-[#7A8580]">No statements found</p>
+            <p className="text-sm text-[#7A8580]">{selectedCreatorId ? 'No statements for this client yet' : 'No statements found'}</p>
           </div>
         ) : (
           <div className="divide-y divide-[rgba(59,77,67,0.05)]">
@@ -2712,7 +2718,7 @@ export default function RoyaltiesPage() {
 
         {activeTab === 'dashboard' && <DashboardTab orgId={orgId} creatorId={selectedCreatorId} />}
         {activeTab === 'processing' && <ProcessingTab orgId={orgId} creators={creators} selectedCreatorId={selectedCreatorId} />}
-        {activeTab === 'statements' && <StatementsTab orgId={orgId} songs={songs} />}
+        {activeTab === 'statements' && <StatementsTab orgId={orgId} songs={songs} selectedCreatorId={selectedCreatorId} />}
         {activeTab === 'earnings' && <EarningsTab orgId={orgId} />}
         {activeTab === 'analytics' && <RoyaltyAnalyticsDashboard orgId={orgId} />}
         {activeTab === 'money_out' && <MoneyOutTab orgId={orgId} creators={creators} contracts={contracts} />}
