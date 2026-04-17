@@ -108,24 +108,49 @@
 
 | Name                              | Example          | Consumed by                                  |
 |-----------------------------------|------------------|----------------------------------------------|
-| `AI_INTEGRATIONS_OPENAI_API_KEY`  | `secret`         | All OpenAI-backed routes (auto-set by Replit OpenAI integration). |
-| `AI_INTEGRATIONS_OPENAI_BASE_URL` | `secret`         | Same.                                        |
-| `RESEND_API_KEY`                  | `secret`         | Email sending (auto-set by Replit Resend integration). |
-| `SPOTIFY_CLIENT_ID`               | `secret`         | Spotify integration (auto-set).              |
-| `SPOTIFY_CLIENT_SECRET`           | `secret`         | Spotify integration (auto-set).              |
-| `DROPBOX_APP_KEY`                 | `secret`         | Cloud-storage linking.                       |
+| `AI_INTEGRATIONS_OPENAI_API_KEY`  | `secret`         | All OpenAI-backed routes (CSV mapping, contract parser, audio analysis, brief builder, assistant chat, Schedule A extractor). Auto-set by the Replit OpenAI integration. |
+| `AI_INTEGRATIONS_OPENAI_BASE_URL` | `secret`         | Same — OpenAI API base URL.                  |
+| `RESEND_API_KEY`                  | `secret`         | Transactional email via Resend (auto-set by the Replit Resend integration). |
+| `SPOTIFY_CLIENT_ID`               | `secret`         | Spotify integration — playlist import, search, release lookup. |
+| `SPOTIFY_CLIENT_SECRET`           | `secret`         | Spotify integration.                         |
+| `DROPBOX_APP_KEY`                 | `secret`         | Cloud-storage linking (Dropbox audio scan).  |
 | `DROPBOX_APP_SECRET`              | `secret`         | Cloud-storage linking.                       |
-| `YOUTUBE_API_KEY`                 | `secret`         | Chart ingestion.                             |
-| `LASTFM_API_KEY`                  | `secret`         | Chart ingestion.                             |
+| `GOOGLE_CLIENT_ID`                | `secret`         | Cloud-storage linking (Google Drive audio scan). |
+| `GOOGLE_CLIENT_SECRET`            | `secret`         | Cloud-storage linking (Google Drive).        |
+| `YOUTUBE_API_KEY`                 | `secret`         | Chart ingestion (streaming intelligence).    |
+| `LASTFM_API_KEY`                  | `secret`         | Chart ingestion (streaming intelligence).    |
+| `CHARTMETRIC_API_KEY`             | `secret`         | Chartmetric streaming/chart data feed.       |
+| `LUMINATE_API_KEY`                | `secret`         | Luminate (Nielsen) sales/streaming feed.     |
+| `LUMINATE_API_SECRET`             | `secret`         | Luminate paired secret.                      |
+| `CLAUDE_API_KEY`                  | `secret`         | Optional Claude AI provider (surfaced in `/settings` integration probe). |
 | `VAPID_PRIVATE_KEY`               | `secret`         | Web Push (PWA push notifications).           |
 | `VAPID_PUBLIC_KEY`                | `BLg…`           | Web Push (exposed to client).                |
-| `VAPID_SUBJECT`                   | `mailto:support@cadence-ci.com` | Web Push.                     |
+| `VAPID_SUBJECT`                   | `mailto:support@cadence-ci.com` | Web Push subject for VAPID claims.|
 | `STAGING_DATABASE_URL`            | postgres URL     | `scripts/seed_staging.py` (never read by app).|
 | `LOG_RING_CAPACITY`               | `10000`          | In-process log ring buffer for `/internal/logs`.|
+| `SQL_DEBUG`                       | `true`           | Enables SQLAlchemy DEBUG logging (very chatty — dev only). |
+| `PORT`                            | `8000`           | Gunicorn bind port (ignored on Replit, which sets it). |
 
-Anything not listed here is treated as "not configured" — the
-relevant integration falls through to a clear error rather than a
-silent fallback.
+### Host-provided (do NOT set yourself)
+
+These are populated by the Replit runtime / connector layer.
+Listed here only so an operator who sees them in the env doesn't
+mistake them for configuration knobs.
+
+| Name                              | Source           | Notes                                        |
+|-----------------------------------|------------------|----------------------------------------------|
+| `REPL_IDENTITY`                   | Replit runtime   | Used by the Spotify / Resend connector clients to authenticate against Replit's connector proxy. |
+| `WEB_REPL_RENEWAL`                | Replit runtime   | Same.                                        |
+| `REPLIT_CONNECTORS_HOSTNAME`      | Replit runtime   | Same — connector proxy hostname.             |
+| `REPLIT_DEPLOYMENT_ID`            | Replit deploy    | Fallback for `BUILD_VERSION` if unset.       |
+| `REPL_SLUG`                       | Replit runtime   | Same — last-resort fallback for `BUILD_VERSION`. |
+| `ALLOWED_ORIGINS`                 | legacy alias     | Read as a fallback for `CORS_ORIGINS`. Prefer `CORS_ORIGINS` in new deployments. |
+
+Anything not listed in this section or the two preceding tables is
+treated as "not configured" — the relevant integration falls
+through to a clear error rather than a silent fallback. If you
+add a new `os.getenv(...)` to backend code, append it here in the
+same PR.
 
 ---
 
