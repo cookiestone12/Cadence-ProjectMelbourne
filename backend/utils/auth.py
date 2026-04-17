@@ -140,6 +140,18 @@ def get_current_admin_user(current_user: User = Depends(get_current_user)):
         )
     return current_user
 
+def get_current_staff_or_admin(current_user: User = Depends(get_current_user)):
+    """Allow Cadence staff (is_cadence_staff) OR master admin (is_super_admin).
+    Used by all /api/internal/portal/* endpoints — read-only operational
+    surface for the staff portal at /internal."""
+    if not (current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cadence staff access required"
+        )
+    return current_user
+
+
 def get_current_super_admin(current_user: User = Depends(get_current_user)):
     if not current_user.is_super_admin:
         raise HTTPException(

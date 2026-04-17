@@ -72,6 +72,14 @@ import AntiFraudPage from './pages/AntiFraudPage'
 import ContentPolicyPage from './pages/ContentPolicyPage'
 import BetaTermsPage from './pages/BetaTermsPage'
 import HelpCenterPage from './pages/HelpCenterPage'
+import InternalLayout from './internal/InternalLayout'
+import InternalLogin from './internal/InternalLogin'
+import InternalDashboard from './internal/Dashboard'
+import InternalOrganizations from './internal/Organizations'
+import InternalUsers from './internal/Users'
+import InternalDatabase from './internal/Database'
+import InternalLogs from './internal/Logs'
+import InternalOnboarding from './internal/Onboarding'
 import Sidebar from './components/Sidebar'
 import PullToRefresh from './components/PullToRefresh'
 import AssistantChat from './components/AssistantChat'
@@ -141,6 +149,33 @@ function App() {
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="text-gray-600">Loading...</div>
       </div>
+    )
+  }
+
+  // Internal staff portal lives outside the regular client auth flow.
+  // It uses its own token in localStorage('internal_token') and its own
+  // login screen; we serve the routes here regardless of whether the
+  // main client app is authenticated.
+  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/internal')) {
+    const internalToken = localStorage.getItem('internal_token')
+    return (
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/internal/login" element={<InternalLogin />} />
+          <Route
+            path="/internal"
+            element={internalToken ? <InternalLayout /> : <Navigate to="/internal/login" />}
+          >
+            <Route index element={<Navigate to="/internal/dashboard" replace />} />
+            <Route path="dashboard" element={<InternalDashboard />} />
+            <Route path="organizations" element={<InternalOrganizations />} />
+            <Route path="users" element={<InternalUsers />} />
+            <Route path="database" element={<InternalDatabase />} />
+            <Route path="logs" element={<InternalLogs />} />
+            <Route path="onboarding" element={<InternalOnboarding />} />
+          </Route>
+        </Routes>
+      </Router>
     )
   }
 
