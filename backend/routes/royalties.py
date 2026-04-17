@@ -1179,7 +1179,10 @@ def _build_statement_delete_summary(db: Session, stmt: "RoyaltyStatement") -> Di
         line_action_items_to_remove = db.query(func.count(ActionItem.id)).filter(
             ActionItem.organization_id == org_id,
             ActionItem.entity_type == "STATEMENT_LINE",
-            ActionItem.entity_label.in_([str(i) for i in line_ids]),
+            _or(
+                ActionItem.entity_id.in_(line_ids),
+                ActionItem.entity_label.in_([str(i) for i in line_ids]),
+            ),
         ).scalar() or 0
 
     file_path = stmt.file_path
