@@ -222,6 +222,15 @@ async def preview_csv(
     )
 
 
+_DOC_EXTS = ('.pdf', '.docx', '.doc')
+_IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff')
+_TEXT_EXTS = ('.txt', '.md', '.tsv')
+
+
+class TextPreviewRequest(BaseModel):
+    text: str
+
+
 @router.post("/document-preview/{org_id}")
 async def preview_document(
     org_id: int,
@@ -229,7 +238,7 @@ async def preview_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from backend.services.document_parser import parse_document
+    from backend.services.document_parser import parse_document_unified
 
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == current_user.id,
@@ -241,16 +250,50 @@ async def preview_document(
 
     filename = file.filename or ""
     lower = filename.lower()
-    if not (lower.endswith('.pdf') or lower.endswith('.docx') or lower.endswith('.doc')):
-        raise HTTPException(status_code=400, detail="File must be a PDF or Word document (.pdf, .docx)")
+    accepted = _DOC_EXTS + _IMAGE_EXTS + _TEXT_EXTS
+    if not lower.endswith(accepted):
+        raise HTTPException(
+            status_code=400,
+            detail="File must be a PDF, Word, image (PNG/JPG), or plain text document.",
+        )
 
-    if file.size and file.size > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10MB.")
+    max_size = 20 * 1024 * 1024 if lower.endswith(_IMAGE_EXTS) else 10 * 1024 * 1024
+    if file.size and file.size > max_size:
+        raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {max_size // (1024*1024)}MB.")
 
     content = await file.read()
-    result = parse_document(content, filename)
+    result = parse_document_unified(content, filename, org_id=org_id)
 
-    if result.errors:
+    if result.errors and not result.schedule_a_songs and not result.schedule_b_songs:
+        raise HTTPException(status_code=400, detail=result.errors[0])
+
+    return result.to_preview_response()
+
+
+@router.post("/text-preview/{org_id}")
+async def preview_pasted_text(
+    org_id: int,
+    payload: TextPreviewRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from backend.services.document_parser import parse_document_unified
+
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not authorized to access this organization")
+
+    text = (payload.text or "").strip()
+    if len(text) < 5:
+        raise HTTPException(status_code=400, detail="Please paste at least a few characters of text.")
+    if len(text) > 200_000:
+        raise HTTPException(status_code=400, detail="Pasted text is too long (200K char max).")
+
+    result = parse_document_unified(None, "pasted.txt", pasted_text=text, org_id=org_id)
+    if result.errors and not result.schedule_a_songs and not result.schedule_b_songs:
         raise HTTPException(status_code=400, detail=result.errors[0])
 
     return result.to_preview_response()

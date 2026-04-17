@@ -37,6 +37,7 @@ class DocumentParseResult:
         self.schedule_b_songs: List[Dict[str, str]] = []
         self.errors: List[str] = []
         self.warnings: List[str] = []
+        self.extraction_method: str = "tabular_pdf"
 
     def to_preview_response(self) -> Dict[str, Any]:
         headers = ["title", "primary_artist", "publishing_percentage", "isrc", "iswc", "section", "notes"]
@@ -50,6 +51,8 @@ class DocumentParseResult:
                 "iswc": s.get("iswc", ""),
                 "section": "Schedule A",
                 "notes": s.get("notes", ""),
+                "_confidence": s.get("_confidence", 1.0),
+                "_source": s.get("_source", ""),
             }
             all_songs.append(row)
         for s in self.schedule_b_songs:
@@ -61,6 +64,8 @@ class DocumentParseResult:
                 "iswc": s.get("iswc", ""),
                 "section": "Schedule B (Pipeline)",
                 "notes": s.get("notes", ""),
+                "_confidence": s.get("_confidence", 1.0),
+                "_source": s.get("_source", ""),
             }
             all_songs.append(row)
 
@@ -96,6 +101,7 @@ class DocumentParseResult:
             },
             "is_document_import": True,
             "warnings": self.warnings,
+            "extraction_method": self.extraction_method,
         }
 
 
@@ -773,3 +779,182 @@ def parse_document(content: bytes, filename: str) -> DocumentParseResult:
         return result
 
     return parse_document_text(text)
+
+
+# ---------------------------------------------------------------------------
+# Format-tolerant unified dispatcher
+# ---------------------------------------------------------------------------
+
+_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff")
+
+
+def _result_from_ai(payload: Dict[str, Any], method_label: str) -> DocumentParseResult:
+    """Build a DocumentParseResult from an AI extractor payload."""
+    result = DocumentParseResult()
+    result.extraction_method = method_label
+
+    header = payload.get("header") or {}
+    result.creator_name = header.get("creator_name") or None
+    result.pro_name = header.get("pro_name") or None
+    result.bmi_ipi = header.get("ipi") or None
+    result.publisher = header.get("publisher") or None
+    result.agreement_type = header.get("agreement_type") or None
+    result.effective_date = header.get("effective_date") or None
+    result.territory = header.get("territory") or None
+    result.term = header.get("term") or None
+
+    for row in payload.get("rows", []):
+        result.schedule_a_songs.append(row)
+
+    for w in payload.get("warnings", []):
+        result.warnings.append(w)
+
+    if result.creator_name:
+        result.warnings.append(f"Detected creator: {result.creator_name}")
+    if result.bmi_ipi:
+        result.warnings.append(f"Detected {result.pro_name or 'PRO'} IPI#: {result.bmi_ipi}")
+
+    if not result.schedule_a_songs:
+        result.errors.append("AI extractor did not find any songs in the supplied document.")
+    return result
+
+
+def parse_document_unified(
+    content: Optional[bytes],
+    filename: Optional[str],
+    pasted_text: Optional[str] = None,
+    org_id: Optional[int] = None,
+) -> DocumentParseResult:
+    """Format-tolerant Schedule A ingestion.
+
+    Routes inputs by extension/MIME and falls back to AI extraction when the
+    deterministic parsers can't find any rows.
+    Order of preference for rich PDFs:
+        1. column-aware tabular extraction (high precision)
+        2. text-based dash/grouped parser
+        3. AI text extractor on extracted PDF text
+        4. AI vision extractor on rendered page images
+    """
+    from .schedule_a_ai_extractor import (
+        extract_from_text as ai_text,
+        extract_from_images as ai_vision,
+        render_pdf_pages_to_png,
+    )
+
+    lower = (filename or "").lower()
+
+    # ---- Pasted free-form text ------------------------------------------------
+    if pasted_text and not content:
+        payload = ai_text(pasted_text, org_id=org_id)
+        return _result_from_ai(payload, "ai_text")
+
+    if content is None:
+        result = DocumentParseResult()
+        result.errors.append("No file or text supplied.")
+        return result
+
+    # ---- Image inputs ---------------------------------------------------------
+    if any(lower.endswith(ext) for ext in _IMAGE_EXTS):
+        payload = ai_vision([content], org_id=org_id)
+        return _result_from_ai(payload, "ai_vision")
+
+    # ---- PDF ------------------------------------------------------------------
+    if lower.endswith(".pdf"):
+        # 1. column-aware tabular extraction
+        try:
+            tabular = extract_tabular_rows_from_pdf(content)
+        except Exception as e:
+            logger.warning(f"Column-aware PDF extraction failed: {e}")
+            tabular = None
+
+        if tabular and tabular.get("rows"):
+            result = DocumentParseResult()
+            result.extraction_method = "tabular_pdf"
+            header_text = tabular.get("header_text", "")
+            cn, ipi, bid, pn = parse_creator_info(header_text)
+            result.creator_name, result.bmi_ipi, result.bmi_id, result.pro_name = cn, ipi, bid, pn
+            ct = parse_contract_terms(header_text)
+            result.publisher = ct["publisher"]
+            result.agreement_type = ct["agreement_type"]
+            result.effective_date = ct["effective_date"]
+            result.territory = ct["territory"]
+            result.term = ct["term"]
+            for r in tabular["rows"]:
+                r.setdefault("_confidence", 0.95)
+                r.setdefault("_source", "tabular pdf row")
+            result.schedule_a_songs = tabular["rows"]
+            if cn:
+                result.warnings.append(f"Detected creator: {cn}")
+            if ipi:
+                result.warnings.append(f"Detected {pn or 'PRO'} IPI#: {ipi}")
+            return result
+
+        # 2. text-based parser
+        try:
+            text = extract_text_from_pdf(content)
+        except Exception as e:
+            text = ""
+            logger.warning(f"PDF text extraction failed: {e}")
+
+        if text and len(text.strip()) >= 10:
+            text_result = parse_document_text(text)
+            text_result.extraction_method = "text_pdf"
+            for s in text_result.schedule_a_songs + text_result.schedule_b_songs:
+                s.setdefault("_confidence", 0.85)
+                s.setdefault("_source", "pdf text line")
+            if text_result.schedule_a_songs or text_result.schedule_b_songs:
+                return text_result
+
+            # 3. AI text fallback when deterministic parser failed but we DO have text
+            ai_payload = ai_text(text, org_id=org_id)
+            if ai_payload.get("rows"):
+                return _result_from_ai(ai_payload, "ai_text_pdf")
+
+        # 4. AI vision fallback for scanned / image-only PDFs
+        images = render_pdf_pages_to_png(content)
+        if images:
+            payload = ai_vision(images, org_id=org_id)
+            return _result_from_ai(payload, "ai_vision_pdf")
+
+        result = DocumentParseResult()
+        result.errors.append("Could not extract any songs from this PDF (text, tabular, and vision passes all came up empty).")
+        return result
+
+    # ---- DOCX -----------------------------------------------------------------
+    if lower.endswith(".docx"):
+        try:
+            text = extract_text_from_docx(content)
+        except Exception as e:
+            logger.error(f"DOCX extraction failed: {e}")
+            result = DocumentParseResult()
+            result.errors.append(f"Failed to read Word document: {e}")
+            return result
+        text_result = parse_document_text(text)
+        text_result.extraction_method = "text_docx"
+        for s in text_result.schedule_a_songs + text_result.schedule_b_songs:
+            s.setdefault("_confidence", 0.85)
+            s.setdefault("_source", "docx line")
+        if text_result.schedule_a_songs or text_result.schedule_b_songs:
+            return text_result
+        ai_payload = ai_text(text, org_id=org_id)
+        if ai_payload.get("rows"):
+            return _result_from_ai(ai_payload, "ai_text_docx")
+        return text_result
+
+    if lower.endswith(".doc"):
+        result = DocumentParseResult()
+        result.errors.append("Legacy .doc format is not supported. Please save the file as .docx or .pdf and try again.")
+        return result
+
+    # ---- Plain text / unknown extension --------------------------------------
+    try:
+        text = content.decode("utf-8", errors="ignore")
+    except Exception:
+        text = ""
+    if text.strip():
+        payload = ai_text(text, org_id=org_id)
+        return _result_from_ai(payload, "ai_text")
+
+    result = DocumentParseResult()
+    result.errors.append(f"Unsupported file type: {filename}")
+    return result

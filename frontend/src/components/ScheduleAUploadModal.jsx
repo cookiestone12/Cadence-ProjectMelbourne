@@ -17,9 +17,35 @@ const STANDARD_FIELDS = [
   { value: 'notes', label: 'Notes' },
 ]
 
-const isDocumentFile = (filename) => {
+const DOC_EXTS = ['.pdf', '.docx', '.doc']
+const IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff']
+const TEXT_EXTS = ['.txt', '.md', '.tsv']
+
+const hasExt = (filename, exts) => {
   const lower = (filename || '').toLowerCase()
-  return lower.endsWith('.pdf') || lower.endsWith('.docx') || lower.endsWith('.doc')
+  return exts.some((e) => lower.endsWith(e))
+}
+
+const isDocumentFile = (filename) =>
+  hasExt(filename, [...DOC_EXTS, ...IMAGE_EXTS, ...TEXT_EXTS])
+
+const METHOD_LABELS = {
+  tabular_pdf: 'Column-aware PDF parser',
+  text_pdf: 'PDF text parser',
+  text_docx: 'Word document parser',
+  ai_text: 'AI text extraction',
+  ai_text_pdf: 'AI fallback (PDF text)',
+  ai_text_docx: 'AI fallback (Word)',
+  ai_vision: 'AI vision (image)',
+  ai_vision_pdf: 'AI vision (scanned PDF)',
+}
+
+const confidenceBadge = (confidence) => {
+  if (confidence == null) return null
+  const c = Number(confidence)
+  if (c >= 0.85) return { label: 'High', cls: 'bg-[rgba(91,154,110,0.15)] text-[#4A8A5A]' }
+  if (c >= 0.6) return { label: 'Med', cls: 'bg-[rgba(196,149,107,0.15)] text-[#8A6B4A]' }
+  return { label: 'Low', cls: 'bg-[rgba(196,112,104,0.15)] text-[#A45850]' }
 }
 
 export default function ScheduleAUploadModal({ onClose, onSuccess, organizationId, creators = [] }) {
@@ -40,6 +66,9 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
   const [isDocImport, setIsDocImport] = useState(false)
   const [documentInfo, setDocumentInfo] = useState(null)
   const [contractTerms, setContractTerms] = useState(null)
+  const [extractionMethod, setExtractionMethod] = useState(null)
+  const [inputMode, setInputMode] = useState('file') // 'file' | 'text'
+  const [pastedText, setPastedText] = useState('')
   
   const [selectedCreatorId, setSelectedCreatorId] = useState('')
   const [createNewCreator, setCreateNewCreator] = useState(false)
@@ -95,6 +124,9 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
   }
   
   const analyzeFile = async () => {
+    if (inputMode === 'text') {
+      return analyzeText()
+    }
     if (!file) return
     
     setAnalyzing(true)
@@ -127,8 +159,9 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
       setAllRows(allRowsData)
       setPreviewRows(allRowsData.slice(0, 5))
       setTotalRows(response.data.row_count || 0)
+      setExtractionMethod(response.data.extraction_method || null)
       
-      if (isDoc && response.data.is_document_import) {
+      if (response.data.is_document_import) {
         setIsDocImport(true)
         setDocumentInfo(response.data.document_info || null)
         setContractTerms(response.data.contract_terms || null)
@@ -159,6 +192,51 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
     }
   }
   
+  const analyzeText = async () => {
+    if (!pastedText || pastedText.trim().length < 5) {
+      setError('Please paste at least a few characters of text.')
+      return
+    }
+    setAnalyzing(true)
+    setError(null)
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.post(
+        `/api/csv/text-preview/${organizationId}`,
+        { text: pastedText },
+        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+      )
+      setPreviewData(response.data)
+      setMapping(response.data.mapping || {})
+      const allRowsData = response.data.preview_rows || []
+      setAllRows(allRowsData)
+      setPreviewRows(allRowsData.slice(0, 5))
+      setTotalRows(response.data.row_count || 0)
+      setExtractionMethod(response.data.extraction_method || 'ai_text')
+      setIsDocImport(true)
+      setDocumentInfo(response.data.document_info || null)
+      setContractTerms(response.data.contract_terms || null)
+      if (response.data.document_info?.creator_name) {
+        const matchingCreator = creatorList.find(
+          (c) => c.display_name.toLowerCase() === response.data.document_info.creator_name.toLowerCase()
+        )
+        if (matchingCreator) {
+          setSelectedCreatorId(String(matchingCreator.id))
+          setCreateNewCreator(false)
+        } else {
+          setCreateNewCreator(true)
+          setNewCreatorName(response.data.document_info.creator_name)
+        }
+      }
+      setStep(2)
+    } catch (err) {
+      console.error('Text analysis failed:', err)
+      setError(err.response?.data?.detail || 'Failed to extract data from the pasted text.')
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
   const handleMappingChange = (csvHeader, newValue) => {
     setMapping(prev => ({
       ...prev,
@@ -247,14 +325,13 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
     }
   }
   
-  const isValidFile = file && (
-    file.name.endsWith('.csv') ||
-    file.name.endsWith('.xlsx') ||
-    file.name.endsWith('.xls') ||
-    file.name.endsWith('.pdf') ||
-    file.name.endsWith('.docx') ||
-    file.name.endsWith('.doc')
-  )
+  const isValidFile = file && hasExt(file.name, [
+    '.csv', '.xlsx', '.xls',
+    ...DOC_EXTS, ...IMAGE_EXTS, ...TEXT_EXTS,
+  ])
+  const canAnalyze = inputMode === 'text'
+    ? pastedText.trim().length >= 5
+    : isValidFile
   
   const getAvailableFields = (currentHeader) => {
     const usedValues = Object.entries(mapping)
@@ -309,6 +386,44 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
         <div className="flex-1 overflow-y-auto p-6">
           {step === 1 && (
             <>
+              <div className="mb-4 inline-flex p-1 bg-[rgba(59,77,67,0.05)] rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => { setInputMode('file'); setError(null) }}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    inputMode === 'file' ? 'bg-white text-[#3D4A44] shadow-sm' : 'text-[#7A8580]'
+                  }`}
+                >
+                  Upload file
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setInputMode('text'); setError(null) }}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    inputMode === 'text' ? 'bg-white text-[#3D4A44] shadow-sm' : 'text-[#7A8580]'
+                  }`}
+                >
+                  Paste text
+                </button>
+              </div>
+
+              {inputMode === 'text' ? (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-[#3D4A44]">
+                    Paste any Schedule A, email, or freeform list
+                  </label>
+                  <textarea
+                    value={pastedText}
+                    onChange={(e) => setPastedText(e.target.value)}
+                    rows={10}
+                    placeholder={"Examples:\n\nWriter: Jane Doe (BMI IPI 123456789)\n\n1. Blinding Lights - The Weeknd 50%\n2. Save Your Tears - The Weeknd 33.3%\n..."}
+                    className="w-full px-3 py-2 text-sm font-mono border border-[rgba(59,77,67,0.2)] rounded-lg focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                  />
+                  <p className="text-xs text-[#7A8580]">
+                    {pastedText.length.toLocaleString()} characters — we'll use AI to find every song.
+                  </p>
+                </div>
+              ) : (
               <div
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                   dragActive
@@ -347,7 +462,7 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                       <input
                         type="file"
                         className="hidden"
-                        accept=".csv,.xlsx,.xls,.pdf,.docx,.doc"
+                        accept=".csv,.xlsx,.xls,.pdf,.docx,.doc,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tiff,.txt,.md,.tsv"
                         onChange={handleFileChange}
                       />
                       <span className="px-4 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] cursor-pointer inline-block transition-colors">
@@ -355,12 +470,13 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                       </span>
                     </label>
                     <p className="text-xs text-[#7A8580] mt-2">
-                      Supported formats: CSV, Excel (.xlsx, .xls), PDF, Word (.docx)
+                      CSV, Excel, PDF, Word, images (PNG/JPG), or plain text — we'll figure it out.
                     </p>
                   </div>
                 )}
               </div>
-              
+              )}
+
               {error && (
                 <div className="mt-4 p-4 bg-[rgba(196,112,104,0.08)] border border-[rgba(196,112,104,0.2)] rounded-lg flex items-start space-x-3">
                   <XCircleIcon className="w-5 h-5 text-[#C47068] flex-shrink-0 mt-0.5" />
@@ -430,9 +546,18 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                 </div>
               )}
 
+              {extractionMethod && (
+                <div className="mb-3 flex items-center gap-2 text-xs text-[#5A7A6A]">
+                  <SparklesIcon className="w-4 h-4 text-[#5B8A72]" />
+                  <span>
+                    Extracted via <strong>{METHOD_LABELS[extractionMethod] || extractionMethod}</strong>
+                  </span>
+                </div>
+              )}
+
               <div className="mb-4 flex items-center justify-between">
                 <span className="text-sm font-medium text-[#3D4A44]">
-                  {totalRows} songs parsed from document
+                  {totalRows} songs parsed
                 </span>
                 <span className="text-xs text-[#7A8580]">
                   {allRows.filter(r => r.section === 'Schedule A').length} released, {allRows.filter(r => r.section !== 'Schedule A').length} pipeline
@@ -448,11 +573,14 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                         <th className="px-3 py-2 text-left font-medium text-[#5B8A72]">Song Title</th>
                         <th className="px-3 py-2 text-center font-medium text-[#5B8A72]">Pub %</th>
                         <th className="px-3 py-2 text-left font-medium text-[#5B8A72]">Section</th>
+                        <th className="px-3 py-2 text-center font-medium text-[#5B8A72]">Confidence</th>
                         <th className="px-3 py-2 text-left font-medium text-[#5B8A72]">Notes</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {allRows.map((row, idx) => (
+                      {allRows.map((row, idx) => {
+                        const cb = confidenceBadge(row._confidence)
+                        return (
                         <tr key={idx} className={`border-t border-[rgba(59,77,67,0.05)] ${row.section !== 'Schedule A' ? 'bg-[rgba(196,149,107,0.05)]' : ''}`}>
                           <td className="px-3 py-2 text-[#3D4A44]">{row.primary_artist || '-'}</td>
                           <td className="px-3 py-2 text-[#3D4A44] font-medium">{row.title || '-'}</td>
@@ -466,9 +594,19 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                               {row.section === 'Schedule A' ? 'Released' : 'Pipeline'}
                             </span>
                           </td>
+                          <td className="px-3 py-2 text-center">
+                            {cb ? (
+                              <span
+                                title={row._source || ''}
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${cb.cls}`}
+                              >
+                                {cb.label}
+                              </span>
+                            ) : <span className="text-[#7A8580]">-</span>}
+                          </td>
                           <td className="px-3 py-2 text-[#7A8580] text-[11px]">{row.notes || ''}</td>
                         </tr>
-                      ))}
+                      )})}
                     </tbody>
                   </table>
                 </div>
@@ -744,7 +882,7 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                   </>
                 ) : (
                   <>
-                    Analyze File
+                    {inputMode === 'text' ? 'Analyze Text' : 'Analyze File'}
                     <ArrowRightIcon className="w-4 h-4" />
                   </>
                 )}
