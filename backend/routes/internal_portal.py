@@ -433,7 +433,9 @@ def user_sessions(
     "/database/tables",
     summary="List database tables",
     description="Sorted list of every table the staff DB browser is permitted to view. "
-                "Tables holding credential material (users, user_sessions) are excluded.",
+                "Only the alembic_version table is excluded; the staff portal exposes "
+                "the full operational schema (users, user_sessions, etc.) read-only "
+                "and gated by staff/master role + non-revoked UserSession.",
 )
 def database_tables(
     db: Session = Depends(get_db),
