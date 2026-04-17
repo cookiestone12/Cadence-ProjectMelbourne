@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { XMarkIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 
@@ -8,7 +8,22 @@ const formatDollars = (cents) => {
   return v.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
-export default function DeleteStatementDialog({ orgId, statementId, statementName, onClose, onDeleted }) {
+export default function DeleteStatementDialog({
+  orgId,
+  statementId,
+  statementIds,
+  statementName,
+  onClose,
+  onDeleted,
+}) {
+  const ids = useMemo(() => {
+    if (Array.isArray(statementIds) && statementIds.length > 0) return statementIds
+    if (statementId != null) return [statementId]
+    return []
+  }, [statementId, statementIds])
+
+  const isBulk = ids.length > 1
+
   const [loading, setLoading] = useState(true)
   const [preview, setPreview] = useState(null)
   const [error, setError] = useState(null)
@@ -16,24 +31,32 @@ export default function DeleteStatementDialog({ orgId, statementId, statementNam
   const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
-    if (!orgId || !statementId) return
+    if (!orgId || ids.length === 0) return
     let cancelled = false
     setLoading(true)
     setError(null)
-    axios.get(`/api/royalties/statements/${orgId}/${statementId}/delete-preview`)
+    const request = isBulk
+      ? axios.post(`/api/royalties/statements/${orgId}/bulk-delete-preview`, { statement_ids: ids })
+      : axios.get(`/api/royalties/statements/${orgId}/${ids[0]}/delete-preview`)
+    request
       .then(res => { if (!cancelled) setPreview(res.data) })
       .catch(err => { if (!cancelled) setError(err.response?.data?.detail || 'Failed to load preview') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [orgId, statementId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgId, isBulk, ids.join(',')])
 
-  const canDelete = confirmText.trim().toUpperCase() === 'DELETE' && !deleting
+  const canDelete = confirmText.trim().toUpperCase() === 'DELETE' && !deleting && !loading && !error
 
   const handleDelete = async () => {
     if (!canDelete) return
     setDeleting(true)
     try {
-      await axios.delete(`/api/royalties/statements/${orgId}/${statementId}`)
+      if (isBulk) {
+        await axios.post(`/api/royalties/statements/${orgId}/bulk-delete`, { statement_ids: ids })
+      } else {
+        await axios.delete(`/api/royalties/statements/${orgId}/${ids[0]}`)
+      }
       if (onDeleted) onDeleted()
       onClose()
     } catch (err) {
@@ -42,13 +65,22 @@ export default function DeleteStatementDialog({ orgId, statementId, statementNam
     }
   }
 
+  const headerTitle = isBulk ? `Delete ${ids.length} Statements` : 'Delete Statement'
+  const buttonLabel = deleting
+    ? 'Deleting...'
+    : isBulk ? `Delete ${ids.length} Statements` : 'Delete Statement'
+
+  const filesToDelete = isBulk
+    ? (preview?.files_to_delete || 0)
+    : (preview?.file_will_be_deleted ? 1 : 0)
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
       <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between p-5 border-b border-[rgba(59,77,67,0.08)]">
           <div className="flex items-center gap-2">
             <ExclamationTriangleIcon className="w-5 h-5 text-red-500" />
-            <h3 className="text-lg font-semibold text-red-600">Delete Statement</h3>
+            <h3 className="text-lg font-semibold text-red-600">{headerTitle}</h3>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-[rgba(59,77,67,0.06)] rounded-full transition-colors">
             <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
@@ -57,9 +89,15 @@ export default function DeleteStatementDialog({ orgId, statementId, statementNam
 
         <div className="p-5 space-y-4 overflow-y-auto">
           <p className="text-sm text-[#3D4A44]">
-            You're about to permanently delete{' '}
-            <span className="font-semibold">{statementName || preview?.source_name || 'this statement'}</span>.
-            This action cannot be undone.
+            {isBulk ? (
+              <>You're about to permanently delete <span className="font-semibold">{ids.length} statements</span> and everything attached to them. This action cannot be undone.</>
+            ) : (
+              <>
+                You're about to permanently delete{' '}
+                <span className="font-semibold">{statementName || preview?.source_name || 'this statement'}</span>.
+                This action cannot be undone.
+              </>
+            )}
           </p>
 
           {loading && (
@@ -76,8 +114,26 @@ export default function DeleteStatementDialog({ orgId, statementId, statementNam
 
           {preview && !loading && (
             <div className="space-y-3">
+              {isBulk && preview.statements?.length > 0 && (
+                <div className="bg-[rgba(59,77,67,0.04)] rounded-xl p-4">
+                  <p className="text-xs font-semibold text-[#3D4A44] uppercase tracking-wide mb-2">
+                    Statements to delete ({preview.statements.length})
+                  </p>
+                  <ul className="text-sm text-[#3D4A44] space-y-1 max-h-32 overflow-y-auto">
+                    {preview.statements.map(s => (
+                      <li key={s.statement_id} className="flex justify-between gap-2">
+                        <span className="text-[#7A8580] truncate">{s.source_name || `Statement #${s.statement_id}`}</span>
+                        <span className="font-medium text-[#3D4A44] whitespace-nowrap">{formatDollars(s.total_revenue_cents)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="bg-[rgba(91,138,114,0.04)] rounded-xl p-4 space-y-2">
-                <p className="text-xs font-semibold text-[#3D4A44] uppercase tracking-wide">What will be removed</p>
+                <p className="text-xs font-semibold text-[#3D4A44] uppercase tracking-wide">
+                  {isBulk ? 'Combined totals' : 'What will be removed'}
+                </p>
                 <ul className="text-sm text-[#3D4A44] space-y-1">
                   <li className="flex justify-between">
                     <span className="text-[#7A8580]">Transactions</span>
@@ -107,10 +163,12 @@ export default function DeleteStatementDialog({ orgId, statementId, statementNam
                     <span className="text-[#7A8580]">Action items removed</span>
                     <span className="font-medium">{preview.action_items_to_remove}</span>
                   </li>
-                  {preview.file_will_be_deleted && (
+                  {filesToDelete > 0 && (
                     <li className="flex justify-between">
-                      <span className="text-[#7A8580]">Uploaded file</span>
-                      <span className="font-medium text-[#3D4A44]">Will be deleted from disk</span>
+                      <span className="text-[#7A8580]">Uploaded files</span>
+                      <span className="font-medium text-[#3D4A44]">
+                        {isBulk ? `${filesToDelete} will be deleted from disk` : 'Will be deleted from disk'}
+                      </span>
                     </li>
                   )}
                 </ul>
@@ -138,7 +196,7 @@ export default function DeleteStatementDialog({ orgId, statementId, statementNam
                     Payment links unwound ({preview.payments_unwound.length})
                   </p>
                   <p className="text-xs text-[#7A8580] mb-2">
-                    These ledger entries link payouts to this statement. The actual payments stay recorded; only the link to this statement is removed and audit-logged.
+                    These ledger entries link payouts to {isBulk ? 'these statements' : 'this statement'}. The actual payments stay recorded; only the link is removed and audit-logged.
                   </p>
                   <ul className="text-sm text-[#3D4A44] space-y-1 max-h-32 overflow-y-auto">
                     {preview.payments_unwound.map(p => (
@@ -177,7 +235,7 @@ export default function DeleteStatementDialog({ orgId, statementId, statementNam
             disabled={!canDelete}
             className="px-5 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            {deleting ? 'Deleting...' : 'Delete Statement'}
+            {buttonLabel}
           </button>
         </div>
       </div>

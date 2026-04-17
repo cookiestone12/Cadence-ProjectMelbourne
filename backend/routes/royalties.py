@@ -1246,27 +1246,25 @@ def delete_statement_preview(
     return _build_statement_delete_summary(db, stmt)
 
 
-@router.delete("/statements/{org_id}/{statement_id}")
-def delete_statement(
+def _perform_statement_delete(
+    db: Session,
+    stmt: "RoyaltyStatement",
     org_id: int,
-    statement_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    verify_org_access(current_user, org_id, db)
-    stmt = db.query(RoyaltyStatement).filter(
-        RoyaltyStatement.id == statement_id,
-        RoyaltyStatement.organization_id == org_id,
-    ).first()
-    if not stmt:
-        raise HTTPException(status_code=404, detail="Statement not found")
-
+    current_user: User,
+) -> Dict[str, Any]:
+    """Run the exhaustive per-statement delete (steps 1-5 + audit log
+    + ORM delete) without committing. Returns the summary dict that
+    was computed and audit-logged. Callers are responsible for the
+    final ``db.commit()`` so this can run alongside other deletes
+    inside a single transaction (used by bulk delete).
+    """
     from ..models.models import (
         RoyaltyLedgerEntry, RoyaltyProcessingRun, RoyaltyStatementLine,
         AdvanceV2, ActionItem,
     )
     from ..services.audit_service import log_action
 
+    statement_id = stmt.id
     summary = _build_statement_delete_summary(db, stmt)
 
     # 1. Restore advance balances for every RECOUPMENT_APPLIED entry
@@ -1391,8 +1389,148 @@ def delete_statement(
     )
 
     db.delete(stmt)
+    return summary
+
+
+class BulkDeleteStatementsRequest(BaseModel):
+    statement_ids: List[int]
+
+
+@router.delete("/statements/{org_id}/{statement_id}")
+def delete_statement(
+    org_id: int,
+    statement_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    stmt = db.query(RoyaltyStatement).filter(
+        RoyaltyStatement.id == statement_id,
+        RoyaltyStatement.organization_id == org_id,
+    ).first()
+    if not stmt:
+        raise HTTPException(status_code=404, detail="Statement not found")
+    summary = _perform_statement_delete(db, stmt, org_id, current_user)
     db.commit()
     return {"detail": "Statement deleted", "summary": summary}
+
+
+def _aggregate_delete_summaries(summaries: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Combine per-statement delete summaries into a single dict the
+    bulk-delete confirmation dialog can render."""
+    adv_map: Dict[int, Dict[str, Any]] = {}
+    for s in summaries:
+        for a in s.get("advance_restores", []):
+            key = a["advance_id"]
+            if key not in adv_map:
+                adv_map[key] = {
+                    "advance_id": key,
+                    "advance_name": a.get("advance_name"),
+                    "restore_cents": 0,
+                }
+            adv_map[key]["restore_cents"] += int(a.get("restore_cents") or 0)
+    advance_restores = sorted(
+        adv_map.values(), key=lambda x: -x["restore_cents"]
+    )
+    payments: List[Dict[str, Any]] = []
+    for s in summaries:
+        payments.extend(s.get("payments_unwound", []) or [])
+    return {
+        "statement_count": len(summaries),
+        "transaction_count": sum(int(s.get("transaction_count") or 0) for s in summaries),
+        "line_count": sum(int(s.get("line_count") or 0) for s in summaries),
+        "allocation_count": sum(int(s.get("allocation_count") or 0) for s in summaries),
+        "processing_run_count": sum(int(s.get("processing_run_count") or 0) for s in summaries),
+        "ledger_entry_count": sum(int(s.get("ledger_entry_count") or 0) for s in summaries),
+        "total_revenue_cents": sum(int(s.get("total_revenue_cents") or 0) for s in summaries),
+        "action_items_to_remove": sum(int(s.get("action_items_to_remove") or 0) for s in summaries),
+        "files_to_delete": sum(1 for s in summaries if s.get("file_will_be_deleted")),
+        "advance_restores": advance_restores,
+        "payments_unwound": payments,
+        "statements": [
+            {
+                "statement_id": s["statement_id"],
+                "source_name": s.get("source_name"),
+                "transaction_count": s.get("transaction_count", 0),
+                "total_revenue_cents": s.get("total_revenue_cents", 0),
+            }
+            for s in summaries
+        ],
+    }
+
+
+@router.post("/statements/{org_id}/bulk-delete-preview")
+def bulk_delete_statement_preview(
+    org_id: int,
+    body: BulkDeleteStatementsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Combined non-mutating preview for deleting many statements at
+    once. Returns the same shape as the single-statement preview but
+    with totals summed and per-advance restores aggregated, so the
+    bulk confirmation dialog can show real numbers."""
+    verify_org_access(current_user, org_id, db)
+    ids = list(dict.fromkeys(body.statement_ids))
+    if not ids:
+        raise HTTPException(status_code=400, detail="No statement IDs provided")
+    stmts = db.query(RoyaltyStatement).filter(
+        RoyaltyStatement.organization_id == org_id,
+        RoyaltyStatement.id.in_(ids),
+    ).all()
+    found = {s.id for s in stmts}
+    missing = [i for i in ids if i not in found]
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Statements not found in this organization: {missing}",
+        )
+    stmts.sort(key=lambda s: ids.index(s.id))
+    summaries = [_build_statement_delete_summary(db, s) for s in stmts]
+    return _aggregate_delete_summaries(summaries)
+
+
+@router.post("/statements/{org_id}/bulk-delete")
+def bulk_delete_statements(
+    org_id: int,
+    body: BulkDeleteStatementsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Delete several statements in one transaction, running the same
+    exhaustive cleanup (advance restore, payment unwind, action item
+    removal, file removal, audit log) per statement that the
+    single-statement endpoint runs. Either all deletions commit or
+    none do."""
+    verify_org_access(current_user, org_id, db)
+    ids = list(dict.fromkeys(body.statement_ids))
+    if not ids:
+        raise HTTPException(status_code=400, detail="No statement IDs provided")
+    stmts = db.query(RoyaltyStatement).filter(
+        RoyaltyStatement.organization_id == org_id,
+        RoyaltyStatement.id.in_(ids),
+    ).all()
+    found = {s.id for s in stmts}
+    missing = [i for i in ids if i not in found]
+    if missing:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Statements not found in this organization: {missing}",
+        )
+    stmts.sort(key=lambda s: ids.index(s.id))
+    summaries: List[Dict[str, Any]] = []
+    try:
+        for stmt in stmts:
+            summaries.append(_perform_statement_delete(db, stmt, org_id, current_user))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {
+        "detail": f"Deleted {len(summaries)} statements",
+        "deleted_count": len(summaries),
+        "summary": _aggregate_delete_summaries(summaries),
+    }
 
 
 @router.get("/statements/{org_id}/{statement_id}/transactions")

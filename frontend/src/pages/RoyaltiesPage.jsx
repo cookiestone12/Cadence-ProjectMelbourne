@@ -290,6 +290,8 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
   const [shareStatement, setShareStatement] = useState(null)
   const [selectedStatement, setSelectedStatement] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [transactions, setTransactions] = useState([])
   const [txLoading, setTxLoading] = useState(false)
   const [uploadStep, setUploadStep] = useState(1)
@@ -340,6 +342,17 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
   }, [orgId, selectedCreatorId])
 
   useEffect(() => { loadStatements() }, [loadStatements])
+
+  useEffect(() => {
+    if (statements.length === 0) return
+    const present = new Set(statements.map(s => s.id))
+    setSelectedIds(prev => {
+      let changed = false
+      const next = new Set()
+      prev.forEach(id => { if (present.has(id)) next.add(id); else changed = true })
+      return changed ? next : prev
+    })
+  }, [statements])
 
   const loadTransactions = async (stmt, page = 0) => {
     setSelectedStatement(stmt)
@@ -423,6 +436,45 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
     const removedId = deleteTarget?.id
     loadStatements()
     if (removedId && selectedStatement?.id === removedId) setSelectedStatement(null)
+    if (removedId) {
+      setSelectedIds(prev => {
+        if (!prev.has(removedId)) return prev
+        const next = new Set(prev)
+        next.delete(removedId)
+        return next
+      })
+    }
+  }
+
+  const toggleSelected = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const visibleStatementIds = statements.map(s => s.id)
+  const allVisibleSelected = visibleStatementIds.length > 0 && visibleStatementIds.every(id => selectedIds.has(id))
+  const someVisibleSelected = visibleStatementIds.some(id => selectedIds.has(id)) && !allVisibleSelected
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (allVisibleSelected) {
+        visibleStatementIds.forEach(id => next.delete(id))
+      } else {
+        visibleStatementIds.forEach(id => next.add(id))
+      }
+      return next
+    })
+  }
+
+  const handleBulkDeleted = () => {
+    setSelectedIds(new Set())
+    setBulkDeleteOpen(false)
+    loadStatements()
+    if (selectedStatement && selectedIds.has(selectedStatement.id)) setSelectedStatement(null)
   }
 
   const handleManualMatch = async (txId) => {
@@ -578,6 +630,14 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-[#3D4A44]">Royalty Statements</h3>
         <div className="flex items-center gap-2">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={() => setBulkDeleteOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all text-sm font-medium"
+            >
+              <TrashIcon className="w-4 h-4" /> Delete selected ({selectedIds.size})
+            </button>
+          )}
           <button onClick={() => setShowBulkUpload(true)} className="flex items-center gap-2 px-4 py-2 border border-[#5B8A72] text-[#5B8A72] rounded-xl hover:bg-[rgba(91,138,114,0.06)] transition-all text-sm font-medium">
             <DocumentDuplicateIcon className="w-4 h-4" /> Bulk Upload
           </button>
@@ -592,6 +652,16 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
           <table className="w-full">
             <thead className="bg-[#EEF1EC]">
               <tr>
+                <th className="pl-4 pr-2 py-3 w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all statements"
+                    checked={allVisibleSelected}
+                    ref={el => { if (el) el.indeterminate = someVisibleSelected }}
+                    onChange={toggleSelectAllVisible}
+                    className="h-4 w-4 rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
+                  />
+                </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Source</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Period</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Currency</th>
@@ -604,6 +674,15 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
             <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
               {statements.map(stmt => (
                 <tr key={stmt.id} className="hover:bg-[rgba(91,138,114,0.04)]">
+                  <td className="pl-4 pr-2 py-4 w-8">
+                    <input
+                      type="checkbox"
+                      aria-label={`Select statement ${stmt.source_name || stmt.id}`}
+                      checked={selectedIds.has(stmt.id)}
+                      onChange={() => toggleSelected(stmt.id)}
+                      className="h-4 w-4 rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
+                    />
+                  </td>
                   <td className="px-6 py-4 text-sm font-medium text-[#3D4A44]">{stmt.source_name || '—'}</td>
                   <td className="px-6 py-4 text-sm text-[#7A8580]">{formatDate(stmt.period_start)} — {formatDate(stmt.period_end)}</td>
                   <td className="px-6 py-4 text-sm text-[#7A8580]">{stmt.currency || 'USD'}</td>
@@ -629,7 +708,7 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                 </tr>
               ))}
               {statements.length === 0 && (
-                <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-[#7A8580]">{selectedCreatorId ? 'No statements for this client yet.' : 'No statements uploaded yet.'}</td></tr>
+                <tr><td colSpan={8} className="px-6 py-12 text-center text-sm text-[#7A8580]">{selectedCreatorId ? 'No statements for this client yet.' : 'No statements uploaded yet.'}</td></tr>
               )}
             </tbody>
           </table>
@@ -997,6 +1076,15 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
           statementName={deleteTarget.source_name}
           onClose={() => setDeleteTarget(null)}
           onDeleted={handleDeleted}
+        />
+      )}
+
+      {bulkDeleteOpen && selectedIds.size > 0 && (
+        <DeleteStatementDialog
+          orgId={orgId}
+          statementIds={Array.from(selectedIds)}
+          onClose={() => setBulkDeleteOpen(false)}
+          onDeleted={handleBulkDeleted}
         />
       )}
     </div>
@@ -2128,6 +2216,8 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
   const [statementsLoading, setStatementsLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('')
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [uploadForm, setUploadForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD', creator_id: selectedCreatorId || '' })
@@ -2154,6 +2244,17 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
   }, [orgId, selectedCreatorId])
 
   useEffect(() => { loadStatements() }, [loadStatements])
+
+  useEffect(() => {
+    if (statements.length === 0) return
+    const present = new Set(statements.map(s => s.id))
+    setSelectedIds(prev => {
+      let changed = false
+      const next = new Set()
+      prev.forEach(id => { if (present.has(id)) next.add(id); else changed = true })
+      return changed ? next : prev
+    })
+  }, [statements])
 
   const handleEnhancedUpload = async () => {
     if (!uploadFile || !uploadForm.source_name || !uploadForm.creator_id) return
@@ -2183,6 +2284,36 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
   const filteredStatements = statusFilter
     ? statements.filter(s => s.status === statusFilter)
     : statements
+
+  const visibleProcessingIds = filteredStatements.slice(0, 20).map(s => s.id)
+  const allVisibleSelected = visibleProcessingIds.length > 0 && visibleProcessingIds.every(id => selectedIds.has(id))
+  const someVisibleSelected = visibleProcessingIds.some(id => selectedIds.has(id)) && !allVisibleSelected
+
+  const toggleSelected = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (allVisibleSelected) {
+        visibleProcessingIds.forEach(id => next.delete(id))
+      } else {
+        visibleProcessingIds.forEach(id => next.add(id))
+      }
+      return next
+    })
+  }
+
+  const handleBulkDeleted = () => {
+    setSelectedIds(new Set())
+    setBulkDeleteOpen(false)
+    loadStatements()
+  }
 
   const STATUS_OPTIONS = [
     { key: '', label: 'Show all statuses' },
@@ -2270,7 +2401,30 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
 
       <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am border border-[rgba(59,77,67,0.08)]">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-6 border-b border-[rgba(59,77,67,0.08)]">
-          <h3 className="text-lg font-semibold text-[#3D4A44] shrink-0">Recent Statements</h3>
+          <div className="flex items-center gap-3 shrink-0">
+            <h3 className="text-lg font-semibold text-[#3D4A44]">Recent Statements</h3>
+            {visibleProcessingIds.length > 0 && (
+              <label className="flex items-center gap-2 text-xs text-[#7A8580] cursor-pointer">
+                <input
+                  type="checkbox"
+                  aria-label="Select all visible statements"
+                  checked={allVisibleSelected}
+                  ref={el => { if (el) el.indeterminate = someVisibleSelected }}
+                  onChange={toggleSelectAllVisible}
+                  className="h-4 w-4 rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
+                />
+                Select all
+              </label>
+            )}
+            {selectedIds.size > 0 && (
+              <button
+                onClick={() => setBulkDeleteOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-all text-xs font-medium"
+              >
+                <TrashIcon className="w-3.5 h-3.5" /> Delete selected ({selectedIds.size})
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-1 bg-white/60 backdrop-blur-xl rounded-[14px] p-1 border border-[rgba(59,77,67,0.08)] overflow-x-auto max-w-full">
             {STATUS_OPTIONS.map(opt => (
               <button
@@ -2305,6 +2459,14 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
                   key={stmt.id}
                   className="w-full px-6 py-4 hover:bg-[rgba(91,138,114,0.04)] transition-colors flex items-center justify-between gap-3"
                 >
+                  <input
+                    type="checkbox"
+                    aria-label={`Select statement ${stmt.source_name || stmt.id}`}
+                    checked={selectedIds.has(stmt.id)}
+                    onChange={() => toggleSelected(stmt.id)}
+                    onClick={e => e.stopPropagation()}
+                    className="h-4 w-4 rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72] flex-shrink-0"
+                  />
                   <button
                     onClick={() => setSelectedStatementId(stmt.id)}
                     className="flex-1 min-w-0 text-left"
@@ -2342,7 +2504,27 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
           statementId={deleteTarget.id}
           statementName={deleteTarget.source_name}
           onClose={() => setDeleteTarget(null)}
-          onDeleted={() => loadStatements()}
+          onDeleted={() => {
+            const removedId = deleteTarget?.id
+            if (removedId) {
+              setSelectedIds(prev => {
+                if (!prev.has(removedId)) return prev
+                const next = new Set(prev)
+                next.delete(removedId)
+                return next
+              })
+            }
+            loadStatements()
+          }}
+        />
+      )}
+
+      {bulkDeleteOpen && selectedIds.size > 0 && (
+        <DeleteStatementDialog
+          orgId={orgId}
+          statementIds={Array.from(selectedIds)}
+          onClose={() => setBulkDeleteOpen(false)}
+          onDeleted={handleBulkDeleted}
         />
       )}
     </div>
