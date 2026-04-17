@@ -16,6 +16,11 @@ logger = logging.getLogger("cadence")
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
+# Separate router for /api/internal/* — staff/master-admin only
+# operational endpoints. Mounted via the same include in main.py
+# (see bottom of this file: `internal_router`).
+internal_router = APIRouter(prefix="/api/internal", tags=["internal"])
+
 class CreateUserRequest(BaseModel):
     username: str
     email: str
@@ -1116,3 +1121,44 @@ def update_ticket_notes(
     db.commit()
 
     return {"status": "ok", "ticket_id": ticket_id}
+
+
+# ---------------------------------------------------------------------------
+# Internal operational endpoints  (mounted under /api/internal)
+# ---------------------------------------------------------------------------
+
+@internal_router.get("/migration-status")
+def migration_status(
+    current_user: User = Depends(get_current_super_admin),
+):
+    """Report Alembic migration state and lock status.
+
+    Master-admin only (`is_super_admin`). Used by the internal
+    portal (Task #76) to answer "what revision are we on?" without
+    SSHing into the container.
+    """
+    from ..models import engine
+    from ..utils.migration_runner import get_alembic_revision_info
+    from ..utils.migration_lock import get_migration_lock_state
+
+    rev_info = get_alembic_revision_info(engine)
+    lock_state = get_migration_lock_state(engine)
+
+    # Spec asks for singular `current_revision` / `head_revision`
+    # fields; we keep both shapes (singular for the common case,
+    # plural for the multi-head case the project currently has).
+    current_revs = rev_info["current_revisions"]
+    head_revs = rev_info["head_revisions"]
+
+    return {
+        "current_revision": current_revs[0] if len(current_revs) == 1 else None,
+        "current_revisions": current_revs,
+        "head_revision": head_revs[0] if len(head_revs) == 1 else None,
+        "head_revisions": head_revs,
+        "is_up_to_date": rev_info["is_up_to_date"],
+        "pending_revisions": rev_info["pending_revisions"],
+        "lock_status": lock_state["status"],
+        "last_run_at": lock_state["started_at"],
+        "last_run_host": lock_state["host"],
+        "last_run_revision": lock_state["revision"],
+    }

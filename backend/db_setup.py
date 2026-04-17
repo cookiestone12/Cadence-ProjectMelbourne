@@ -26,23 +26,23 @@ def ensure_schema_updates():
         if 'hero_image_data' not in cols:
             conn.execute(text("ALTER TABLE creators ADD COLUMN hero_image_data BYTEA"))
             conn.commit()
-            logger.info("Added hero_image_data column to creators")
+            logger.warning("[DDL drift] Added hero_image_data column to creators")
         if 'hero_image_mime' not in cols:
             conn.execute(text("ALTER TABLE creators ADD COLUMN hero_image_mime VARCHAR"))
             conn.commit()
-            logger.info("Added hero_image_mime column to creators")
+            logger.warning("[DDL drift] Added hero_image_mime column to creators")
 
         release_cols = [c['name'] for c in inspector.get_columns('releases')]
         if 'creator_id' not in release_cols:
             conn.execute(text("ALTER TABLE releases ADD COLUMN creator_id INTEGER REFERENCES creators(id)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_releases_creator_id ON releases(creator_id)"))
             conn.commit()
-            logger.info("Added creator_id column to releases")
+            logger.warning("[DDL drift] Added creator_id column to releases")
         if 'cover_art_data' not in release_cols:
             conn.execute(text("ALTER TABLE releases ADD COLUMN cover_art_data BYTEA"))
             conn.execute(text("ALTER TABLE releases ADD COLUMN cover_art_mime VARCHAR"))
             conn.commit()
-            logger.info("Added cover_art_data/cover_art_mime columns to releases")
+            logger.warning("[DDL drift] Added cover_art_data/cover_art_mime columns to releases")
 
         if 'creative_contacts' in inspector.get_table_names():
             cc_cols = [c['name'] for c in inspector.get_columns('creative_contacts')]
@@ -64,7 +64,7 @@ def ensure_schema_updates():
                 cc_added.append('created_by_user_id')
             if cc_added:
                 conn.commit()
-                logger.info(f"Added {'/'.join(cc_added)} columns to creative_contacts")
+                logger.warning(f"[DDL drift] Added {'/'.join(cc_added)} columns to creative_contacts")
 
             result = conn.execute(text(
                 "SELECT COUNT(*) FROM creative_contacts WHERE created_by_user_id IS NULL"
@@ -83,50 +83,50 @@ def ensure_schema_updates():
                     WHERE cc.created_by_user_id IS NULL
                 """))
                 conn.commit()
-                logger.info(f"Backfilled created_by_user_id for {null_count} existing creative contacts")
+                logger.warning(f"[DDL drift] Backfilled created_by_user_id for {null_count} existing creative contacts")
 
         if 'song_contracts' in inspector.get_table_names():
             sc_cols = [c['name'] for c in inspector.get_columns('song_contracts')]
             if 'contract_id' not in sc_cols:
                 conn.execute(text("ALTER TABLE song_contracts ADD COLUMN contract_id INTEGER REFERENCES contracts(id)"))
                 conn.commit()
-                logger.info("Added contract_id column to song_contracts")
+                logger.warning("[DDL drift] Added contract_id column to song_contracts")
 
         song_cols = {c['name']: c for c in inspector.get_columns('songs')}
         if 'audio_file_url' not in song_cols:
             conn.execute(text("ALTER TABLE songs ADD COLUMN audio_file_url VARCHAR"))
             conn.commit()
-            logger.info("Added audio_file_url column to songs")
+            logger.warning("[DDL drift] Added audio_file_url column to songs")
         if 'lyrics' not in song_cols:
             conn.execute(text("ALTER TABLE songs ADD COLUMN lyrics TEXT"))
             conn.commit()
-            logger.info("Added lyrics column to songs")
+            logger.warning("[DDL drift] Added lyrics column to songs")
         if 'contract_documents' not in inspector.get_table_names():
             from backend.models.models import ContractDocument
             ContractDocument.__table__.create(bind=engine)
-            logger.info("Created contract_documents table")
+            logger.warning("[DDL drift] Created contract_documents table")
 
         if 'contracts' in inspector.get_table_names():
             contract_cols = [c['name'] for c in inspector.get_columns('contracts')]
             if 'creator_id' not in contract_cols:
                 conn.execute(text("ALTER TABLE contracts ADD COLUMN creator_id INTEGER REFERENCES creators(id)"))
                 conn.commit()
-                logger.info("Added creator_id column to contracts")
+                logger.warning("[DDL drift] Added creator_id column to contracts")
             if 'payment_direction' not in contract_cols:
                 conn.execute(text("ALTER TABLE contracts ADD COLUMN payment_direction VARCHAR DEFAULT 'INCOMING'"))
                 conn.commit()
-                logger.info("Added payment_direction column to contracts")
+                logger.warning("[DDL drift] Added payment_direction column to contracts")
 
         if 'rights_splits' in inspector.get_table_names():
             rs_cols = [c['name'] for c in inspector.get_columns('rights_splits')]
             if 'rights_holder_name' not in rs_cols:
                 conn.execute(text("ALTER TABLE rights_splits ADD COLUMN rights_holder_name VARCHAR"))
                 conn.commit()
-                logger.info("Added rights_holder_name column to rights_splits")
+                logger.warning("[DDL drift] Added rights_holder_name column to rights_splits")
             if 'role' not in rs_cols:
                 conn.execute(text("ALTER TABLE rights_splits ADD COLUMN role VARCHAR"))
                 conn.commit()
-                logger.info("Added role column to rights_splits")
+                logger.warning("[DDL drift] Added role column to rights_splits")
             constraints = inspector.get_foreign_keys('rights_splits')
             for fk in constraints:
                 if 'rights_holder_id' in fk.get('constrained_columns', []):
@@ -135,7 +135,7 @@ def ensure_schema_updates():
                         try:
                             conn.execute(text("ALTER TABLE rights_splits ALTER COLUMN rights_holder_id DROP NOT NULL"))
                             conn.commit()
-                            logger.info("Made rights_holder_id nullable in rights_splits")
+                            logger.warning("[DDL drift] Made rights_holder_id nullable in rights_splits")
                         except Exception:
                             pass
                     break
@@ -152,21 +152,21 @@ def ensure_schema_updates():
             if field not in cols:
                 conn.execute(text(f"ALTER TABLE creators ADD COLUMN {field} {col_type}"))
                 conn.commit()
-                logger.info(f"Added {field} column to creators")
+                logger.warning(f"[DDL drift] Added {field} column to creators")
 
         sc_cols = [c['name'] for c in inspector.get_columns('song_credits')]
         if 'needs_review' not in sc_cols:
             conn.execute(text("ALTER TABLE song_credits ADD COLUMN needs_review BOOLEAN NOT NULL DEFAULT FALSE"))
             conn.commit()
-            logger.info("Added needs_review column to song_credits")
+            logger.warning("[DDL drift] Added needs_review column to song_credits")
         if 'unmatched_artist_name' not in sc_cols:
             conn.execute(text("ALTER TABLE song_credits ADD COLUMN unmatched_artist_name VARCHAR"))
             conn.commit()
-            logger.info("Added unmatched_artist_name column to song_credits")
+            logger.warning("[DDL drift] Added unmatched_artist_name column to song_credits")
         try:
             conn.execute(text("ALTER TABLE song_credits ALTER COLUMN creator_id DROP NOT NULL"))
             conn.commit()
-            logger.info("Made creator_id nullable in song_credits")
+            logger.warning("[DDL drift] Made creator_id nullable in song_credits")
         except Exception:
             pass
 
@@ -174,27 +174,27 @@ def ensure_schema_updates():
         if 'release_status' not in song_cols_refreshed:
             conn.execute(text("ALTER TABLE songs ADD COLUMN release_status VARCHAR NOT NULL DEFAULT 'unreleased'"))
             conn.commit()
-            logger.info("Added release_status column to songs")
+            logger.warning("[DDL drift] Added release_status column to songs")
             conn.execute(text(
                 "UPDATE songs SET release_status = 'released' "
                 "WHERE is_released = true OR (release_date IS NOT NULL AND release_date <= CURRENT_DATE)"
             ))
             conn.commit()
-            logger.info("Backfilled release_status for existing songs")
+            logger.warning("[DDL drift] Backfilled release_status for existing songs")
         if 'entry_type' not in song_cols_refreshed:
             conn.execute(text("ALTER TABLE songs ADD COLUMN entry_type VARCHAR NOT NULL DEFAULT 'Song'"))
             conn.commit()
-            logger.info("Added entry_type column to songs")
+            logger.warning("[DDL drift] Added entry_type column to songs")
         if 'parent_song_id' not in song_cols_refreshed:
             conn.execute(text("ALTER TABLE songs ADD COLUMN parent_song_id INTEGER REFERENCES songs(id)"))
             conn.commit()
-            logger.info("Added parent_song_id column to songs")
+            logger.warning("[DDL drift] Added parent_song_id column to songs")
         if 'shared_song_group_id' not in song_cols_refreshed:
             conn.execute(text("ALTER TABLE songs ADD COLUMN shared_song_group_id VARCHAR"))
             conn.commit()
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_songs_shared_song_group_id ON songs (shared_song_group_id)"))
             conn.commit()
-            logger.info("Added shared_song_group_id column to songs")
+            logger.warning("[DDL drift] Added shared_song_group_id column to songs")
 
         try:
             conn.execute(text(
@@ -217,11 +217,11 @@ def ensure_schema_updates():
         if 'can_manage_roster' not in om_cols:
             conn.execute(text("ALTER TABLE organization_members ADD COLUMN can_manage_roster BOOLEAN DEFAULT FALSE"))
             conn.commit()
-            logger.info("Added can_manage_roster column to organization_members")
+            logger.warning("[DDL drift] Added can_manage_roster column to organization_members")
         if 'linked_creator_id' not in om_cols:
             conn.execute(text("ALTER TABLE organization_members ADD COLUMN linked_creator_id INTEGER REFERENCES creators(id)"))
             conn.commit()
-            logger.info("Added linked_creator_id column to organization_members")
+            logger.warning("[DDL drift] Added linked_creator_id column to organization_members")
 
         if 'royalty_statements' in inspector.get_table_names():
             rs_cols = [c['name'] for c in inspector.get_columns('royalty_statements')]
@@ -229,7 +229,7 @@ def ensure_schema_updates():
                 conn.execute(text("ALTER TABLE royalty_statements ADD COLUMN creator_id INTEGER REFERENCES creators(id)"))
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_royalty_statements_creator_id ON royalty_statements(creator_id)"))
                 conn.commit()
-                logger.info("Added creator_id column to royalty_statements")
+                logger.warning("[DDL drift] Added creator_id column to royalty_statements")
 
         bool_to_string_fields = ['is_paid', 'is_invoiced', 'is_registered_with_dsp']
         for field in bool_to_string_fields:
@@ -248,7 +248,7 @@ def ensure_schema_updates():
                     alter_default_sql = f"ALTER TABLE songs ALTER COLUMN {safe_field} SET DEFAULT 'No'"  # safe: same as above
                     conn.execute(text(alter_default_sql))
                     conn.commit()
-                    logger.info(f"Converted songs.{safe_field} from BOOLEAN to VARCHAR")
+                    logger.warning(f"[DDL drift] Converted songs.{safe_field} from BOOLEAN to VARCHAR")
 
         perf_indexes = [
             ("ix_songs_organization_id", "songs", "organization_id"),
@@ -280,7 +280,7 @@ def ensure_schema_updates():
                     safe_col = _validate_sql_identifier(column)
                     conn.execute(text(f"CREATE INDEX IF NOT EXISTS {safe_idx} ON {safe_tbl}({safe_col})"))
                     conn.commit()
-                    logger.info(f"Created performance index {idx_name}")
+                    logger.warning(f"[DDL drift] Created performance index {idx_name}")
                 except Exception as e:
                     logger.warning(f"Could not create index {idx_name}: {e}")
 
@@ -290,7 +290,7 @@ def ensure_schema_updates():
                 try:
                     conn.execute(text(f"CREATE INDEX IF NOT EXISTS {composite_idx} ON stream_estimates(song_id, organization_id, period_date)"))
                     conn.commit()
-                    logger.info(f"Created composite index {composite_idx}")
+                    logger.warning(f"[DDL drift] Created composite index {composite_idx}")
                 except Exception as e:
                     logger.warning(f"Could not create composite index: {e}")
 
@@ -298,14 +298,14 @@ def ensure_schema_updates():
         if 'client_access_scope' not in om_cols:
             conn.execute(text("ALTER TABLE organization_members ADD COLUMN client_access_scope VARCHAR DEFAULT 'OWN'"))
             conn.commit()
-            logger.info("Added client_access_scope column to organization_members")
+            logger.warning("[DDL drift] Added client_access_scope column to organization_members")
 
         org_cols = [c['name'] for c in inspector.get_columns('organizations')]
         if 'access_code' not in org_cols:
             conn.execute(text("ALTER TABLE organizations ADD COLUMN access_code VARCHAR"))
             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_organizations_access_code ON organizations(access_code)"))
             conn.commit()
-            logger.info("Added access_code column to organizations")
+            logger.warning("[DDL drift] Added access_code column to organizations")
 
         _generate_missing_access_codes()
 
@@ -314,7 +314,7 @@ def ensure_schema_updates():
             if 'shared_modules' not in cs_cols:
                 conn.execute(text("ALTER TABLE client_shares ADD COLUMN shared_modules JSON"))
                 conn.commit()
-                logger.info("Added shared_modules column to client_shares")
+                logger.warning("[DDL drift] Added shared_modules column to client_shares")
 
         try:
             existing_constraints = inspector.get_unique_constraints('client_shares')
@@ -327,7 +327,7 @@ def ensure_schema_updates():
                     "WHERE status IN ('PENDING', 'ACCEPTED')"
                 ))
                 conn.commit()
-                logger.info("Replaced uq_client_share_creator_email with partial unique index ix_client_share_active_unique")
+                logger.warning("[DDL drift] Replaced uq_client_share_creator_email with partial unique index ix_client_share_active_unique")
             else:
                 conn.execute(text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS ix_client_share_active_unique "
@@ -354,20 +354,20 @@ def ensure_schema_updates():
                     safe_field = _validate_sql_identifier(field)
                     conn.execute(text(f"ALTER TABLE royalty_statements ADD COLUMN {safe_field} {col_type}"))
                     conn.commit()
-                    logger.info(f"Added {field} column to royalty_statements")
+                    logger.warning(f"[DDL drift] Added {field} column to royalty_statements")
 
         if 'works' in inspector.get_table_names():
             works_cols = [c['name'] for c in inspector.get_columns('works')]
             if 'status' not in works_cols:
                 conn.execute(text("ALTER TABLE works ADD COLUMN status VARCHAR NOT NULL DEFAULT 'PENDING'"))
                 conn.commit()
-                logger.info("Added status column to works")
+                logger.warning("[DDL drift] Added status column to works")
 
         if 'song_edit_history' not in inspector.get_table_names():
             try:
                 from backend.models.models import SongEditHistory
                 SongEditHistory.__table__.create(bind=engine, checkfirst=True)
-                logger.info("Created song_edit_history table")
+                logger.warning("[DDL drift] Created song_edit_history table")
             except Exception as e:
                 logger.warning(f"Could not create song_edit_history table: {e}")
         else:
@@ -382,7 +382,7 @@ def ensure_schema_updates():
                     END $$;
                 """))
                 conn.commit()
-                logger.info("Updated song_edit_history FK to SET NULL")
+                logger.warning("[DDL drift] Updated song_edit_history FK to SET NULL")
             except Exception as e:
                 conn.rollback()
                 logger.debug(f"song_edit_history FK update (may already be correct): {e}")
@@ -396,7 +396,7 @@ def ensure_schema_updates():
             try:
                 from backend.models.models import RegistrationReport
                 RegistrationReport.__table__.create(bind=engine, checkfirst=True)
-                logger.info("Created registration_reports table")
+                logger.warning("[DDL drift] Created registration_reports table")
             except Exception as e:
                 logger.warning(f"Could not create registration_reports table: {e}")
         else:
@@ -407,7 +407,7 @@ def ensure_schema_updates():
                         with engine.connect() as conn:
                             conn.execute(text(f"ALTER TABLE registration_reports ADD COLUMN {col_name} {col_type}"))
                             conn.commit()
-                        logger.info(f"Added {col_name} to registration_reports")
+                        logger.warning(f"[DDL drift] Added {col_name} to registration_reports")
                     except Exception as e:
                         logger.warning(f"Could not add {col_name} to registration_reports: {e}")
 
@@ -600,6 +600,24 @@ def sync_release_status():
 
 def main():
     logger.info("Starting database setup...")
+
+    # Step 1: Bootstrap the migration lock table and run Alembic
+    # FIRST. The idempotent DDL backstop below is now drift-only —
+    # Alembic owns forward schema changes; the backstop just patches
+    # any column/table that doesn't yet have an Alembic revision.
+    try:
+        from backend.utils.migration_runner import run_migrations_with_lock
+        run_migrations_with_lock(engine)
+    except Exception as e:
+        # Migration failure is serious. Log loudly but continue so
+        # the backstop can at least try to bring the schema to a
+        # workable state — operators see the warning in /api/internal/migration-status.
+        logger.error(f"Alembic upgrade failed; falling through to DDL backstop. Error: {e}")
+
+    # Step 2: Idempotent DDL backstop. Anything created here that
+    # wasn't applied by Alembic above represents drift — every
+    # backstop block emits a WARNING with the table/column name so
+    # we can incrementally migrate it into Alembic over time.
     try:
         Base.metadata.create_all(bind=engine, checkfirst=True)
         logger.info("Database tables created/verified")
