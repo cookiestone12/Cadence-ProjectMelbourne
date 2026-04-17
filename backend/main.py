@@ -562,9 +562,14 @@ app.include_router(leads.admin_router)
 
 # Synthesize a one-line summary on every route that doesn't already
 # have a hand-written one so /docs and /redoc are scannable instead
-# of being 482 bare function names.
+# of being 482 bare function names. Run inside a startup hook so the
+# route table is fully assembled before we walk it.
 from .utils.openapi_backfill import backfill_route_summaries
-backfill_route_summaries(app)
+
+
+@app.on_event("startup")
+def _backfill_openapi_summaries():
+    backfill_route_summaries(app)
 
 uploads_dir = Path(__file__).parent / "uploads"
 uploads_dir.mkdir(parents=True, exist_ok=True)
