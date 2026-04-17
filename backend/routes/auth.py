@@ -23,13 +23,12 @@ def _record_session(db: Session, user_id: int, token: str, request: Optional[Req
     ip = None
     ua = None
     if request is not None:
-        try:
-            ip = request.client.host if request.client else None
-            ua = request.headers.get("user-agent")
-            if ua and len(ua) > 512:
-                ua = ua[:512]
-        except Exception:
-            pass
+        client = getattr(request, "client", None)
+        if client is not None:
+            ip = getattr(client, "host", None)
+        ua = request.headers.get("user-agent")
+        if ua and len(ua) > 512:
+            ua = ua[:512]
     # Pull expires_at directly from the JWT 'exp' claim so the
     # session row matches the token even if ACCESS_TOKEN_EXPIRE_MINUTES
     # is changed at runtime or a custom expires_delta was passed.

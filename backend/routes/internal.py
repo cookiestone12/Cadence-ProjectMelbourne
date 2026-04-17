@@ -103,7 +103,8 @@ def provision_staff_user(
     db.commit()
     db.refresh(user)
 
-    # Welcome email — failure must not roll back the provisioning.
+    # Welcome email — log failures but don't undo a successful
+    # provisioning over an email problem.
     try:
         provider = get_email_provider()
         provider.send_email(
@@ -119,7 +120,11 @@ def provision_staff_user(
             ),
         )
     except Exception:
-        pass
+        import logging
+        logging.getLogger("cadence").exception(
+            "Welcome email failed for staff user_id=%s email=%s",
+            user.id, user.email,
+        )
 
     return user
 
