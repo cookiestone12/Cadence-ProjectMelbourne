@@ -94,6 +94,28 @@ def test_real_artist_still_combined():
     assert score == 1.0
 
 
+def test_bulk_confirm_includes_review_required_lines():
+    """bulk_confirm_high_confidence should promote BOTH AUTO_MATCHED
+    and high-confidence REVIEW_REQUIRED lines so users can resolve
+    review-required suggestions without leaving the modal."""
+    import inspect
+    from backend.services.royalty_processing_engine import bulk_confirm_high_confidence
+    src = inspect.getsource(bulk_confirm_high_confidence)
+    assert 'in_(["AUTO_MATCHED", "REVIEW_REQUIRED"])' in src or \
+        "REVIEW_REQUIRED" in src and "AUTO_MATCHED" in src and ".in_(" in src, \
+        "bulk_confirm_high_confidence must include REVIEW_REQUIRED lines"
+
+
+def test_auto_match_reevaluates_review_required_lines():
+    """auto_match_lines should re-evaluate REVIEW_REQUIRED lines that
+    were system-suggested, not just UNMATCHED ones."""
+    import inspect
+    from backend.services.royalty_processing_engine import auto_match_lines
+    src = inspect.getsource(auto_match_lines)
+    assert "REVIEW_REQUIRED" in src and "matched_by_user_id" in src, \
+        "auto_match_lines must re-process REVIEW_REQUIRED lines (excluding user overrides)"
+
+
 def test_column_mapping_does_not_steal_writer_share_for_artist():
     from backend.routes.royalties import suggest_column_mapping
     headers = ["Work Title", "Writer", "Writer Share %", "Royalty Amount"]

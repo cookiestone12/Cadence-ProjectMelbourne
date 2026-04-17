@@ -474,10 +474,13 @@ def bulk_confirm_high_confidence(
     user_id: Optional[int] = None,
 ) -> int:
     try:
+        # Confirm both AUTO_MATCHED lines and REVIEW_REQUIRED lines
+        # whose system-suggested match meets the confidence threshold.
+        # Lines a user has already manually overridden are excluded.
         lines = db.query(RoyaltyStatementLine).filter(
             RoyaltyStatementLine.org_id == org_id,
             RoyaltyStatementLine.statement_id == statement_id,
-            RoyaltyStatementLine.match_status == "AUTO_MATCHED",
+            RoyaltyStatementLine.match_status.in_(["AUTO_MATCHED", "REVIEW_REQUIRED"]),
             RoyaltyStatementLine.match_confidence >= threshold,
             RoyaltyStatementLine.matched_song_id.isnot(None),
         ).all()
