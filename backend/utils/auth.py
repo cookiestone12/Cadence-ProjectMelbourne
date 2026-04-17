@@ -73,11 +73,7 @@ def get_current_user(
     if user is None:
         raise credentials_exception
 
-    try:
-        set_user_id(user.id)
-    except Exception:
-        pass
-
+    set_user_id(user.id)
     return user
 
 def get_current_admin_user(current_user: User = Depends(get_current_user)):

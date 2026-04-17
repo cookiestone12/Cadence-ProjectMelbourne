@@ -338,7 +338,16 @@ app_logger.info(
     f"cors_origins={cors_origins or '(none)'}"
 )
 
-app.add_middleware(RequestContextMiddleware)
+# Middleware stack (Starlette runs LAST-ADDED first / outermost):
+#   1. RequestContextMiddleware (outermost) — sets request_id BEFORE
+#      anything else and injects X-Request-ID into every response,
+#      including 426s rejected by the HTTPS middleware below.
+#   2. CORSMiddleware (middle) — wraps the app so CORS headers are
+#      attached to error responses too.
+#   3. HTTPSEnforcementMiddleware (innermost) — short-circuits with
+#      a 426 in production when X-Forwarded-Proto isn't https. The
+#      rejection still passes back through RequestContext, so the
+#      response carries X-Request-ID.
 app.add_middleware(HTTPSEnforcementMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -348,6 +357,7 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Request-ID"],
 )
+app.add_middleware(RequestContextMiddleware)
 
 
 @app.exception_handler(SQLAlchemyError)
