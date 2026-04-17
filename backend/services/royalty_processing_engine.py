@@ -1,5 +1,6 @@
 import logging
 import hashlib
+import re
 from datetime import datetime
 from typing import List, Optional, Dict, Tuple
 from sqlalchemy.orm import Session
@@ -99,6 +100,27 @@ def parse_statement_to_lines(
                 return None
             return str(val).strip() or None
 
+        def clean_artist(val):
+            """Return artist name only if it looks like a real name.
+
+            Reject percentage strings (e.g. ``50.0%``), digit-only values,
+            currency amounts, lone punctuation (``--``, ``—``), and any
+            value with no alphabetic characters. Some parsers misalign
+            columns and dump the writer/publisher share into the artist
+            field; storing those would poison fuzzy matching.
+            """
+            if val is None:
+                return None
+            s = str(val).strip()
+            if not s:
+                return None
+            if not re.search(r"[A-Za-z]", s):
+                return None
+            stripped = s.replace(",", "").replace("$", "").replace("%", "").strip()
+            if stripped and re.fullmatch(r"-?\d+(?:\.\d+)?", stripped):
+                return None
+            return s
+
         def safe_float(row, col):
             if not col:
                 return None
@@ -126,10 +148,11 @@ def parse_statement_to_lines(
 
         total_revenue = 0.0
         for row_idx, row in enumerate(rows):
+            artist_clean = clean_artist(safe_get(row, artist_col))
             hash_data = {
                 "isrc": safe_get(row, isrc_col),
                 "track_title": safe_get(row, title_col),
-                "artist": safe_get(row, artist_col),
+                "artist": artist_clean,
                 "revenue": safe_get(row, rev_col),
                 "territory": safe_get(row, territory_col),
                 "store": safe_get(row, platform_col),
@@ -170,7 +193,7 @@ def parse_statement_to_lines(
                 upc=safe_get(row, upc_col),
                 iswc=safe_get(row, iswc_col),
                 track_title_raw=safe_get(row, title_col),
-                artist_name_raw=safe_get(row, artist_col),
+                artist_name_raw=artist_clean,
                 release_title_raw=safe_get(row, release_title_col),
                 label_raw=safe_get(row, label_col),
                 territory=territory_val,
@@ -289,7 +312,15 @@ def auto_match_lines(db: Session, statement_id: int, org_id: int) -> dict:
 
             if not matched and line.track_title_raw:
                 line_title = line.track_title_raw.lower().strip()
-                line_artist = (line.artist_name_raw or "").lower().strip()
+                raw_artist = (line.artist_name_raw or "").strip()
+                # Treat percentages, digit-only, and any non-alphabetic
+                # values the same as a missing artist — otherwise an
+                # exact title match gets penalized down into the
+                # REVIEW_REQUIRED band by a junk artist score.
+                if raw_artist and re.search(r"[A-Za-z]", raw_artist):
+                    line_artist = raw_artist.lower()
+                else:
+                    line_artist = ""
                 best_score = 0.0
                 best_song = None
 

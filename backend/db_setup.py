@@ -628,7 +628,43 @@ def main():
     sync_stale_health_scores()
     sync_release_status()
     backfill_publishing_percentages()
+    backfill_clean_statement_line_artists()
     logger.info("Database setup complete")
+
+
+def backfill_clean_statement_line_artists():
+    """Null out RoyaltyStatementLine.artist_name_raw values that are
+    obviously not artist names (percentages, digit-only, lone punctuation,
+    or anything with no alphabetic characters).
+
+    Some statement parsers — most notably the BMI-style PDF path — used
+    to write the writer/publisher share percentage into the artist
+    column. Those junk values poison the fuzzy matcher. This backfill
+    cleans them up in-place so existing statements behave correctly
+    without requiring users to delete and re-upload.
+    """
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        result = db.execute(text(
+            "UPDATE royalty_statement_lines "
+            "SET artist_name_raw = NULL "
+            "WHERE artist_name_raw IS NOT NULL "
+            "AND ("
+            "  artist_name_raw !~ '[A-Za-z]' "
+            "  OR REPLACE(REPLACE(REPLACE(TRIM(artist_name_raw), ',', ''), '$', ''), '%', '') "
+            "     ~ '^-?[0-9]+(\\.[0-9]+)?$'"
+            ")"
+        ))
+        affected = result.rowcount or 0
+        if affected > 0:
+            db.commit()
+            logger.info(f"Cleaned {affected} statement line artist values that were not real names")
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Statement line artist cleanup: {e}")
+    finally:
+        db.close()
 
 
 def backfill_publishing_percentages():

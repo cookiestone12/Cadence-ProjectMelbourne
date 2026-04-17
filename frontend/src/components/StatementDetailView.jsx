@@ -334,7 +334,11 @@ export default function StatementDetailView({ orgId, statementId, onBack, initia
       if (activeTab === 'lines') {
         loadLines()
       }
-      alert(`Auto-match complete. ${res.data.stats?.auto_matched || 0} lines matched.`)
+      const s = res.data.stats || {}
+      const a = s.auto_matched || 0
+      const r2 = s.review_required || 0
+      const u = s.unmatched || 0
+      alert(`Auto-match complete. ${a} auto-matched, ${r2} need review, ${u} unmatched.`)
     } catch (err) {
       console.error('Auto-match failed:', err)
       alert(err.response?.data?.detail || 'Auto-match failed.')
@@ -392,7 +396,8 @@ export default function StatementDetailView({ orgId, statementId, onBack, initia
   const totalLines = stats?.total_lines || 0
   const matchedCount = (stats?.by_status?.MATCHED?.count || 0) + (stats?.by_status?.CONFIRMED?.count || 0) + (stats?.by_status?.AUTO_MATCHED?.count || 0)
   const ignoredCount = stats?.by_status?.IGNORED?.count || 0
-  const unmatchedCount = totalLines - matchedCount - ignoredCount
+  const reviewCount = stats?.by_status?.REVIEW_REQUIRED?.count || 0
+  const unmatchedCount = stats?.by_status?.UNMATCHED?.count || 0
   const matchPct = totalLines > 0 ? (matchedCount / totalLines) * 100 : 0
 
   return (
@@ -510,7 +515,7 @@ export default function StatementDetailView({ orgId, statementId, onBack, initia
             </div>
             <div className="p-6 space-y-4">
               <p className="text-sm text-[#7A8580]">
-                This will create ledger entries for all statement lines. Matched lines are allocated to payees based on contract splits with recoupment applied. Unmatched lines are booked as unallocated org revenue.
+                This will create ledger entries for all statement lines. Matched (and confirmed) lines are allocated to payees based on contract splits with recoupment applied. Lines awaiting review and unmatched lines are booked as unallocated org revenue until they're confirmed.
               </p>
               <div className="bg-[rgba(91,138,114,0.06)] rounded-xl p-4">
                 <div className="flex justify-between text-sm mb-2">
@@ -522,6 +527,10 @@ export default function StatementDetailView({ orgId, statementId, onBack, initia
                   <span className="font-medium text-[#5B8A72]">{matchedCount}</span>
                 </div>
                 <div className="flex justify-between text-sm mb-2">
+                  <span className="text-[#7A8580]">Needs Review</span>
+                  <span className="font-medium text-orange-600">{reviewCount}</span>
+                </div>
+                <div className="flex justify-between text-sm mb-2">
                   <span className="text-[#7A8580]">Unmatched</span>
                   <span className="font-medium text-[#B87333]">{unmatchedCount}</span>
                 </div>
@@ -530,6 +539,27 @@ export default function StatementDetailView({ orgId, statementId, onBack, initia
                   <span className="font-medium text-[#3D4A44]">{matchPct.toFixed(1)}%</span>
                 </div>
               </div>
+              {reviewCount > 0 && (
+                <div className="bg-orange-50 rounded-xl p-3 space-y-2">
+                  <p className="text-xs text-orange-700">
+                    {reviewCount} line{reviewCount !== 1 ? 's have' : ' has'} a suggested match awaiting confirmation. {reviewCount !== 1 ? 'They' : 'It'} won't be allocated to a payee until confirmed.
+                  </p>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const res = await axios.post(`/api/royalty-processing/${orgId}/statements/${statementId}/bulk-confirm`, { threshold: bulkThreshold })
+                        await loadStatement()
+                        alert(`Confirmed ${res.data.confirmed_count || 0} suggestion${(res.data.confirmed_count || 0) === 1 ? '' : 's'} at or above ${bulkThreshold}% confidence.`)
+                      } catch (err) {
+                        alert(err.response?.data?.detail || 'Bulk confirm failed.')
+                      }
+                    }}
+                    className="text-xs px-3 py-1.5 bg-white border border-orange-300 text-orange-700 rounded-lg hover:bg-orange-100 font-medium"
+                  >
+                    Confirm all suggestions ≥ {bulkThreshold}%
+                  </button>
+                </div>
+              )}
               {unmatchedCount > 0 && (
                 <div className="bg-[rgba(184,115,51,0.06)] rounded-xl p-3">
                   <p className="text-xs text-[#B87333]">
