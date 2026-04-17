@@ -476,6 +476,7 @@ def parse_uploaded_file(content: bytes, filename: str, org_id: int = None) -> tu
                         "platform": "Source/Collector",
                         "revenue_type": "Income Type",
                         "gross_amount": "Gross Amount",
+                        "release_title": "Source Detail",
                     }
                     return result["headers"], result["rows"], metadata
         except Exception as e:
@@ -848,6 +849,25 @@ async def upload_statement(
     else:
         mapping = suggest_column_mapping(headers, source_name or "")
 
+    # Defensive: if the resolved mapping references headers that don't actually
+    # appear in the parsed row dictionaries, the row.get(col) lookups silently
+    # return None and we end up persisting empty transactions. Fall back to
+    # auto-detecting column mappings against the actual row keys we got.
+    if rows:
+        row_keys = set(rows[0].keys())
+        mapped_headers = {v for v in (mapping or {}).values() if v}
+        if mapped_headers and not (mapped_headers & row_keys):
+            logger.warning(
+                f"Resolved mapping headers {mapped_headers} not found in row keys {row_keys}; "
+                f"falling back to header-based column suggestion"
+            )
+            mapping = suggest_column_mapping(list(row_keys), source_name or "")
+
+    logger.info(
+        f"upload_statement: parsed {len(rows)} rows from {file.filename!r}; "
+        f"suggested_mapping={'yes' if suggested else 'no'}; resolved mapping={mapping}"
+    )
+
     p_start = None
     p_end = None
     if period_start:
@@ -931,14 +951,7 @@ async def upload_statement(
 
     grand_total_net = pdf_metadata.get("grand_total_net") if pdf_metadata else None
     if grand_total_net is not None:
-        statement.total_revenue_cents = int(round(grand_total_net * 100))
         logger.info(f"Using PDF Grand Total for revenue: ${grand_total_net:.2f} (parsed sum: ${total_rev / 100:.2f})")
-    else:
-        statement.total_revenue_cents = total_rev
-    statement.total_transactions = len(transactions)
-    statement.matched_transactions = matched_count
-    statement.unmatched_transactions = unmatched_count
-    statement.status = "PROCESSED" if unmatched_count == 0 else "PARTIALLY_MATCHED"
 
     line_parse_warning = None
     try:
@@ -950,6 +963,26 @@ async def upload_statement(
     except Exception as e:
         line_parse_warning = str(e)
         logger.warning(f"Failed to create statement lines: {e}")
+
+    # parse_statement_to_lines writes statement.total_transactions with its own
+    # line count. For the basic Statements upload flow we want the success dialog
+    # and Statements table to reflect the RoyaltyTransaction rows we actually
+    # persisted (the source of truth for this view), so set everything AFTER the
+    # lines call.
+    statement.total_transactions = len(transactions)
+    statement.matched_transactions = matched_count
+    statement.unmatched_transactions = unmatched_count
+    if grand_total_net is not None:
+        statement.total_revenue_cents = int(round(grand_total_net * 100))
+    else:
+        statement.total_revenue_cents = total_rev
+    statement.status = "PROCESSED" if unmatched_count == 0 else "PARTIALLY_MATCHED"
+
+    logger.info(
+        f"upload_statement: persisted {len(transactions)} transactions "
+        f"({matched_count} matched, {unmatched_count} unmatched), "
+        f"total_revenue=${statement.total_revenue_cents / 100:.2f}, statement_id={statement.id}"
+    )
 
     from ..services.audit_service import log_action
     log_action(db, org_id, current_user.id, "UPLOAD", "STATEMENT", statement.id, source_name,
