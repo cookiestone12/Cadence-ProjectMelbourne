@@ -236,11 +236,32 @@ def parse_statement_to_lines(
 
 def auto_match_lines(db: Session, statement_id: int, org_id: int) -> dict:
     try:
+        # Re-evaluate UNMATCHED lines AND REVIEW_REQUIRED lines that
+        # were auto-suggested (matched_by_user_id IS NULL). Lines that
+        # a user has manually confirmed/overridden are left untouched.
+        from sqlalchemy import or_, and_
         lines = db.query(RoyaltyStatementLine).filter(
             RoyaltyStatementLine.org_id == org_id,
             RoyaltyStatementLine.statement_id == statement_id,
-            RoyaltyStatementLine.match_status == "UNMATCHED",
+            or_(
+                RoyaltyStatementLine.match_status == "UNMATCHED",
+                and_(
+                    RoyaltyStatementLine.match_status == "REVIEW_REQUIRED",
+                    RoyaltyStatementLine.matched_by_user_id.is_(None),
+                ),
+            ),
         ).all()
+
+        # Reset auto-suggested REVIEW_REQUIRED lines so the existing
+        # match logic below can replace them with a fresh suggestion
+        # (or drop them to UNMATCHED if no candidate scores).
+        for line in lines:
+            if line.match_status == "REVIEW_REQUIRED":
+                line.matched_song_id = None
+                line.matched_release_id = None
+                line.match_confidence = None
+                line.match_method = None
+                line.match_status = "UNMATCHED"
 
         org_songs = db.query(Song).filter(Song.organization_id == org_id).all()
         org_releases = db.query(Release).filter(Release.organization_id == org_id).all()

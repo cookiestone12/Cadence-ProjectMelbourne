@@ -238,15 +238,42 @@ def suggest_column_mapping(headers: List[str], source_type: str = "") -> Dict[st
             else:
                 hints[field] = extra
 
-    mapping = {}
+    # Per-field disqualifiers: tokens that, if present in the header,
+    # mean the header should NOT be claimed by this field even if a
+    # hint matches. Prevents e.g. the artist field greedily claiming
+    # a "Writer Share %" column because "writer" appears in both the
+    # artist hints and the header.
+    field_disqualifiers = {
+        "artist": ["share", "%", "percent", "percentage", "ownership", "split"],
+        "track_title": ["share", "%", "percent", "percentage"],
+        "revenue": ["%", "percent", "percentage", "share", "rate", "exchange"],
+    }
+
+    # Process share_percentage and publisher BEFORE artist so a column
+    # like "Writer Share" gets correctly claimed as a share column
+    # rather than as the artist column.
+    field_order = [
+        "isrc", "upc", "iswc", "work_id",
+        "share_percentage", "publisher",
+        "track_title", "artist",
+        "revenue", "gross_amount", "quantity",
+        "territory", "platform", "revenue_type",
+    ]
+    ordered_fields = [f for f in field_order if f in hints] + [f for f in hints if f not in field_order]
+
+    mapping = {f: None for f in hints}
     used_headers = set()
-    for field, field_hints in hints.items():
+    for field in ordered_fields:
+        field_hints = hints[field]
+        disqualifiers = field_disqualifiers.get(field, [])
         best_match = None
         for header in headers:
             if header in used_headers:
                 continue
             lower = header.lower().strip()
             lower_clean = re.sub(r'\s+', ' ', lower)
+            if any(d in lower_clean for d in disqualifiers):
+                continue
             for hint in field_hints:
                 if hint == lower_clean or re.search(r'(?:^|[\s_\-/])' + re.escape(hint) + r'(?:[\s_\-/]|$)', lower_clean):
                     best_match = header
