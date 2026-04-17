@@ -279,17 +279,17 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
       let importMapping = mapping
       let importRows = allRows.length > 0 ? allRows : previewRows
 
-      // Drop rows the user unchecked in the review step, and any rows that
-      // ended up with an empty title after editing.
-      importRows = importRows.filter(r => !r._skip && (r.title || '').trim().length > 0)
-
-      if (importRows.length === 0) {
-        setError('No rows selected for import. Check at least one row to keep.')
-        setImporting(false)
-        return
-      }
-
       if (isDocImport) {
+        // Doc/text imports use normalized field names directly. Drop rows the
+        // user unchecked in the review step, and any rows whose title was
+        // edited to empty.
+        importRows = importRows.filter(r => !r._skip && (r.title || '').trim().length > 0)
+
+        if (importRows.length === 0) {
+          setError('No rows selected for import. Check at least one row to keep.')
+          setImporting(false)
+          return
+        }
         importMapping = {
           title: 'title',
           primary_artist: 'primary_artist',
