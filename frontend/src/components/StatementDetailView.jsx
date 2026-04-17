@@ -83,8 +83,8 @@ const LINE_FILTERS = [
   { key: 'IGNORED', label: 'Ignored' },
 ]
 
-export default function StatementDetailView({ orgId, statementId, onBack }) {
-  const [activeTab, setActiveTab] = useState('overview')
+export default function StatementDetailView({ orgId, statementId, onBack, initialTab = 'overview' }) {
+  const [activeTab, setActiveTab] = useState(initialTab)
   const [statement, setStatement] = useState(null)
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)

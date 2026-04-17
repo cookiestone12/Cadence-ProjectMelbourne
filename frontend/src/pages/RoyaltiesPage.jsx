@@ -566,6 +566,7 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
           orgId={orgId}
           statementId={selectedStatement.id}
           onBack={() => { setSelectedStatement(null); loadStatements() }}
+          initialTab="lines"
         />
       </div>
     )
