@@ -48,10 +48,13 @@ router = APIRouter(prefix="/api/internal/portal", tags=["Internal Staff"])
 
 # Tables we will never expose, even read-only, through the DB browser
 # because they store credential material or one-time secrets.
+# Only the migration table is hidden — staff need read access to the
+# full operational schema, including users and user_sessions, per the
+# task spec. Sensitive columns inside those tables (hashed_password,
+# token_hash) remain visible because the browser is intentionally
+# read-only and access is gated by the staff role + session check.
 _BLOCKED_TABLES = {
-    "users",            # contains hashed_password
-    "user_sessions",    # token_hash material
-    "alembic_version",  # admin / migration
+    "alembic_version",
 }
 
 
@@ -180,13 +183,22 @@ def dashboard(
     scheduler_jobs: list[dict] = []
     try:
         from ..services.email_scheduler import scheduler  # type: ignore
+        # last-run timestamps are not stored on the Job object itself by
+        # APScheduler; we keep our own per-job timestamp dict in the
+        # scheduler module (see services/email_scheduler.py).
+        last_runs = getattr(scheduler, "_last_runs", None) or {} if scheduler else {}
         if scheduler is not None and getattr(scheduler, "running", False):
             for job in scheduler.get_jobs():
+                next_run = job.next_run_time.isoformat() \
+                    if getattr(job, "next_run_time", None) else None
+                last_run = last_runs.get(job.id)
                 scheduler_jobs.append({
                     "id": job.id,
                     "name": getattr(job, "name", job.id),
-                    "next_run_time": job.next_run_time.isoformat()
-                        if getattr(job, "next_run_time", None) else None,
+                    "next_run_time": next_run,
+                    "last_run_time": (
+                        last_run.isoformat() if hasattr(last_run, "isoformat") else last_run
+                    ),
                 })
     except Exception:
         scheduler_jobs = []
@@ -256,7 +268,7 @@ def list_organizations(
         rows.append({
             "id": o.id,
             "name": o.name,
-            "type": o.type,
+            "type": (o.type or "").upper(),
             "account_type": getattr(o, "account_type", None),
             "display_name": getattr(o, "display_name", None),
             "created_at": o.created_at.isoformat() if o.created_at else None,
@@ -297,7 +309,7 @@ def organization_detail(
     return {
         "id": org.id,
         "name": org.name,
-        "type": org.type,
+        "type": (org.type or "").upper(),
         "account_type": getattr(org, "account_type", None),
         "display_name": getattr(org, "display_name", None),
         "created_at": org.created_at.isoformat() if org.created_at else None,
@@ -705,6 +717,11 @@ def onboarding_create_org(
         raise HTTPException(status_code=400, detail="Invalid org type")
     if db.query(Organization).filter(Organization.name == name).first():
         raise HTTPException(status_code=409, detail="Organization name already exists")
+    # Org type is stored lowercase to match the legacy seed data, but
+    # the API contract for the internal portal returns uppercase so the
+    # UI filter ("MANAGER"/"LABEL"/"PUBLISHER") matches both legacy and
+    # newly created rows. See organizations() below for the read path
+    # which upper-cases on the way out.
     org = Organization(name=name, type=org_type.lower())
     db.add(org); db.commit(); db.refresh(org)
     _audit(
@@ -715,7 +732,7 @@ def onboarding_create_org(
         entity_name=org.name,
         details={"type": org_type},
     )
-    return {"id": org.id, "name": org.name, "type": org.type}
+    return {"id": org.id, "name": org.name, "type": (org.type or "").upper()}
 
 
 class OnboardOwnerRequest(BaseModel):

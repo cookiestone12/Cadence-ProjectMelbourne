@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 
 logger = logging.getLogger("cadence")
 
@@ -14,6 +15,19 @@ INTERVAL_HOURS = {
 }
 
 _scheduler = None
+# Per-job last-run tracker, populated via the EVENT_JOB_EXECUTED /
+# EVENT_JOB_ERROR listener registered in start_scheduler(). Exposed
+# on the scheduler instance as ._last_runs so the internal portal
+# dashboard can surface last-run timestamps for each job alongside
+# the next_run_time provided natively by APScheduler.
+_last_runs: dict = {}
+
+
+def _record_job_run(event):
+    try:
+        _last_runs[event.job_id] = datetime.utcnow()
+    except Exception:
+        pass
 
 
 def check_and_send_digests():
@@ -278,6 +292,8 @@ def start_scheduler():
         id="nightly_user_session_cleanup",
         replace_existing=True,
     )
+    _scheduler.add_listener(_record_job_run, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
+    _scheduler._last_runs = _last_runs  # type: ignore[attr-defined]
     _scheduler.start()
     logger.info("Email digest scheduler started (15-minute interval)")
     logger.info("Storage scan scheduler started (hourly check)")
