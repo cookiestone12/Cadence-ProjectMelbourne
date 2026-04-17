@@ -55,7 +55,7 @@ def get_current_organization(
     ).first()
     
     if not membership:
-        if current_user.is_super_admin:
+        if current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False):
             org = db.query(Organization).order_by(Organization.id).first()
             if not org:
                 raise HTTPException(status_code=404, detail="No organizations exist yet")
@@ -94,13 +94,13 @@ def get_current_membership(
     ).first()
     
     if not membership:
-        if current_user.is_super_admin:
+        if current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False):
             org = db.query(Organization).order_by(Organization.id).first()
             if org:
                 return {
                     "organization_id": org.id,
                     "user_id": current_user.id,
-                    "role": "OWNER"
+                    "role": "OWNER" if current_user.is_super_admin else "STAFF_VIEWER",
                 }
         raise HTTPException(status_code=404, detail="User is not a member of any organization")
     
@@ -123,7 +123,8 @@ def get_organization(
         OrganizationMember.organization_id == org_id
     ).first()
     
-    if not membership:
+    # Cadence staff and master admins get read access to any org.
+    if not membership and not current_user.is_super_admin and not getattr(current_user, "is_cadence_staff", False):
         raise HTTPException(status_code=403, detail="Not authorized to access this organization")
     
     org = db.query(Organization).filter(Organization.id == org_id).first()

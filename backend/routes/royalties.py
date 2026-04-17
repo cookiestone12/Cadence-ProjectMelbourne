@@ -41,7 +41,9 @@ def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = No
         OrganizationMember.user_id == user.id,
         OrganizationMember.organization_id == org_id
     ).first()
-    if not membership and not user.is_super_admin:
+    # Cadence staff get read access to every org per Task #74.
+    # Write paths still gate on membership/role inside their handlers.
+    if not membership and not user.is_super_admin and not getattr(user, "is_cadence_staff", False):
         if creator_id:
             from .client_sharing import has_shared_access, ALL_SHARE_MODULES
             share = has_shared_access(db, user.id, creator_id)

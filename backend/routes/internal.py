@@ -43,11 +43,12 @@ class StaffUserResponse(BaseModel):
 
 
 def _audit_org_id(db: Session, actor: User) -> Optional[int]:
-    """AuditLog.organization_id is non-nullable with FK to
-    organizations. Staff provision/deprovision is platform-level,
-    so use the actor's first org if present, otherwise fall back to
-    any org in the database. If there are no orgs at all, return
-    None and the caller skips audit logging.
+    """Pick a representative org for the audit row. Staff
+    provision/deprovision is platform-level, so we prefer the
+    actor's first org but fall back to any org in the database.
+    Since migration d3e4f5a6b7c8 made audit_logs.organization_id
+    nullable, returning None is fine — the audit row is still
+    written.
     """
     if actor.organization_memberships:
         return actor.organization_memberships[0].organization_id
@@ -76,18 +77,16 @@ def provision_staff_user(
     db.add(user)
     db.flush()
 
-    audit_org = _audit_org_id(db, actor)
-    if audit_org is not None:
-        log_action(
-            db,
-            organization_id=audit_org,
-            user_id=actor.id,
-            action="STAFF_PROVISIONED",
-            entity_type="USER",
-            entity_id=user.id,
-            entity_name=user.username,
-            details={"role_note": payload.role_note, "email": user.email},
-        )
+    log_action(
+        db,
+        organization_id=_audit_org_id(db, actor),
+        user_id=actor.id,
+        action="STAFF_PROVISIONED",
+        entity_type="USER",
+        entity_id=user.id,
+        entity_name=user.username,
+        details={"role_note": payload.role_note, "email": user.email},
+    )
     db.commit()
     db.refresh(user)
 
@@ -135,18 +134,16 @@ def deprovision_staff_user(
         synchronize_session=False,
     )
 
-    audit_org = _audit_org_id(db, actor)
-    if audit_org is not None:
-        log_action(
-            db,
-            organization_id=audit_org,
-            user_id=actor.id,
-            action="STAFF_DEPROVISIONED",
-            entity_type="USER",
-            entity_id=user.id,
-            entity_name=user.username,
-            details={"role_note": payload.role_note, "sessions_revoked": revoked},
-        )
+    log_action(
+        db,
+        organization_id=_audit_org_id(db, actor),
+        user_id=actor.id,
+        action="STAFF_DEPROVISIONED",
+        entity_type="USER",
+        entity_id=user.id,
+        entity_name=user.username,
+        details={"role_note": payload.role_note, "sessions_revoked": revoked},
+    )
     db.commit()
     db.refresh(user)
     return user

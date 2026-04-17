@@ -1578,7 +1578,7 @@ class AuditLog(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     action = Column(String, nullable=False)
     entity_type = Column(String, nullable=False)

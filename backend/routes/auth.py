@@ -59,31 +59,33 @@ class TokenResponse(BaseModel):
     user: dict
 
 @router.post("/register", response_model=TokenResponse)
-def register(request: RegisterRequest, db: Session = Depends(get_db)):
+def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     # Check if user exists
-    if db.query(User).filter(func.lower(User.username) == request.username.lower()).first():
+    if db.query(User).filter(func.lower(User.username) == payload.username.lower()).first():
         raise HTTPException(status_code=400, detail="Username already registered")
     
-    if db.query(User).filter(User.email == request.email).first():
+    if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     
     # Create new user
-    hashed_password = get_password_hash(request.password)
+    hashed_password = get_password_hash(payload.password)
     
     # First user is admin
     is_admin = db.query(User).count() == 0
     
     user = User(
-        username=request.username,
-        email=request.email,
+        username=payload.username,
+        email=payload.email,
         hashed_password=hashed_password,
         is_admin=is_admin
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    db.flush()
     
     access_token = create_access_token(data={"sub": user.username})
+    _record_session(db, user.id, access_token, request)
+    db.commit()
+    db.refresh(user)
     
     return {
         "access_token": access_token,

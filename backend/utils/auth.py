@@ -3,7 +3,7 @@ from typing import Optional
 import hashlib
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sa_func
@@ -58,33 +58,38 @@ def verify_token(token: str) -> Optional[str]:
     return username
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
+    # Per-request cache so multiple Depends(get_current_user) usages
+    # in the same request don't re-hit the DB for the user + session.
+    cached = getattr(request.state, "cached_user", None)
+    if cached is not None:
+        return cached
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
+
     token = credentials.credentials
     payload = decode_access_token(token)
-    
+
     if payload is None:
         raise credentials_exception
-    
+
     username = payload.get("sub")
     if username is None or not isinstance(username, str):
         raise credentials_exception
-    
+
     user = db.query(User).filter(sa_func.lower(User.username) == username.lower()).first()
     if user is None:
         raise credentials_exception
 
     # Session enforcement: every JWT must have a matching, non-revoked
-    # UserSession row. Tokens issued before this feature shipped (or
-    # whose session row was pruned) get rejected here so deprovisioned
-    # staff can't keep using a stolen JWT.
+    # UserSession row so deprovisioned staff can't keep using a JWT.
     from ..models import UserSession
     session = db.query(UserSession).filter(
         UserSession.token_hash == hash_token(token)
@@ -93,7 +98,39 @@ def get_current_user(
         raise credentials_exception
 
     set_user_id(user.id)
+    request.state.cached_user = user
     return user
+
+
+def user_can_read_org(user: User, org_id: int, db: Session) -> bool:
+    """Centralized read-access check.
+    Read access: master admin OR Cadence staff OR org member.
+    """
+    if user.is_super_admin or getattr(user, "is_cadence_staff", False):
+        return True
+    from ..models import OrganizationMember
+    return db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == user.id,
+        OrganizationMember.organization_id == org_id,
+    ).first() is not None
+
+
+def user_can_write_org(user: User, org_id: int, db: Session) -> bool:
+    """Centralized write-access check.
+    Write access: master admin OR org-scoped OWNER/ADMIN.
+    is_cadence_staff is read-only and does NOT confer write.
+    """
+    if user.is_super_admin:
+        return True
+    from ..models import OrganizationMember
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == user.id,
+        OrganizationMember.organization_id == org_id,
+    ).first()
+    if not membership:
+        return False
+    role = (membership.role or "").upper()
+    return role in ("OWNER", "ADMIN")
 
 def get_current_admin_user(current_user: User = Depends(get_current_user)):
     if not current_user.is_admin and not current_user.is_super_admin:
