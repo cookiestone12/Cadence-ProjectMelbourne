@@ -162,15 +162,26 @@ def _seed(staging_url: str) -> None:
                     hashed_password=get_password_hash(SANDBOX_PASSWORD),
                     is_active=True,
                     is_cadence_staff=True,
+                    is_super_admin=True,
                 )
                 db.add(master)
                 db.flush()
-                print(f"[seed_staging] Created MasterPAdmin staff user id={master.id}")
+                print(f"[seed_staging] Created MasterPAdmin (staff+super) id={master.id}")
             else:
-                # Ensure existing record has staff bit set; do not touch password.
+                # Ensure existing record has staff + super bits set; do
+                # not touch password. Reconciling these on rerun matters
+                # so staff/super-only endpoints are exercisable in staging.
+                changed = False
                 if not master.is_cadence_staff:
                     master.is_cadence_staff = True
-                print(f"[seed_staging] Reusing existing MasterPAdmin id={master.id}")
+                    changed = True
+                if not master.is_super_admin:
+                    master.is_super_admin = True
+                    changed = True
+                print(
+                    f"[seed_staging] Reusing existing MasterPAdmin id={master.id}"
+                    + (" (reconciled staff/super flags)" if changed else "")
+                )
 
             # ----- Cadence Sandbox org -----
             org = db.query(Organization).filter(
@@ -211,6 +222,14 @@ def _seed(staging_url: str) -> None:
                         user_id=user.id,
                         role=role,
                     ))
+                elif membership.role != role:
+                    # Reconcile drift on rerun so staging always has
+                    # exactly one user at each expected role.
+                    print(
+                        f"[seed_staging] Reconciling {username} role "
+                        f"{membership.role} -> {role}"
+                    )
+                    membership.role = role
 
             # ----- Creators -----
             creators: list[Creator] = []
