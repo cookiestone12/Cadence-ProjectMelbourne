@@ -12,7 +12,7 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 router = APIRouter(prefix="/api/creative-directory", tags=["Creative Directory"])
-public_router = APIRouter(prefix="/api/public", tags=["Public"])
+public_router = APIRouter(prefix="/api/public", tags=["Creative Directory"])
 
 
 def verify_org_access(user: User, org_id: int, db: Session):

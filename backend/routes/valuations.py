@@ -24,7 +24,7 @@ class ValuationCreateRequest(BaseModel):
     source: str = "MANUAL"
     notes: Optional[str] = None
 
-@router.get("/{song_id}/valuation", response_model=Optional[ValuationResponse])
+@router.get("/{song_id}/valuation", response_model=Optional[ValuationResponse], summary="Get latest song valuation", description="Returns the most recent valuation calculated for the song.")
 def get_song_valuation(
     song_id: int,
     db: Session = Depends(get_db),
@@ -64,7 +64,7 @@ def get_song_valuation(
         "notes": valuation.notes
     }
 
-@router.post("/{song_id}/valuation", response_model=ValuationResponse)
+@router.post("/{song_id}/valuation", response_model=ValuationResponse, summary="Compute a new song valuation", description="Runs the catalog valuation engine (industry multiples + Black Box Algorithm) for the song and persists the result.")
 def create_song_valuation(
     song_id: int,
     request: ValuationCreateRequest,
@@ -112,7 +112,7 @@ def create_song_valuation(
         "notes": valuation.notes
     }
 
-@router.get("/{song_id}/valuations", response_model=List[ValuationResponse])
+@router.get("/{song_id}/valuations", response_model=List[ValuationResponse], summary="List historical song valuations", description="Returns every valuation ever computed for the song, newest first.")
 def get_song_valuation_history(
     song_id: int,
     db: Session = Depends(get_db),

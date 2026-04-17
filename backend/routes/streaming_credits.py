@@ -16,8 +16,8 @@ from .client_sharing import has_shared_access
 logger = logging.getLogger("cadence")
 
 router = APIRouter(prefix="/api/streaming-credits", tags=["Streaming Credits"])
-public_router = APIRouter(prefix="/api/public", tags=["Public"])
-admin_chart_router = APIRouter(prefix="/api/admin/charts", tags=["Admin Charts"])
+public_router = APIRouter(prefix="/api/public", tags=["Streaming Credits"])
+admin_chart_router = APIRouter(prefix="/api/admin/charts", tags=["Streaming Credits"])
 
 
 def _verify_org_access(user: User, org_id: int, db: Session, creator_id: int = None):

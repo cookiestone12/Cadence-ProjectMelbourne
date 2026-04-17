@@ -74,7 +74,7 @@ class OrgNotificationSettingResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.get("", response_model=List[NotificationResponse])
+@router.get("", response_model=List[NotificationResponse], summary="List notifications", description="Returns the current user's notifications, newest first, with optional unread-only filter.")
 def get_notifications(
     unread_only: bool = False,
     limit: int = 50,
@@ -98,7 +98,7 @@ def get_notifications(
         created_at=n.created_at
     ) for n in notifications]
 
-@router.get("/unread-count")
+@router.get("/unread-count", summary="Unread notification count", description="Returns the count of unread notifications for the current user. Cheap; safe to poll for badge counts.")
 def get_unread_count(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -110,7 +110,7 @@ def get_unread_count(
     
     return {"unread_count": count}
 
-@router.put("/{notification_id}/read")
+@router.put("/{notification_id}/read", summary="Mark notification as read", description="Flips a single notification's read flag for the current user.")
 def mark_as_read(
     notification_id: int,
     db: Session = Depends(get_db),
@@ -130,7 +130,7 @@ def mark_as_read(
     
     return {"message": "Notification marked as read"}
 
-@router.put("/read-all")
+@router.put("/read-all", summary="Mark all notifications as read", description="Bulk-marks every unread notification for the current user as read.")
 def mark_all_as_read(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -144,7 +144,7 @@ def mark_all_as_read(
     
     return {"message": "All notifications marked as read"}
 
-@router.delete("/{notification_id}")
+@router.delete("/{notification_id}", summary="Delete a notification", description="Removes a single notification from the current user's inbox.")
 def delete_notification(
     notification_id: int,
     db: Session = Depends(get_db),
@@ -163,7 +163,7 @@ def delete_notification(
     
     return {"message": "Notification deleted"}
 
-@router.get("/preferences", response_model=List[NotificationPreferenceResponse])
+@router.get("/preferences", response_model=List[NotificationPreferenceResponse], summary="Get notification preferences", description="Returns the current user's per-channel (in-app / email) preferences for each notification type.")
 def get_preferences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -197,7 +197,7 @@ def get_preferences(
     
     return result
 
-@router.put("/preferences")
+@router.put("/preferences", summary="Update notification preferences", description="Bulk-updates the current user's per-type, per-channel notification preferences.")
 def update_preference(
     request: NotificationPreferenceRequest,
     db: Session = Depends(get_db),
@@ -652,7 +652,7 @@ def get_digest_pdf(
     )
 
 
-@router.get("/org/{org_id}/settings", response_model=List[OrgNotificationSettingResponse])
+@router.get("/org/{org_id}/settings", response_model=List[OrgNotificationSettingResponse], summary="Get org-level notification settings", description="Owner/Admin: returns the organization-wide defaults for each notification type.")
 def get_org_notification_settings(
     org_id: int,
     db: Session = Depends(get_db),

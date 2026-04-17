@@ -46,12 +46,7 @@ def backfill_route_summaries(app: FastAPI) -> int:
         func_name = getattr(endpoint, "__name__", "") or ""
         if not func_name:
             continue
-        synthesized = _humanize(func_name)
-        route.summary = synthesized
-        # FastAPI also caches the OpenAPI fragment per-route; clearing
-        # it forces regeneration on the next /openapi.json request.
-        if hasattr(route, "openapi_extra"):
-            pass
+        route.summary = _humanize(func_name)
         updated += 1
 
     if updated:

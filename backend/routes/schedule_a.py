@@ -19,7 +19,7 @@ logger = logging.getLogger("cadence")
 router = APIRouter(prefix="/api/schedule-a", tags=["Schedule A"])
 
 
-@router.post("/upload/{org_id}")
+@router.post("/upload/{org_id}", summary="Upload a Schedule A document", description="Stages a Schedule A PDF/DOCX, runs AI extraction, and returns a parsed preview for review.")
 async def upload_schedule_a(
     org_id: int,
     file: UploadFile = File(...),
@@ -182,7 +182,7 @@ def format_bool(val):
     return "N/A"
 
 
-@router.get("/creator/{creator_id}/data")
+@router.get("/creator/{creator_id}/data", summary="Get a creator's Schedule A data", description="Returns the structured Schedule A rows (titles, splits, contracts) for a creator.")
 def get_schedule_a_data(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -292,7 +292,7 @@ def get_schedule_a_data(
     }
 
 
-@router.get("/creator/{creator_id}/csv")
+@router.get("/creator/{creator_id}/csv", summary="Export Schedule A as CSV", description="Streams the creator's Schedule A as a CSV download.")
 def export_schedule_a_csv(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -383,7 +383,7 @@ def export_schedule_a_csv(
     )
 
 
-@router.get("/creator/{creator_id}/pdf")
+@router.get("/creator/{creator_id}/pdf", summary="Export Schedule A as PDF", description="Renders a branded PDF Schedule A for the creator.")
 def export_schedule_a_pdf(
     creator_id: int,
     db: Session = Depends(get_db),

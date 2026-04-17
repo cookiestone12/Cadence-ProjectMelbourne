@@ -180,7 +180,7 @@ def parse_csv_file(content: bytes) -> tuple[list, list]:
     return headers, rows
 
 
-@router.post("/preview/{org_id}", response_model=CSVPreviewResponse)
+@router.post("/preview/{org_id}", response_model=CSVPreviewResponse, summary="Preview a CSV import", description="Parses the CSV, runs the AI column mapper, and returns a row-by-row preview with confidence scores. No data is written.")
 async def preview_csv(
     org_id: int,
     file: UploadFile = File(...),
@@ -239,7 +239,7 @@ class TextPreviewRequest(BaseModel):
     text: str
 
 
-@router.post("/document-preview/{org_id}")
+@router.post("/document-preview/{org_id}", summary="Preview a document (PDF/DOCX) import", description="Runs the AI document parser to preview a Schedule A or contract. No data is written.")
 async def preview_document(
     org_id: int,
     file: UploadFile = File(...),
@@ -338,7 +338,7 @@ async def preview_document(
     return payload
 
 
-@router.post("/text-preview/{org_id}")
+@router.post("/text-preview/{org_id}", summary="Preview pasted-text import", description="Same as document preview but accepts raw pasted text.")
 async def preview_pasted_text(
     org_id: int,
     payload: TextPreviewRequest,
@@ -386,7 +386,7 @@ async def preview_pasted_text(
     return out
 
 
-@router.post("/import/{org_id}", response_model=ImportResult)
+@router.post("/import/{org_id}", response_model=ImportResult, summary="Commit a previewed import", description="Executes the import based on the previously confirmed preview payload. Returns counts of created / updated / skipped rows.")
 async def import_csv(
     org_id: int,
     request: CSVImportRequest,

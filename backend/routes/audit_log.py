@@ -21,7 +21,7 @@ def verify_org_access(user: User, org_id: int, db: Session):
     return membership
 
 
-@router.get("/org/{org_id}")
+@router.get("/org/{org_id}", summary="List org audit log entries", description="Returns the org's audit trail (provisioning, deletes, role changes, payments, etc.) with paging.")
 def get_audit_logs(
     org_id: int,
     action: Optional[str] = None,
@@ -78,7 +78,7 @@ def get_audit_logs(
     }
 
 
-@router.get("/org/{org_id}/summary")
+@router.get("/org/{org_id}/summary", summary="Audit log summary", description="Aggregated counts of audit events per category for dashboard tiles.")
 def get_audit_summary(
     org_id: int,
     db: Session = Depends(get_db),
