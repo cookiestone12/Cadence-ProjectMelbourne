@@ -246,18 +246,29 @@ def suggest_column_mapping(headers: List[str], source_type: str = "") -> Dict[st
     field_disqualifiers = {
         "artist": ["share", "%", "percent", "percentage", "ownership", "split"],
         "track_title": ["share", "%", "percent", "percentage"],
-        "revenue": ["%", "percent", "percentage", "share", "exchange rate"],
+        # Reject headers that are clearly a *type/category* column, not
+        # an actual money column. e.g. "Revenue Type", "Income Type",
+        # "Royalty Type", "Category", "Performance Type". Without this
+        # the greedy "revenue" hint claims "Revenue Type" before the
+        # real "Amount" column, leaving every row with $0.
+        "revenue": [
+            "%", "percent", "percentage", "share", "exchange rate",
+            "type", "category",
+        ],
     }
 
-    # Process share_percentage and publisher BEFORE artist so a column
-    # like "Writer Share" gets correctly claimed as a share column
-    # rather than as the artist column.
+    # Process share_percentage / publisher BEFORE artist so a column
+    # like "Writer Share" gets correctly claimed as a share column.
+    # Process revenue_type BEFORE revenue so a "Revenue Type" / "Income
+    # Type" header is claimed as revenue_type first, leaving the real
+    # money column free to be picked up by revenue.
     field_order = [
         "isrc", "upc", "iswc", "work_id",
         "share_percentage", "publisher",
         "track_title", "artist",
+        "revenue_type",
         "revenue", "gross_amount", "quantity",
-        "territory", "platform", "revenue_type",
+        "territory", "platform",
     ]
     ordered_fields = [f for f in field_order if f in hints] + [f for f in hints if f not in field_order]
 

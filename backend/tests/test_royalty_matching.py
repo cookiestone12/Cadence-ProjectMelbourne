@@ -116,6 +116,36 @@ def test_auto_match_reevaluates_review_required_lines():
         "auto_match_lines must re-process REVIEW_REQUIRED lines (excluding user overrides)"
 
 
+def test_column_mapping_does_not_steal_revenue_type_for_revenue():
+    """Vanguard publisher PDF: header row is
+    [WORK TITLE, ISRC, REVENUE TYPE, SOURCE, UNITS/PLAYS, RATE, AMOUNT].
+    Greedy hint matching used to claim 'REVENUE TYPE' as the revenue
+    column, so every transaction parsed at $0. Revenue must resolve to
+    AMOUNT, and revenue_type must claim REVENUE TYPE."""
+    from backend.routes.royalties import suggest_column_mapping
+    headers = ["WORK TITLE", "ISRC", "REVENUE TYPE", "SOURCE",
+               "UNITS/PLAYS", "RATE", "AMOUNT"]
+    mapping = suggest_column_mapping(headers, source_type="")
+    assert mapping["revenue"] == "AMOUNT", mapping
+    assert mapping["revenue_type"] == "REVENUE TYPE", mapping
+
+
+def test_column_mapping_revenue_with_only_revenue_header():
+    """Plain 'Revenue' header (no Type column) still resolves."""
+    from backend.routes.royalties import suggest_column_mapping
+    mapping = suggest_column_mapping(["Title", "Artist", "Revenue", "Streams"], "")
+    assert mapping["revenue"] == "Revenue"
+
+
+def test_column_mapping_distrokid_style_unchanged():
+    """Common distributor format must continue to resolve correctly."""
+    from backend.routes.royalties import suggest_column_mapping
+    mapping = suggest_column_mapping(["ISRC", "Title", "Artist", "Earnings (USD)", "Quantity"], "")
+    assert mapping["revenue"] == "Earnings (USD)"
+    assert mapping["artist"] == "Artist"
+    assert mapping["track_title"] == "Title"
+
+
 def test_column_mapping_does_not_steal_writer_share_for_artist():
     from backend.routes.royalties import suggest_column_mapping
     headers = ["Work Title", "Writer", "Writer Share %", "Royalty Amount"]
