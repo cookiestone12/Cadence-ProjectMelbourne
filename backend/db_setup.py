@@ -632,13 +632,11 @@ def _run_schema_setup_under_lock():
         return
 
     try:
-        # Step A: Alembic owns forward schema changes.
-        try:
-            upgrade_to_heads(engine)
-        except Exception as e:
-            logger.error(
-                f"Alembic upgrade failed; falling through to DDL backstop. Error: {e}"
-            )
+        # Step A: Alembic owns forward schema changes. Failure is
+        # FATAL — partial migration state must not silently fall
+        # through to the drift backstop, which could mask a broken
+        # revision and start the app against an unknown schema.
+        upgrade_to_heads(engine)
 
         # Step B: Idempotent DDL backstop — anything created here
         # that wasn't applied by Alembic above represents drift.
@@ -668,10 +666,24 @@ def _run_schema_setup_under_lock():
         except Exception as e:
             logger.warning(f"Schema update check: {e}")
     finally:
-        post = get_alembic_revision_info(engine)
-        release_migration_lock(
-            engine, revision_label=",".join(post["current_revisions"])
-        )
+        # Release MUST happen even if revision introspection fails.
+        # Best-effort revision label, then guaranteed unlock.
+        revision_label = "unknown"
+        try:
+            post = get_alembic_revision_info(engine)
+            revision_label = ",".join(post["current_revisions"]) or "unknown"
+        except Exception as e:
+            logger.warning(
+                f"Could not introspect revision after schema setup: {e}. "
+                f"Releasing lock with revision_label='unknown'."
+            )
+        try:
+            release_migration_lock(engine, revision_label=revision_label)
+        except Exception as e:
+            logger.error(
+                f"release_migration_lock raised (lock will auto-clear after "
+                f"stale timeout): {e}"
+            )
 
 
 def main():
