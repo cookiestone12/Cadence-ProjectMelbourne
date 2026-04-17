@@ -2,11 +2,11 @@
 
 Connects to the database identified by ``STAGING_DATABASE_URL``
 (NEVER the production ``DATABASE_URL``), runs the Alembic migration
-chain to bring it to head, and then idempotently seeds a single
-``Cadence Sandbox`` organization populated with:
+chain to bring it to head, and then idempotently seeds:
 
-  * test users at every role (OWNER, ADMIN, MEMBER, READ_ONLY)
-    plus the global MasterPAdmin staff user
+  * MasterPAdmin staff user (global)
+  * a single ``Cadence Sandbox`` organization
+  * one user per OrganizationMemberRole (OWNER, ADMIN, MEMBER, CLIENT)
   * 5 creators (sandbox_creator_*)
   * 20 songs (sandbox_song_*) credited across the creators
   * 2 royalty statements (sandbox_statement_*)
@@ -16,6 +16,10 @@ Every row is name-prefixed with ``sandbox_`` so a staging operator
 can grep / DELETE the seeded set without affecting any other org
 that happens to share the database. The script is safe to re-run:
 existing rows are detected by name and skipped.
+
+After seeding the script asserts post-seed counts and exits non-zero
+if any required entity is missing — failures are NOT silently
+swallowed.
 
 Usage:
     export STAGING_DATABASE_URL=postgresql://user:pw@host:5432/cadence_staging
@@ -31,11 +35,25 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
+
+
+SANDBOX_ORG_NAME = "Cadence Sandbox"
+SANDBOX_PASSWORD = "Sandbox!234"
+ROLE_USERS = [
+    ("sandbox_owner",  "OWNER"),
+    ("sandbox_admin",  "ADMIN"),
+    ("sandbox_member", "MEMBER"),
+    ("sandbox_client", "CLIENT"),
+]
+NUM_CREATORS = 5
+NUM_SONGS = 20
+NUM_STATEMENTS = 2
+NUM_CONTRACTS = 1
 
 
 def _resolve_staging_url() -> str:
@@ -65,7 +83,7 @@ def _run_alembic(staging_url: str) -> None:
     cfg = Config(str(REPO_ROOT / "alembic.ini"))
     # Override sqlalchemy.url so we never accidentally hit DATABASE_URL.
     cfg.set_main_option("sqlalchemy.url", staging_url)
-    print(f"[seed_staging] Running 'alembic upgrade heads' against staging…")
+    print("[seed_staging] Running 'alembic upgrade heads' against staging…")
     command.upgrade(cfg, "heads")
     print("[seed_staging] Alembic upgrade complete.")
 
@@ -77,7 +95,7 @@ def _seed(staging_url: str) -> None:
     original_db_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = staging_url
     try:
-        from sqlalchemy import create_engine
+        from sqlalchemy import create_engine, func
         from sqlalchemy.orm import sessionmaker
 
         from backend.models.models import (
@@ -87,6 +105,8 @@ def _seed(staging_url: str) -> None:
             Creator,
             Song,
             SongCredit,
+            RoyaltyStatement,
+            Contract,
         )
         from backend.utils.auth import get_password_hash
 
@@ -94,12 +114,34 @@ def _seed(staging_url: str) -> None:
         Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
         db = Session()
         try:
+            # ----- MasterPAdmin (global staff user) -----
+            master = db.query(User).filter(
+                func.lower(User.username) == "masterpadmin"
+            ).first()
+            if not master:
+                master = User(
+                    username="MasterPAdmin",
+                    email="masterpadmin@sandbox.cadence-ci.test",
+                    hashed_password=get_password_hash(SANDBOX_PASSWORD),
+                    is_active=True,
+                    is_cadence_staff=True,
+                )
+                db.add(master)
+                db.flush()
+                print(f"[seed_staging] Created MasterPAdmin staff user id={master.id}")
+            else:
+                # Ensure existing record has staff bit set; do not touch password.
+                if not master.is_cadence_staff:
+                    master.is_cadence_staff = True
+                print(f"[seed_staging] Reusing existing MasterPAdmin id={master.id}")
+
+            # ----- Cadence Sandbox org -----
             org = db.query(Organization).filter(
-                Organization.name == "Cadence Sandbox"
+                Organization.name == SANDBOX_ORG_NAME
             ).first()
             if not org:
                 org = Organization(
-                    name="Cadence Sandbox",
+                    name=SANDBOX_ORG_NAME,
                     type="LABEL",
                     access_code="SANDBOX1",
                 )
@@ -107,29 +149,21 @@ def _seed(staging_url: str) -> None:
                 db.flush()
                 print(f"[seed_staging] Created Organization id={org.id}")
             else:
-                print(
-                    f"[seed_staging] Reusing existing Organization id={org.id}"
-                )
+                print(f"[seed_staging] Reusing existing Organization id={org.id}")
 
-            # Users — one per role.
-            role_users = [
-                ("sandbox_owner",     "OWNER"),
-                ("sandbox_admin",     "ADMIN"),
-                ("sandbox_member",    "MEMBER"),
-                ("sandbox_readonly",  "READ_ONLY"),
-            ]
-            for username, role in role_users:
+            # ----- Users at every membership role -----
+            for username, role in ROLE_USERS:
                 user = db.query(User).filter(User.username == username).first()
                 if not user:
                     user = User(
                         username=username,
                         email=f"{username}@sandbox.cadence-ci.test",
-                        hashed_password=get_password_hash("Sandbox!234"),
+                        hashed_password=get_password_hash(SANDBOX_PASSWORD),
                         is_active=True,
                     )
                     db.add(user)
                     db.flush()
-                    print(f"[seed_staging] Created user {username} (pw=Sandbox!234)")
+                    print(f"[seed_staging] Created user {username}")
                 membership = db.query(OrganizationMember).filter(
                     OrganizationMember.user_id == user.id,
                     OrganizationMember.organization_id == org.id,
@@ -141,37 +175,41 @@ def _seed(staging_url: str) -> None:
                         role=role,
                     ))
 
-            # Creators.
+            # ----- Creators -----
             creators: list[Creator] = []
-            for i in range(1, 6):
+            for i in range(1, NUM_CREATORS + 1):
                 name = f"sandbox_creator_{i:02d}"
                 creator = db.query(Creator).filter(
-                    Creator.name == name,
+                    Creator.display_name == name,
                     Creator.organization_id == org.id,
                 ).first()
                 if not creator:
                     creator = Creator(
-                        name=name,
                         organization_id=org.id,
-                        primary_role="ARTIST",
+                        display_name=name,
+                        legal_name=name.replace("_", " ").title(),
+                        roles=["ARTIST"],
                     )
                     db.add(creator)
                     db.flush()
                 creators.append(creator)
             print(f"[seed_staging] Ensured {len(creators)} creators")
 
-            # Songs (20) credited round-robin to creators.
+            # ----- Songs (20) credited round-robin to creators -----
             songs_created = 0
-            for i in range(1, 21):
+            for i in range(1, NUM_SONGS + 1):
                 title = f"sandbox_song_{i:02d}"
+                creator = creators[(i - 1) % len(creators)]
                 song = db.query(Song).filter(
                     Song.title == title,
                     Song.organization_id == org.id,
                 ).first()
                 if not song:
                     song = Song(
-                        title=title,
                         organization_id=org.id,
+                        title=title,
+                        primary_artist=creator.display_name,
+                        asset_type="TRACK",
                         release_status="released" if i % 2 == 0 else "unreleased",
                         entry_type="Song",
                         release_date=date(2024, 1, 1) + timedelta(days=i * 7),
@@ -179,58 +217,93 @@ def _seed(staging_url: str) -> None:
                     db.add(song)
                     db.flush()
                     songs_created += 1
-                    creator = creators[(i - 1) % len(creators)]
                     db.add(SongCredit(
                         song_id=song.id,
                         creator_id=creator.id,
-                        role="WRITER",
+                        role="SONGWRITER",
                         publishing_share=100.0,
                         master_share=100.0,
                     ))
-            print(f"[seed_staging] Created {songs_created} new songs")
+            print(f"[seed_staging] Created {songs_created} new songs (target {NUM_SONGS})")
 
-            # Statements + contract — best-effort: we look up the
-            # models lazily because their column sets change across
-            # migrations and we don't want to fail the whole seed if
-            # an optional column was renamed.
-            try:
-                from backend.models.models import RoyaltyStatement
-                for i in range(1, 3):
-                    name = f"sandbox_statement_{i:02d}"
-                    if not db.query(RoyaltyStatement).filter(
-                        RoyaltyStatement.statement_name == name,
-                        RoyaltyStatement.organization_id == org.id,
-                    ).first():
-                        db.add(RoyaltyStatement(
-                            organization_id=org.id,
-                            statement_name=name,
-                            period_start=date(2024, 1, 1),
-                            period_end=date(2024, 3, 31),
-                            currency="USD",
-                            reported_gross=1000.0 * i,
-                            reported_net=850.0 * i,
-                        ))
-                print("[seed_staging] Ensured 2 royalty statements")
-            except Exception as e:  # pragma: no cover
-                print(f"[seed_staging] Skipped royalty statements: {e}")
+            # ----- Royalty statements -----
+            for i in range(1, NUM_STATEMENTS + 1):
+                source_name = f"sandbox_statement_{i:02d}"
+                stmt = db.query(RoyaltyStatement).filter(
+                    RoyaltyStatement.source_name == source_name,
+                    RoyaltyStatement.organization_id == org.id,
+                ).first()
+                if not stmt:
+                    db.add(RoyaltyStatement(
+                        organization_id=org.id,
+                        source_name=source_name,
+                        source_type="SANDBOX",
+                        period_start=date(2024, 1, 1),
+                        period_end=date(2024, 3, 31),
+                        currency="USD",
+                        status="PENDING",
+                        reported_gross=1000.0 * i,
+                        reported_net=850.0 * i,
+                    ))
+            print(f"[seed_staging] Ensured {NUM_STATEMENTS} royalty statements")
 
-            try:
-                from backend.models.models import Contract
-                if not db.query(Contract).filter(
-                    Contract.title == "sandbox_contract_01",
+            # ----- Contract -----
+            for i in range(1, NUM_CONTRACTS + 1):
+                title = f"sandbox_contract_{i:02d}"
+                ctr = db.query(Contract).filter(
+                    Contract.title == title,
                     Contract.organization_id == org.id,
-                ).first():
+                ).first()
+                if not ctr:
                     db.add(Contract(
                         organization_id=org.id,
-                        title="sandbox_contract_01",
+                        title=title,
                         contract_type="PUBLISHING",
-                        signed_date=date(2024, 1, 15),
+                        status="ACTIVE",
+                        start_date=date(2024, 1, 15),
+                        end_date=date(2027, 1, 14),
+                        creator_id=creators[0].id,
                     ))
-                print("[seed_staging] Ensured 1 contract")
-            except Exception as e:  # pragma: no cover
-                print(f"[seed_staging] Skipped contract: {e}")
+            print(f"[seed_staging] Ensured {NUM_CONTRACTS} contract")
 
             db.commit()
+
+            # ----- Post-seed assertions: fail loudly if anything is missing -----
+            org_id = org.id
+            counts = {
+                "organization":    db.query(Organization).filter(Organization.id == org_id).count(),
+                "memberships":     db.query(OrganizationMember).filter(OrganizationMember.organization_id == org_id).count(),
+                "creators":        db.query(Creator).filter(Creator.organization_id == org_id).count(),
+                "songs":           db.query(Song).filter(Song.organization_id == org_id).count(),
+                "statements":      db.query(RoyaltyStatement).filter(RoyaltyStatement.organization_id == org_id).count(),
+                "contracts":       db.query(Contract).filter(Contract.organization_id == org_id).count(),
+            }
+            print(f"[seed_staging] Post-seed counts: {counts}")
+            problems = []
+            if counts["organization"] != 1:
+                problems.append("Cadence Sandbox org missing")
+            if counts["memberships"] < len(ROLE_USERS):
+                problems.append(
+                    f"expected ≥{len(ROLE_USERS)} memberships, got {counts['memberships']}"
+                )
+            if counts["creators"] < NUM_CREATORS:
+                problems.append(f"expected ≥{NUM_CREATORS} creators, got {counts['creators']}")
+            if counts["songs"] < NUM_SONGS:
+                problems.append(f"expected ≥{NUM_SONGS} songs, got {counts['songs']}")
+            if counts["statements"] < NUM_STATEMENTS:
+                problems.append(
+                    f"expected ≥{NUM_STATEMENTS} statements, got {counts['statements']}"
+                )
+            if counts["contracts"] < NUM_CONTRACTS:
+                problems.append(
+                    f"expected ≥{NUM_CONTRACTS} contracts, got {counts['contracts']}"
+                )
+            if problems:
+                print(
+                    "ERROR: post-seed validation failed: " + "; ".join(problems),
+                    file=sys.stderr,
+                )
+                sys.exit(3)
             print("[seed_staging] Done.")
         finally:
             db.close()
