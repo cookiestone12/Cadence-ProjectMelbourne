@@ -267,8 +267,10 @@ database layer — no cross-environment writes are possible.
      bash run_backend.sh
    ```
    Use the seeded usernames (`sandbox_owner`, `sandbox_admin`,
-   `sandbox_member`, `sandbox_readonly`, password `Sandbox!234`)
-   to exercise role-specific flows.
+   `sandbox_member`, `sandbox_client`, password `Sandbox!234`)
+   to exercise role-specific flows. (Roles map to the
+   `OrganizationMemberRole` enum: OWNER / ADMIN / MEMBER / CLIENT —
+   there is no READ_ONLY role today.)
 
 ---
 

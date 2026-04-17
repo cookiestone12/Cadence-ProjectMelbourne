@@ -108,7 +108,13 @@ def _seed(staging_url: str) -> None:
             RoyaltyStatement,
             Contract,
         )
-        from backend.utils.auth import get_password_hash
+        # Hash directly with bcrypt rather than importing
+        # backend.utils.auth, which requires SESSION_SECRET at import
+        # time. The seed script must run with only STAGING_DATABASE_URL.
+        import bcrypt
+
+        def get_password_hash(pw: str) -> str:
+            return bcrypt.hashpw(pw.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
         engine = create_engine(staging_url, pool_pre_ping=True)
         Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
@@ -221,7 +227,7 @@ def _seed(staging_url: str) -> None:
                         song_id=song.id,
                         creator_id=creator.id,
                         role="SONGWRITER",
-                        publishing_share=100.0,
+                        pub_share=100.0,
                         master_share=100.0,
                     ))
             print(f"[seed_staging] Created {songs_created} new songs (target {NUM_SONGS})")
