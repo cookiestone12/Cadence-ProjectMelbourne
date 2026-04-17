@@ -64,7 +64,7 @@ def verify_org_access(user: User, org_id: int, db: Session):
         OrganizationMember.user_id == user.id,
         OrganizationMember.organization_id == org_id
     ).first()
-    if not membership and not user.is_super_admin and not getattr(user, "is_cadence_staff", False):
+    if not membership and not user.is_super_admin:
         raise HTTPException(status_code=403, detail="Access denied")
     return membership
 
@@ -78,7 +78,9 @@ def list_works(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    verify_org_access(current_user, org_id, db)
+    # Cadence staff get cross-org READ access (Task #74); writes still gated.
+    if not getattr(current_user, "is_cadence_staff", False):
+        verify_org_access(current_user, org_id, db)
     query = db.query(Work).filter(Work.organization_id == org_id)
 
     if search:
@@ -128,7 +130,9 @@ def get_work(work_id: int, db: Session = Depends(get_db), current_user: User = D
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
         raise HTTPException(status_code=404, detail="Work not found")
-    verify_org_access(current_user, work.organization_id, db)
+    # Cadence staff get cross-org READ access (Task #74); writes still gated.
+    if not getattr(current_user, "is_cadence_staff", False):
+        verify_org_access(current_user, work.organization_id, db)
 
     tracks = []
     for wt in db.query(WorkTrack).filter(WorkTrack.work_id == work_id).all():

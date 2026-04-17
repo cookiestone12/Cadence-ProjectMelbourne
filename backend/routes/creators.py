@@ -972,7 +972,8 @@ async def add_creator_contact(
     creator = db.query(Creator).filter(Creator.id == creator_id).first()
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
-    if not current_user.is_super_admin and not getattr(current_user, "is_cadence_staff", False):
+    # WRITE path — staff cross-org read does NOT confer write.
+    if not current_user.is_super_admin:
         membership = db.query(OrganizationMember).filter(
             OrganizationMember.user_id == current_user.id,
             OrganizationMember.organization_id == creator.organization_id
@@ -1034,7 +1035,8 @@ async def remove_creator_contact(
     creator = db.query(Creator).filter(Creator.id == creator_id).first()
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
-    if not current_user.is_super_admin and not getattr(current_user, "is_cadence_staff", False):
+    # WRITE path — staff cross-org read does NOT confer write.
+    if not current_user.is_super_admin:
         membership = db.query(OrganizationMember).filter(
             OrganizationMember.user_id == current_user.id,
             OrganizationMember.organization_id == creator.organization_id

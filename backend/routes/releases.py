@@ -74,7 +74,7 @@ def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = No
         OrganizationMember.user_id == user.id,
         OrganizationMember.organization_id == org_id
     ).first()
-    if not membership and not user.is_super_admin and not getattr(user, "is_cadence_staff", False):
+    if not membership and not user.is_super_admin:
         if creator_id and has_shared_access(db, user.id, creator_id, required_module="catalog"):
             return None
         raise HTTPException(status_code=403, detail="Access denied")
@@ -271,7 +271,9 @@ def list_releases(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    verify_org_access(current_user, org_id, db, creator_id=creator_id)
+    # Cadence staff get cross-org READ access (Task #74); writes still gated.
+    if not getattr(current_user, "is_cadence_staff", False):
+        verify_org_access(current_user, org_id, db, creator_id=creator_id)
     query = db.query(Release).filter(Release.organization_id == org_id)
 
     if search:
@@ -320,7 +322,9 @@ def get_release(release_id: int, db: Session = Depends(get_db), current_user: Us
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
         raise HTTPException(status_code=404, detail="Release not found")
-    verify_org_access(current_user, release.organization_id, db)
+    # Cadence staff get cross-org READ access (Task #74); writes still gated.
+    if not getattr(current_user, "is_cadence_staff", False):
+        verify_org_access(current_user, release.organization_id, db)
 
     release_tracks = db.query(ReleaseTrack).filter(
         ReleaseTrack.release_id == release_id
