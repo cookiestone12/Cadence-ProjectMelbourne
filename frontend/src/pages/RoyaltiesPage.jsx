@@ -133,7 +133,7 @@ function DashboardTab({ orgId, creatorId }) {
     axios.get(`/api/expenses/org/${orgId}/summary`)
       .then(res => setExpenseSummary(res.data))
       .catch(err => console.error('Expense summary load error:', err))
-  }, [orgId])
+  }, [orgId, creatorId])
 
   if (loading) return <LoadingSpinner message="Loading dashboard..." />
   if (!data) return <EmptyState icon={ChartBarIcon} title="No Dashboard Data" message="Upload royalty statements to see your dashboard." />
@@ -545,159 +545,11 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
 
   if (selectedStatement) {
     return (
-      <div className="space-y-4">
-        <button onClick={() => setSelectedStatement(null)} className="flex items-center gap-2 text-[#5B8A72] hover:text-[#4a7a62] text-sm font-medium transition-colors">
-          <ArrowLeftIcon className="w-4 h-4" /> Back to Statements
-        </button>
-        <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-6 border border-[rgba(59,77,67,0.08)]">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-[#3D4A44]">{selectedStatement.source_name || 'Statement'}</h3>
-              <p className="text-sm text-[#7A8580]">
-                {formatDate(selectedStatement.period_start)} — {formatDate(selectedStatement.period_end)}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => handleRematch(selectedStatement.id)} className="px-3 py-1.5 text-sm bg-[rgba(91,138,114,0.1)] text-[#5B8A72] rounded-xl hover:bg-[rgba(91,138,114,0.2)] transition-colors font-medium">
-                <ArrowPathIcon className="w-4 h-4 inline mr-1" /> Re-match
-              </button>
-              <button
-                onClick={() => handleCalculate(selectedStatement.id)}
-                disabled={calculating[selectedStatement.id]}
-                className="px-3 py-1.5 text-sm bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all font-medium disabled:opacity-50"
-              >
-                <CalculatorIcon className="w-4 h-4 inline mr-1" /> {calculating[selectedStatement.id] ? 'Calculating...' : 'Calculate Royalties'}
-              </button>
-            </div>
-          </div>
-
-          {txLoading ? <LoadingSpinner message="Loading transactions..." /> : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-[#EEF1EC]">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Track</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Artist</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Source</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">ISRC</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Revenue</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[#7A8580] uppercase">Qty</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#7A8580] uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
-                  {transactions.map(tx => (
-                    <tr key={tx.id} className="hover:bg-[rgba(91,138,114,0.04)]">
-                      <td className="px-4 py-3 text-sm text-[#3D4A44]">{tx.original_track_title || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-[#7A8580]">{tx.original_artist || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-[#7A8580]">{tx.platform || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-[#7A8580] font-mono text-xs">{tx.original_isrc || '—'}</td>
-                      <td className="px-4 py-3 text-sm text-right font-medium text-[#3D4A44]">{formatCents(tx.revenue_cents)}</td>
-                      <td className="px-4 py-3 text-sm text-right text-[#7A8580]">{(tx.quantity || 0).toLocaleString()}</td>
-                      <td className="px-4 py-3">
-                        {tx.matched_song_id || tx.match_status === 'MATCHED' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Matched</span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Unmatched</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {!(tx.matched_song_id || tx.match_status === 'MATCHED') && (
-                          <div className="flex items-center gap-1">
-                            <div className="relative">
-                              <input
-                                type="text"
-                                placeholder="Search songs..."
-                                value={songSearchTerm[tx.id] ?? (matchingSongId[tx.id] ? (songs || []).find(s => String(s.id) === String(matchingSongId[tx.id]))?.title || '' : '')}
-                                onChange={e => {
-                                  setSongSearchTerm(prev => ({ ...prev, [tx.id]: e.target.value }))
-                                  setSongDropdownOpen(prev => ({ ...prev, [tx.id]: true }))
-                                  if (!e.target.value) setMatchingSongId(prev => ({ ...prev, [tx.id]: '' }))
-                                }}
-                                onFocus={() => setSongDropdownOpen(prev => ({ ...prev, [tx.id]: true }))}
-                                onBlur={() => setTimeout(() => setSongDropdownOpen(prev => ({ ...prev, [tx.id]: false })), 200)}
-                                className="text-xs border border-[rgba(59,77,67,0.15)] rounded-lg px-2 py-1 bg-white text-[#3D4A44] w-[160px]"
-                              />
-                              {songDropdownOpen[tx.id] && (
-                                <div className="absolute z-50 mt-1 w-[220px] max-h-[200px] overflow-y-auto bg-white border border-[rgba(59,77,67,0.15)] rounded-lg shadow-lg">
-                                  {(songs || [])
-                                    .filter(s => {
-                                      const term = (songSearchTerm[tx.id] || '').toLowerCase()
-                                      return !term || s.title.toLowerCase().includes(term) || (s.primary_artist || '').toLowerCase().includes(term)
-                                    })
-                                    .map(s => (
-                                      <button
-                                        key={s.id}
-                                        type="button"
-                                        onClick={() => {
-                                          setMatchingSongId(prev => ({ ...prev, [tx.id]: String(s.id) }))
-                                          setSongSearchTerm(prev => ({ ...prev, [tx.id]: s.title }))
-                                          setSongDropdownOpen(prev => ({ ...prev, [tx.id]: false }))
-                                        }}
-                                        className="w-full text-left px-3 py-1.5 text-xs text-[#3D4A44] hover:bg-[rgba(91,138,114,0.08)] transition-colors"
-                                      >
-                                        <div className="font-medium truncate">{s.title}</div>
-                                        {s.primary_artist && <div className="text-[10px] text-[#7A8580] truncate">{s.primary_artist}</div>}
-                                      </button>
-                                    ))
-                                  }
-                                  {(songs || []).filter(s => {
-                                    const term = (songSearchTerm[tx.id] || '').toLowerCase()
-                                    return !term || s.title.toLowerCase().includes(term) || (s.primary_artist || '').toLowerCase().includes(term)
-                                  }).length === 0 && (
-                                    <div className="px-3 py-2 text-xs text-[#7A8580]">No songs found</div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => handleManualMatch(tx.id)}
-                              disabled={!matchingSongId[tx.id]}
-                              className="px-2 py-1 text-xs bg-[#5B8A72] text-white rounded-lg disabled:opacity-40 hover:bg-[#4a7a62] transition-colors"
-                            >
-                              Match
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {transactions.length === 0 && (
-                    <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-[#7A8580]">No transactions found.</td></tr>
-                  )}
-                </tbody>
-              </table>
-              {txTotal > txPerPage && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-[rgba(59,77,67,0.08)]">
-                  <span className="text-sm text-[#7A8580]">
-                    Showing {txPage * txPerPage + 1}–{Math.min((txPage + 1) * txPerPage, txTotal)} of {txTotal}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => loadTransactions(selectedStatement, txPage - 1)}
-                      disabled={txPage === 0}
-                      className="px-3 py-1.5 text-sm font-medium text-[#3D4A44] bg-white border border-[rgba(59,77,67,0.15)] rounded-lg hover:bg-[rgba(91,138,114,0.06)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Previous
-                    </button>
-                    <span className="text-sm text-[#7A8580]">
-                      Page {txPage + 1} of {Math.ceil(txTotal / txPerPage)}
-                    </span>
-                    <button
-                      onClick={() => loadTransactions(selectedStatement, txPage + 1)}
-                      disabled={(txPage + 1) * txPerPage >= txTotal}
-                      className="px-3 py-1.5 text-sm font-medium text-[#3D4A44] bg-white border border-[rgba(59,77,67,0.15)] rounded-lg hover:bg-[rgba(91,138,114,0.06)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      <StatementDetailView
+        orgId={orgId}
+        statementId={selectedStatement.id}
+        onBack={() => { setSelectedStatement(null); loadStatements() }}
+      />
     )
   }
 
@@ -1121,7 +973,7 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
   )
 }
 
-function EarningsTab({ orgId }) {
+function EarningsTab({ orgId, selectedCreatorId }) {
   const [view, setView] = useState('overview')
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1130,11 +982,14 @@ function EarningsTab({ orgId }) {
 
   useEffect(() => {
     if (!orgId) return
-    axios.get(`/api/royalties/dashboard/${orgId}`).then(res => {
+    const url = selectedCreatorId
+      ? `/api/royalties/dashboard/${orgId}?creator_id=${selectedCreatorId}`
+      : `/api/royalties/dashboard/${orgId}`
+    axios.get(url).then(res => {
       setSummary(res.data)
       setStatements(res.data.recent_statements || [])
     }).catch(() => {})
-  }, [orgId])
+  }, [orgId, selectedCreatorId])
 
   const loadData = useCallback(async () => {
     if (!orgId) return
@@ -1146,7 +1001,8 @@ function EarningsTab({ orgId }) {
       track: `/api/royalties/earnings/${orgId}/by-track`,
     }
     try {
-      const res = await axios.get(endpoints[view])
+      const params = selectedCreatorId ? { creator_id: selectedCreatorId } : {}
+      const res = await axios.get(endpoints[view], { params })
       setData(Array.isArray(res.data) ? res.data : res.data.earnings || res.data.data || [])
     } catch (err) {
       console.error('Failed to load earnings:', err)
@@ -1154,7 +1010,7 @@ function EarningsTab({ orgId }) {
     } finally {
       setLoading(false)
     }
-  }, [orgId, view])
+  }, [orgId, view, selectedCreatorId])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -2719,7 +2575,7 @@ export default function RoyaltiesPage() {
         {activeTab === 'dashboard' && <DashboardTab orgId={orgId} creatorId={selectedCreatorId} />}
         {activeTab === 'processing' && <ProcessingTab orgId={orgId} creators={creators} selectedCreatorId={selectedCreatorId} />}
         {activeTab === 'statements' && <StatementsTab orgId={orgId} songs={songs} selectedCreatorId={selectedCreatorId} />}
-        {activeTab === 'earnings' && <EarningsTab orgId={orgId} />}
+        {activeTab === 'earnings' && <EarningsTab orgId={orgId} selectedCreatorId={selectedCreatorId} />}
         {activeTab === 'analytics' && <RoyaltyAnalyticsDashboard orgId={orgId} />}
         {activeTab === 'money_out' && <MoneyOutTab orgId={orgId} creators={creators} contracts={contracts} />}
         {activeTab === 'fees' && <FeesAdvancesTab orgId={orgId} creators={creators} />}

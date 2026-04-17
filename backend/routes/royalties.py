@@ -1336,7 +1336,7 @@ def royalties_dashboard(
 
     total_unallocated = total_revenue - total_allocated
 
-    matched_tracks = db.query(
+    matched_tracks_query = db.query(
         Song.id, Song.title, Song.primary_artist,
         func.sum(RoyaltyTransaction.revenue_cents).label("total_cents"),
         func.sum(RoyaltyTransaction.quantity).label("total_quantity"),
@@ -1344,11 +1344,16 @@ def royalties_dashboard(
         RoyaltyTransaction, RoyaltyTransaction.song_id == Song.id
     ).filter(
         RoyaltyTransaction.organization_id == org_id,
-    ).group_by(Song.id, Song.title, Song.primary_artist).order_by(
-        desc("total_cents")
-    ).limit(10).all()
+    )
+    if creator_id:
+        matched_tracks_query = matched_tracks_query.join(
+            RoyaltyStatement, RoyaltyStatement.id == RoyaltyTransaction.statement_id
+        ).filter(RoyaltyStatement.creator_id == creator_id)
+    matched_tracks = matched_tracks_query.group_by(
+        Song.id, Song.title, Song.primary_artist
+    ).order_by(desc("total_cents")).limit(10).all()
 
-    unmatched_tracks = db.query(
+    unmatched_tracks_query = db.query(
         RoyaltyTransaction.original_track_title,
         RoyaltyTransaction.original_artist,
         func.sum(RoyaltyTransaction.revenue_cents).label("total_cents"),
@@ -1357,7 +1362,12 @@ def royalties_dashboard(
         RoyaltyTransaction.organization_id == org_id,
         RoyaltyTransaction.song_id.is_(None),
         RoyaltyTransaction.original_track_title.isnot(None),
-    ).group_by(
+    )
+    if creator_id:
+        unmatched_tracks_query = unmatched_tracks_query.join(
+            RoyaltyStatement, RoyaltyStatement.id == RoyaltyTransaction.statement_id
+        ).filter(RoyaltyStatement.creator_id == creator_id)
+    unmatched_tracks = unmatched_tracks_query.group_by(
         RoyaltyTransaction.original_track_title,
         RoyaltyTransaction.original_artist,
     ).order_by(desc("total_cents")).limit(10).all()
@@ -1475,11 +1485,15 @@ def royalties_dashboard(
 @router.get("/earnings/{org_id}/by-holder")
 def earnings_by_holder(
     org_id: int,
+    creator_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
 
+    alloc_filters = [RoyaltyAllocation.organization_id == org_id]
+    if creator_id is not None:
+        alloc_filters.append(RoyaltyAllocation.rights_holder_id == creator_id)
     alloc_results = db.query(
         Creator.id, Creator.display_name,
         func.sum(RoyaltyAllocation.allocated_cents).label("total_cents"),
@@ -1487,7 +1501,7 @@ def earnings_by_holder(
     ).join(
         RoyaltyAllocation, RoyaltyAllocation.rights_holder_id == Creator.id
     ).filter(
-        RoyaltyAllocation.organization_id == org_id,
+        *alloc_filters
     ).group_by(Creator.id, Creator.display_name).order_by(desc("total_cents")).all()
 
     alloc_map = {}
@@ -1497,6 +1511,9 @@ def earnings_by_holder(
             "recouped_cents": r.total_recouped or 0,
         }
 
+    stmt_filters = [RoyaltyStatement.organization_id == org_id]
+    if creator_id is not None:
+        stmt_filters.append(RoyaltyStatement.creator_id == creator_id)
     stmt_results = db.query(
         Creator.id, Creator.display_name,
         func.sum(RoyaltyStatement.total_revenue_cents).label("total_revenue"),
@@ -1504,7 +1521,7 @@ def earnings_by_holder(
     ).join(
         RoyaltyStatement, RoyaltyStatement.creator_id == Creator.id
     ).filter(
-        RoyaltyStatement.organization_id == org_id,
+        *stmt_filters
     ).group_by(Creator.id, Creator.display_name).all()
 
     holders = {}
@@ -1548,11 +1565,15 @@ def earnings_by_holder(
 @router.get("/earnings/{org_id}/by-contract")
 def earnings_by_contract(
     org_id: int,
+    creator_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
 
+    filters = [RoyaltyAllocation.organization_id == org_id]
+    if creator_id is not None:
+        filters.append(Contract.creator_id == creator_id)
     results = db.query(
         Contract.id, Contract.title, Contract.advance_amount, Contract.advance_recouped,
         func.sum(RoyaltyAllocation.allocated_cents).label("total_cents"),
@@ -1560,7 +1581,7 @@ def earnings_by_contract(
     ).join(
         RoyaltyAllocation, RoyaltyAllocation.contract_id == Contract.id
     ).filter(
-        RoyaltyAllocation.organization_id == org_id,
+        *filters
     ).group_by(Contract.id, Contract.title, Contract.advance_amount, Contract.advance_recouped).order_by(desc("total_cents")).all()
 
     return {
@@ -1586,12 +1607,13 @@ def earnings_by_contract(
 @router.get("/earnings/{org_id}/by-track")
 def earnings_by_track(
     org_id: int,
+    creator_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
 
-    matched_results = db.query(
+    matched_query = db.query(
         Song.id, Song.title, Song.primary_artist, Song.isrc,
         func.sum(RoyaltyTransaction.revenue_cents).label("total_revenue_cents"),
         func.sum(RoyaltyTransaction.quantity).label("total_quantity"),
@@ -1599,7 +1621,14 @@ def earnings_by_track(
         RoyaltyTransaction, RoyaltyTransaction.song_id == Song.id
     ).filter(
         RoyaltyTransaction.organization_id == org_id,
-    ).group_by(Song.id, Song.title, Song.primary_artist, Song.isrc).order_by(desc("total_revenue_cents")).all()
+    )
+    if creator_id is not None:
+        matched_query = matched_query.join(
+            RoyaltyStatement, RoyaltyStatement.id == RoyaltyTransaction.statement_id
+        ).filter(RoyaltyStatement.creator_id == creator_id)
+    matched_results = matched_query.group_by(
+        Song.id, Song.title, Song.primary_artist, Song.isrc
+    ).order_by(desc("total_revenue_cents")).all()
 
     earnings = [
         {
@@ -1614,7 +1643,7 @@ def earnings_by_track(
         for r in matched_results
     ]
 
-    unmatched_results = db.query(
+    unmatched_query = db.query(
         RoyaltyTransaction.original_track_title,
         RoyaltyTransaction.original_artist,
         func.sum(RoyaltyTransaction.revenue_cents).label("total_revenue_cents"),
@@ -1623,7 +1652,12 @@ def earnings_by_track(
         RoyaltyTransaction.organization_id == org_id,
         RoyaltyTransaction.song_id.is_(None),
         RoyaltyTransaction.original_track_title.isnot(None),
-    ).group_by(
+    )
+    if creator_id is not None:
+        unmatched_query = unmatched_query.join(
+            RoyaltyStatement, RoyaltyStatement.id == RoyaltyTransaction.statement_id
+        ).filter(RoyaltyStatement.creator_id == creator_id)
+    unmatched_results = unmatched_query.group_by(
         RoyaltyTransaction.original_track_title,
         RoyaltyTransaction.original_artist,
     ).order_by(desc("total_revenue_cents")).limit(100).all()
