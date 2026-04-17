@@ -37,7 +37,12 @@ export default function Users() {
   const deprovision = async (uid) => {
     if (!window.confirm('Deprovision this staff user?')) return
     try {
-      await internal.post(`/api/internal/deprovision-staff-user/${uid}`)
+      // Backend takes the user_id in the body, not the URL
+      // (see backend/routes/internal.py:deprovision_staff_user).
+      await internal.post('/api/internal/deprovision-staff-user', {
+        user_id: uid,
+        role_note: 'deprovisioned via internal portal',
+      })
       load()
     } catch (e) {
       alert(e?.response?.data?.detail || 'Deprovision failed')

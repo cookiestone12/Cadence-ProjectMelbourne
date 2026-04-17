@@ -13,11 +13,13 @@ export default function InternalLogin() {
     e.preventDefault()
     setErr(''); setLoading(true)
     try {
+      // cookie-login sets the JWT as an httpOnly cookie; we only
+      // persist a minimal display profile in localStorage so the
+      // sidebar can show the staff member's name.
       const { data } = await internal.post(
         '/api/internal/portal/cookie-login',
         { username, password }
       )
-      localStorage.setItem('internal_token', data.access_token)
       localStorage.setItem('internal_user', JSON.stringify(data.user))
       navigate('/internal/dashboard')
     } catch (e) {

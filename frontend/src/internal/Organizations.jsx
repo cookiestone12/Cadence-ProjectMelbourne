@@ -1,11 +1,22 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import internal from './api'
+
+const SORTS = {
+  newest: (a, b) => b.id - a.id,
+  oldest: (a, b) => a.id - b.id,
+  name: (a, b) => (a.name || '').localeCompare(b.name || ''),
+  size: (a, b) => (b.song_count + b.creator_count) - (a.song_count + a.creator_count),
+}
 
 export default function Organizations() {
   const [rows, setRows] = useState([])
   const [q, setQ] = useState('')
+  const [type, setType] = useState('')
+  const [sort, setSort] = useState('newest')
   const [selected, setSelected] = useState(null)
   const [detail, setDetail] = useState(null)
+  const [viewAs, setViewAs] = useState(false)
+  const [accessCode, setAccessCode] = useState(null)
 
   const load = async () => {
     const { data } = await internal.get('/api/internal/portal/organizations', {
@@ -14,18 +25,36 @@ export default function Organizations() {
     setRows(data.rows)
   }
 
+  const visibleRows = useMemo(() => {
+    let list = rows
+    if (type) list = list.filter((r) => r.type === type)
+    return list.slice().sort(SORTS[sort] || SORTS.newest)
+  }, [rows, sort, type])
+
   const openDetail = async (id) => {
-    setSelected(id); setDetail(null)
+    setSelected(id); setDetail(null); setAccessCode(null); setViewAs(false)
     const { data } = await internal.get(`/api/internal/portal/organizations/${id}`)
     setDetail(data)
+  }
+
+  const fetchAccessCode = async () => {
+    if (!selected) return
+    try {
+      const { data } = await internal.get(
+        `/api/internal/portal/organizations/${selected}/access-code`
+      )
+      setAccessCode(data.access_code)
+    } catch (e) {
+      alert(e?.response?.data?.detail || 'Failed to fetch access code')
+    }
   }
 
   const createOrg = async () => {
     const name = window.prompt('Organization name?')
     if (!name) return
-    const type = window.prompt('Type (MANAGER, LABEL, PUBLISHER):', 'MANAGER') || 'MANAGER'
+    const orgType = window.prompt('Type (MANAGER, LABEL, PUBLISHER):', 'MANAGER') || 'MANAGER'
     try {
-      await internal.post('/api/admin/organizations', { name, type })
+      await internal.post('/api/admin/organizations', { name, type: orgType })
       load()
     } catch (e) {
       alert(e?.response?.data?.detail || 'Create failed (master admin only)')
@@ -45,14 +74,34 @@ export default function Organizations() {
           + New org
         </button>
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <input
-          className="border border-slate-300 rounded-md px-3 py-1.5 text-sm flex-1"
+          className="border border-slate-300 rounded-md px-3 py-1.5 text-sm flex-1 min-w-[180px]"
           placeholder="Search by name…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && load()}
         />
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className="border border-slate-300 rounded-md px-2 py-1.5 text-sm"
+        >
+          <option value="">All types</option>
+          <option value="MANAGER">Manager</option>
+          <option value="LABEL">Label</option>
+          <option value="PUBLISHER">Publisher</option>
+        </select>
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+          className="border border-slate-300 rounded-md px-2 py-1.5 text-sm"
+        >
+          <option value="newest">Sort: Newest</option>
+          <option value="oldest">Sort: Oldest</option>
+          <option value="name">Sort: Name A→Z</option>
+          <option value="size">Sort: Largest catalog</option>
+        </select>
         <button onClick={load} className="px-3 py-1.5 bg-slate-200 rounded-md text-sm">
           Search
         </button>
@@ -72,7 +121,7 @@ export default function Organizations() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((o) => (
+              {visibleRows.map((o) => (
                 <tr
                   key={o.id}
                   onClick={() => openDetail(o.id)}
@@ -98,22 +147,44 @@ export default function Organizations() {
             <div className="text-slate-500">Loading…</div>
           ) : (
             <div className="space-y-3">
-              <div>
-                <div className="text-lg font-semibold">{detail.name}</div>
-                <div className="text-xs text-slate-500">
-                  {detail.type} · {detail.account_type || '—'}
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-lg font-semibold">{detail.name}</div>
+                  <div className="text-xs text-slate-500">
+                    {detail.type} · {detail.account_type || '—'}
+                  </div>
                 </div>
+                <label className="text-xs flex items-center gap-1 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={viewAs}
+                    onChange={(e) => setViewAs(e.target.checked)}
+                  />
+                  <span>View as OWNER (read-only)</span>
+                </label>
               </div>
-              <div className="text-xs text-slate-500">
-                Created {detail.created_at}
-              </div>
+              {viewAs && (
+                <div className="text-[11px] bg-amber-50 border border-amber-200 text-amber-800 rounded px-2 py-1">
+                  Read-only owner view: showing the same fields an OWNER would see.
+                  Writes are not enabled.
+                </div>
+              )}
+              <div className="text-xs text-slate-500">Created {detail.created_at}</div>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-slate-50 p-2 rounded">
-                  Songs: <b>{detail.song_count}</b>
-                </div>
-                <div className="bg-slate-50 p-2 rounded">
-                  Creators: <b>{detail.creator_count}</b>
-                </div>
+                <div className="bg-slate-50 p-2 rounded">Songs: <b>{detail.song_count}</b></div>
+                <div className="bg-slate-50 p-2 rounded">Creators: <b>{detail.creator_count}</b></div>
+              </div>
+              <div className="border-t border-slate-200 pt-3">
+                <div className="font-medium mb-1">Access code</div>
+                {accessCode ? (
+                  <div className="font-mono text-base bg-slate-100 px-2 py-1 rounded inline-block">
+                    {accessCode}
+                  </div>
+                ) : (
+                  <button onClick={fetchAccessCode} className="text-xs text-sky-700 hover:underline">
+                    Show access code
+                  </button>
+                )}
               </div>
               <div>
                 <div className="font-medium mb-1">Members</div>

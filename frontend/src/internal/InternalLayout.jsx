@@ -1,5 +1,6 @@
 import React from 'react'
 import { NavLink, useNavigate, Outlet } from 'react-router-dom'
+import internal from './api'
 
 const NAV = [
   { to: '/internal/dashboard', label: 'Dashboard' },
@@ -14,8 +15,8 @@ export default function InternalLayout() {
   const navigate = useNavigate()
   const user = JSON.parse(localStorage.getItem('internal_user') || 'null')
 
-  const logout = () => {
-    localStorage.removeItem('internal_token')
+  const logout = async () => {
+    try { await internal.post('/api/internal/portal/cookie-logout') } catch {}
     localStorage.removeItem('internal_user')
     navigate('/internal/login')
   }

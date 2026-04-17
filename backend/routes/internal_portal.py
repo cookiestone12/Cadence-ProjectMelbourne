@@ -28,12 +28,13 @@ from sqlalchemy.orm import Session
 from ..models import get_db, User, Organization, OrganizationMember, UserSession
 from ..models.models import AuditLog, Song, Creator
 from ..utils.auth import (
-    get_current_staff_or_admin,
+    get_current_staff_from_cookie as get_current_staff_or_admin,
     verify_password,
     create_access_token,
     hash_token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
+import os
 from ..utils.logging_config import tail_logs
 
 logger = logging.getLogger("cadence")
@@ -556,18 +557,22 @@ def cookie_login(
     ))
     db.commit()
 
+    # Cookie has to cover BOTH /internal (the SPA shell) and
+    # /api/internal/portal/* (the API the SPA calls), so it lives at
+    # path=/. httpOnly + SameSite=Lax keeps it out of JS reach. Secure
+    # is set in production only; in dev the workspace runs over plain
+    # HTTP and the browser would silently drop a Secure cookie.
     response.set_cookie(
         key="cadence_internal_token",
         value=token,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         httponly=True,
-        secure=True,
+        secure=os.getenv("APP_ENV", "development").lower() == "production",
         samesite="lax",
-        path="/internal",
+        path="/",
     )
     return {
-        "access_token": token,
-        "token_type": "bearer",
+        "token_type": "cookie",
         "user": {
             "id": user.id,
             "username": user.username,
@@ -576,3 +581,63 @@ def cookie_login(
             "is_cadence_staff": getattr(user, "is_cadence_staff", False),
         },
     }
+
+
+@router.post(
+    "/cookie-logout",
+    summary="Internal portal cookie logout",
+    description="Clears the cadence_internal_token cookie and revokes the matching "
+                "UserSession row so the JWT can't be reused.",
+)
+def cookie_logout(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+):
+    token = request.cookies.get("cadence_internal_token")
+    if token:
+        sess = db.query(UserSession).filter(
+            UserSession.token_hash == hash_token(token)
+        ).first()
+        if sess and not sess.is_revoked:
+            sess.is_revoked = True
+            sess.revoked_at = datetime.utcnow()
+            db.commit()
+    response.delete_cookie(key="cadence_internal_token", path="/")
+    return {"ok": True}
+
+
+# --- organization access code ----------------------------------------
+
+@router.get(
+    "/organizations/{org_id}/access-code",
+    summary="Get an organization's join access code",
+    description="Read-only fetch of the org's current join code; auto-generates one if "
+                "the org has never had it set. Mirrors the owner-only endpoint at "
+                "/api/organizations/{id}/access-code so staff don't need to log in as "
+                "the owner just to read the code during onboarding.",
+)
+def get_org_access_code(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_staff_or_admin),
+):
+    import string, random
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    if not getattr(org, "access_code", None):
+        chars = string.ascii_uppercase + string.digits
+        new_code = "".join(random.choices(chars, k=8))
+        while db.query(Organization).filter(Organization.access_code == new_code).first():
+            new_code = "".join(random.choices(chars, k=8))
+        org.access_code = new_code
+        db.commit()
+        _audit(
+            db, current_user,
+            action="INTERNAL_ACCESS_CODE_GENERATED",
+            entity_type="organization",
+            entity_id=org.id,
+            entity_name=org.name,
+        )
+    return {"organization_id": org.id, "access_code": org.access_code}

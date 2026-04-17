@@ -152,6 +152,65 @@ def get_current_staff_or_admin(current_user: User = Depends(get_current_user)):
     return current_user
 
 
+# Cookie-or-Bearer dependency for the internal staff portal.
+# The /internal frontend authenticates via POST /cookie-login which
+# sets cadence_internal_token as an httpOnly cookie. We accept that
+# cookie OR a normal Authorization: Bearer header (the latter is
+# only used by curl-based smoke tests). Validation matches
+# get_current_user (signature + non-revoked UserSession + staff
+# role).
+_optional_security = HTTPBearer(auto_error=False)
+
+
+def get_current_staff_from_cookie(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_security),
+    db: Session = Depends(get_db),
+) -> User:
+    cached = getattr(request.state, "cached_user", None)
+    if cached is not None:
+        if not (cached.is_super_admin or getattr(cached, "is_cadence_staff", False)):
+            raise HTTPException(status_code=403, detail="Cadence staff access required")
+        return cached
+
+    token: Optional[str] = None
+    if credentials and credentials.credentials:
+        token = credentials.credentials
+    if not token:
+        token = request.cookies.get("cadence_internal_token")
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    payload = decode_access_token(token)
+    if payload is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    username = payload.get("sub")
+    if not isinstance(username, str):
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user = db.query(User).filter(sa_func.lower(User.username) == username.lower()).first()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    from ..models import UserSession
+    session = db.query(UserSession).filter(
+        UserSession.token_hash == hash_token(token)
+    ).first()
+    if session is None or session.is_revoked:
+        raise HTTPException(status_code=401, detail="Session revoked")
+
+    if not (user.is_super_admin or getattr(user, "is_cadence_staff", False)):
+        raise HTTPException(status_code=403, detail="Cadence staff access required")
+
+    set_user_id(user.id)
+    request.state.cached_user = user
+    return user
+
+
 def get_current_super_admin(current_user: User = Depends(get_current_user)):
     if not current_user.is_super_admin:
         raise HTTPException(

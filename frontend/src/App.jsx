@@ -153,18 +153,23 @@ function App() {
   }
 
   // Internal staff portal lives outside the regular client auth flow.
-  // It uses its own token in localStorage('internal_token') and its own
+  // It uses an httpOnly cookie (cadence_internal_token) for auth and its own
   // login screen; we serve the routes here regardless of whether the
   // main client app is authenticated.
   if (typeof window !== 'undefined' && window.location.pathname.startsWith('/internal')) {
-    const internalToken = localStorage.getItem('internal_token')
+    // Auth lives in an httpOnly cookie that JS cannot read; we use the
+    // presence of the non-sensitive `internal_user` profile blob as a
+    // hint that the user has logged in. If the cookie is actually
+    // missing or expired, the api.js interceptor will catch the 401 on
+    // the next portal call and bounce back to /internal/login.
+    const internalUser = localStorage.getItem('internal_user')
     return (
       <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
           <Route path="/internal/login" element={<InternalLogin />} />
           <Route
             path="/internal"
-            element={internalToken ? <InternalLayout /> : <Navigate to="/internal/login" />}
+            element={internalUser ? <InternalLayout /> : <Navigate to="/internal/login" />}
           >
             <Route index element={<Navigate to="/internal/dashboard" replace />} />
             <Route path="dashboard" element={<InternalDashboard />} />

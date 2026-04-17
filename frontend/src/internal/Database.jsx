@@ -5,7 +5,7 @@ export default function Database() {
   const [tables, setTables] = useState([])
   const [table, setTable] = useState('')
   const [page, setPage] = useState(null)
-  const [filter, setFilter] = useState('')
+  const [colFilters, setColFilters] = useState({})
   const [offset, setOffset] = useState(0)
   const limit = 50
 
@@ -23,16 +23,16 @@ export default function Database() {
   }
 
   const pickTable = (t) => {
-    setTable(t); setOffset(0); setFilter('')
+    setTable(t); setOffset(0); setColFilters({})
     load(t, 0)
   }
 
   const exportCsv = async () => {
     if (!table) return
-    const token = localStorage.getItem('internal_token')
+    // Cookie carries auth — withCredentials + same origin is enough.
     const r = await fetch(
       `/api/internal/portal/database/${table}/export.csv`,
-      { headers: { Authorization: `Bearer ${token}` } },
+      { credentials: 'include' },
     )
     const blob = await r.blob()
     const url = URL.createObjectURL(blob)
@@ -43,8 +43,11 @@ export default function Database() {
 
   const filteredRows = page
     ? page.rows.filter((row) =>
-        !filter ||
-        row.some((v) => String(v ?? '').toLowerCase().includes(filter.toLowerCase()))
+        page.columns.every((c, idx) => {
+          const f = (colFilters[c] || '').toLowerCase()
+          if (!f) return true
+          return String(row[idx] ?? '').toLowerCase().includes(f)
+        })
       )
     : []
 
@@ -79,12 +82,12 @@ export default function Database() {
                 <div className="text-xs text-slate-500">
                   {page.total} rows · showing {page.rows.length}
                 </div>
-                <input
-                  className="border border-slate-300 rounded-md px-2 py-1 text-xs flex-1 min-w-[180px]"
-                  placeholder="Filter visible rows…"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
-                />
+                <button
+                  onClick={() => setColFilters({})}
+                  className="px-2 py-1 bg-slate-100 rounded text-xs"
+                >
+                  Clear filters
+                </button>
                 <button onClick={exportCsv} className="px-2 py-1 bg-slate-200 rounded text-xs">
                   Export CSV
                 </button>
@@ -109,6 +112,20 @@ export default function Database() {
                     <tr>
                       {page.columns.map((c) => (
                         <th key={c} className="px-2 py-1 text-left font-mono whitespace-nowrap">{c}</th>
+                      ))}
+                    </tr>
+                    <tr>
+                      {page.columns.map((c) => (
+                        <th key={c} className="px-2 py-1 bg-slate-50">
+                          <input
+                            className="w-full border border-slate-200 rounded px-1 py-0.5 text-xs font-normal"
+                            placeholder="filter…"
+                            value={colFilters[c] || ''}
+                            onChange={(e) =>
+                              setColFilters({ ...colFilters, [c]: e.target.value })
+                            }
+                          />
+                        </th>
                       ))}
                     </tr>
                   </thead>
