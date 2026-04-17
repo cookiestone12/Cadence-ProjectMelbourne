@@ -14,7 +14,7 @@ from ..models import (
     get_db, User, OrganizationMember, Song, Creator,
     Contract, ContractAsset, RightsSplit,
     RoyaltyStatement, RoyaltyTransaction, RoyaltyAllocation, Payment,
-    Fee, Advance, Placement,
+    Fee, Advance, Placement, RoyaltyStatementLine,
 )
 from ..utils.auth import get_current_user
 
@@ -1624,6 +1624,45 @@ def earnings_by_holder(
                 "statement_count": 0,
             }
 
+    # New-pipeline statement lines are attributed to the parent statement's
+    # creator. RoyaltyStatement.total_revenue_cents (used above for
+    # total_revenue) already includes these line dollars, so the holder's
+    # revenue-basis totals already reflect them. We additionally surface
+    # any holder that exists only via new-pipeline statements (no legacy
+    # allocations and no statement total yet aggregated above) so they
+    # aren't dropped from the listing.
+    line_filters = [RoyaltyStatementLine.org_id == org_id]
+    if creator_id is not None:
+        line_filters.append(RoyaltyStatement.creator_id == creator_id)
+    line_holder_results = db.query(
+        Creator.id, Creator.display_name,
+        func.sum(RoyaltyStatementLine.net_amount_statement_currency).label("total_dollars"),
+    ).join(
+        RoyaltyStatement, RoyaltyStatement.creator_id == Creator.id
+    ).join(
+        RoyaltyStatementLine, RoyaltyStatementLine.statement_id == RoyaltyStatement.id
+    ).filter(*line_filters).group_by(Creator.id, Creator.display_name).all()
+
+    for r in line_holder_results:
+        if r.id in holders:
+            continue
+        cents = int(round((r.total_dollars or 0) * 100))
+        if cents <= 0:
+            continue
+        holders[r.id] = {
+            "rights_holder_id": r.id,
+            "rights_holder_name": r.display_name,
+            "total_revenue_cents": cents,
+            "total_revenue_dollars": cents / 100.0,
+            "total_allocated_cents": 0,
+            "total_allocated_dollars": 0.0,
+            "total_recouped_cents": 0,
+            "total_recouped_dollars": 0.0,
+            "net_earned_cents": cents,
+            "net_earned_dollars": cents / 100.0,
+            "statement_count": 0,
+        }
+
     earnings = sorted(holders.values(), key=lambda x: x.get("total_revenue_cents", 0), reverse=True)
     return {"earnings": earnings}
 
@@ -1650,24 +1689,79 @@ def earnings_by_contract(
         *filters
     ).group_by(Contract.id, Contract.title, Contract.advance_amount, Contract.advance_recouped).order_by(desc("total_cents")).all()
 
-    return {
-        "earnings": [
-            {
-                "contract_id": r.id,
-                "contract_title": r.title,
-                "advance_amount": r.advance_amount or 0,
-                "advance_recouped": r.advance_recouped or 0,
-                "remaining_advance": max((r.advance_amount or 0) - (r.advance_recouped or 0), 0),
-                "recoupment_percentage": round(((r.advance_recouped or 0) / r.advance_amount) * 100, 2) if r.advance_amount and r.advance_amount > 0 else 0,
-                "total_allocated_cents": r.total_cents,
-                "total_allocated_dollars": r.total_cents / 100.0,
-                "total_recouped_cents": r.total_recouped,
-                "net_earned_cents": r.total_cents - r.total_recouped,
-                "net_earned_dollars": (r.total_cents - r.total_recouped) / 100.0,
+    contracts_map = {}
+    for r in results:
+        contracts_map[r.id] = {
+            "contract_id": r.id,
+            "contract_title": r.title,
+            "advance_amount": r.advance_amount or 0,
+            "advance_recouped": r.advance_recouped or 0,
+            "remaining_advance": max((r.advance_amount or 0) - (r.advance_recouped or 0), 0),
+            "recoupment_percentage": round(((r.advance_recouped or 0) / r.advance_amount) * 100, 2) if r.advance_amount and r.advance_amount > 0 else 0,
+            "total_allocated_cents": r.total_cents or 0,
+            "total_allocated_dollars": (r.total_cents or 0) / 100.0,
+            "total_recouped_cents": r.total_recouped or 0,
+            "net_earned_cents": (r.total_cents or 0) - (r.total_recouped or 0),
+            "net_earned_dollars": ((r.total_cents or 0) - (r.total_recouped or 0)) / 100.0,
+        }
+
+    # Attribute new-pipeline statement lines to a contract only when the
+    # parent statement's creator has exactly one contract — the only
+    # deterministic 1:1 mapping available. New-pipeline statements don't
+    # carry a contract_id and don't produce per-contract allocations, so
+    # for creators with multiple contracts we leave lines unattributed at
+    # the contract level (mirroring how legacy unallocated transactions
+    # don't appear under contracts).
+    line_filters = [RoyaltyStatementLine.org_id == org_id]
+    if creator_id is not None:
+        line_filters.append(RoyaltyStatement.creator_id == creator_id)
+    line_by_creator = db.query(
+        RoyaltyStatement.creator_id,
+        func.sum(RoyaltyStatementLine.net_amount_statement_currency).label("total_dollars"),
+    ).join(
+        RoyaltyStatementLine, RoyaltyStatementLine.statement_id == RoyaltyStatement.id
+    ).filter(*line_filters).group_by(RoyaltyStatement.creator_id).all()
+
+    for r in line_by_creator:
+        if r.creator_id is None:
+            continue
+        cents = int(round((r.total_dollars or 0) * 100))
+        if cents <= 0:
+            continue
+        creator_contracts = db.query(Contract).filter(
+            Contract.organization_id == org_id,
+            Contract.creator_id == r.creator_id,
+        ).all()
+        if len(creator_contracts) != 1:
+            continue
+        contract = creator_contracts[0]
+        if contract.id in contracts_map:
+            entry = contracts_map[contract.id]
+            entry["total_allocated_cents"] = (entry.get("total_allocated_cents") or 0) + cents
+            entry["total_allocated_dollars"] = entry["total_allocated_cents"] / 100.0
+            entry["net_earned_cents"] = entry["total_allocated_cents"] - (entry.get("total_recouped_cents") or 0)
+            entry["net_earned_dollars"] = entry["net_earned_cents"] / 100.0
+        else:
+            contracts_map[contract.id] = {
+                "contract_id": contract.id,
+                "contract_title": contract.title,
+                "advance_amount": contract.advance_amount or 0,
+                "advance_recouped": contract.advance_recouped or 0,
+                "remaining_advance": max((contract.advance_amount or 0) - (contract.advance_recouped or 0), 0),
+                "recoupment_percentage": round(((contract.advance_recouped or 0) / contract.advance_amount) * 100, 2) if contract.advance_amount and contract.advance_amount > 0 else 0,
+                "total_allocated_cents": cents,
+                "total_allocated_dollars": cents / 100.0,
+                "total_recouped_cents": 0,
+                "net_earned_cents": cents,
+                "net_earned_dollars": cents / 100.0,
             }
-            for r in results
-        ]
-    }
+
+    earnings = sorted(
+        contracts_map.values(),
+        key=lambda x: x.get("total_allocated_cents", 0) or 0,
+        reverse=True,
+    )
+    return {"earnings": earnings}
 
 
 @router.get("/earnings/{org_id}/by-track")
@@ -1740,6 +1834,94 @@ def earnings_by_track(
                 "total_quantity": r.total_quantity,
                 "unmatched": True,
             })
+
+    # Aggregate from new-pipeline statement lines and merge with legacy results
+    line_matched_q = db.query(
+        Song.id, Song.title, Song.primary_artist, Song.isrc,
+        func.sum(RoyaltyStatementLine.net_amount_statement_currency).label("total_dollars"),
+        func.sum(RoyaltyStatementLine.unit_count).label("total_quantity"),
+    ).join(
+        RoyaltyStatementLine, RoyaltyStatementLine.matched_song_id == Song.id
+    ).filter(
+        RoyaltyStatementLine.org_id == org_id,
+    )
+    if creator_id is not None:
+        line_matched_q = line_matched_q.join(
+            RoyaltyStatement, RoyaltyStatement.id == RoyaltyStatementLine.statement_id
+        ).filter(RoyaltyStatement.creator_id == creator_id)
+    line_matched = line_matched_q.group_by(
+        Song.id, Song.title, Song.primary_artist, Song.isrc
+    ).all()
+
+    by_song = {e["song_id"]: e for e in earnings if e.get("song_id") is not None}
+    for r in line_matched:
+        cents = int(round((r.total_dollars or 0) * 100))
+        qty = r.total_quantity or 0
+        if r.id in by_song:
+            existing = by_song[r.id]
+            existing["total_revenue_cents"] = (existing.get("total_revenue_cents") or 0) + cents
+            existing["total_revenue_dollars"] = existing["total_revenue_cents"] / 100.0
+            existing["total_quantity"] = (existing.get("total_quantity") or 0) + qty
+        else:
+            entry = {
+                "song_id": r.id,
+                "title": r.title,
+                "artist": r.primary_artist,
+                "isrc": r.isrc,
+                "total_revenue_cents": cents,
+                "total_revenue_dollars": cents / 100.0,
+                "total_quantity": qty,
+            }
+            earnings.append(entry)
+            by_song[r.id] = entry
+
+    line_unmatched_q = db.query(
+        RoyaltyStatementLine.track_title_raw,
+        RoyaltyStatementLine.artist_name_raw,
+        func.sum(RoyaltyStatementLine.net_amount_statement_currency).label("total_dollars"),
+        func.sum(RoyaltyStatementLine.unit_count).label("total_quantity"),
+    ).filter(
+        RoyaltyStatementLine.org_id == org_id,
+        RoyaltyStatementLine.matched_song_id.is_(None),
+        RoyaltyStatementLine.track_title_raw.isnot(None),
+    )
+    if creator_id is not None:
+        line_unmatched_q = line_unmatched_q.join(
+            RoyaltyStatement, RoyaltyStatement.id == RoyaltyStatementLine.statement_id
+        ).filter(RoyaltyStatement.creator_id == creator_id)
+    line_unmatched = line_unmatched_q.group_by(
+        RoyaltyStatementLine.track_title_raw,
+        RoyaltyStatementLine.artist_name_raw,
+    ).all()
+
+    by_unmatched = {
+        (e.get("title"), e.get("artist")): e
+        for e in earnings if e.get("song_id") is None and e.get("unmatched")
+    }
+    for r in line_unmatched:
+        cents = int(round((r.total_dollars or 0) * 100))
+        if cents <= 0:
+            continue
+        qty = r.total_quantity or 0
+        key = (r.track_title_raw, r.artist_name_raw)
+        if key in by_unmatched:
+            existing = by_unmatched[key]
+            existing["total_revenue_cents"] = (existing.get("total_revenue_cents") or 0) + cents
+            existing["total_revenue_dollars"] = existing["total_revenue_cents"] / 100.0
+            existing["total_quantity"] = (existing.get("total_quantity") or 0) + qty
+        else:
+            entry = {
+                "song_id": None,
+                "title": r.track_title_raw,
+                "artist": r.artist_name_raw,
+                "isrc": None,
+                "total_revenue_cents": cents,
+                "total_revenue_dollars": cents / 100.0,
+                "total_quantity": qty,
+                "unmatched": True,
+            }
+            earnings.append(entry)
+            by_unmatched[key] = entry
 
     earnings.sort(key=lambda x: x.get("total_revenue_cents", 0) or 0, reverse=True)
 
