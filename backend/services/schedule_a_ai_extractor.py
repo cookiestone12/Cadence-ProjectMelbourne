@@ -69,7 +69,18 @@ Always return JSON of the form:
       "status": string|null,
       "notes": string|null,
       "confidence": number,
-      "source": string
+      "source": string,
+      "field_confidence": {
+        "title": number,
+        "primary_artist": number,
+        "publishing_percentage": number,
+        "master_percentage": number,
+        "advance_amount": number,
+        "label": number,
+        "isrc": number,
+        "iswc": number,
+        "release_date": number
+      }
     }
   ]
 }
@@ -138,6 +149,36 @@ def _coerce_text(value: Any) -> str:
     return str(value).strip()
 
 
+_ISRC_RE = __import__("re").compile(r"^[A-Z]{2}[A-Z0-9]{3}\d{7}$")
+_ISWC_RE = __import__("re").compile(r"^T-?\d{3}\.?\d{3}\.?\d{3}-?\d$")
+_DATE_RE = __import__("re").compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _validate_row_fields(row: Dict[str, Any]) -> List[str]:
+    """Return a list of field-level validation flags (e.g. 'isrc:invalid')."""
+    flags: List[str] = []
+    isrc = row.get("isrc") or ""
+    if isrc and not _ISRC_RE.match(isrc.upper()):
+        flags.append("isrc:invalid")
+    iswc = row.get("iswc") or ""
+    if iswc and not _ISWC_RE.match(iswc.upper()):
+        flags.append("iswc:invalid")
+    rd = row.get("release_date") or ""
+    if rd and not _DATE_RE.match(rd):
+        flags.append("release_date:invalid")
+    for pct_field in ("publishing_percentage", "master_percentage"):
+        v = row.get(pct_field)
+        if v in (None, ""):
+            continue
+        try:
+            n = float(v)
+            if n < 0 or n > 100:
+                flags.append(f"{pct_field}:out_of_range")
+        except (TypeError, ValueError):
+            flags.append(f"{pct_field}:invalid")
+    return flags
+
+
 def _normalize_row(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     title = _coerce_text(raw.get("title"))
     if not title:
@@ -165,7 +206,21 @@ def _normalize_row(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         except (TypeError, ValueError):
             advance = ""
 
-    return {
+    field_conf_raw = raw.get("field_confidence") or {}
+    if not isinstance(field_conf_raw, dict):
+        field_conf_raw = {}
+    field_confidence: Dict[str, float] = {}
+    for f in _NORMALIZED_FIELDS:
+        v = field_conf_raw.get(f)
+        try:
+            if v is None:
+                field_confidence[f] = round(confidence, 2)
+            else:
+                field_confidence[f] = round(max(0.0, min(1.0, float(v))), 2)
+        except (TypeError, ValueError):
+            field_confidence[f] = round(confidence, 2)
+
+    normalized = {
         "title": title,
         "primary_artist": _coerce_text(raw.get("primary_artist")),
         "publishing_percentage": _coerce_pct(raw.get("publishing_percentage")),
@@ -178,7 +233,12 @@ def _normalize_row(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "notes": " | ".join([p for p in notes_parts if p]),
         "_confidence": round(confidence, 2),
         "_source": _coerce_text(raw.get("source"))[:120],
+        "_field_confidence": field_confidence,
     }
+    flags = _validate_row_fields(normalized)
+    if flags:
+        normalized["_flags"] = flags
+    return normalized
 
 
 def _parse_response(text: str) -> Dict[str, Any]:

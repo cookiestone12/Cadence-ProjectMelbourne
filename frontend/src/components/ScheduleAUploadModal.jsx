@@ -872,7 +872,7 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
             {step === 1 && (
               <button
                 onClick={analyzeFile}
-                disabled={!isValidFile || analyzing}
+                disabled={!canAnalyze || analyzing}
                 className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {analyzing ? (

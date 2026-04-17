@@ -225,6 +225,7 @@ async def preview_csv(
 _DOC_EXTS = ('.pdf', '.docx', '.doc')
 _IMAGE_EXTS = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff')
 _TEXT_EXTS = ('.txt', '.md', '.tsv')
+_TABULAR_EXTS = ('.csv', '.xlsx', '.xls')
 
 
 class TextPreviewRequest(BaseModel):
@@ -250,11 +251,11 @@ async def preview_document(
 
     filename = file.filename or ""
     lower = filename.lower()
-    accepted = _DOC_EXTS + _IMAGE_EXTS + _TEXT_EXTS
+    accepted = _DOC_EXTS + _IMAGE_EXTS + _TEXT_EXTS + _TABULAR_EXTS
     if not lower.endswith(accepted):
         raise HTTPException(
             status_code=400,
-            detail="File must be a PDF, Word, image (PNG/JPG), or plain text document.",
+            detail="File must be a CSV, Excel, PDF, Word, image (PNG/JPG), or plain text document.",
         )
 
     max_size = 20 * 1024 * 1024 if lower.endswith(_IMAGE_EXTS) else 10 * 1024 * 1024
@@ -262,6 +263,43 @@ async def preview_document(
         raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {max_size // (1024*1024)}MB.")
 
     content = await file.read()
+
+    # Tabular formats (CSV/Excel) go through the existing column-mapping
+    # parser, then are wrapped in the unified preview shape so callers see one
+    # consistent response regardless of input type.
+    if lower.endswith(_TABULAR_EXTS):
+        if lower.endswith(('.xlsx', '.xls')):
+            headers, rows = parse_excel_file(content)
+        else:
+            headers, rows = parse_csv_file(content)
+        ai_result = parse_csv_with_ai("", headers, org_id=org_id)
+        initial_mapping = ai_result.get("mapping", {})
+        generic_count = sum(1 for h in headers if h.startswith("Column_"))
+        if generic_count > 0 and rows:
+            initial_mapping = infer_mapping_from_data(headers, rows, initial_mapping)
+        # Tag rows with high deterministic confidence and the spreadsheet source label
+        tagged: List[Dict[str, Any]] = []
+        for r in rows:
+            r2 = dict(r)
+            r2.setdefault("_confidence", 0.95)
+            r2.setdefault("_source", "spreadsheet row")
+            tagged.append(r2)
+        return {
+            "success": True,
+            "extraction_method": "tabular_excel" if lower.endswith(('.xlsx', '.xls')) else "tabular_csv",
+            "schedule_a_songs": [],
+            "schedule_b_songs": [],
+            "preview_rows": tagged[:50],
+            "preview_total": len(tagged),
+            "headers": headers,
+            "mapping": initial_mapping,
+            "row_count": len(tagged),
+            "creator_info": {},
+            "contract_terms": {},
+            "warnings": [],
+            "errors": [],
+        }
+
     result = parse_document_unified(content, filename, org_id=org_id)
 
     if result.errors and not result.schedule_a_songs and not result.schedule_b_songs:
