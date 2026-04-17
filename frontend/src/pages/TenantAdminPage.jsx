@@ -20,6 +20,8 @@ import {
   EnvelopeIcon,
   ClipboardDocumentIcon,
   ArrowPathIcon,
+  DocumentArrowUpIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline'
 import ClientSharingTab from '../components/ClientSharingModal'
 import EmailSendModal from '../components/EmailSendModal'
@@ -120,6 +122,7 @@ export default function TenantAdminPage() {
     { id: 'members', label: 'Team Members', icon: UsersIcon },
     { id: 'branding', label: 'Organization Branding', icon: BuildingOfficeIcon },
     { id: 'sharing', label: 'Client Sharing', icon: ShareIcon },
+    { id: 'imports', label: 'Schedule A Imports', icon: DocumentArrowUpIcon },
     { id: 'audit', label: 'Activity Log', icon: ClipboardDocumentListIcon },
   ]
 
@@ -185,6 +188,8 @@ export default function TenantAdminPage() {
       )}
 
       {activeTab === 'sharing' && <ClientSharingTab />}
+
+      {activeTab === 'imports' && <ScheduleAImportsTab />}
 
       {activeTab === 'audit' && <AuditLogTab />}
 
@@ -1225,6 +1230,206 @@ function AuditLogTab() {
               <button onClick={() => setOffset(offset + limit)} disabled={offset + limit >= total} className="px-3 py-1.5 text-sm border border-[rgba(59,77,67,0.12)] rounded-lg disabled:opacity-40 hover:bg-[#EEF1EC] transition-colors">Next</button>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ScheduleAImportsTab() {
+  const [orgId, setOrgId] = useState(null)
+  const [imports, setImports] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [reExtracting, setReExtracting] = useState(null)
+  const [reExtractResult, setReExtractResult] = useState(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const orgRes = await axios.get('/api/organizations/current')
+      const id = orgRes.data?.id
+      if (!id) {
+        setError('Could not determine current organization')
+        setImports([])
+        return
+      }
+      setOrgId(id)
+      const res = await axios.get(`/api/schedule-a-imports/${id}?limit=200`)
+      setImports(res.data || [])
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to load Schedule A imports')
+      setImports([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const downloadOriginal = async (rec) => {
+    if (!orgId) return
+    try {
+      const res = await axios.get(`/api/schedule-a-imports/${orgId}/${rec.id}/download`, { responseType: 'blob' })
+      const blob = new Blob([res.data], { type: res.headers['content-type'] || rec.mime_type || 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = rec.original_filename || `schedule_a_${rec.id}`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(err?.response?.data?.detail || 'Failed to download original file.')
+    }
+  }
+
+  const reExtract = async (rec) => {
+    if (!orgId) return
+    setReExtracting(rec.id)
+    setReExtractResult(null)
+    try {
+      const res = await axios.post(`/api/schedule-a-imports/${orgId}/${rec.id}/re-extract`)
+      setReExtractResult({ importId: rec.id, ...res.data })
+    } catch (err) {
+      const detail = err?.response?.data?.detail || 'Re-extraction failed.'
+      setReExtractResult({ importId: rec.id, success: false, errors: [detail], preview_rows: [] })
+    } finally {
+      setReExtracting(null)
+    }
+  }
+
+  const formatBytes = (n) => {
+    if (n == null) return '-'
+    if (n < 1024) return `${n} B`
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+    return `${(n / (1024 * 1024)).toFixed(2)} MB`
+  }
+
+  const formatDate = (iso) => {
+    if (!iso) return '-'
+    const d = new Date(iso)
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-[#3D4A44]">Schedule A Imports</h2>
+          <p className="text-sm text-[#7A8580] mt-0.5">Audit history of original Schedule A files extracted into Cadence.</p>
+        </div>
+        <button
+          onClick={load}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm border border-[rgba(59,77,67,0.12)] rounded-lg hover:bg-[#EEF1EC] text-[#3D4A44]"
+        >
+          <ArrowPathIcon className="w-4 h-4" />
+          Refresh
+        </button>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm flex items-center gap-2">
+          <ExclamationTriangleIcon className="w-5 h-5" />
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-[#5B8A72] border-t-transparent"></div>
+        </div>
+      ) : imports.length === 0 ? (
+        <div className="text-center py-12 text-[#7A8580] bg-white rounded-xl shadow-sm">
+          <DocumentArrowUpIcon className="w-12 h-12 mx-auto mb-3 opacity-40" />
+          <p className="font-medium">No Schedule A imports yet</p>
+          <p className="text-sm mt-1">Files uploaded through the Schedule A importer will appear here.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
+          <table className="w-full min-w-[860px]">
+            <thead className="bg-[#EEF1EC]">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">When</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Uploader</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Creator</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">File</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Size</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Method</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[#3D4A44]">Songs</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[#3D4A44]">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
+              {imports.map((rec) => (
+                <React.Fragment key={rec.id}>
+                  <tr className="hover:bg-[#FAFBF9]">
+                    <td className="px-4 py-3 text-xs text-[#7A8580] whitespace-nowrap">{formatDate(rec.created_at)}</td>
+                    <td className="px-4 py-3 text-sm text-[#3D4A44]">{rec.user_email || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-[#3D4A44]">{rec.creator_name || '—'}</td>
+                    <td className="px-4 py-3 text-sm text-[#3D4A44] max-w-[260px]">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate" title={rec.original_filename}>{rec.original_filename}</span>
+                        {rec.is_text_paste && (
+                          <span className="text-[10px] uppercase tracking-wide bg-[#EEF1EC] text-[#5B8A72] px-1.5 py-0.5 rounded">Pasted</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-[#7A8580] whitespace-nowrap">{formatBytes(rec.file_size)}</td>
+                    <td className="px-4 py-3 text-xs text-[#7A8580]">{rec.extraction_method || '—'}</td>
+                    <td className="px-4 py-3 text-xs text-[#3D4A44] whitespace-nowrap">
+                      <span className="font-medium">{rec.songs_created}</span>
+                      {rec.songs_failed > 0 && (
+                        <span className="text-[#9B2C2C] ml-1">({rec.songs_failed} failed)</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => downloadOriginal(rec)}
+                          disabled={!rec.file_available}
+                          title={rec.file_available ? 'Download original file' : 'Original file no longer available'}
+                          className="flex items-center gap-1 px-2 py-1 text-xs bg-[#5B8A72] text-white rounded hover:bg-[#4a7560] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <ArrowDownTrayIcon className="w-3.5 h-3.5" />
+                          Download
+                        </button>
+                        <button
+                          onClick={() => reExtract(rec)}
+                          disabled={!rec.file_available || reExtracting === rec.id}
+                          title={rec.file_available ? 'Re-run extraction preview' : 'Original file no longer available'}
+                          className="flex items-center gap-1 px-2 py-1 text-xs border border-[#5B8A72] text-[#5B8A72] rounded hover:bg-[#EEF1EC] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <ArrowPathIcon className={`w-3.5 h-3.5 ${reExtracting === rec.id ? 'animate-spin' : ''}`} />
+                          {reExtracting === rec.id ? 'Re-extracting…' : 'Re-extract'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {reExtractResult?.importId === rec.id && (
+                    <tr className="bg-[#FAFBF9]">
+                      <td colSpan={8} className="px-4 py-3 text-xs">
+                        {reExtractResult.success ? (
+                          <div className="text-[#3D4A44]">
+                            <span className="font-medium">Re-extract preview:</span> {reExtractResult.row_count} rows
+                            {reExtractResult.extraction_method ? ` · ${reExtractResult.extraction_method}` : ''}
+                            {(reExtractResult.warnings || []).length > 0 && (
+                              <span className="text-[#856404] ml-2">· {reExtractResult.warnings.length} warning(s)</span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-[#9B2C2C]">
+                            <span className="font-medium">Re-extract failed:</span>{' '}
+                            {(reExtractResult.errors || []).join(', ') || 'Unknown error'}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
