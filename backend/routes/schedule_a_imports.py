@@ -3,17 +3,17 @@ from __future__ import annotations
 
 import logging
 import mimetypes
-import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..models import get_db, OrganizationMember, User
-from ..models.models import ScheduleAImport, Creator
+from ..models.models import ScheduleAImport
 from ..utils.auth import get_current_user
+from ..services import schedule_a_storage
 
 logger = logging.getLogger("cadence")
 
@@ -54,6 +54,15 @@ def _admin_or_403(membership: OrganizationMember) -> None:
         raise HTTPException(status_code=403, detail="Only OWNER or ADMIN may access Schedule A audit data")
 
 
+def _file_available(rec: ScheduleAImport) -> bool:
+    if not rec.stored_path:
+        return False
+    try:
+        return schedule_a_storage.open_bytes(rec.stored_path) is not None
+    except Exception:
+        return False
+
+
 @router.get("/{org_id}", response_model=List[ScheduleAImportSummary])
 async def list_schedule_a_imports(
     org_id: int,
@@ -89,7 +98,7 @@ async def list_schedule_a_imports(
             created_at=r.created_at.isoformat() if r.created_at else "",
             user_id=r.user_id,
             user_email=r.user.email if r.user else None,
-            file_available=bool(r.stored_path and os.path.exists(r.stored_path)),
+            file_available=_file_available(r),
         ))
     return out
 
@@ -110,14 +119,17 @@ async def download_schedule_a_import(
     ).first()
     if not rec:
         raise HTTPException(status_code=404, detail="Import not found")
-    if not rec.stored_path or not os.path.exists(rec.stored_path):
-        raise HTTPException(status_code=410, detail="Original file is no longer available on disk")
+
+    data = schedule_a_storage.open_bytes(rec.stored_path) if rec.stored_path else None
+    if data is None:
+        raise HTTPException(status_code=410, detail="Original file is no longer available")
 
     media_type = rec.mime_type or mimetypes.guess_type(rec.original_filename)[0] or "application/octet-stream"
-    return FileResponse(
-        rec.stored_path,
+    safe_name = (rec.original_filename or f"schedule_a_{import_id}").replace('"', "_")
+    return Response(
+        content=data,
         media_type=media_type,
-        filename=rec.original_filename,
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
     )
 
 
@@ -128,9 +140,13 @@ class ReExtractResult(BaseModel):
     row_count: int = 0
     creator_info: Dict[str, Any] = {}
     contract_terms: Dict[str, Any] = {}
+    document_info: Dict[str, Any] = {}
     warnings: List[str] = []
     errors: List[str] = []
     is_text_paste: bool = False
+    original_filename: Optional[str] = None
+    creator_id: Optional[int] = None
+    creator_name: Optional[str] = None
 
 
 @router.post("/{org_id}/{import_id}/re-extract", response_model=ReExtractResult)
@@ -155,16 +171,12 @@ async def re_extract_schedule_a_import(
     ).first()
     if not rec:
         raise HTTPException(status_code=404, detail="Import not found")
-    if not rec.stored_path or not os.path.exists(rec.stored_path):
-        raise HTTPException(status_code=410, detail="Original file is no longer available on disk")
+
+    content = schedule_a_storage.open_bytes(rec.stored_path) if rec.stored_path else None
+    if content is None:
+        raise HTTPException(status_code=410, detail="Original file is no longer available")
 
     from ..services.document_parser import parse_document_unified
-
-    try:
-        with open(rec.stored_path, "rb") as f:
-            content = f.read()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to read saved file: {e}")
 
     if rec.is_text_paste:
         try:
@@ -183,7 +195,11 @@ async def re_extract_schedule_a_import(
         row_count=payload.get("row_count", 0) or len(payload.get("preview_rows", [])),
         creator_info=payload.get("creator_info") or {},
         contract_terms=payload.get("contract_terms") or {},
+        document_info=payload.get("document_info") or {},
         warnings=payload.get("warnings") or [],
         errors=payload.get("errors") or [],
         is_text_paste=bool(rec.is_text_paste),
+        original_filename=rec.original_filename,
+        creator_id=rec.creator_id,
+        creator_name=rec.creator_name,
     )

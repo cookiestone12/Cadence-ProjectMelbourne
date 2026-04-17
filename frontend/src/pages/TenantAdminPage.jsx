@@ -1006,7 +1006,42 @@ function AuditLogTab() {
   const [filterEntity, setFilterEntity] = useState('')
   const [filterUserId, setFilterUserId] = useState('')
   const [orgMembers, setOrgMembers] = useState([])
+  const [orgId, setOrgId] = useState(null)
+  const [reExtracting, setReExtracting] = useState(null)
+  const [reExtractResult, setReExtractResult] = useState(null)
   const limit = 50
+
+  const downloadOriginal = async (importId, filename) => {
+    if (!orgId) return
+    try {
+      const res = await axios.get(`/api/schedule-a-imports/${orgId}/${importId}/download`, { responseType: 'blob' })
+      const blob = new Blob([res.data], { type: res.headers['content-type'] || 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename || `schedule_a_${importId}`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      const detail = err?.response?.data?.detail || 'Failed to download original file.'
+      alert(detail)
+    }
+  }
+
+  const reExtract = async (importId) => {
+    if (!orgId) return
+    setReExtracting(importId)
+    setReExtractResult(null)
+    try {
+      const res = await axios.post(`/api/schedule-a-imports/${orgId}/${importId}/re-extract`)
+      setReExtractResult({ importId, ...res.data })
+    } catch (err) {
+      const detail = err?.response?.data?.detail || 'Re-extraction failed.'
+      setReExtractResult({ importId, success: false, errors: [detail], preview_rows: [] })
+    } finally {
+      setReExtracting(null)
+    }
+  }
 
   useEffect(() => {
     const fetchMembers = async () => {
@@ -1026,15 +1061,16 @@ function AuditLogTab() {
     setLoading(true)
     try {
       const orgRes = await axios.get('/api/organizations/current')
-      const orgId = orgRes.data?.id
-      if (!orgId) return
+      const currentOrgId = orgRes.data?.id
+      if (!currentOrgId) return
+      setOrgId(currentOrgId)
       const params = new URLSearchParams()
       params.append('limit', limit)
       params.append('offset', offset)
       if (filterAction) params.append('action', filterAction)
       if (filterEntity) params.append('entity_type', filterEntity)
       if (filterUserId) params.append('user_id', filterUserId)
-      const res = await axios.get(`/api/audit-log/org/${orgId}?${params}`)
+      const res = await axios.get(`/api/audit-log/org/${currentOrgId}?${params}`)
       setLogs(res.data.logs || [])
       setTotal(res.data.total || 0)
     } catch (err) {
@@ -1137,8 +1173,46 @@ function AuditLogTab() {
                   </td>
                   <td className="px-4 py-3 text-xs text-[#7A8580]">{log.entity_type}</td>
                   <td className="px-4 py-3 text-sm text-[#3D4A44] truncate max-w-[200px]">{log.entity_name || '-'}</td>
-                  <td className="px-4 py-3 text-xs text-[#7A8580] truncate max-w-[200px]">
-                    {log.details ? JSON.stringify(log.details) : '-'}
+                  <td className="px-4 py-3 text-xs text-[#7A8580] max-w-[280px]">
+                    {log.action === 'SCHEDULE_A_IMPORTED' && log.entity_id ? (
+                      <div className="flex flex-col gap-1.5">
+                        <div className="truncate">
+                          {log.details?.songs_created || 0} songs created
+                          {log.details?.extraction_method ? ` · ${log.details.extraction_method}` : ''}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => downloadOriginal(log.entity_id, log.entity_name)}
+                            className="px-2 py-1 text-xs bg-[#5B8A72] text-white rounded hover:bg-[#4a7560] transition-colors"
+                          >
+                            Download original
+                          </button>
+                          <button
+                            onClick={() => reExtract(log.entity_id)}
+                            disabled={reExtracting === log.entity_id}
+                            className="px-2 py-1 text-xs border border-[#5B8A72] text-[#5B8A72] rounded hover:bg-[#EEF1EC] transition-colors disabled:opacity-50"
+                          >
+                            {reExtracting === log.entity_id ? 'Re-extracting…' : 'Re-extract'}
+                          </button>
+                        </div>
+                        {reExtractResult?.importId === log.entity_id && (
+                          <div className="mt-1 p-2 rounded bg-[#FAFBF9] border border-[rgba(59,77,67,0.12)] text-[11px]">
+                            {reExtractResult.success ? (
+                              <span>
+                                Re-extract: {reExtractResult.row_count} rows
+                                {reExtractResult.extraction_method ? ` (${reExtractResult.extraction_method})` : ''}
+                              </span>
+                            ) : (
+                              <span className="text-[#9B2C2C]">
+                                Failed: {(reExtractResult.errors || []).join(', ') || 'Unknown error'}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="truncate block">{log.details ? JSON.stringify(log.details) : '-'}</span>
+                    )}
                   </td>
                 </tr>
               ))}

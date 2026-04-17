@@ -275,7 +275,7 @@ async def preview_document(
     # audit / re-extraction. The staged_file_id is opaque and only useful when
     # echoed back to /import.
     from ..services import schedule_a_storage
-    staged_id, staged_path = schedule_a_storage.stage_upload(org_id, content, filename)
+    staged_id, staged_key = schedule_a_storage.stage_upload(org_id, content, filename)
     sha256 = schedule_a_storage.hash_bytes(content)
     staging_meta = {
         "staged_file_id": staged_id,
@@ -328,8 +328,7 @@ async def preview_document(
     if result.errors and not result.schedule_a_songs and not result.schedule_b_songs:
         # Don't leave the file staged if we're rejecting the upload outright
         try:
-            from pathlib import Path as _P
-            _P(staged_path).unlink(missing_ok=True)
+            schedule_a_storage.delete(staged_key)
         except Exception:
             pass
         raise HTTPException(status_code=400, detail=result.errors[0])
@@ -363,7 +362,7 @@ async def preview_pasted_text(
 
     from ..services import schedule_a_storage
     encoded = text.encode("utf-8")
-    staged_id, staged_path = schedule_a_storage.stage_upload(org_id, encoded, "pasted.txt")
+    staged_id, staged_key = schedule_a_storage.stage_upload(org_id, encoded, "pasted.txt")
     sha256 = schedule_a_storage.hash_bytes(encoded)
     staging_meta = {
         "staged_file_id": staged_id,
@@ -377,8 +376,7 @@ async def preview_pasted_text(
     result = parse_document_unified(None, "pasted.txt", pasted_text=text, org_id=org_id)
     if result.errors and not result.schedule_a_songs and not result.schedule_b_songs:
         try:
-            from pathlib import Path as _P
-            _P(staged_path).unlink(missing_ok=True)
+            schedule_a_storage.delete(staged_key)
         except Exception:
             pass
         raise HTTPException(status_code=400, detail=result.errors[0])
@@ -538,18 +536,21 @@ async def import_csv(
             from ..models.models import ScheduleAImport
             from ..services.audit_service import log_action
 
-            staged = schedule_a_storage.find_staged(org_id, request.staged_file_id)
-            if staged is not None:
-                size = staged.stat().st_size
-                with open(staged, "rb") as f:
-                    sha = schedule_a_storage.hash_bytes(f.read())
+            staged_key = schedule_a_storage.find_staged(org_id, request.staged_file_id)
+            if staged_key is not None:
+                staged_bytes = schedule_a_storage.open_bytes(staged_key) or b""
+                size = len(staged_bytes)
+                sha = schedule_a_storage.hash_bytes(staged_bytes)
+                fallback_name = staged_key.rsplit("/", 1)[-1]
+                if "__" in fallback_name:
+                    fallback_name = fallback_name.split("__", 1)[1]
                 rec = ScheduleAImport(
                     organization_id=org_id,
                     user_id=current_user.id,
                     creator_id=creator.id if creator else None,
                     creator_name=creator.display_name if creator else None,
-                    original_filename=request.staged_filename or staged.name,
-                    stored_path=str(staged),
+                    original_filename=request.staged_filename or fallback_name,
+                    stored_path=staged_key,
                     file_size=size,
                     mime_type=request.staged_mime,
                     sha256=sha,
@@ -562,8 +563,8 @@ async def import_csv(
                 )
                 db.add(rec)
                 db.flush()
-                final_path = schedule_a_storage.promote_staged(org_id, str(staged), rec.id)
-                rec.stored_path = final_path
+                final_key = schedule_a_storage.promote_staged(org_id, staged_key, rec.id)
+                rec.stored_path = final_key
                 log_action(
                     db,
                     organization_id=org_id,
