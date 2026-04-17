@@ -39,6 +39,7 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
   const [totalRows, setTotalRows] = useState(0)
   const [isDocImport, setIsDocImport] = useState(false)
   const [documentInfo, setDocumentInfo] = useState(null)
+  const [contractTerms, setContractTerms] = useState(null)
   
   const [selectedCreatorId, setSelectedCreatorId] = useState('')
   const [createNewCreator, setCreateNewCreator] = useState(false)
@@ -130,6 +131,7 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
       if (isDoc && response.data.is_document_import) {
         setIsDocImport(true)
         setDocumentInfo(response.data.document_info || null)
+        setContractTerms(response.data.contract_terms || null)
         if (response.data.document_info?.creator_name) {
           const matchingCreator = creatorList.find(
             c => c.display_name.toLowerCase() === response.data.document_info.creator_name.toLowerCase()
@@ -146,6 +148,7 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
       } else {
         setIsDocImport(false)
         setDocumentInfo(null)
+        setContractTerms(null)
         setStep(2)
       }
     } catch (err) {
@@ -397,6 +400,25 @@ export default function ScheduleAUploadModal({ onClose, onSuccess, organizationI
                     )}
                     {documentInfo.bmi_id && <p><strong>ID#:</strong> {documentInfo.bmi_id}</p>}
                   </div>
+                </div>
+              )}
+
+              {contractTerms && Object.values(contractTerms).some(v => v) && (
+                <div className="mb-4 p-4 bg-[rgba(123,165,148,0.08)] border border-[rgba(123,165,148,0.15)] rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <DocumentTextIcon className="w-5 h-5 text-[#5B8A72]" />
+                    <span className="text-sm font-semibold text-[#3D4A44]">Contract Terms Detected</span>
+                  </div>
+                  <div className="text-sm text-[#5A7A6A] grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+                    {contractTerms.publisher && <p><strong>Publisher:</strong> {contractTerms.publisher}</p>}
+                    {contractTerms.agreement_type && <p><strong>Agreement:</strong> {contractTerms.agreement_type}</p>}
+                    {contractTerms.effective_date && <p><strong>Effective Date:</strong> {contractTerms.effective_date}</p>}
+                    {contractTerms.territory && <p><strong>Territory:</strong> {contractTerms.territory}</p>}
+                    {contractTerms.term && <p><strong>Term:</strong> {contractTerms.term}</p>}
+                  </div>
+                  <p className="mt-2 text-xs text-[#7A8580] italic">
+                    These terms are surfaced for reference. They are not yet linked to a contract record.
+                  </p>
                 </div>
               )}
               

@@ -28,6 +28,11 @@ class DocumentParseResult:
         self.bmi_ipi: Optional[str] = None
         self.bmi_id: Optional[str] = None
         self.pro_name: Optional[str] = None
+        self.publisher: Optional[str] = None
+        self.agreement_type: Optional[str] = None
+        self.effective_date: Optional[str] = None
+        self.territory: Optional[str] = None
+        self.term: Optional[str] = None
         self.schedule_a_songs: List[Dict[str, str]] = []
         self.schedule_b_songs: List[Dict[str, str]] = []
         self.errors: List[str] = []
@@ -81,6 +86,13 @@ class DocumentParseResult:
                 "bmi_ipi": self.bmi_ipi,
                 "bmi_id": self.bmi_id,
                 "pro_name": self.pro_name,
+            },
+            "contract_terms": {
+                "publisher": self.publisher,
+                "agreement_type": self.agreement_type,
+                "effective_date": self.effective_date,
+                "territory": self.territory,
+                "term": self.term,
             },
             "is_document_import": True,
             "warnings": self.warnings,
@@ -374,6 +386,43 @@ def parse_creator_info(text: str) -> Tuple[Optional[str], Optional[str], Optiona
     return creator_name, bmi_ipi, bmi_id, pro_name
 
 
+def parse_contract_terms(text: str) -> Dict[str, Optional[str]]:
+    """Extract deal-level contract terms from a Schedule A header block.
+
+    Looks for Publisher, Agreement (type), Effective Date, Territory, and Term
+    fields written as 'Label: value' on their own lines (case-insensitive).
+    Values stop at the first line break or pipe separator so multi-field
+    header rows like 'Territory: World | Term: 5 years' parse correctly.
+    """
+    terms: Dict[str, Optional[str]] = {
+        "publisher": None,
+        "agreement_type": None,
+        "effective_date": None,
+        "territory": None,
+        "term": None,
+    }
+    if not text:
+        return terms
+
+    def _find(label_pattern: str) -> Optional[str]:
+        m = re.search(
+            rf'(?im)(?:^|\|)\s*(?:{label_pattern})\s*:\s*([^\n|]+?)\s*(?:\||$)',
+            text,
+        )
+        if not m:
+            return None
+        val = m.group(1).strip().rstrip(',;.').strip()
+        return val or None
+
+    terms["publisher"] = _find(r'publisher')
+    terms["agreement_type"] = _find(r'agreement(?:\s+type)?')
+    terms["effective_date"] = _find(r'effective\s+date')
+    terms["territory"] = _find(r'territory')
+    terms["term"] = _find(r'term')
+
+    return terms
+
+
 def is_tabular_header(line: str) -> bool:
     """Detect a columnar Schedule A header row.
 
@@ -577,11 +626,18 @@ def parse_document_text(text: str) -> DocumentParseResult:
     result.bmi_id = bmi_id
     result.pro_name = pro_name
 
+    contract_terms = parse_contract_terms(text)
+    result.publisher = contract_terms["publisher"]
+    result.agreement_type = contract_terms["agreement_type"]
+    result.effective_date = contract_terms["effective_date"]
+    result.territory = contract_terms["territory"]
+    result.term = contract_terms["term"]
+
     metadata_skip_patterns = [
         r'^(writer|publisher)\s*:',
         r'^cae\s*/?\s*ipi',
         r'^pro\s*:',
-        r'^agreement\s*:',
+        r'^agreement(?:\s+type)?\s*:',
         r'^effective\s+date',
         r'^territory\s*:',
         r'^term\s*:',
@@ -673,11 +729,18 @@ def parse_document(content: bytes, filename: str) -> DocumentParseResult:
             tabular = None
         if tabular and tabular.get("rows"):
             result = DocumentParseResult()
-            creator_name, bmi_ipi, bmi_id, pro_name = parse_creator_info(tabular.get("header_text", ""))
+            header_text = tabular.get("header_text", "")
+            creator_name, bmi_ipi, bmi_id, pro_name = parse_creator_info(header_text)
             result.creator_name = creator_name
             result.bmi_ipi = bmi_ipi
             result.bmi_id = bmi_id
             result.pro_name = pro_name
+            contract_terms = parse_contract_terms(header_text)
+            result.publisher = contract_terms["publisher"]
+            result.agreement_type = contract_terms["agreement_type"]
+            result.effective_date = contract_terms["effective_date"]
+            result.territory = contract_terms["territory"]
+            result.term = contract_terms["term"]
             result.schedule_a_songs = tabular["rows"]
             if creator_name:
                 result.warnings.append(f"Detected creator: {creator_name}")
