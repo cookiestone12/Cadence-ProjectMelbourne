@@ -598,49 +598,90 @@ def sync_release_status():
         db.close()
 
 
+def _run_schema_setup_under_lock():
+    """All schema-mutating work (Alembic + idempotent DDL backstop)
+    happens INSIDE the migration lock. If we can't acquire the
+    lock, we skip ALL schema mutations — the leader will finish.
+
+    Order (per Task #73 spec):
+      1. Bootstrap migration_lock table (raw DDL)
+      2. Acquire lock (or skip schema work entirely on contention)
+      3. alembic upgrade heads
+      4. Base.metadata.create_all + ensure_schema_updates (drift backstop)
+      5. Release lock in finally
+    """
+    from backend.utils.migration_runner import upgrade_to_heads
+    from backend.utils.migration_lock import (
+        bootstrap_migration_lock_table,
+        acquire_migration_lock,
+        release_migration_lock,
+    )
+    from backend.utils.migration_runner import get_alembic_revision_info
+
+    bootstrap_migration_lock_table(engine)
+
+    if not acquire_migration_lock(engine, revision_label="pending"):
+        # Another live process owns the lock. Skip ALL schema work
+        # (both Alembic AND the idempotent DDL backstop) so we don't
+        # run ALTER/CREATE in parallel with the leader. Postgres
+        # MVCC means we'll see the leader's schema once it commits.
+        logger.warning(
+            "Skipping ALL schema setup (Alembic + DDL backstop) because another "
+            "process holds the migration lock. Data seeds will still run."
+        )
+        return
+
+    try:
+        # Step A: Alembic owns forward schema changes.
+        try:
+            upgrade_to_heads(engine)
+        except Exception as e:
+            logger.error(
+                f"Alembic upgrade failed; falling through to DDL backstop. Error: {e}"
+            )
+
+        # Step B: Idempotent DDL backstop — anything created here
+        # that wasn't applied by Alembic above represents drift.
+        # Every block in ensure_schema_updates() that fires emits a
+        # WARNING with `[DDL drift]` so we can incrementally pull
+        # the drift into Alembic over time.
+        try:
+            Base.metadata.create_all(bind=engine, checkfirst=True)
+            logger.info("Database tables created/verified")
+        except Exception as e:
+            logger.warning(f"Table creation warning (may be benign): {e}")
+            from sqlalchemy import inspect
+            inspector = inspect(engine)
+            existing = set(inspector.get_table_names())
+            logger.info(f"Existing tables: {len(existing)}")
+            for table in Base.metadata.sorted_tables:
+                if table.name not in existing:
+                    try:
+                        table.create(bind=engine, checkfirst=True)
+                        logger.info(f"Created missing table: {table.name}")
+                    except Exception as te:
+                        logger.warning(f"Failed to create table {table.name}: {te}")
+
+        try:
+            ensure_schema_updates()
+            logger.info("Schema updates completed")
+        except Exception as e:
+            logger.warning(f"Schema update check: {e}")
+    finally:
+        post = get_alembic_revision_info(engine)
+        release_migration_lock(
+            engine, revision_label=",".join(post["current_revisions"])
+        )
+
+
 def main():
     logger.info("Starting database setup...")
 
-    # Step 1: Bootstrap the migration lock table and run Alembic
-    # FIRST. The idempotent DDL backstop below is now drift-only —
-    # Alembic owns forward schema changes; the backstop just patches
-    # any column/table that doesn't yet have an Alembic revision.
-    try:
-        from backend.utils.migration_runner import run_migrations_with_lock
-        run_migrations_with_lock(engine)
-    except Exception as e:
-        # Migration failure is serious. Log loudly but continue so
-        # the backstop can at least try to bring the schema to a
-        # workable state — operators see the warning in /api/internal/migration-status.
-        logger.error(f"Alembic upgrade failed; falling through to DDL backstop. Error: {e}")
+    # All schema-mutating work runs inside the migration lock.
+    _run_schema_setup_under_lock()
 
-    # Step 2: Idempotent DDL backstop. Anything created here that
-    # wasn't applied by Alembic above represents drift — every
-    # backstop block emits a WARNING with the table/column name so
-    # we can incrementally migrate it into Alembic over time.
-    try:
-        Base.metadata.create_all(bind=engine, checkfirst=True)
-        logger.info("Database tables created/verified")
-    except Exception as e:
-        logger.warning(f"Table creation warning (may be benign): {e}")
-        from sqlalchemy import inspect
-        inspector = inspect(engine)
-        existing = set(inspector.get_table_names())
-        logger.info(f"Existing tables: {len(existing)}")
-        for table in Base.metadata.sorted_tables:
-            if table.name not in existing:
-                try:
-                    table.create(bind=engine, checkfirst=True)
-                    logger.info(f"Created missing table: {table.name}")
-                except Exception as te:
-                    logger.warning(f"Failed to create table {table.name}: {te}")
-
-    try:
-        ensure_schema_updates()
-        logger.info("Schema updates completed")
-    except Exception as e:
-        logger.warning(f"Schema update check: {e}")
-
+    # Data seeds and backfills are safe to run on every boot; they
+    # are idempotent and don't touch DDL.
     seed_super_admin()
     seed_checklist_items()
     sync_stale_health_scores()

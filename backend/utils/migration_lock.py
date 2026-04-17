@@ -66,10 +66,14 @@ def acquire_migration_lock(engine: Engine, revision_label: str = "pending") -> b
     now = datetime.now(timezone.utc)
     stale_cutoff = now - STALE_LOCK_AFTER
 
-    # Update only if (a) the lock is idle, OR (b) the existing lock
-    # is older than our stale threshold. This is a single statement
-    # so the row lock taken by UPDATE serializes concurrent racers.
+    # Capture prior state so we can emit a clear stale-clear log
+    # AFTER the takeover, then attempt the conditional UPDATE in a
+    # single statement so the row lock serializes concurrent racers.
     with engine.begin() as conn:
+        prior = conn.execute(text(
+            "SELECT status, started_at, host FROM migration_lock WHERE id = 1 FOR UPDATE"
+        )).fetchone()
+
         result = conn.execute(
             text("""
                 UPDATE migration_lock
@@ -83,16 +87,21 @@ def acquire_migration_lock(engine: Engine, revision_label: str = "pending") -> b
                     OR started_at IS NULL
                     OR started_at < :stale_cutoff
                   )
-                RETURNING (
-                    SELECT host FROM migration_lock WHERE id = 1
-                ) AS prior_host,
-                (
-                    SELECT started_at FROM migration_lock WHERE id = 1
-                ) AS prior_started_at
+                RETURNING id
             """),
             {"now": now, "host": host, "rev": revision_label, "stale_cutoff": stale_cutoff},
         )
         row = result.fetchone()
+
+    if row is not None and prior is not None and prior.status == "running":
+        # We just stole a stale lock from a previous owner — emit a
+        # loud, explicit log line so operators see this in incident
+        # postmortems.
+        logger.warning(
+            f"Stale migration lock auto-cleared: previous owner host={prior.host} "
+            f"started_at={prior.started_at} (older than {STALE_LOCK_AFTER}). "
+            f"Taking ownership as host={host}."
+        )
 
     if row is None:
         # Lock held by a live process. Show who has it for ops debugging.

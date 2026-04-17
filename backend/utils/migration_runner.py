@@ -79,16 +79,8 @@ def get_alembic_revision_info(engine: Engine) -> dict:
     }
 
 
-def run_migrations_with_lock(engine: Engine) -> None:
-    """Bootstrap lock table, acquire lock, run `alembic upgrade heads`,
-    release lock. Always releases in a finally block.
-
-    If another process already holds the lock (and it is not stale),
-    we LOG and return without raising — the other process is doing
-    the work; we do not want to block the entire boot.
-    """
-    bootstrap_migration_lock_table(engine)
-
+def upgrade_to_heads(engine: Engine) -> None:
+    """Run `alembic upgrade heads` (caller MUST already hold the lock)."""
     info = get_alembic_revision_info(engine)
     if info["is_up_to_date"]:
         logger.info(
@@ -96,25 +88,10 @@ def run_migrations_with_lock(engine: Engine) -> None:
             f"skipping upgrade."
         )
         return
-
-    label = ",".join(info["head_revisions"]) or "pending"
-    if not acquire_migration_lock(engine, revision_label=label):
-        # Another live process is migrating. Don't error out; just
-        # boot read-only-ish — the leader will finish, and the next
-        # request will see the new schema via Postgres MVCC.
-        logger.warning(
-            "Skipping Alembic upgrade because another process holds the migration lock."
-        )
-        return
-
-    try:
-        logger.info(
-            f"Running alembic upgrade heads (current={info['current_revisions']}, "
-            f"target={info['head_revisions']}, pending={len(info['pending_revisions'])})"
-        )
-        cfg = _alembic_cfg()
-        alembic_command.upgrade(cfg, "heads")
-        logger.info("Alembic upgrade heads complete.")
-    finally:
-        post = get_alembic_revision_info(engine)
-        release_migration_lock(engine, revision_label=",".join(post["current_revisions"]))
+    logger.info(
+        f"Running alembic upgrade heads (current={info['current_revisions']}, "
+        f"target={info['head_revisions']}, pending={len(info['pending_revisions'])})"
+    )
+    cfg = _alembic_cfg()
+    alembic_command.upgrade(cfg, "heads")
+    logger.info("Alembic upgrade heads complete.")
