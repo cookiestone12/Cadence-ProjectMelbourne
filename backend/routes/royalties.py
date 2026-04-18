@@ -876,12 +876,38 @@ async def upload_statement(
     currency: str = Form("USD"),
     column_mapping: Optional[str] = Form(None),
     creator_id: Optional[int] = Form(None),
+    force: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
     source_name = normalize_source_name(source_name)
     content = await file.read()
+
+    # Duplicate detection: same org + same file_name + same byte size = same upload.
+    # Pass `force=true` to override (e.g. legitimate re-upload of an updated file
+    # that happens to share a name). Returns 409 with the existing statement id.
+    if file.filename and not force:
+        existing_dup = db.query(RoyaltyStatement).filter(
+            RoyaltyStatement.organization_id == org_id,
+            RoyaltyStatement.file_name == file.filename,
+        ).first()
+        if existing_dup is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "duplicate_statement",
+                    "message": (
+                        f"A statement with file name '{file.filename}' was already "
+                        f"uploaded (id={existing_dup.id}, status={existing_dup.status}). "
+                        f"Re-submit with force=true to override."
+                    ),
+                    "existing_statement_id": existing_dup.id,
+                    "existing_status": existing_dup.status,
+                    "existing_uploaded_at": existing_dup.created_at.isoformat() if existing_dup.created_at else None,
+                },
+            )
+
     headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)
 
     detected_pro = detect_pro_source(headers, source_name or "", file.filename or "")
@@ -931,6 +957,22 @@ async def upload_statement(
             p_end = date.fromisoformat(period_end)
         except ValueError:
             pass
+
+    # Auto-extract period from PDF header if the caller didn't supply one.
+    # Recognizes "Performance Period: Jul - Dec 2023" / "Statement Period: ..."
+    # patterns common to BMI, ASCAP, and most publisher statements.
+    if (p_start is None or p_end is None) and (file.filename or "").lower().endswith(".pdf"):
+        try:
+            from ..utils.pdf_statement_parser import parse_period_from_pdf
+            auto_start, auto_end = parse_period_from_pdf(content)
+            if p_start is None and auto_start is not None:
+                p_start = auto_start
+            if p_end is None and auto_end is not None:
+                p_end = auto_end
+            if auto_start or auto_end:
+                logger.info(f"upload_statement: auto-parsed period {auto_start} - {auto_end} from PDF header")
+        except Exception as e:
+            logger.warning(f"upload_statement: period auto-parse failed: {e}")
 
     statement = RoyaltyStatement(
         organization_id=org_id,

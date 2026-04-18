@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, or_
+from sqlalchemy import func, desc, or_, case
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import date, datetime
 from difflib import SequenceMatcher
+from collections import defaultdict
 import csv
 import io
 import json
@@ -712,6 +713,164 @@ def list_processing_runs(
             }
             for r in runs
         ]
+    }
+
+
+@router.get(
+    "/{org_id}/reconciliation",
+    summary="Org-wide royalty reconciliation report",
+    description=(
+        "Returns a per-statement reconciliation showing the variance between "
+        "the statement header total, the sum of its line items, the ledger "
+        "entries written by /process, and (if known) the PDF-stated grand "
+        "total. Flags duplicates, $0-with-N-lines parser failures, missing "
+        "periods, and statements marked PROCESSED that have no ledger.\n\n"
+        "**Path parameter:** `org_id`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the org.\n\n"
+        "**Response:** `{ totals: {...}, statements: [{id, file_name, header_total_cents, sum_of_lines_cents, ledger_total_cents, variance_cents, flags: [...]}], duplicate_groups: [...] }`."
+    ),
+)
+def get_reconciliation_report(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+
+    statements = db.query(RoyaltyStatement).filter(
+        RoyaltyStatement.organization_id == org_id,
+    ).order_by(desc(RoyaltyStatement.id)).all()
+
+    # Aggregate sum of lines + count of zero/non-zero lines per statement
+    line_sums = dict(
+        db.query(
+            RoyaltyStatementLine.statement_id,
+            func.coalesce(func.sum(RoyaltyStatementLine.net_amount), 0),
+        )
+        .filter(RoyaltyStatementLine.org_id == org_id)
+        .group_by(RoyaltyStatementLine.statement_id)
+        .all()
+    )
+    line_counts = {}
+    for sid, n_total, n_zero in db.query(
+        RoyaltyStatementLine.statement_id,
+        func.count(RoyaltyStatementLine.id),
+        func.sum(case((func.coalesce(RoyaltyStatementLine.net_amount, 0) == 0, 1), else_=0)),
+    ).filter(RoyaltyStatementLine.org_id == org_id).group_by(RoyaltyStatementLine.statement_id).all():
+        line_counts[sid] = (int(n_total or 0), int(n_zero or 0))
+
+    ledger_sums = dict(
+        db.query(
+            RoyaltyLedgerEntry.statement_id,
+            func.coalesce(func.sum(RoyaltyLedgerEntry.amount_cents), 0),
+        )
+        .filter(
+            RoyaltyLedgerEntry.org_id == org_id,
+            RoyaltyLedgerEntry.entry_type == "EARNING",
+        )
+        .group_by(RoyaltyLedgerEntry.statement_id)
+        .all()
+    )
+
+    # Duplicate detection by file_name within the org
+    dup_buckets = defaultdict(list)
+    for s in statements:
+        if s.file_name:
+            dup_buckets[s.file_name].append(s.id)
+    duplicate_ids = {
+        sid for ids in dup_buckets.values() if len(ids) > 1 for sid in ids
+    }
+    duplicate_groups = [
+        {"file_name": fn, "statement_ids": sorted(ids)}
+        for fn, ids in dup_buckets.items() if len(ids) > 1
+    ]
+
+    rows = []
+    grand_header = 0
+    grand_lines_cents = 0
+    grand_ledger = 0
+    grand_assigned = 0
+    grand_unassigned = 0
+    flagged = 0
+    for s in statements:
+        header_cents = int(s.total_revenue_cents or 0)
+        line_total_dollars = float(line_sums.get(s.id, 0) or 0)
+        line_cents = int(round(line_total_dollars * 100))
+        ledger_cents = int(ledger_sums.get(s.id, 0) or 0)
+        n_total, n_zero = line_counts.get(s.id, (0, 0))
+
+        flags = []
+        if s.id in duplicate_ids:
+            flags.append("DUPLICATE_FILE")
+        if header_cents == 0 and n_total > 0:
+            flags.append("ZERO_AMOUNT_HEADER")
+        if n_total > 0 and n_zero == n_total:
+            flags.append("ALL_LINES_ZERO_AMOUNT")
+        elif n_total > 0 and n_zero > 0:
+            flags.append("SOME_LINES_ZERO_AMOUNT")
+        if abs(header_cents - line_cents) > 1 and n_total > 0:
+            flags.append("HEADER_VS_LINES_VARIANCE")
+        if (s.status or "").upper() == "PROCESSED" and ledger_cents == 0 and header_cents > 0:
+            flags.append("PROCESSED_WITHOUT_LEDGER")
+        if header_cents > 0 and ledger_cents > 0 and abs(header_cents - ledger_cents) > 1:
+            flags.append("HEADER_VS_LEDGER_VARIANCE")
+        if not s.period_start or not s.period_end:
+            flags.append("PERIOD_MISSING")
+        if s.creator_id is None:
+            flags.append("UNASSIGNED")
+
+        if flags:
+            flagged += 1
+
+        # Don't double-count duplicates in grand totals: keep the lowest id only
+        is_dup_secondary = (
+            s.id in duplicate_ids and s.file_name
+            and s.id != min(dup_buckets[s.file_name])
+        )
+
+        if not is_dup_secondary:
+            grand_header += header_cents
+            grand_lines_cents += line_cents
+            grand_ledger += ledger_cents
+            if s.creator_id is not None:
+                grand_assigned += header_cents
+            else:
+                grand_unassigned += header_cents
+
+        rows.append({
+            "id": s.id,
+            "file_name": s.file_name,
+            "source_name": s.source_name,
+            "source_type": s.source_type,
+            "status": s.status,
+            "creator_id": s.creator_id,
+            "uploaded_at": s.created_at.isoformat() if s.created_at else None,
+            "period_start": s.period_start.isoformat() if s.period_start else None,
+            "period_end": s.period_end.isoformat() if s.period_end else None,
+            "header_total_cents": header_cents,
+            "sum_of_lines_cents": line_cents,
+            "ledger_total_cents": ledger_cents,
+            "variance_cents": header_cents - line_cents,
+            "line_count": n_total,
+            "zero_amount_line_count": n_zero,
+            "flags": flags,
+            "is_duplicate_secondary": is_dup_secondary,
+        })
+
+    return {
+        "totals": {
+            "statement_count": len(statements),
+            "flagged_count": flagged,
+            "duplicate_group_count": len(duplicate_groups),
+            # Net of duplicate-secondaries — the figure that should match Reports.
+            "header_total_cents_net_of_dupes": grand_header,
+            "sum_of_lines_cents_net_of_dupes": grand_lines_cents,
+            "ledger_total_cents_net_of_dupes": grand_ledger,
+            "assigned_total_cents_net_of_dupes": grand_assigned,
+            "unassigned_total_cents_net_of_dupes": grand_unassigned,
+        },
+        "statements": rows,
+        "duplicate_groups": duplicate_groups,
     }
 
 
@@ -1436,6 +1595,7 @@ async def upload_and_parse_statement(
     column_mapping: Optional[str] = Form(None),
     creator_id: Optional[int] = Form(None),
     auto_match: Optional[str] = Query("true"),
+    force: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1443,6 +1603,30 @@ async def upload_and_parse_statement(
     from .royalties import normalize_source_name
     source_name = normalize_source_name(source_name)
     content = await file.read()
+
+    # Duplicate detection (mirrors /api/royalties/statements/{org_id}/upload):
+    # same org + same file_name = same upload. 409 unless caller passes force=true.
+    if file.filename and not force:
+        existing_dup = db.query(RoyaltyStatement).filter(
+            RoyaltyStatement.organization_id == org_id,
+            RoyaltyStatement.file_name == file.filename,
+        ).first()
+        if existing_dup is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "duplicate_statement",
+                    "message": (
+                        f"A statement with file name '{file.filename}' was already "
+                        f"uploaded (id={existing_dup.id}, status={existing_dup.status}). "
+                        f"Re-submit with force=true to override."
+                    ),
+                    "existing_statement_id": existing_dup.id,
+                    "existing_status": existing_dup.status,
+                    "existing_uploaded_at": existing_dup.created_at.isoformat() if existing_dup.created_at else None,
+                },
+            )
+
     try:
         headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)
     except HTTPException:
@@ -1478,6 +1662,20 @@ async def upload_and_parse_statement(
             p_end = date.fromisoformat(period_end)
         except ValueError:
             pass
+
+    # Auto-extract period from PDF header when not supplied (BMI/ASCAP/publisher).
+    if (p_start is None or p_end is None) and (file.filename or "").lower().endswith(".pdf"):
+        try:
+            from ..utils.pdf_statement_parser import parse_period_from_pdf
+            auto_start, auto_end = parse_period_from_pdf(content)
+            if p_start is None and auto_start is not None:
+                p_start = auto_start
+            if p_end is None and auto_end is not None:
+                p_end = auto_end
+            if auto_start or auto_end:
+                logger.info(f"upload_and_parse_statement: auto-parsed period {auto_start} - {auto_end} from PDF header")
+        except Exception as e:
+            logger.warning(f"upload_and_parse_statement: period auto-parse failed: {e}")
 
     statement = RoyaltyStatement(
         organization_id=org_id,

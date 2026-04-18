@@ -1,7 +1,8 @@
 import re
 import io
 import logging
-from typing import Optional
+from datetime import date
+from typing import Optional, Tuple
 
 logger = logging.getLogger("cadence")
 
@@ -100,6 +101,83 @@ def _split_income_type(text: str) -> tuple:
 
 def _parse_amount(s: str) -> float:
     return float(s.replace(",", ""))
+
+
+_MONTH_TO_NUM = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12,
+    "january": 1, "february": 2, "march": 3, "april": 4, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+}
+
+# Patterns we recognize at the top of PRO/publisher statements:
+#   "Performance Period: Jul - Dec 2023"
+#   "Statement Period: July 1, 2023 - December 31, 2023"
+#   "For the Period: Jul - Dec 2023"
+#   "Period Ending: 12/31/2023"
+_PERIOD_HEADER_RE = re.compile(
+    r"(?i)(?:performance\s+period|statement\s+period|for\s+the\s+period|reporting\s+period|royalty\s+period|period)\s*[:\-]?\s*(.+?)$",
+    re.MULTILINE,
+)
+_MONTH_RANGE_RE = re.compile(
+    r"(?i)\b([a-z]{3,9})\.?\s*(\d{0,2})\s*[,\-/]?\s*(\d{4})?\s*[\-\u2013to]+\s*([a-z]{3,9})\.?\s*(\d{0,2})\s*[,\-/]?\s*(\d{4})"
+)
+
+
+def _last_day_of_month(year: int, month: int) -> int:
+    if month == 12:
+        return 31
+    from calendar import monthrange
+    return monthrange(year, month)[1]
+
+
+def parse_period_from_text(text: str) -> Tuple[Optional[date], Optional[date]]:
+    """Best-effort period extraction from the first page or two of a statement.
+
+    Returns (period_start, period_end) — either may be None if not parseable.
+    Recognizes patterns like "Performance Period: Jul - Dec 2023",
+    "Statement Period: July 1, 2023 - December 31, 2023".
+    """
+    if not text:
+        return None, None
+    for m in _PERIOD_HEADER_RE.finditer(text[:4000]):
+        candidate = m.group(1).strip()
+        rng = _MONTH_RANGE_RE.search(candidate)
+        if not rng:
+            continue
+        start_mon = _MONTH_TO_NUM.get(rng.group(1).lower().rstrip("."))
+        end_mon = _MONTH_TO_NUM.get(rng.group(4).lower().rstrip("."))
+        if not start_mon or not end_mon:
+            continue
+        end_year_str = rng.group(6)
+        start_year_str = rng.group(3) or end_year_str
+        try:
+            start_year = int(start_year_str)
+            end_year = int(end_year_str)
+        except (TypeError, ValueError):
+            continue
+        start_day = int(rng.group(2)) if rng.group(2) else 1
+        end_day = int(rng.group(5)) if rng.group(5) else _last_day_of_month(end_year, end_mon)
+        try:
+            return date(start_year, start_mon, start_day), date(end_year, end_mon, end_day)
+        except ValueError:
+            continue
+    return None, None
+
+
+def parse_period_from_pdf(content: bytes) -> Tuple[Optional[date], Optional[date]]:
+    try:
+        import pdfplumber
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            text = ""
+            for page in pdf.pages[:2]:
+                t = page.extract_text()
+                if t:
+                    text += t + "\n"
+        return parse_period_from_text(text)
+    except Exception as e:
+        logger.warning(f"parse_period_from_pdf failed: {e}")
+        return None, None
 
 
 def is_publishing_statement(content: bytes) -> bool:

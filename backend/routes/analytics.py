@@ -9,6 +9,7 @@ from ..models import (
     Work, WorkTrack, Release, ReleaseTrack,
     Contract, ContractAsset, RightsSplit,
     RoyaltyStatement, RoyaltyTransaction, RoyaltyAllocation,
+    RoyaltyStatementLine, RoyaltyLedgerEntry,
     Placement, ActionItem, Payment,
     ValuationCalculation, SongValuationSnapshot, Organization
 )
@@ -45,8 +46,12 @@ def get_overview_analytics(org_id: int, db: Session = Depends(get_db), current_u
     avg_health = db.query(func.avg(Song.status_health_score)).filter(Song.organization_id == org_id).scalar() or 0
     released_count = db.query(func.count(Song.id)).filter(Song.organization_id == org_id, Song.is_released == True).scalar() or 0
 
-    total_revenue_cents = db.query(func.sum(RoyaltyTransaction.revenue_cents)).filter(
-        RoyaltyTransaction.organization_id == org_id
+    # Single source of truth: sum royalty_statements.total_revenue_cents
+    # (same value the Royalties page shows). The legacy royalty_transactions
+    # table only carries data for some statements and was producing a stale,
+    # smaller number on the Reports tab. See .local/session_plan.md.
+    total_revenue_cents = db.query(func.sum(RoyaltyStatement.total_revenue_cents)).filter(
+        RoyaltyStatement.organization_id == org_id
     ).scalar() or 0
 
     total_placement_value = db.query(func.sum(Placement.license_fee)).filter(
@@ -214,12 +219,14 @@ def get_health_distribution(org_id: int, db: Session = Depends(get_db), current_
 def get_revenue_analytics(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(db, current_user.id, org_id)
 
+    # Use coalesce(period_start, created_at) so statements without parsed
+    # periods still bucket somewhere instead of disappearing from the chart.
+    bucket = func.date_trunc('month', func.coalesce(RoyaltyStatement.period_start, RoyaltyStatement.created_at))
     revenue_by_month = db.query(
-        func.date_trunc('month', RoyaltyStatement.period_start).label('month'),
+        bucket.label('month'),
         func.sum(RoyaltyStatement.total_revenue_cents).label('revenue')
     ).filter(
         RoyaltyStatement.organization_id == org_id,
-        RoyaltyStatement.period_start.isnot(None)
     ).group_by('month').order_by('month').all()
 
     monthly_revenue = []
@@ -229,55 +236,64 @@ def get_revenue_analytics(org_id: int, db: Session = Depends(get_db), current_us
             "revenue": int(row.revenue or 0),
         })
 
+    # Top tracks: query the authoritative line table joined to songs.
+    # net_amount is in dollars (Float); convert to cents at the edge to keep
+    # the API contract (revenue=cents) stable for the frontend.
     top_tracks = db.query(
         Song.title,
         Song.primary_artist,
-        func.sum(RoyaltyTransaction.revenue_cents).label('total_revenue')
+        func.coalesce(func.sum(RoyaltyStatementLine.net_amount), 0).label('total_revenue_dollars')
     ).join(
-        RoyaltyTransaction, RoyaltyTransaction.song_id == Song.id
+        RoyaltyStatementLine, RoyaltyStatementLine.matched_song_id == Song.id
     ).filter(
-        Song.organization_id == org_id
+        Song.organization_id == org_id,
+        RoyaltyStatementLine.org_id == org_id,
     ).group_by(Song.id, Song.title, Song.primary_artist).order_by(
-        func.sum(RoyaltyTransaction.revenue_cents).desc()
+        func.coalesce(func.sum(RoyaltyStatementLine.net_amount), 0).desc()
     ).limit(10).all()
 
     top_tracks_data = [
-        {"title": t.title, "artist": t.primary_artist, "revenue": int(t.total_revenue or 0)}
+        {"title": t.title, "artist": t.primary_artist,
+         "revenue": int(round(float(t.total_revenue_dollars or 0) * 100))}
         for t in top_tracks
     ]
 
     revenue_by_platform = db.query(
-        RoyaltyTransaction.platform,
-        func.sum(RoyaltyTransaction.revenue_cents).label('revenue')
+        RoyaltyStatementLine.store,
+        func.coalesce(func.sum(RoyaltyStatementLine.net_amount), 0).label('revenue_dollars')
     ).filter(
-        RoyaltyTransaction.organization_id == org_id,
-        RoyaltyTransaction.platform.isnot(None)
-    ).group_by(RoyaltyTransaction.platform).order_by(
-        func.sum(RoyaltyTransaction.revenue_cents).desc()
+        RoyaltyStatementLine.org_id == org_id,
+        RoyaltyStatementLine.store.isnot(None),
+        RoyaltyStatementLine.store != "",
+    ).group_by(RoyaltyStatementLine.store).order_by(
+        func.coalesce(func.sum(RoyaltyStatementLine.net_amount), 0).desc()
     ).limit(10).all()
 
     platform_data = [
-        {"platform": r.platform or "Unknown", "revenue": int(r.revenue or 0)}
+        {"platform": r.store or "Unknown",
+         "revenue": int(round(float(r.revenue_dollars or 0) * 100))}
         for r in revenue_by_platform
     ]
 
     revenue_by_territory = db.query(
-        RoyaltyTransaction.territory,
-        func.sum(RoyaltyTransaction.revenue_cents).label('revenue')
+        RoyaltyStatementLine.territory,
+        func.coalesce(func.sum(RoyaltyStatementLine.net_amount), 0).label('revenue_dollars')
     ).filter(
-        RoyaltyTransaction.organization_id == org_id,
-        RoyaltyTransaction.territory.isnot(None)
-    ).group_by(RoyaltyTransaction.territory).order_by(
-        func.sum(RoyaltyTransaction.revenue_cents).desc()
+        RoyaltyStatementLine.org_id == org_id,
+        RoyaltyStatementLine.territory.isnot(None),
+        RoyaltyStatementLine.territory != "",
+    ).group_by(RoyaltyStatementLine.territory).order_by(
+        func.coalesce(func.sum(RoyaltyStatementLine.net_amount), 0).desc()
     ).limit(10).all()
 
     territory_data = [
-        {"territory": r.territory or "Unknown", "revenue": int(r.revenue or 0)}
+        {"territory": r.territory or "Unknown",
+         "revenue": int(round(float(r.revenue_dollars or 0) * 100))}
         for r in revenue_by_territory
     ]
 
-    total_revenue = db.query(func.sum(RoyaltyTransaction.revenue_cents)).filter(
-        RoyaltyTransaction.organization_id == org_id
+    total_revenue = db.query(func.sum(RoyaltyStatement.total_revenue_cents)).filter(
+        RoyaltyStatement.organization_id == org_id
     ).scalar() or 0
 
     total_paid = db.query(func.sum(Payment.amount_cents)).filter(
@@ -328,10 +344,25 @@ def get_creator_analytics(org_id: int, db: Session = Depends(get_db), current_us
             Song.id.in_(song_ids)
         ).scalar() or 0
 
-        revenue = db.query(func.sum(RoyaltyTransaction.revenue_cents)).filter(
-            RoyaltyTransaction.song_id.in_(song_ids),
-            RoyaltyTransaction.organization_id == org_id
+        # Per-creator revenue: prefer the explicit royalty_statements.creator_id
+        # rollup (matches Royalties page). Fall back to summing matched lines
+        # via SongCredit so unassigned-but-credited creators still show up.
+        revenue_cents_from_statements = db.query(
+            func.coalesce(func.sum(RoyaltyStatement.total_revenue_cents), 0)
+        ).filter(
+            RoyaltyStatement.organization_id == org_id,
+            RoyaltyStatement.creator_id == c.id,
         ).scalar() or 0
+        revenue_dollars_from_lines = db.query(
+            func.coalesce(func.sum(RoyaltyStatementLine.net_amount), 0)
+        ).filter(
+            RoyaltyStatementLine.org_id == org_id,
+            RoyaltyStatementLine.matched_song_id.in_(song_ids),
+        ).scalar() or 0
+        revenue = max(
+            int(revenue_cents_from_statements),
+            int(round(float(revenue_dollars_from_lines) * 100)),
+        )
 
         creator_stats.append({
             "id": c.id,

@@ -10,7 +10,7 @@ import {
   ChartBarIcon, CurrencyDollarIcon, UsersIcon, HeartIcon,
   FilmIcon, ShieldCheckIcon, MusicalNoteIcon, DocumentTextIcon,
   RectangleStackIcon, ExclamationTriangleIcon, ArrowTrendingUpIcon,
-  CheckCircleIcon, ArrowDownTrayIcon
+  CheckCircleIcon, ArrowDownTrayIcon, ArrowRightIcon
 } from '@heroicons/react/24/outline'
 
 const TABS = [
@@ -71,6 +71,7 @@ export default function ReportsPage() {
   const [valuationData, setValuationData] = useState(null)
   const [expiringContracts, setExpiringContracts] = useState(null)
   const [dateRange, setDateRange] = useState('all')
+  const [reconciliation, setReconciliation] = useState(null)
 
   useEffect(() => {
     async function init() {
@@ -91,6 +92,14 @@ export default function ReportsPage() {
     if (!orgId) return
     loadTabData(activeTab)
   }, [orgId, activeTab, dateRange])
+
+  useEffect(() => {
+    if (!orgId) return
+    axios
+      .get(`/api/royalty-processing/${orgId}/reconciliation`)
+      .then(res => setReconciliation(res.data))
+      .catch(e => console.error('Failed to load reconciliation:', e))
+  }, [orgId])
 
   function handleExport(reportType) {
     window.open(`/api/analytics/org/${orgId}/export/${reportType}`, '_blank')
@@ -179,6 +188,30 @@ export default function ReportsPage() {
             Export
           </button>
         </div>
+
+        {reconciliation && reconciliation.totals && reconciliation.totals.flagged_count > 0 && (
+          <div className="mb-4 rounded-[14px] border border-[#E0B062] bg-[#FFF8E8] p-4 flex items-start gap-3 shadow-[0px_2px_8px_rgba(0,0,0,0.06)]">
+            <ExclamationTriangleIcon className="w-5 h-5 text-[#B07A1F] flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-[14px] font-semibold text-[#7A5410]">
+                {reconciliation.totals.flagged_count} royalty {reconciliation.totals.flagged_count === 1 ? 'statement needs' : 'statements need'} attention
+              </p>
+              <p className="text-[13px] text-[#8A6520] mt-0.5">
+                {reconciliation.totals.duplicate_group_count > 0 && (
+                  <span>{reconciliation.totals.duplicate_group_count} duplicate {reconciliation.totals.duplicate_group_count === 1 ? 'file' : 'files'} detected. </span>
+                )}
+                Reports totals may differ from Royalties until these are resolved.
+              </p>
+            </div>
+            <Link
+              to="/royalties"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-[10px] text-[13px] font-medium text-[#7A5410] hover:bg-[#FFF1D0] border border-[#E0B062] transition-all whitespace-nowrap"
+            >
+              Review in Royalties
+              <ArrowRightIcon className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
 
         <div className="flex gap-1 mb-3 bg-white rounded-[14px] p-1.5 shadow-[0px_2px_8px_rgba(0,0,0,0.06)] overflow-x-auto">
           {TABS.map(tab => (
