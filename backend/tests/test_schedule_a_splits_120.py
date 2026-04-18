@@ -28,6 +28,7 @@ from backend.models.models import (
     RightsSplit,
 )
 from backend.services.schedule_a_ingestion import ingest_schedule_a
+from backend.models.models import Creator, OrganizationMember
 
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -179,3 +180,64 @@ def test_reupload_updates_splits_idempotently(db):
     ).all()
     by_type = {s.rights_type: s.share_percentage for s in splits}
     assert by_type == {"PUBLISHING": 60.0, "MASTER": 30.0}
+
+
+def test_client_portal_catalog_returns_pub_master(db):
+    """API regression: /api/client-portal/catalog must surface
+    publishing_percentage, master_percentage, and per-credit pub_share /
+    master_share for songs ingested via Schedule A.
+    """
+    from fastapi.testclient import TestClient
+    from backend.main import app
+    from backend.models.database import get_db
+    from backend.utils.auth import get_current_user
+
+    org, _owner = _seed_org(db)
+
+    creator = Creator(
+        organization_id=org.id,
+        display_name="Jane Doe",
+        legal_name="Jane Doe",
+    )
+    db.add(creator)
+    db.flush()
+
+    client_user = User(email="jane@acme.test", username="jane", hashed_password="x")
+    db.add(client_user)
+    db.flush()
+    db.add(OrganizationMember(
+        user_id=client_user.id,
+        organization_id=org.id,
+        role="CLIENT",
+        linked_creator_id=creator.id,
+    ))
+    db.commit()
+
+    rows = [["Song Title", "Artist", "Publishing %", "Master %"], ["Portal Track", "Jane", 75, 50]]
+    ingest_schedule_a(
+        db=db, organization=org, file_content=_make_xlsx(rows),
+        filename="JANE DOE - Placement Sheet.xlsx", user_id=client_user.id,
+    )
+
+    song = db.query(Song).filter(Song.title == "Portal Track").one()
+    credit = db.query(SongCredit).filter(SongCredit.song_id == song.id).one()
+    credit.creator_id = creator.id
+    db.commit()
+
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_current_user] = lambda: client_user
+    try:
+        with TestClient(app) as tc:
+            resp = tc.get("/api/client-portal/catalog")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        portal_song = next(s for s in data["songs"] if s["title"] == "Portal Track")
+        assert portal_song["publishing_percentage"] == 75.0
+        assert portal_song["master_percentage"] == 50.0
+        assert portal_song["credits"], portal_song
+        c = portal_song["credits"][0]
+        assert c["pub_share"] == 75.0
+        assert c["master_share"] == 50.0
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)

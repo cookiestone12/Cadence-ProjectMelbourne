@@ -70,9 +70,38 @@ def _song_has_split_sheet_splits(db, song_id: int) -> bool:
     )
 
 
+def _song_has_any_other_contract(db, song_id: int) -> bool:
+    """True if the song already participates in ANY non-SPLIT_SHEET contract.
+
+    We refuse to touch such songs because their splits should be authored
+    through that other contract (publishing deal, admin deal, etc.), not
+    inferred from the bare song-level percentages.
+    """
+    return (
+        db.query(ContractAsset.id)
+        .join(Contract, Contract.id == ContractAsset.contract_id)
+        .filter(
+            ContractAsset.asset_type == "SONG",
+            ContractAsset.asset_id == song_id,
+            Contract.contract_type != "SPLIT_SHEET",
+        )
+        .first()
+        is not None
+    )
+
+
 def backfill(dry_run: bool = False, only_org_id: int = None) -> dict:
     db = SessionLocal()
-    stats = {"orgs_scanned": 0, "songs_scanned": 0, "songs_backfilled": 0, "credits_synced": 0, "skipped_no_user": 0}
+    stats = {
+        "orgs_scanned": 0,
+        "songs_scanned": 0,
+        "songs_backfilled": 0,
+        "credits_synced": 0,
+        "skipped_no_user": 0,
+        "skipped_other_contract": 0,
+        "skipped_multi_credit": 0,
+        "skipped_no_credit": 0,
+    }
     try:
         org_q = db.query(Organization)
         if only_org_id:
@@ -100,6 +129,9 @@ def backfill(dry_run: bool = False, only_org_id: int = None) -> dict:
                 stats["songs_scanned"] += 1
                 if _song_has_split_sheet_splits(db, song.id):
                     continue
+                if _song_has_any_other_contract(db, song.id):
+                    stats["skipped_other_contract"] += 1
+                    continue
 
                 credits = (
                     db.query(SongCredit)
@@ -107,33 +139,35 @@ def backfill(dry_run: bool = False, only_org_id: int = None) -> dict:
                     .all()
                 )
                 if not credits:
+                    stats["skipped_no_credit"] += 1
                     continue
 
-                pub_pct = song.publishing_percentage
-                master_pct = song.master_percentage
+                # Multi-credit songs are unsafe to backfill from song-level
+                # percentages — applying the same Pub/Master % to every
+                # credit would over-allocate. These need manual review.
+                distinct_creators = {c.creator_id for c in credits}
+                if len(distinct_creators) > 1:
+                    stats["skipped_multi_credit"] += 1
+                    continue
 
-                touched = False
-                for credit in credits:
-                    pub_share = credit.pub_share if credit.pub_share is not None else pub_pct
-                    master_share = credit.master_share if credit.master_share is not None else master_pct
-                    if pub_share is None and master_share is None:
-                        continue
-                    if dry_run:
-                        touched = True
-                        stats["credits_synced"] += 1
-                        continue
-                    sync_credit_to_splits(
-                        db, song, credit.creator_id, pub_share, master_share, credit.role or "Producer", user_id
-                    )
-                    if credit.pub_share is None and pub_share is not None:
-                        credit.pub_share = pub_share
-                    if credit.master_share is None and master_share is not None:
-                        credit.master_share = master_share
-                    touched = True
+                credit = credits[0]
+                pub_share = credit.pub_share if credit.pub_share is not None else song.publishing_percentage
+                master_share = credit.master_share if credit.master_share is not None else song.master_percentage
+                if pub_share is None and master_share is None:
+                    continue
+                if dry_run:
                     stats["credits_synced"] += 1
-
-                if touched:
                     stats["songs_backfilled"] += 1
+                    continue
+                sync_credit_to_splits(
+                    db, song, credit.creator_id, pub_share, master_share, credit.role or "Producer", user_id
+                )
+                if credit.pub_share is None and pub_share is not None:
+                    credit.pub_share = pub_share
+                if credit.master_share is None and master_share is not None:
+                    credit.master_share = master_share
+                stats["credits_synced"] += 1
+                stats["songs_backfilled"] += 1
 
             if not dry_run:
                 db.commit()
