@@ -279,25 +279,25 @@ def estimate_all_songs(org_id: int, db: Session) -> Dict[str, Any]:
     return results
 
 
-def get_song_stream_summary(song_id: int, org_id: int, db: Session) -> Dict[str, Any]:
-    from ..models.models import StreamEstimate
+def _empty_summary() -> Dict[str, Any]:
+    return {"total_streams": 0, "platforms": {}, "confidence": 0}
 
-    estimates = db.query(StreamEstimate).filter(
-        StreamEstimate.song_id == song_id,
-        StreamEstimate.organization_id == org_id,
-    ).order_by(StreamEstimate.period_date.desc()).all()
 
-    if not estimates:
-        return {"total_streams": 0, "platforms": {}, "confidence": 0}
+def _build_summary_from_latest(latest_estimates) -> Dict[str, Any]:
+    """Shared finisher for both single- and bulk-summary helpers.
 
-    latest_date = estimates[0].period_date if estimates else None
-    latest = [e for e in estimates if e.period_date == latest_date]
+    Takes the rows for one song's latest period_date and returns the
+    same shape both endpoints have always returned.
+    """
+    if not latest_estimates:
+        return _empty_summary()
 
-    platforms = {}
+    latest_date = latest_estimates[0].period_date
+    platforms: Dict[str, Any] = {}
     total = 0
     avg_confidence = 0
 
-    for est in latest:
+    for est in latest_estimates:
         streams = est.estimated_streams or 0
         platforms[est.platform] = {
             "streams": int(streams),
@@ -308,8 +308,8 @@ def get_song_stream_summary(song_id: int, org_id: int, db: Session) -> Dict[str,
         total += streams
         avg_confidence += est.confidence_score
 
-    if latest:
-        avg_confidence /= len(latest)
+    if latest_estimates:
+        avg_confidence /= len(latest_estimates)
 
     return {
         "total_streams": int(total),
@@ -318,3 +318,79 @@ def get_song_stream_summary(song_id: int, org_id: int, db: Session) -> Dict[str,
         "last_updated": latest_date.isoformat() if latest_date else None,
         "riaa_equivalents": compute_riaa_equivalents(int(total)),
     }
+
+
+def get_song_stream_summary(song_id: int, org_id: int, db: Session) -> Dict[str, Any]:
+    from ..models.models import StreamEstimate
+
+    estimates = db.query(StreamEstimate).filter(
+        StreamEstimate.song_id == song_id,
+        StreamEstimate.organization_id == org_id,
+    ).order_by(StreamEstimate.period_date.desc()).all()
+
+    if not estimates:
+        return _empty_summary()
+
+    latest_date = estimates[0].period_date
+    latest = [e for e in estimates if e.period_date == latest_date]
+    return _build_summary_from_latest(latest)
+
+
+def get_song_stream_summaries(
+    song_ids, org_id: int, db: Session
+) -> Dict[int, Dict[str, Any]]:
+    """Bulk variant of `get_song_stream_summary`.
+
+    Replaces N+1 patterns where callers loop over a page of songs and
+    call the per-song helper. Issues at most TWO queries regardless of
+    page size:
+      1. Per-song MAX(period_date) for the requested ids in this org.
+      2. The actual StreamEstimate rows joined to those (song_id, period_date)
+         pairs.
+
+    Returns a dict mapping song_id -> summary dict. Songs with no
+    estimates get the empty-summary stub (`{"total_streams": 0, ...}`)
+    so the caller can `dict.get(sid, _empty)` without a KeyError.
+    """
+    from ..models.models import StreamEstimate
+    from sqlalchemy import and_, func
+
+    ids = [int(s) for s in (song_ids or []) if s is not None]
+    if not ids:
+        return {}
+
+    latest_dates_subq = (
+        db.query(
+            StreamEstimate.song_id.label("song_id"),
+            func.max(StreamEstimate.period_date).label("latest"),
+        )
+        .filter(
+            StreamEstimate.song_id.in_(ids),
+            StreamEstimate.organization_id == org_id,
+        )
+        .group_by(StreamEstimate.song_id)
+        .subquery()
+    )
+
+    rows = (
+        db.query(StreamEstimate)
+        .join(
+            latest_dates_subq,
+            and_(
+                StreamEstimate.song_id == latest_dates_subq.c.song_id,
+                StreamEstimate.period_date == latest_dates_subq.c.latest,
+            ),
+        )
+        .filter(StreamEstimate.organization_id == org_id)
+        .all()
+    )
+
+    by_song: Dict[int, list] = {}
+    for r in rows:
+        by_song.setdefault(r.song_id, []).append(r)
+
+    out: Dict[int, Dict[str, Any]] = {}
+    for sid in ids:
+        ests = by_song.get(sid)
+        out[sid] = _build_summary_from_latest(ests) if ests else _empty_summary()
+    return out

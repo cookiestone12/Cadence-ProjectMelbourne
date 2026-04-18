@@ -112,7 +112,7 @@ def creator_credited_songs(
     _verify_org_access(user, org_id, db, creator_id=creator_id)
 
     from ..models.models import SongCredit, Song, SongDSPLink
-    from ..services.stream_estimator import get_song_stream_summary
+    from ..services.stream_estimator import get_song_stream_summaries
     from sqlalchemy import or_
 
     spotify_dsp_subq = db.query(SongDSPLink.song_id).filter(
@@ -134,9 +134,12 @@ def creator_credited_songs(
     offset = (page - 1) * per_page
     credits_list = credits_q.offset(offset).limit(per_page).all()
 
+    song_ids = [song.id for _, song in credits_list]
+    summaries = get_song_stream_summaries(song_ids, org_id, db)
+
     songs = []
     for credit, song in credits_list:
-        stream_summary = get_song_stream_summary(song.id, org_id, db)
+        stream_summary = summaries.get(song.id) or {"total_streams": 0, "platforms": {}, "confidence": 0}
         songs.append({
             "song_id": song.id,
             "title": song.title,
