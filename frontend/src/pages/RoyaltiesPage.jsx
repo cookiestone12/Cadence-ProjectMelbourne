@@ -21,7 +21,8 @@ import {
   UserGroupIcon,
   MusicalNoteIcon,
   DocumentDuplicateIcon,
-  ShareIcon
+  ShareIcon,
+  PencilSquareIcon
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid'
 import {
@@ -325,6 +326,55 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
   const [bulkProcessing, setBulkProcessing] = useState(false)
   const [bulkCurrentIndex, setBulkCurrentIndex] = useState(-1)
   const [bulkResults, setBulkResults] = useState([])
+
+  const [editStmt, setEditStmt] = useState(null)
+  const [editForm, setEditForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD' })
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState(null)
+
+  const openEditStatement = (stmt) => {
+    setEditStmt(stmt)
+    setEditForm({
+      source_name: stmt.source_name || '',
+      source_type: stmt.source_type || '',
+      period_start: stmt.period_start || '',
+      period_end: stmt.period_end || '',
+      currency: stmt.currency || 'USD',
+    })
+    setEditError(null)
+  }
+
+  const closeEditStatement = () => {
+    if (editSaving) return
+    setEditStmt(null)
+    setEditError(null)
+  }
+
+  const submitEditStatement = async () => {
+    if (!editStmt) return
+    if (editForm.period_start && editForm.period_end && editForm.period_start > editForm.period_end) {
+      setEditError('Period start must be on or before period end.')
+      return
+    }
+    setEditSaving(true)
+    setEditError(null)
+    try {
+      const body = {
+        source_name: editForm.source_name || null,
+        source_type: editForm.source_type || null,
+        period_start: editForm.period_start || null,
+        period_end: editForm.period_end || null,
+        currency: editForm.currency || null,
+      }
+      await axios.patch(`/api/royalties/statements/${orgId}/${editStmt.id}`, body)
+      setEditStmt(null)
+      loadStatements()
+    } catch (err) {
+      setEditError(err.response?.data?.detail || err.message || 'Failed to save changes.')
+    } finally {
+      setEditSaving(false)
+    }
+  }
 
   const loadStatements = useCallback(async () => {
     if (!orgId) return
@@ -697,6 +747,9 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                       <button onClick={() => handleCalculate(stmt.id)} disabled={calculating[stmt.id]} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors disabled:opacity-40" title="Calculate">
                         <CalculatorIcon className="w-4 h-4" />
                       </button>
+                      <button onClick={() => openEditStatement(stmt)} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors" title="Edit period & metadata">
+                        <PencilSquareIcon className="w-4 h-4" />
+                      </button>
                       <button onClick={() => setShareStatement(stmt)} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors" title="Share">
                         <ShareIcon className="w-4 h-4" />
                       </button>
@@ -941,14 +994,19 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                       className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period Start</label>
-                      <input type="date" value={bulkPeriodStart} onChange={e => setBulkPeriodStart(e.target.value)} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period End</label>
-                      <input type="date" value={bulkPeriodEnd} onChange={e => setBulkPeriodEnd(e.target.value)} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+                  <div>
+                    <p className="text-xs text-[#7A8580] mb-2">
+                      Statement period is auto-detected from each PDF — leave blank unless you want to force the same range on every file. You can fix the period later from the row actions.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period Start (optional override)</label>
+                        <input type="date" value={bulkPeriodStart} onChange={e => setBulkPeriodStart(e.target.value)} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period End (optional override)</label>
+                        <input type="date" value={bulkPeriodEnd} onChange={e => setBulkPeriodEnd(e.target.value)} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
+                      </div>
                     </div>
                   </div>
                   <div>
@@ -1055,6 +1113,88 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editStmt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4" onClick={closeEditStatement}>
+          <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-lg font-semibold text-[#3D4A44]">Edit Statement</h3>
+              <button onClick={closeEditStatement} disabled={editSaving} className="p-2 hover:bg-[rgba(59,77,67,0.06)] rounded-full transition-colors disabled:opacity-40">
+                <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-[#7A8580]">
+                Correct the statement period or label if it was misread from the PDF. This does not change the underlying file or any line amounts. The change is recorded in the audit log.
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Name</label>
+                <input
+                  type="text"
+                  value={editForm.source_name}
+                  onChange={e => setEditForm(f => ({ ...f, source_name: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Statement Source</label>
+                <select
+                  value={editForm.source_type}
+                  onChange={e => setEditForm(f => ({ ...f, source_type: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
+                >
+                  {SOURCE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period Start</label>
+                  <input
+                    type="date"
+                    value={editForm.period_start || ''}
+                    onChange={e => setEditForm(f => ({ ...f, period_start: e.target.value }))}
+                    className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period End</label>
+                  <input
+                    type="date"
+                    value={editForm.period_end || ''}
+                    onChange={e => setEditForm(f => ({ ...f, period_end: e.target.value }))}
+                    className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Currency</label>
+                <select
+                  value={editForm.currency}
+                  onChange={e => setEditForm(f => ({ ...f, currency: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
+                >
+                  {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              {editError && (
+                <div className="px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+                  {typeof editError === 'string' ? editError : 'Failed to save changes.'}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <button onClick={closeEditStatement} disabled={editSaving} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44] transition-colors disabled:opacity-40">Cancel</button>
+                <button
+                  onClick={submitEditStatement}
+                  disabled={editSaving}
+                  className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium disabled:opacity-50"
+                >
+                  {editSaving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

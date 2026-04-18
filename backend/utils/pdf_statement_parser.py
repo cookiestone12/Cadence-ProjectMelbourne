@@ -114,13 +114,39 @@ _MONTH_TO_NUM = {
 #   "Performance Period: Jul - Dec 2023"
 #   "Statement Period: July 1, 2023 - December 31, 2023"
 #   "For the Period: Jul - Dec 2023"
+#   "Royalty Distribution Period: Jan - Jun 2024"
+#   "Distribution Period: Q1 2024"
 #   "Period Ending: 12/31/2023"
 _PERIOD_HEADER_RE = re.compile(
-    r"(?i)(?:performance\s+period|statement\s+period|for\s+the\s+period|reporting\s+period|royalty\s+period|period)\s*[:\-]?\s*(.+?)$",
+    r"(?i)(?:performance\s+period|statement\s+period|royalty\s+distribution\s+period|"
+    r"distribution\s+period|for\s+the\s+period|reporting\s+period|royalty\s+period|"
+    r"earnings\s+period|accounting\s+period|period\s+covered|period)\s*[:\-]?\s*(.+?)$",
     re.MULTILINE,
 )
 _MONTH_RANGE_RE = re.compile(
     r"(?i)\b([a-z]{3,9})\.?\s*(\d{0,2})\s*[,\-/]?\s*(\d{4})?\s*[\-\u2013to]+\s*([a-z]{3,9})\.?\s*(\d{0,2})\s*[,\-/]?\s*(\d{4})"
+)
+# "1Q 2024", "Q1 2024", "1st Quarter 2024", "First Quarter 2024"
+_QUARTER_RE = re.compile(
+    r"(?i)\b(?:(?P<n1>[1-4])(?:st|nd|rd|th)?\s*(?:q|quarter)|q\s*(?P<n2>[1-4])|"
+    r"(?P<word>first|second|third|fourth)\s+quarter)\b[\s,]*(?P<year>\d{4})"
+)
+_QUARTER_WORD = {"first": 1, "second": 2, "third": 3, "fourth": 4}
+# "1H 2024", "H1 2024", "First Half 2024", "Second Half 2024"
+_HALF_RE = re.compile(
+    r"(?i)\b(?:(?P<n1>[12])\s*h|h\s*(?P<n2>[12])|"
+    r"(?P<word>first|second)\s+half)\b[\s,]*(?P<year>\d{4})"
+)
+_HALF_WORD = {"first": 1, "second": 2}
+# "From 1/1/2024 to 6/30/2024", "01/01/2024 - 06/30/2024"
+_DATE_PAIR_RE = re.compile(
+    r"(?:from\s+)?(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})\s*(?:to|through|-|\u2013)\s*"
+    r"(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})",
+    re.IGNORECASE,
+)
+# "Period Ending: 12/31/2023"
+_PERIOD_ENDING_RE = re.compile(
+    r"(?i)period\s+ending\s*[:\-]?\s*(\d{1,2})[/\-](\d{1,2})[/\-](\d{2,4})"
 )
 
 
@@ -131,37 +157,118 @@ def _last_day_of_month(year: int, month: int) -> int:
     return monthrange(year, month)[1]
 
 
+def _norm_year(y: int) -> int:
+    if y < 100:
+        return 2000 + y if y < 70 else 1900 + y
+    return y
+
+
 def parse_period_from_text(text: str) -> Tuple[Optional[date], Optional[date]]:
     """Best-effort period extraction from the first page or two of a statement.
 
     Returns (period_start, period_end) — either may be None if not parseable.
-    Recognizes patterns like "Performance Period: Jul - Dec 2023",
-    "Statement Period: July 1, 2023 - December 31, 2023".
+    Recognizes:
+      * "Performance Period: Jul - Dec 2023"
+      * "Statement Period: July 1, 2023 - December 31, 2023"
+      * "Royalty Distribution Period: 1H 2024" / "Q1 2024" / "First Half 2024"
+      * "From 01/01/2024 to 06/30/2024"
+      * "Period Ending: 12/31/2023"  (infers half-year ending on that date)
     """
     if not text:
         return None, None
-    for m in _PERIOD_HEADER_RE.finditer(text[:4000]):
+    window = text[:8000]
+
+    # 1) Try header line + month-range (most explicit).
+    for m in _PERIOD_HEADER_RE.finditer(window):
         candidate = m.group(1).strip()
+
         rng = _MONTH_RANGE_RE.search(candidate)
-        if not rng:
-            continue
-        start_mon = _MONTH_TO_NUM.get(rng.group(1).lower().rstrip("."))
-        end_mon = _MONTH_TO_NUM.get(rng.group(4).lower().rstrip("."))
-        if not start_mon or not end_mon:
-            continue
-        end_year_str = rng.group(6)
-        start_year_str = rng.group(3) or end_year_str
+        if rng:
+            start_mon = _MONTH_TO_NUM.get(rng.group(1).lower().rstrip("."))
+            end_mon = _MONTH_TO_NUM.get(rng.group(4).lower().rstrip("."))
+            if start_mon and end_mon:
+                end_year_str = rng.group(6)
+                start_year_str = rng.group(3) or end_year_str
+                try:
+                    start_year = int(start_year_str)
+                    end_year = int(end_year_str)
+                    start_day = int(rng.group(2)) if rng.group(2) else 1
+                    end_day = int(rng.group(5)) if rng.group(5) else _last_day_of_month(end_year, end_mon)
+                    return date(start_year, start_mon, start_day), date(end_year, end_mon, end_day)
+                except (TypeError, ValueError):
+                    pass
+
+        # Quarter notation under a period header.
+        q = _QUARTER_RE.search(candidate)
+        if q:
+            try:
+                year = int(q.group("year"))
+                qnum = int(q.group("n1") or q.group("n2") or 0) or _QUARTER_WORD.get(
+                    (q.group("word") or "").lower(), 0
+                )
+                if qnum:
+                    s_mon = (qnum - 1) * 3 + 1
+                    e_mon = s_mon + 2
+                    return date(year, s_mon, 1), date(year, e_mon, _last_day_of_month(year, e_mon))
+            except (TypeError, ValueError):
+                pass
+
+        # Half-year notation under a period header.
+        h = _HALF_RE.search(candidate)
+        if h:
+            try:
+                year = int(h.group("year"))
+                hnum = int(h.group("n1") or h.group("n2") or 0) or _HALF_WORD.get(
+                    (h.group("word") or "").lower(), 0
+                )
+                if hnum == 1:
+                    return date(year, 1, 1), date(year, 6, 30)
+                if hnum == 2:
+                    return date(year, 7, 1), date(year, 12, 31)
+            except (TypeError, ValueError):
+                pass
+
+        # Numeric date pair under a period header.
+        dp = _DATE_PAIR_RE.search(candidate)
+        if dp:
+            try:
+                s_m, s_d, s_y = int(dp.group(1)), int(dp.group(2)), _norm_year(int(dp.group(3)))
+                e_m, e_d, e_y = int(dp.group(4)), int(dp.group(5)), _norm_year(int(dp.group(6)))
+                return date(s_y, s_m, s_d), date(e_y, e_m, e_d)
+            except (TypeError, ValueError):
+                pass
+
+    # 2) Free-floating "Period Ending: 12/31/2023" — infer the half/quarter
+    #    that ends on that date so we don't make up a 3-year window.
+    pe = _PERIOD_ENDING_RE.search(window)
+    if pe:
         try:
-            start_year = int(start_year_str)
-            end_year = int(end_year_str)
-        except (TypeError, ValueError):
-            continue
-        start_day = int(rng.group(2)) if rng.group(2) else 1
-        end_day = int(rng.group(5)) if rng.group(5) else _last_day_of_month(end_year, end_mon)
-        try:
-            return date(start_year, start_mon, start_day), date(end_year, end_mon, end_day)
-        except ValueError:
-            continue
+            m_, d_, y_ = int(pe.group(1)), int(pe.group(2)), _norm_year(int(pe.group(3)))
+            end_d = date(y_, m_, d_)
+            # If end_d looks like end-of-quarter, infer that quarter; otherwise
+            # infer the half-year ending on that date.
+            if (m_, d_) in {(3, 31), (6, 30), (9, 30), (12, 31)}:
+                # half-year preference: Jun 30 → H1, Dec 31 → H2
+                if (m_, d_) == (6, 30):
+                    return date(y_, 1, 1), end_d
+                if (m_, d_) == (12, 31):
+                    return date(y_, 7, 1), end_d
+                # quarter
+                qstart_mon = ((m_ - 1) // 3) * 3 + 1
+                return date(y_, qstart_mon, 1), end_d
+            # Generic fallback: 6 months ending on end_d.
+            from dateutil.relativedelta import relativedelta  # type: ignore
+            return end_d - relativedelta(months=5, day=1), end_d
+        except Exception:
+            pass
+
+    # NOTE: We deliberately do NOT scan for free-floating quarter/half
+    # tokens (e.g. a stray "Q1 2024" in a table cell). Without an
+    # accompanying period header, those tokens produce false positives
+    # from narrative text or summary tables. Quarter/half phrasing is
+    # only honoured when it appears under a period header — handled in
+    # step 1 above.
+
     return None, None
 
 
@@ -170,7 +277,9 @@ def parse_period_from_pdf(content: bytes) -> Tuple[Optional[date], Optional[date
         import pdfplumber
         with pdfplumber.open(io.BytesIO(content)) as pdf:
             text = ""
-            for page in pdf.pages[:2]:
+            # Scan first 3 pages — some PRO statements bury the period below
+            # a long client-info block on page 1.
+            for page in pdf.pages[:3]:
                 t = page.extract_text()
                 if t:
                     text += t + "\n"

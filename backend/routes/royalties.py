@@ -903,6 +903,150 @@ def get_statement(
     }
 
 
+class StatementMetaUpdate(BaseModel):
+    source_name: Optional[str] = None
+    source_type: Optional[str] = None
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
+    currency: Optional[str] = None
+
+
+@router.patch(
+    "/statements/{org_id}/{statement_id}",
+    summary="Edit royalty statement metadata",
+    description=(
+        "Patches editable metadata on an uploaded `RoyaltyStatement` — most "
+        "commonly to fix `period_start` / `period_end` when the parser couldn't "
+        "extract them from the PDF header (BMI / publisher quirks). Also "
+        "supports correcting `source_name`, `source_type`, and `currency`. "
+        "Does NOT change the underlying file or any line / ledger amounts.\n\n"
+        "**Path parameters:** `org_id`, `statement_id`.\n"
+        "**Body:** any subset of `{ source_name, source_type, period_start, "
+        "period_end, currency }`.\n"
+        "**Auth:** Bearer JWT — caller must be an OWNER, ADMIN, or have "
+        "royalties write permission on the org.\n"
+        "**Audit:** Writes a `STATEMENT_UPDATE` row to `audit_logs` with the "
+        "field-level diff."
+    ),
+)
+def update_statement_meta(
+    org_id: int,
+    statement_id: int,
+    body: StatementMetaUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Owner/Admin only — Viewers/Editors must request a role bump to correct
+    # statement metadata (it has financial-reporting consequences).
+    membership = verify_org_access(current_user, org_id, db)
+    role = (getattr(membership, "role", "") or "").upper()
+    if not current_user.is_super_admin and role not in ("OWNER", "ADMIN"):
+        raise HTTPException(
+            status_code=403,
+            detail="Editing statement metadata requires Owner or Admin role.",
+        )
+
+    stmt = db.query(RoyaltyStatement).filter(
+        RoyaltyStatement.id == statement_id,
+        RoyaltyStatement.organization_id == org_id,
+    ).first()
+    if not stmt:
+        raise HTTPException(status_code=404, detail="Statement not found")
+
+    # Build a field-level diff for the audit log so reconciliation reviewers
+    # can see exactly what was corrected and by whom.
+    changes: dict = {}
+
+    if body.source_name is not None:
+        new_name = normalize_source_name(body.source_name)
+        if new_name and new_name != stmt.source_name:
+            changes["source_name"] = {"old": stmt.source_name, "new": new_name}
+            stmt.source_name = new_name
+
+    if body.source_type is not None and body.source_type != stmt.source_type:
+        changes["source_type"] = {"old": stmt.source_type, "new": body.source_type}
+        stmt.source_type = body.source_type
+
+    if body.currency is not None:
+        new_cur = body.currency.strip().upper()[:3]
+        if new_cur and new_cur != stmt.currency:
+            changes["currency"] = {"old": stmt.currency, "new": new_cur}
+            stmt.currency = new_cur
+
+    # Period validation: if both supplied, start must be ≤ end.
+    new_start = body.period_start if body.period_start is not None else stmt.period_start
+    new_end = body.period_end if body.period_end is not None else stmt.period_end
+    if new_start and new_end and new_start > new_end:
+        raise HTTPException(
+            status_code=422,
+            detail="period_start must be on or before period_end",
+        )
+
+    if body.period_start is not None and body.period_start != stmt.period_start:
+        changes["period_start"] = {
+            "old": stmt.period_start.isoformat() if stmt.period_start else None,
+            "new": body.period_start.isoformat(),
+        }
+        stmt.period_start = body.period_start
+
+    if body.period_end is not None and body.period_end != stmt.period_end:
+        changes["period_end"] = {
+            "old": stmt.period_end.isoformat() if stmt.period_end else None,
+            "new": body.period_end.isoformat(),
+        }
+        stmt.period_end = body.period_end
+
+    if not changes:
+        # Nothing actually changed — return current state without an audit row.
+        return {
+            "id": stmt.id,
+            "source_name": stmt.source_name,
+            "source_type": stmt.source_type,
+            "period_start": stmt.period_start.isoformat() if stmt.period_start else None,
+            "period_end": stmt.period_end.isoformat() if stmt.period_end else None,
+            "currency": stmt.currency,
+            "changed": False,
+        }
+
+    # Audit the change in the SAME transaction as the metadata mutation. If
+    # the audit insert fails, we MUST roll the metadata change back too — a
+    # silent unaudited correction to a financial statement is a worse
+    # outcome than rejecting the request.
+    try:
+        from ..services.audit_service import log_action
+        log_action(
+            db=db,
+            organization_id=org_id,
+            user_id=current_user.id,
+            action="STATEMENT_UPDATE",
+            entity_type="RoyaltyStatement",
+            entity_id=stmt.id,
+            entity_name=stmt.source_name or stmt.file_name,
+            details={"changes": changes},
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"update_statement_meta: audit log failed, rolling back: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not record audit entry; statement was not modified.",
+        )
+
+    db.refresh(stmt)
+
+    return {
+        "id": stmt.id,
+        "source_name": stmt.source_name,
+        "source_type": stmt.source_type,
+        "period_start": stmt.period_start.isoformat() if stmt.period_start else None,
+        "period_end": stmt.period_end.isoformat() if stmt.period_end else None,
+        "currency": stmt.currency,
+        "changed": True,
+        "changes": changes,
+    }
+
+
 @router.post("/statements/{org_id}/upload", summary="Upload royalty statement", description='Ingests a CSV / XLSX / PDF royalty statement, normalizes columns, and stages it for matching. Supports DSP, label, publisher, and sync statement formats.\n\n**Path parameter:** `org_id`.\n**Body (multipart/form-data):** `file`; `source_name`; `source_type` (`dsp|label|publisher|sync|other`); `period_start?`; `period_end?`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ statement_id, status, total_rows, total_amount_cents, currency }`.')
 async def upload_statement(
     org_id: int,
