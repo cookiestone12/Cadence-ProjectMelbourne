@@ -1,4 +1,6 @@
+# =====================================================================
 # Python
+# =====================================================================
 __pycache__/
 *.py[cod]
 *$py.class
@@ -22,8 +24,13 @@ wheels/
 venv/
 ENV/
 env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Node
+# =====================================================================
+# Node / Frontend build output
+# =====================================================================
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -31,26 +38,81 @@ yarn-error.log*
 .pnpm-debug.log*
 frontend/dist/
 frontend/build/
+frontend/.vite/
+.parcel-cache/
 
-# Environment
+# =====================================================================
+# Secrets & environment
+# Never commit anything that holds a real credential. Replit's secret
+# manager is the only place secrets should live.
+# =====================================================================
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
 
-# IDE
+# =====================================================================
+# Local databases & data dumps
+# =====================================================================
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+
+# =====================================================================
+# Uploads (user-generated content lives in cloud storage, not git)
+# =====================================================================
+uploads/*
+!uploads/.gitkeep
+
+# =====================================================================
+# Logs
+# =====================================================================
+*.log
+logs/
+/tmp/logs/
+
+# =====================================================================
+# Replit + agent scratch
+# `.local/tasks/` is kept on purpose — it's the project task history.
+# Everything else under `.local/` is ephemeral agent state.
+# =====================================================================
+.local/*
+!.local/tasks/
+.local/state/
+.local/.commit_message
+.replit_history
+.upm/
+.cache/
+.config/
+.pythonlibs/
+
+# =====================================================================
+# Attachments dropped into chat
+# `attached_assets/` is a scratch dump for files the user pastes into
+# the agent chat. It can grow into many GBs of PDFs / videos / images
+# and almost never belongs in source control.
+# =====================================================================
+attached_assets/
+
+# =====================================================================
+# Screenshots / exports / scratch artifacts
+# =====================================================================
+screenshots/
+exports/
+*.screenshot.png
+*.screenshot.jpg
+
+# =====================================================================
+# IDE & OS
+# =====================================================================
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Uploads
-uploads/*
-!uploads/.gitkeep
-
-# Database
-*.db
-*.sqlite
+desktop.ini
