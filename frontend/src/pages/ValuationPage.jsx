@@ -61,9 +61,16 @@ export default function ValuationPage() {
         if (!alive) return
         const orgId = orgRes.data?.id
         if (!orgId) return
-        const creatorsRes = await axios.get(`/api/creators/${orgId}`)
+        // /api/creators/{creator_id} is the single-creator detail route — what
+        // we want here is the org-roster endpoint that the Roster page uses.
+        // The previous URL silently 404'd (or returned a single-object
+        // payload), so the Scope dropdown was always empty no matter how
+        // many creators the org had.
+        const creatorsRes = await axios.get(`/api/creators/org/${orgId}`)
         if (!alive) return
-        setCreators(Array.isArray(creatorsRes.data) ? creatorsRes.data : [])
+        const list = Array.isArray(creatorsRes.data) ? creatorsRes.data : []
+        list.sort((a, b) => (a.display_name || a.name || '').localeCompare(b.display_name || b.name || ''))
+        setCreators(list)
       } catch (e) {
         if (alive) console.error('Failed to load creators for scope dropdown:', e)
       }
