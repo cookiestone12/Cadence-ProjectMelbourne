@@ -548,6 +548,13 @@ def _parse_bmi_writer_text(full_text: str) -> Optional[dict]:
             # the strict end-with-$amount pattern, but guard anyway by
             # requiring the category text to be a recognized BMI bucket).
             if category_raw not in BMI_CATEGORY_FULL_NAMES:
+                # Surface unknown categories rather than dropping them silently —
+                # if BMI ever introduces or renames a category, the warning will
+                # show up in logs before the total quietly drifts again.
+                logger.warning(
+                    "BMI parser: skipped continuation row with unknown "
+                    f"category {category_raw!r} (line: {line!r})"
+                )
                 continue
             category = category_raw
             performances = m_cont.group("performances").replace(",", "")
