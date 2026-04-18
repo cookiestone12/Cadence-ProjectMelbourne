@@ -11,6 +11,33 @@ There are two copies of the codebase, and they should always agree:
 
 Everything you do happens in the workspace. GitHub is just the safety copy.
 
+## First-time setup (one-time, ~5 minutes)
+
+Until this is done once, the workspace has no GitHub backup. You only need to do this on the first ever connection — after that it's automatic.
+
+1. Open the **Git** panel in the left sidebar of Replit (the icon that looks like a branch).
+2. Click **Connect to GitHub**. Replit will open a GitHub authorization page in a new tab.
+3. Sign in to your GitHub account (or create one — it's free) and click **Authorize Replit**. This grants Replit permission to create and push to repositories on your behalf. You can revoke it any time from GitHub's settings.
+4. Back in Replit, click **Create a new repository**.
+   - Name it something like `cadence` or `cadence-app`.
+   - Set the visibility to **Private**. Always private.
+   - Leave the default branch as `main`.
+5. Click **Create & Push**. Replit will push the entire current history (all your existing checkpoints, including the work from Task #89 and earlier) up to the new GitHub repo.
+6. Open the GitHub link Replit shows you and confirm you can see the files. You're done.
+
+From now on the **Day-to-day** section below is all you need.
+
+## Pre-push checklist (10-second sanity check)
+
+Before clicking **Commit & Push**, glance over the list of changed files in the Git panel and make sure you don't see:
+
+- Anything starting with `attached_assets/` (chat scratch — should be ignored automatically, but worth a glance)
+- Anything ending in `.env` (real environment files)
+- `*.pem`, `*.key`, `secrets.json` or anything that looks like a credential
+- Database dumps (`*.db`, `*.sqlite`, `*.dump`, `*.sql.gz`)
+
+If any of those appear, stop and ask the agent before pushing.
+
 ## Day-to-day: pushing your changes to GitHub
 
 After Cadence has been working in the workspace for a while and you'd like to back up the latest version:
