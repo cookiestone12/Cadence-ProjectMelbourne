@@ -11,9 +11,9 @@ There are two copies of the codebase, and they should always agree:
 
 Everything you do happens in the workspace. GitHub is just the safety copy.
 
-## First-time setup (one-time, ~5 minutes)
+## One-time GitHub connection (your turn — ~5 minutes)
 
-Until this is done once, the workspace has no GitHub backup. You only need to do this on the first ever connection — after that it's automatic.
+The workspace has been prepped for a GitHub mirror (`.gitignore` is tightened, scratch files are untracked, the commit history is clean). The last step requires you because it involves logging into your GitHub account in your browser — nobody, including the agent, can do that for you.
 
 1. Open the **Git** panel in the left sidebar of Replit (the icon that looks like a branch).
 2. Click **Connect to GitHub**. Replit will open a GitHub authorization page in a new tab.
@@ -23,9 +23,10 @@ Until this is done once, the workspace has no GitHub backup. You only need to do
    - Set the visibility to **Private**. Always private.
    - Leave the default branch as `main`.
 5. Click **Create & Push**. Replit will push the entire current history (all your existing checkpoints, including the work from Task #89 and earlier) up to the new GitHub repo.
-6. Open the GitHub link Replit shows you and confirm you can see the files. You're done.
+6. Open the GitHub link Replit shows you and confirm you can see the files.
+7. Once the repo exists, paste its URL into `replit.md` (under the **Source Control** section) so future agents and collaborators know where it lives.
 
-From now on the **Day-to-day** section below is all you need.
+From then on the **Day-to-day** section below is all you need.
 
 ## Pre-push checklist (10-second sanity check)
 
