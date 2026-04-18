@@ -130,6 +130,7 @@ def creator_credited_songs(
         ),
     )
 
+    per_page = min(max(per_page, 1), 100)
     total = credits_q.count()
     offset = (page - 1) * per_page
     credits_list = credits_q.offset(offset).limit(per_page).all()

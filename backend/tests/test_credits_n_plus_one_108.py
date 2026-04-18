@@ -102,9 +102,10 @@ def test_bulk_summary_is_constant_query_count(db):
         event.remove(db.bind, "before_cursor_execute", listener)
 
     assert len(out) == 70
-    # MAX-per-song subquery + the join fetch = 2 queries hitting stream_estimates.
-    # Allow up to 3 to absorb any incidental cache-warming select.
-    assert counter["n"] <= 3, f"bulk summary issued {counter['n']} stream_estimate queries; expected <= 3"
+    # Contract: exactly 1 stream_estimates SELECT — SQLAlchemy compiles the
+    # MAX(period_date) subquery inline as a derived table joined against
+    # stream_estimates, so the whole bulk fetch is a single round-trip.
+    assert counter["n"] == 1, f"bulk summary issued {counter['n']} stream_estimate queries; expected exactly 1"
 
 
 def test_bulk_matches_per_song(db):
