@@ -32,7 +32,11 @@ def _verify_org_access(user: User, org_id: int, db: Session, creator_id: int = N
     return membership
 
 
-@router.get("/org/{org_id}/overview")
+@router.get(
+    "/org/{org_id}/overview",
+    summary='Get the org-wide streaming credits overview',
+    description='Returns the dashboard for songwriter/producer credits scraped from DSPs (Spotify/Apple) — total credited tracks per creator and missing-credit counts.\n\n**Path parameter:** `org_id`.\n**Query:** `dsp` (`spotify|apple|all`), `start_date`, `end_date`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ creators: [{creator_id, name, total_credits, by_dsp: {...}, missing_count}] }`.',
+)
 def credits_overview(
     org_id: int,
     search: str = Query(None),
@@ -72,7 +76,11 @@ def credits_overview(
     return {"creators": results, "total": len(results)}
 
 
-@router.get("/org/{org_id}/creator/{creator_id}")
+@router.get(
+    "/org/{org_id}/creator/{creator_id}",
+    summary="Get a creator's streaming-credits detail summary",
+    description='Per-creator rollup: credit counts by DSP, by role (writer / producer / etc.), recently scraped, and pending claim issues.\n\n**Path parameters:** `org_id`, `creator_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ creator_id, name, summary: {...}, pending: [...], last_scraped_at }`.',
+)
 def creator_credits_detail(
     org_id: int,
     creator_id: int,
@@ -88,7 +96,11 @@ def creator_credits_detail(
     return result
 
 
-@router.get("/org/{org_id}/creator/{creator_id}/songs")
+@router.get(
+    "/org/{org_id}/creator/{creator_id}/songs",
+    summary='List the songs a creator has streaming credits on',
+    description="Per-song detail behind the creator overview — DSP, role, ISRC, credit URL, and whether it's matched to a Song in the catalog.\n\n**Path parameters:** `org_id`, `creator_id`.\n**Query:** `dsp`, `role`, `matched` (bool), `q`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, songs: [{credit_id, dsp, track_title, artist, isrc, role, credit_url, matched_song_id}] }`.",
+)
 def creator_credited_songs(
     org_id: int,
     creator_id: int,
@@ -146,7 +158,11 @@ def creator_credited_songs(
     return {"songs": songs, "total": total, "page": page, "per_page": per_page}
 
 
-@router.post("/org/{org_id}/creator/{creator_id}/refresh")
+@router.post(
+    "/org/{org_id}/creator/{creator_id}/refresh",
+    summary='Re-scrape DSP credits for a creator',
+    description='Triggers an on-demand scrape against Spotify/Apple credit pages for the creator. Synchronous; returns when the scrape completes.\n\n**Path parameters:** `org_id`, `creator_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ creator_id, fetched, added, updated, errors }`.',
+)
 def refresh_creator_credits(
     org_id: int,
     creator_id: int,
@@ -167,7 +183,11 @@ class ShareSettings(BaseModel):
     passcode: Optional[str] = None
 
 
-@router.post("/org/{org_id}/creator/{creator_id}/share")
+@router.post(
+    "/org/{org_id}/creator/{creator_id}/share",
+    summary="Mint or rotate a public share link for a creator's credits",
+    description="Creates (or rotates and replaces) the public share token used by `/credits/{share_token}` to expose the creator's credits page without auth. Returns the new URL.\n\n**Path parameters:** `org_id`, `creator_id`.\n**Body:** `{ expires_in_days?: int, rotate?: bool }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ share_token, share_url, expires_at }`.",
+)
 def manage_share_link(
     org_id: int,
     creator_id: int,
@@ -212,7 +232,11 @@ def manage_share_link(
     }
 
 
-@router.delete("/org/{org_id}/creator/{creator_id}/share")
+@router.delete(
+    "/org/{org_id}/creator/{creator_id}/share",
+    summary="Revoke the public share link for a creator's credits",
+    description='Invalidates the existing token so the public page returns 410.\n\n**Path parameters:** `org_id`, `creator_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ success: true }`.',
+)
 def revoke_share_link(
     org_id: int,
     creator_id: int,
@@ -238,7 +262,11 @@ def revoke_share_link(
     return {"status": "Share link revoked"}
 
 
-@public_router.get("/credits/{share_token}")
+@public_router.get(
+    "/credits/{share_token}",
+    summary='Public read-only credits page for a creator',
+    description="Resolves a share token to the creator's public credits view. Returns 404/410 if the token is invalid or expired.\n\n**Path parameter:** `share_token`.\n**Auth:** None — public.\n**Response:** `{ creator_name, organization_name, credits: [...], expires_at }`.",
+)
 def public_credits_page(
     share_token: str,
     passcode: str = Query(None),
@@ -264,7 +292,11 @@ def _verify_super_admin(user: User):
         raise HTTPException(status_code=403, detail="Super admin access required")
 
 
-@admin_chart_router.get("/sources")
+@admin_chart_router.get(
+    "/sources",
+    summary='List configured chart-data sources',
+    description='Returns every ChartSource the platform polls for chart positions (Billboard, Spotify Charts, Apple Music charts, etc.) along with their fetch status.\n\n**Auth:** Bearer JWT — platform admin.\n**Response:** `{ sources: [{id, name, platform, url, status, last_fetched_at, next_fetch_at, error}] }`.',
+)
 def list_chart_sources(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -300,7 +332,11 @@ class ChartSourceCreate(BaseModel):
     fetch_frequency: str = "DAILY"
 
 
-@admin_chart_router.post("/sources")
+@admin_chart_router.post(
+    "/sources",
+    summary='Register a new chart-data source',
+    description='Adds a new chart source the fetcher should poll on a schedule. Validates the URL is reachable.\n\n**Body:** `{ name, platform, url, schedule_cron?, country?: string }`.\n**Auth:** Bearer JWT — platform admin.\n**Response:** `{ id, name, status: "active" }`.',
+)
 def create_chart_source(
     body: ChartSourceCreate,
     user: User = Depends(get_current_user),
@@ -330,7 +366,11 @@ class ChartSourceUpdate(BaseModel):
     name: Optional[str] = None
 
 
-@admin_chart_router.put("/sources/{source_id}")
+@admin_chart_router.put(
+    "/sources/{source_id}",
+    summary='Update a chart source',
+    description='Patches an existing ChartSource (URL, schedule, status). Pass `status="paused"` to stop polling without deleting.\n\n**Path parameter:** `source_id`.\n**Body:** any subset of writable fields from create + `status`.\n**Auth:** Bearer JWT — platform admin.\n**Response:** `{ id, status }`.',
+)
 def update_chart_source(
     source_id: int,
     body: ChartSourceUpdate,
@@ -354,7 +394,11 @@ def update_chart_source(
     return {"id": source.id, "status": "updated"}
 
 
-@admin_chart_router.post("/fetch/{source_id}")
+@admin_chart_router.post(
+    "/fetch/{source_id}",
+    summary='Trigger an immediate fetch of a chart source',
+    description="Bypasses the schedule and runs a fetch right now — useful for debugging a source that's failing.\n\n**Path parameter:** `source_id`.\n**Auth:** Bearer JWT — platform admin.\n**Response:** `{ source_id, status, fetched_entries, error? }`.",
+)
 def trigger_manual_fetch(
     source_id: int,
     user: User = Depends(get_current_user),
@@ -371,7 +415,11 @@ def trigger_manual_fetch(
     return result
 
 
-@admin_chart_router.get("/stats")
+@admin_chart_router.get(
+    "/stats",
+    summary='Get chart-fetcher health statistics',
+    description='Returns aggregate fetcher metrics for the admin overview tile.\n\n**Auth:** Bearer JWT — platform admin.\n**Response:** `{ total_sources, active_sources, by_platform: [...], total_entries, matched_entries, match_rate }`.',
+)
 def chart_stats(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -402,7 +450,11 @@ def chart_stats(
     }
 
 
-@admin_chart_router.post("/backfill")
+@admin_chart_router.post(
+    "/backfill",
+    summary='Kick off a historical chart-data backfill',
+    description='Asynchronously walks every active source and refetches its historical archive (where supported) so the chart store has deeper history. Long-running.\n\n**Body:** `{ source_ids?: int[], start_date?, end_date? }`.\n**Auth:** Bearer JWT — platform admin.\n**Response:** `{ status: "queued", message }`.',
+)
 def trigger_backfill(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

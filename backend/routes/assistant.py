@@ -246,7 +246,11 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage]
 
 
-@router.post("/chat")
+@router.post(
+    "/chat",
+    summary='Send a message to the AI assistant',
+    description="Sends a chat turn to the in-app assistant (OpenAI-backed) with the calling user's org context. Returns the assistant reply and any tool calls made in the process.\n\n**Body:** `{ messages: [{role, content}], context?: {org_id?, creator_id?, page?}, stream?: bool }`.\n**Auth:** Bearer JWT.\n**Response:** `{ reply, tool_calls?: [...], usage: {prompt_tokens, completion_tokens} }`.",
+)
 async def assistant_chat(
     request: ChatRequest,
     db: Session = Depends(get_db),

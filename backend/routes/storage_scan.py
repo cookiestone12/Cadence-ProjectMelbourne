@@ -77,7 +77,21 @@ class ReassignMatchRequest(BaseModel):
     work_id: Optional[int] = None
 
 
-@router.get("/org/{org_id}/links")
+@router.get(
+    "/org/{org_id}/links",
+    summary="List a creator's connected cloud-storage folders",
+    description=(
+        "Returns every CreatorStorageLink in the org — a link is a "
+        "(creator, provider, folder_path) tuple that storage scans crawl "
+        "for new audio. Optionally filter to a single creator.\n\n"
+        "**Path parameter:** `org_id` — Cadence Organization ID.\n"
+        "**Optional query:** `creator_id` — restrict to a single Creator.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `List[{ id, creator_id, provider, folder_path, "
+        "container_name, scan_recursive, auto_scan_enabled, "
+        "auto_scan_frequency, last_scanned_at }]`."
+    ),
+)
 def list_creator_storage_links(
     org_id: int,
     creator_id: Optional[int] = None,
@@ -105,7 +119,24 @@ def list_creator_storage_links(
     } for l in links]
 
 
-@router.post("/org/{org_id}/links")
+@router.post(
+    "/org/{org_id}/links",
+    summary="Connect a cloud-storage folder to a creator",
+    description=(
+        "Pins a folder in the org's connected provider (Dropbox / Google "
+        "Drive / OneDrive / S3) to a Creator. Future scans will index audio "
+        "files under that path and propose Song matches. The folder must be "
+        "reachable by the org's IntegrationAccount for `provider`.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Body (`CreatorStorageLinkCreate`):** `creator_id`, `provider` "
+        "(default `DROPBOX`), `folder_path`, optional `container_name` "
+        "(bucket / drive id), `scan_recursive` (default true), "
+        "`auto_scan_enabled` (default false), `auto_scan_frequency` "
+        "(`DAILY` / `WEEKLY` / `MONTHLY`).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ id, creator_id, provider, folder_path }`."
+    ),
+)
 def create_creator_storage_link(
     org_id: int,
     request: CreatorStorageLinkCreate,
@@ -154,7 +185,21 @@ def create_creator_storage_link(
     }
 
 
-@router.put("/org/{org_id}/links/{link_id}")
+@router.put(
+    "/org/{org_id}/links/{link_id}",
+    summary="Update a creator storage link",
+    description=(
+        "Patches an existing CreatorStorageLink. Use the dedicated "
+        "`/schedule` endpoint to change auto-scan timing without touching "
+        "the path.\n\n"
+        "**Path parameters:** `org_id`, `link_id`.\n"
+        "**Body (`CreatorStorageLinkUpdate`):** any subset of `folder_path`, "
+        "`container_name`, `scan_recursive`, `auto_scan_enabled`, "
+        "`auto_scan_frequency`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ message: \"Storage link updated\" }`."
+    ),
+)
 def update_creator_storage_link(
     org_id: int,
     link_id: int,
@@ -185,7 +230,18 @@ def update_creator_storage_link(
     return {"message": "Updated"}
 
 
-@router.delete("/org/{org_id}/links/{link_id}")
+@router.delete(
+    "/org/{org_id}/links/{link_id}",
+    summary="Disconnect a creator storage link",
+    description=(
+        "Removes the CreatorStorageLink. Already-imported AudioAssets and "
+        "match results are preserved; only the future-scan binding is "
+        "broken.\n\n"
+        "**Path parameters:** `org_id`, `link_id`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ message: \"Storage link deleted\" }`."
+    ),
+)
 def delete_creator_storage_link(
     org_id: int,
     link_id: int,
@@ -204,7 +260,20 @@ def delete_creator_storage_link(
     return {"message": "Deleted"}
 
 
-@router.post("/org/{org_id}/scan/{link_id}")
+@router.post(
+    "/org/{org_id}/scan/{link_id}",
+    summary="Run a one-off scan against a single storage link",
+    description=(
+        "Kicks off a synchronous crawl of the linked folder. New audio "
+        "files are imported into AudioAsset and run through the matcher to "
+        "produce StorageScanResult rows the user can later approve or "
+        "reject. Existing files are skipped via content hash.\n\n"
+        "**Path parameters:** `org_id`, `link_id`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ scan_batch_id, scanned, imported, matched, "
+        "skipped, errors }`."
+    ),
+)
 def scan_creator_folder(
     org_id: int,
     link_id: int,
@@ -222,7 +291,19 @@ def scan_creator_folder(
         raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
 
 
-@router.post("/org/{org_id}/scan-all")
+@router.post(
+    "/org/{org_id}/scan-all",
+    summary="Run a fresh scan of every storage link in the org",
+    description=(
+        "Iterates every CreatorStorageLink in the org and runs the same "
+        "import-and-match flow as the per-link scan endpoint. Long-running; "
+        "consider using `/org-scan` (batched/async) for very large orgs.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ scan_batch_id, links_scanned, totals: { scanned, "
+        "imported, matched, skipped, errors } }`."
+    ),
+)
 def scan_all_folders(
     org_id: int,
     db: Session = Depends(get_db),
@@ -237,7 +318,21 @@ def scan_all_folders(
         raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
 
 
-@router.get("/org/{org_id}/results")
+@router.get(
+    "/org/{org_id}/results",
+    summary="List storage-scan match results",
+    description=(
+        "Returns the queue of StorageScanResult rows produced by recent "
+        "scans — each row is a candidate Song/Work match for an imported "
+        "AudioAsset that needs human review.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Optional query:** `creator_id`, `status` (`PENDING` / `APPROVED` "
+        "/ `REJECTED`), `confidence` (`HIGH` / `MEDIUM` / `LOW`), "
+        "`scan_batch_id`, `limit`, `offset`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ items: [...], total }` ordered by newest first."
+    ),
+)
 def get_scan_results(
     org_id: int,
     scan_batch_id: Optional[str] = None,
@@ -287,7 +382,19 @@ def get_scan_results(
     } for r in results]
 
 
-@router.get("/org/{org_id}/batches")
+@router.get(
+    "/org/{org_id}/batches",
+    summary="List recent scan batches with summary counts",
+    description=(
+        "Groups StorageScanResult rows by `scan_batch_id` and returns one "
+        "row per batch with totals. Used to power the Scan History view.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Optional query:** `limit` (default 20).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `List[{ scan_batch_id, started_at, link_id, "
+        "creator_id, total, pending, approved, rejected }]`."
+    ),
+)
 def get_scan_batches(
     org_id: int,
     db: Session = Depends(get_db),
@@ -329,7 +436,23 @@ def get_scan_batches(
     return result
 
 
-@router.post("/org/{org_id}/results/{result_id}/approve")
+@router.post(
+    "/org/{org_id}/results/{result_id}/approve",
+    summary="Approve a scan result and link the audio to a song / work",
+    description=(
+        "Accepts the proposed match (or a manual override) and binds the "
+        "imported AudioAsset to the chosen Song/Work. Three modes:\n"
+        "1. Accept the proposed match — body `{}`.\n"
+        "2. Override with an existing record — body `{ song_id }` or "
+        "`{ work_id }`.\n"
+        "3. Create a new Song on the fly — body `{ create_new: true, "
+        "new_title, new_artist }`.\n\n"
+        "**Path parameters:** `org_id`, `result_id`.\n"
+        "**Body:** `ApproveRequest` (see modes above).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ message, song_id?, work_id?, asset_id }`."
+    ),
+)
 def approve_result(
     org_id: int,
     result_id: int,
@@ -373,7 +496,18 @@ def approve_result(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/org/{org_id}/results/{result_id}/reject")
+@router.post(
+    "/org/{org_id}/results/{result_id}/reject",
+    summary="Reject a scan result",
+    description=(
+        "Marks a StorageScanResult as `REJECTED`. The underlying AudioAsset "
+        "stays in the system but is excluded from the review queue. "
+        "Re-scanning the folder will not re-propose this asset.\n\n"
+        "**Path parameters:** `org_id`, `result_id`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ message: \"Result rejected\" }`."
+    ),
+)
 def reject_result(
     org_id: int,
     result_id: int,
@@ -388,7 +522,20 @@ def reject_result(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/org/{org_id}/results/{result_id}/reassign")
+@router.post(
+    "/org/{org_id}/results/{result_id}/reassign",
+    summary="Reassign an already-approved scan result to a different song",
+    description=(
+        "Used to fix mistakes: moves the linked AudioAsset off its current "
+        "Song/Work and onto a different one without going back through the "
+        "approval queue.\n\n"
+        "**Path parameters:** `org_id`, `result_id`.\n"
+        "**Body (`ReassignMatchRequest`):** exactly one of `song_id` or "
+        "`work_id`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ message: \"Match reassigned\" }`."
+    ),
+)
 def reassign_match(
     org_id: int,
     result_id: int,
@@ -417,7 +564,22 @@ def reassign_match(
     return {"message": "Reassigned"}
 
 
-@router.post("/org/{org_id}/bulk-approve")
+@router.post(
+    "/org/{org_id}/bulk-approve",
+    summary="Bulk-approve a scan batch's high-confidence matches",
+    description=(
+        "Auto-approves every PENDING StorageScanResult in `scan_batch_id` "
+        "whose match confidence meets `min_confidence`. Equivalent to "
+        "calling the per-result approve endpoint with the proposed match "
+        "for each row, but in a single transaction.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Body (`BulkApproveRequest`):** `scan_batch_id` (from the batches "
+        "endpoint), `min_confidence` (`HIGH` / `MEDIUM` / `LOW`, default "
+        "`HIGH`).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ approved, skipped, errors }`."
+    ),
+)
 def bulk_approve(
     org_id: int,
     request: BulkApproveRequest,
@@ -466,7 +628,19 @@ class AnalyzeLinkedRequest(BaseModel):
     scan_batch_id: Optional[str] = None
 
 
-@router.post("/org/{org_id}/analyze-linked")
+@router.post(
+    "/org/{org_id}/analyze-linked",
+    summary="Queue audio analysis for every linked AudioAsset that lacks it",
+    description=(
+        "Walks the org's AudioAssets that are already linked to a Song/Work "
+        "but have no AudioAnalysis row yet, and enqueues them for "
+        "fingerprinting/key/BPM analysis.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Optional query:** `creator_id` (limit to one creator's catalog).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ total_assets, queued }`."
+    ),
+)
 def analyze_linked_songs(
     org_id: int,
     request: AnalyzeLinkedRequest = AnalyzeLinkedRequest(),
@@ -538,7 +712,19 @@ class OrgWideScanRequest(BaseModel):
     auto_link_threshold: float = 0.85
 
 
-@router.post("/org/{org_id}/org-scan")
+@router.post(
+    "/org/{org_id}/org-scan",
+    summary="Trigger an asynchronous org-wide deep scan",
+    description=(
+        "Enqueues a background job that fans out scans across every "
+        "CreatorStorageLink in the org and follows up with audio analysis "
+        "for any new imports. Returns immediately with a `scan_batch_id` "
+        "the UI can poll via `/batches`.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ scan_batch_id, queued: true }`."
+    ),
+)
 def org_wide_scan(
     org_id: int,
     request: OrgWideScanRequest = OrgWideScanRequest(),
@@ -581,7 +767,21 @@ def org_wide_scan(
         raise HTTPException(status_code=500, detail=f"Scan failed: {str(e)}")
 
 
-@router.get("/org/{org_id}/coverage")
+@router.get(
+    "/org/{org_id}/coverage",
+    summary="Audio + analysis coverage stats for the org",
+    description=(
+        "Reports how much of the catalog has audio attached and how much "
+        "of that audio has been analyzed. Powers the Coverage widget on "
+        "the storage dashboard.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Optional query:** `creator_id` to scope to a single roster.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ total_songs, songs_with_audio, songs_unlinked, "
+        "songs_analyzed, songs_queued, songs_failed, total_assets, "
+        "audio_coverage_pct, analysis_coverage_pct }`."
+    ),
+)
 def get_audio_coverage(
     org_id: int,
     db: Session = Depends(get_db),
@@ -637,7 +837,18 @@ def get_audio_coverage(
     }
 
 
-@router.post("/org/{org_id}/analyze-all-unanalyzed")
+@router.post(
+    "/org/{org_id}/analyze-all-unanalyzed",
+    summary="Queue audio analysis for every AudioAsset without one",
+    description=(
+        "Broader counterpart of `/analyze-linked`: ignores Song/Work linkage "
+        "and just queues an AudioAnalysis job for any AudioAsset in the org "
+        "that doesn't have one yet (or whose previous analysis failed).\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ message, queued }`."
+    ),
+)
 def analyze_all_unanalyzed(
     org_id: int,
     db: Session = Depends(get_db),
@@ -692,7 +903,20 @@ class ScheduleScanRequest(BaseModel):
     auto_scan_frequency: Optional[str] = "daily"
 
 
-@router.put("/org/{org_id}/links/{link_id}/schedule")
+@router.put(
+    "/org/{org_id}/links/{link_id}/schedule",
+    summary="Configure a link's automatic scan schedule",
+    description=(
+        "Toggles whether the storage link is included in scheduled scans "
+        "and at what cadence. The platform scheduler runs daily and picks "
+        "up enabled links whose `auto_scan_frequency` window has elapsed.\n\n"
+        "**Path parameters:** `org_id`, `link_id`.\n"
+        "**Body:** `{ auto_scan_enabled: bool, auto_scan_frequency?: "
+        "\"DAILY\" | \"WEEKLY\" | \"MONTHLY\" }`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ message, auto_scan_enabled, auto_scan_frequency }`."
+    ),
+)
 def update_scan_schedule(
     org_id: int,
     link_id: int,
@@ -718,7 +942,19 @@ def update_scan_schedule(
     }
 
 
-@router.get("/org/{org_id}/providers")
+@router.get(
+    "/org/{org_id}/providers",
+    summary="List the org's connected cloud-storage providers",
+    description=(
+        "Returns one row per IntegrationAccount of provider type "
+        "(`DROPBOX`, `GOOGLE_DRIVE`, `ONEDRIVE`, `S3`) — these are the "
+        "providers the link/browse endpoints can target.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `List[{ provider, account_email, connected_at, "
+        "status }]`."
+    ),
+)
 def get_connected_providers(
     org_id: int,
     db: Session = Depends(get_db),
@@ -738,7 +974,22 @@ def get_connected_providers(
     } for i in integrations]
 
 
-@router.get("/org/{org_id}/browse")
+@router.get(
+    "/org/{org_id}/browse",
+    summary="Browse a folder in a connected provider",
+    description=(
+        "Lists immediate folder/file children at `path` in the org's "
+        "connected `provider` so the New Link wizard can render a folder "
+        "picker. Read-only; no scanning is triggered.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Required query:** `provider` (e.g. `DROPBOX`).\n"
+        "**Optional query:** `path` (default root, provider-specific "
+        "format), `container_name` (bucket / drive id when applicable).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ provider, path, files: [{name, path, is_folder, "
+        "size, modified}] }`."
+    ),
+)
 async def browse_provider_folders(
     org_id: int,
     provider: str = Query("DROPBOX"),

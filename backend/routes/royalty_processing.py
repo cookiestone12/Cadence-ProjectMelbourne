@@ -132,7 +132,11 @@ class PayoutBatchStatusUpdate(BaseModel):
 
 # --- Statement Lines ---
 
-@router.get("/{org_id}/statements/{statement_id}/lines")
+@router.get(
+    "/{org_id}/statements/{statement_id}/lines",
+    summary='List the parsed line items on a royalty statement',
+    description='Returns the per-track/per-territory rows that were extracted when the statement file was uploaded. This is the workhorse list view for the matching/reconciliation UI.\n\n**Path parameters:** `org_id` — Organization ID; `statement_id` — RoyaltyStatement id.\n**Query:** `status` (`unmatched|matched|confirmed|ignored`), `q` (substring on title/artist/ISRC), `min_amount`, `max_amount`, `limit` (default 100), `offset`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ total, limit, offset, lines: [{id, track_title, artist, isrc, period, territory, amount_cents, currency, status, song_id, work_id, release_id, match_confidence}] }`.',
+)
 def list_statement_lines(
     org_id: int,
     statement_id: int,
@@ -273,7 +277,11 @@ def list_statement_lines(
     return {"total": total, "offset": offset, "limit": limit, "lines": results}
 
 
-@router.get("/{org_id}/statements/{statement_id}/lines/stats")
+@router.get(
+    "/{org_id}/statements/{statement_id}/lines/stats",
+    summary="Get aggregate counts and totals for a statement's lines",
+    description='Returns the breakdown the matching dashboard renders along the top of the page: how many lines fall in each status bucket and what they sum to. Used to drive the progress bars and KPIs.\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ total_lines, total_amount, by_status: { unmatched, suggested, confirmed, ignored } }` where each entry is `{ count, amount_cents }`.',
+)
 def get_statement_line_stats(
     org_id: int,
     statement_id: int,
@@ -354,7 +362,11 @@ def get_statement_line_stats(
 
 # --- Matching ---
 
-@router.post("/{org_id}/statements/{statement_id}/auto-match")
+@router.post(
+    "/{org_id}/statements/{statement_id}/auto-match",
+    summary='Run the auto-matcher across every line on a statement',
+    description="Kicks off the auto-matching engine which fingerprints every unmatched line against the org's catalog (ISRC > exact title+artist > fuzzy title) and writes a suggested `song_id`/`work_id` plus a confidence score to each row. Lines already in `confirmed` or `ignored` are skipped. Synchronous.\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ success: true, status, stats: { matched, high_confidence, low_confidence, unmatched } }`.",
+)
 def trigger_auto_match(
     org_id: int,
     statement_id: int,
@@ -400,7 +412,11 @@ def trigger_auto_match(
     return {"success": True, "stats": stats, "status": stmt.status}
 
 
-@router.post("/{org_id}/lines/{line_id}/confirm-match")
+@router.post(
+    "/{org_id}/lines/{line_id}/confirm-match",
+    summary='Confirm a suggested match (or attach an explicit one) to a line',
+    description="Locks in the song/work/release a statement line should pay out to. If the body specifies `song_id` it overrides whatever the auto-matcher suggested. Sets the line's status to `confirmed` and clears any pending suggestion.\n\n**Path parameters:** `org_id`, `line_id` — RoyaltyStatementLine id.\n**Body (`ConfirmMatchRequest`):** `song_id` (required), `work_id?`, `release_id?`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ success: true }`.",
+)
 def confirm_line_match(
     org_id: int,
     line_id: int,
@@ -417,7 +433,11 @@ def confirm_line_match(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/{org_id}/lines/{line_id}/reject-match")
+@router.post(
+    "/{org_id}/lines/{line_id}/reject-match",
+    summary="Reject the auto-matcher's suggestion on a line",
+    description='Clears the suggested song/work/release on a line and returns it to `unmatched` so a human can resolve it. Does **not** mark the line as ignored; use `/ignore` for that.\n\n**Path parameters:** `org_id`, `line_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ success: true }`.',
+)
 def reject_line_match(
     org_id: int,
     line_id: int,
@@ -433,7 +453,11 @@ def reject_line_match(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/{org_id}/lines/{line_id}/ignore")
+@router.post(
+    "/{org_id}/lines/{line_id}/ignore",
+    summary='Mark a statement line as intentionally unallocated',
+    description="Sets the line's status to `ignored` so it stops appearing in the unmatched queue and is excluded from allocation. Useful for tax adjustments, recoupments already handled elsewhere, or garbage rows from the source file.\n\n**Path parameters:** `org_id`, `line_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ success: true }`.",
+)
 def ignore_statement_line(
     org_id: int,
     line_id: int,
@@ -449,7 +473,11 @@ def ignore_statement_line(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/{org_id}/statements/{statement_id}/bulk-confirm")
+@router.post(
+    "/{org_id}/statements/{statement_id}/bulk-confirm",
+    summary='Bulk-confirm every high-confidence suggestion on a statement',
+    description='Walks every line on the statement that has a `match_confidence` at or above the supplied threshold and confirms it in one shot. Designed to clear out the easy wins so reviewers can focus on the long tail.\n\n**Path parameters:** `org_id`, `statement_id`.\n**Body (`BulkConfirmRequest`):** `threshold` (0–100, default 85).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ success: true, confirmed_count }`.',
+)
 def bulk_confirm_matches(
     org_id: int,
     statement_id: int,
@@ -470,7 +498,11 @@ def bulk_confirm_matches(
     return {"success": True, "confirmed_count": count}
 
 
-@router.get("/{org_id}/lines/{line_id}/suggestions")
+@router.get(
+    "/{org_id}/lines/{line_id}/suggestions",
+    summary='Get ranked match candidates for a single statement line',
+    description='Returns the top scoring catalog entries for a line so a human can pick the right one when the auto-matcher was uncertain. Combines ISRC/title/artist matching strategies.\n\n**Path parameters:** `org_id`, `line_id`.\n**Query:** `limit` (default 5).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ line_id, suggestions: [{song_id, work_id, release_id, title, artist, isrc, confidence, reason}] }`.',
+)
 def get_match_suggestions(
     org_id: int,
     line_id: int,
@@ -536,7 +568,11 @@ def get_match_suggestions(
 
 # --- Processing ---
 
-@router.get("/{org_id}/statements/{statement_id}/allocation-preview")
+@router.get(
+    "/{org_id}/statements/{statement_id}/allocation-preview",
+    summary="Preview how a statement's revenue would split across rights-holders",
+    description="Computes — without persisting — the per-payee allocation that `/process` would write to the ledger, by joining each confirmed line to its work's RightsSplits and applying advance recoupment rules. Use this to sanity-check before pulling the trigger.\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ statement_id, is_processed, allocations: [{payee_id, payee_name, gross_cents, recouped_cents, net_cents, currency, lines: [...]}] }`.",
+)
 def get_statement_allocation_preview(
     org_id: int,
     statement_id: int,
@@ -559,7 +595,11 @@ def get_statement_allocation_preview(
     }
 
 
-@router.post("/{org_id}/statements/{statement_id}/process")
+@router.post(
+    "/{org_id}/statements/{statement_id}/process",
+    summary='Process a statement: write ledger entries and recoup advances',
+    description='Materializes the allocation preview into RoyaltyLedgerEntry rows for every payee, applies recoupment against any open advances in the configured pools, and marks the statement as `processed`. Idempotent on already-processed statements (use `/reprocess` to redo).\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ success: true, processing_run: {id, started_at, completed_at, lines_processed, entries_written, advance_recoupments_cents} }`.',
+)
 def process_statement_endpoint(
     org_id: int,
     statement_id: int,
@@ -597,7 +637,11 @@ def process_statement_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/{org_id}/statements/{statement_id}/reprocess")
+@router.post(
+    "/{org_id}/statements/{statement_id}/reprocess",
+    summary='Reverse and re-run processing for an already-processed statement',
+    description="Voids the prior RoyaltyProcessingRun's ledger entries (keeping an audit trail), then re-runs `/process` from scratch. Use when splits, advances, or matches have changed since the original processing.\n\n**Path parameters:** `org_id`, `statement_id`.\n**Body (`ReprocessRequest`):** `reason` — required free-text audit reason recorded on the new run.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ success: true, processing_run: {...} }`.",
+)
 def reprocess_statement_endpoint(
     org_id: int,
     statement_id: int,
@@ -636,7 +680,11 @@ def reprocess_statement_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/{org_id}/statements/{statement_id}/runs")
+@router.get(
+    "/{org_id}/statements/{statement_id}/runs",
+    summary='List every processing run for a statement',
+    description='Returns the audit history of `/process` and `/reprocess` calls against a statement, newest first.\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ runs: [{id, kind, started_at, completed_at, actor_user_id, reason, lines_processed, entries_written, voided_at, voided_by_run_id}] }` ordered by `started_at desc`.',
+)
 def list_processing_runs(
     org_id: int,
     statement_id: int,
@@ -669,7 +717,11 @@ def list_processing_runs(
 
 # --- Payees ---
 
-@router.get("/{org_id}/payees")
+@router.get(
+    "/{org_id}/payees",
+    summary="List the org's payees (creators and external companies)",
+    description='Returns every Payee record — the abstraction that owns a royalty ledger balance. A payee is either backed by a Creator in the roster or an external `company` (label, sub-publisher, etc.).\n\n**Path parameter:** `org_id`.\n**Query:** `payee_type` (`creator|company`), `q` (name search).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ payees: [{id, payee_type, creator_id, company_name, contact_email, balance_cents, currency, created_at}] }`.',
+)
 def list_payees(
     org_id: int,
     db: Session = Depends(get_db),
@@ -700,7 +752,11 @@ def list_payees(
     return {"payees": results}
 
 
-@router.post("/{org_id}/payees")
+@router.post(
+    "/{org_id}/payees",
+    summary='Create a new payee (creator-backed or external company)',
+    description='Adds a Payee that future allocations and payouts can post to. When `payee_type="creator"`, `creator_id` must reference a Creator in the org. When `payee_type="company"`, `company_name` must be supplied.\n\n**Path parameter:** `org_id`.\n**Body (`PayeeCreateRequest`):** `payee_type` (`creator|company`), `creator_id?`, `company_name?`, `contact_email?`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ id, payee_type, creator_id, company_name, contact_email, created_at }`.',
+)
 def create_payee(
     org_id: int,
     body: PayeeCreateRequest,
@@ -728,7 +784,11 @@ def create_payee(
     }
 
 
-@router.get("/{org_id}/payees/{payee_id}/ledger")
+@router.get(
+    "/{org_id}/payees/{payee_id}/ledger",
+    summary="Get a payee's running royalty ledger",
+    description='Returns every credit (allocation), debit (recoupment), and payout posted to the payee, chronological newest-first, with a running balance. This is the source of truth for what the org owes — or has paid — that payee.\n\n**Path parameters:** `org_id`, `payee_id`.\n**Query:** `limit` (default 100), `offset`, `start_date`, `end_date`, `entry_type` (`credit|debit|payout|advance`).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ total, limit, offset, entries: [{id, posted_at, entry_type, amount_cents, running_balance_cents, currency, statement_id, processing_run_id, payout_item_id, advance_id, memo}] }`.',
+)
 def get_payee_ledger(
     org_id: int,
     payee_id: int,
@@ -796,7 +856,11 @@ def get_payee_ledger(
 
 # --- Payables ---
 
-@router.get("/{org_id}/payables")
+@router.get(
+    "/{org_id}/payables",
+    summary='List current outstanding amounts owed to each payee',
+    description='Returns the rolled-up `balance_cents` per payee — i.e. what would be paid out if a batch were cut today, after recoupment. Drives the "Payables" dashboard and the payout-batch builder.\n\n**Path parameter:** `org_id`.\n**Query:** `min_balance_cents` (default 0), `currency`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ payables: [{payee_id, payee_name, payee_type, balance_cents, currency, last_credit_at}] }` sorted by balance desc.',
+)
 def list_payables(
     org_id: int,
     db: Session = Depends(get_db),
@@ -866,7 +930,11 @@ def list_payables(
 
 # --- Advances ---
 
-@router.get("/{org_id}/advances")
+@router.get(
+    "/{org_id}/advances",
+    summary='List all advances (recoupable and non-recoupable) in the org',
+    description='Returns every AdvanceV2 record — the principal balances that future royalty allocations will recoup against, including their current recoupment status.\n\n**Path parameter:** `org_id`.\n**Query:** `payee_id`, `contract_id`, `recouped` (bool — only fully/partially recouped), `pool` (recoupment pool name).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ advances: [{id, advance_name, advance_date, principal_amount_cents, recouped_amount_cents, outstanding_cents, currency, recoupment_pool, recoupment_priority, cross_collateralize, payee_id, contract_id, recoupable, start_recouping_on, end_recouping_on}] }`.',
+)
 def list_advances(
     org_id: int,
     contract_id: Optional[int] = None,
@@ -907,7 +975,11 @@ def list_advances(
     }
 
 
-@router.post("/{org_id}/advances")
+@router.post(
+    "/{org_id}/advances",
+    summary='Create a new advance against a payee or contract',
+    description="Records an advance that will be recouped from future royalties in the given `recoupment_pool`. Set `cross_collateralize=true` to allow recoupment across all of the payee's pools.\n\n**Path parameter:** `org_id`.\n**Body (`AdvanceCreateRequest`):** `advance_name`, `principal_amount_cents`, `recoupment_pool`, `recoupment_priority` (default 1), `currency` (default USD), `recoupable` (default true), `cross_collateralize` (default false), `payee_id?`, `contract_id?`, `advance_date?`, `start_recouping_on?`, `end_recouping_on?`, `notes?`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** the created advance object.",
+)
 def create_advance(
     org_id: int,
     body: AdvanceCreateRequest,
@@ -945,7 +1017,11 @@ def create_advance(
     }
 
 
-@router.put("/{org_id}/advances/{advance_id}")
+@router.put(
+    "/{org_id}/advances/{advance_id}",
+    summary="Update an advance's metadata",
+    description='Patches editable fields on an advance. Changing `principal_amount_cents` does **not** retroactively rewrite ledger entries — re-run `/reprocess` on affected statements if you need that.\n\n**Path parameters:** `org_id`, `advance_id`.\n**Body (`AdvanceUpdateRequest`):** any subset of writable fields from create.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** the updated advance object.',
+)
 def update_advance(
     org_id: int,
     advance_id: int,
@@ -987,7 +1063,11 @@ def update_advance(
     }
 
 
-@router.get("/{org_id}/advances/{advance_id}")
+@router.get(
+    "/{org_id}/advances/{advance_id}",
+    summary='Get a single advance with its recoupment history',
+    description='Returns the advance plus the per-statement history of how much was recouped against it and when.\n\n**Path parameters:** `org_id`, `advance_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** the full advance object plus `recoupment_history: [{processing_run_id, statement_id, recouped_at, amount_cents}]`.',
+)
 def get_advance_detail(
     org_id: int,
     advance_id: int,
@@ -1041,7 +1121,11 @@ def get_advance_detail(
 
 # --- Payout Batches ---
 
-@router.get("/{org_id}/payout-batches")
+@router.get(
+    "/{org_id}/payout-batches",
+    summary='List payout batches for the organization',
+    description='Returns all PayoutBatch records (drafts, approved, paid) with their total amount and item count. Used to render the payouts page.\n\n**Path parameter:** `org_id`.\n**Query:** `status` (`draft|approved|paid|cancelled`).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ batches: [{id, name, status, currency, total_cents, item_count, created_at, paid_at}] }`.',
+)
 def list_payout_batches(
     org_id: int,
     db: Session = Depends(get_db),
@@ -1078,7 +1162,11 @@ def list_payout_batches(
     return {"batches": results}
 
 
-@router.post("/{org_id}/payout-batches")
+@router.post(
+    "/{org_id}/payout-batches",
+    summary='Create a new (empty) payout batch',
+    description='Creates a draft PayoutBatch that line items can be added to via `/items`. Status starts as `draft`; cut over to `approved` and then `paid` via `/status`.\n\n**Path parameter:** `org_id`.\n**Body (`PayoutBatchCreateRequest`):** `name`, `currency` (default USD).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** the created batch object.',
+)
 def create_payout_batch(
     org_id: int,
     body: PayoutBatchCreateRequest,
@@ -1105,7 +1193,11 @@ def create_payout_batch(
     }
 
 
-@router.post("/{org_id}/payout-batches/{batch_id}/items")
+@router.post(
+    "/{org_id}/payout-batches/{batch_id}/items",
+    summary='Add a payout item to a draft batch',
+    description="Appends a single payee/amount line to a draft PayoutBatch and debits the payee's ledger when the batch is later marked paid. Only allowed while the batch is `draft`.\n\n**Path parameters:** `org_id`, `batch_id`.\n**Body (`PayoutItemCreateRequest`):** `payee_id`, `amount_cents`, `memo?`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** the created PayoutItem `{id, payee_id, amount_cents, memo, created_at}`.",
+)
 def add_payout_item(
     org_id: int,
     batch_id: int,
@@ -1143,7 +1235,11 @@ def add_payout_item(
     }
 
 
-@router.put("/{org_id}/payout-batches/{batch_id}/status")
+@router.put(
+    "/{org_id}/payout-batches/{batch_id}/status",
+    summary='Move a payout batch through its status lifecycle',
+    description='Transitions the batch — `draft → approved → paid` (or `cancelled` from any non-paid state). Marking a batch `paid` writes a debit ledger entry for every item against its payee.\n\n**Path parameters:** `org_id`, `batch_id`.\n**Body (`PayoutBatchStatusUpdate`):** `status` (`draft|approved|paid|cancelled`).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** the updated batch object.',
+)
 def update_payout_batch_status(
     org_id: int,
     batch_id: int,
@@ -1187,7 +1283,11 @@ def update_payout_batch_status(
 
 # --- Processing Inbox ---
 
-@router.get("/{org_id}/inbox")
+@router.get(
+    "/{org_id}/inbox",
+    summary='Get the royalty-processing action-item inbox',
+    description='Returns the prioritized list of things a royalty operator needs to do — statements waiting to be processed, statements with low-confidence matches, statements that re-need processing after splits changed, etc. Each item includes a deep link.\n\n**Path parameter:** `org_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ items: [{id, kind, severity, statement_id, title, description, created_at, link}] }`.',
+)
 def get_processing_inbox(
     org_id: int,
     db: Session = Depends(get_db),
@@ -1208,7 +1308,11 @@ def get_processing_inbox(
 
 # --- Exports ---
 
-@router.get("/{org_id}/statements/{statement_id}/export/unmatched")
+@router.get(
+    "/{org_id}/statements/{statement_id}/export/unmatched",
+    summary='Download the unmatched lines on a statement as CSV',
+    description='Streams a CSV of every line whose status is `unmatched` so an operator can resolve them in a spreadsheet (or hand them off to a contractor).\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `text/csv` download — columns: `line_id, track_title, artist, isrc, period, territory, amount_cents, currency, suggested_song_id, suggested_title, confidence`.',
+)
 def export_unmatched_lines(
     org_id: int,
     statement_id: int,
@@ -1240,7 +1344,11 @@ def export_unmatched_lines(
     )
 
 
-@router.get("/{org_id}/statements/{statement_id}/export/allocation")
+@router.get(
+    "/{org_id}/statements/{statement_id}/export/allocation",
+    summary='Download the per-payee allocation preview as CSV',
+    description='Streams the rows from `/allocation-preview` as a CSV — one row per payee with their gross, recouped and net amounts.\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `text/csv` download — columns: `payee_id, payee_name, gross_cents, recouped_cents, net_cents, currency`.',
+)
 def export_allocation_preview(
     org_id: int,
     statement_id: int,
@@ -1274,7 +1382,11 @@ def export_allocation_preview(
     )
 
 
-@router.get("/{org_id}/statements/{statement_id}/export/payables")
+@router.get(
+    "/{org_id}/statements/{statement_id}/export/payables",
+    summary='Download the payables report for a processed statement as CSV',
+    description='Like the allocation export but only for **processed** statements: shows the actual ledger postings written by the processing run plus updated payee balances.\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `text/csv` download — columns: `payee_id, payee_name, posted_amount_cents, balance_cents, currency, processing_run_id`.',
+)
 def export_payables_report(
     org_id: int,
     statement_id: int,
@@ -1308,7 +1420,11 @@ def export_payables_report(
 
 # --- Statement Upload Enhancement ---
 
-@router.post("/{org_id}/statements/upload")
+@router.post(
+    "/{org_id}/statements/upload",
+    summary='Upload a royalty statement file and parse it into lines',
+    description='Accepts a CSV/XLSX statement file (Spotify, Apple, ASCAP, BMI, etc.), auto-detects the source format, suggests column mappings, and creates a RoyaltyStatement with parsed RoyaltyStatementLine rows. Run `/auto-match` next.\n\n**Path parameter:** `org_id`.\n**Body (multipart/form-data):** `file` (the statement), `source` (PRO/DSP slug, optional — auto-detected when omitted), `period_start`, `period_end` (optional ISO dates), `column_mapping` (optional JSON overrides).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ statement_id, source_detected, lines_created, suggested_mapping, warnings }`.',
+)
 async def upload_and_parse_statement(
     org_id: int,
     file: UploadFile = File(...),
@@ -1424,7 +1540,11 @@ async def upload_and_parse_statement(
     }
 
 
-@router.get("/{org_id}/statements/{statement_id}/reconciliation")
+@router.get(
+    "/{org_id}/statements/{statement_id}/reconciliation",
+    summary='Run control totals against a statement',
+    description="Compares the sum of parsed line amounts against the source file's reported totals (when supplied) to flag parsing/import errors. Used as a sanity check before processing.\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ reported_total_cents, parsed_total_cents, delta_cents, in_balance, by_currency: [...] }`.",
+)
 def get_reconciliation(
     org_id: int,
     statement_id: int,
@@ -1436,7 +1556,11 @@ def get_reconciliation(
     return result
 
 
-@router.get("/{org_id}/statements/{statement_id}/classification")
+@router.get(
+    "/{org_id}/statements/{statement_id}/classification",
+    summary="Break down a statement's lines by revenue classification",
+    description='Returns the buckets the reconciliation engine assigned to each line — mechanical, performance, sync, neighboring rights, streaming, etc. — with counts and totals per bucket. Drives the "composition" pie chart on the statement page.\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ classifications: [{bucket, count, amount_cents, currency, pct_of_total}] }`.',
+)
 def get_statement_classification(
     org_id: int,
     statement_id: int,
@@ -1447,7 +1571,11 @@ def get_statement_classification(
     return get_classification_breakdown(db, statement_id, org_id)
 
 
-@router.get("/{org_id}/statements/{statement_id}/match-summary")
+@router.get(
+    "/{org_id}/statements/{statement_id}/match-summary",
+    summary='Summarize match coverage for a statement',
+    description="Reports how much of the statement's value has been matched, by match strategy (ISRC, exact, fuzzy, manual) — useful for spotting brittle data sources.\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ total_amount_cents, matched_amount_cents, unmatched_amount_cents, coverage_pct, by_strategy: [{strategy, count, amount_cents}] }`.",
+)
 def get_statement_match_summary(
     org_id: int,
     statement_id: int,
@@ -1458,7 +1586,11 @@ def get_statement_match_summary(
     return get_match_summary(db, statement_id, org_id)
 
 
-@router.post("/{org_id}/statements/{statement_id}/set-reported-totals")
+@router.post(
+    "/{org_id}/statements/{statement_id}/set-reported-totals",
+    summary='Manually record the reported totals from the source file',
+    description="Stores the totals printed on the cover page of the original PRO/DSP statement so reconciliation has something to compare the parsed sum against. Use when the parser couldn't auto-extract them.\n\n**Path parameters:** `org_id`, `statement_id`.\n**Body:** `{ reported_total_cents: int, currency: str, totals_by_bucket?: { mechanical?, performance?, ... } }`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ success: true }`.",
+)
 def set_reported_totals(
     org_id: int,
     statement_id: int,
@@ -1485,7 +1617,11 @@ def set_reported_totals(
     return {"message": "Reported totals updated"}
 
 
-@router.get("/{org_id}/analytics/portfolio")
+@router.get(
+    "/{org_id}/analytics/portfolio",
+    summary='Portfolio-level decay/earnings analytics for the org',
+    description='Returns the org-wide decay analytics dashboard data: aggregate earnings curves, CAGR, top earners, and projected lifetime value across the catalog.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `currency`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ totals_by_period: [...], cagr, decay_fit: {a, k, r2}, top_songs: [...], projections: [...] }`.',
+)
 def get_portfolio_analytics_endpoint(
     org_id: int,
     db: Session = Depends(get_db),
@@ -1495,7 +1631,11 @@ def get_portfolio_analytics_endpoint(
     return get_portfolio_analytics(db, org_id)
 
 
-@router.get("/{org_id}/analytics/song/{song_id}")
+@router.get(
+    "/{org_id}/analytics/song/{song_id}",
+    summary='Per-song decay/earnings analytics',
+    description='The song-level version of `/analytics/portfolio`: time series, exponential decay fit, CAGR, and projection for a single song based on its historical royalty postings.\n\n**Path parameters:** `org_id`, `song_id`.\n**Query:** `start_date`, `end_date`, `currency`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ song_id, time_series: [{period, amount_cents}], cagr, decay_fit: {a, k, r2}, projection: [...] }`.',
+)
 def get_song_analytics_endpoint(
     org_id: int,
     song_id: int,
@@ -1506,7 +1646,11 @@ def get_song_analytics_endpoint(
     return get_song_analytics(db, org_id, song_id)
 
 
-@router.get("/{org_id}/analytics/time-series")
+@router.get(
+    "/{org_id}/analytics/time-series",
+    summary='Aggregate royalty earnings as a time series',
+    description='Returns a flexible time series of royalty postings, optionally grouped by source, classification, payee, or song. Powers custom analytics widgets.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `granularity` (`month|quarter|year`), `group_by` (`source|classification|payee|song`), `currency`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ series: [{key, points: [{period, amount_cents}]}] }`.',
+)
 def get_time_series_endpoint(
     org_id: int,
     song_id: Optional[int] = Query(None),

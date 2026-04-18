@@ -38,7 +38,11 @@ def _get_org_id(current_user: User, db: Session) -> int:
     return membership.organization_id
 
 
-@router.post("/search")
+@router.post(
+    "/search",
+    summary='Search the catalog with brief-builder filters',
+    description='Composite search powered by the brief-builder UI: combines metadata filters (genre, mood, BPM, key), free text, and creator filters into a ranked list of song candidates for a sync brief.\n\n**Body:** `{ org_id, query?, filters: {genres?, moods?, bpm_min?, bpm_max?, key?, creator_ids?, has_audio?, has_one_stop?}, limit?, offset? }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, results: [{song_id, title, artist, score, matched_filters: [...]}] }`.',
+)
 def search_brief(
     request: BriefSearchRequest,
     db: Session = Depends(get_db),

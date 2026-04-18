@@ -131,7 +131,7 @@ class CatalogSummaryResponse(BaseModel):
     collectible_publishing_value: float
     black_box_loss: float
 
-@router.get("/summary", response_model=List[CatalogSummaryResponse])
+@router.get("/summary", response_model=List[CatalogSummaryResponse], summary="Get summary for all catalogs", description="Returns one summary row per Catalog the user can see (song count, last upload, owner). Used to render the catalog list page.\n\n**Query:** `org_id` (defaults to the caller's current org).\n**Auth:** Bearer JWT.\n**Response:** `List[CatalogSummaryResponse]` — `[{id, name, song_count, owner, last_upload_at, status}]`.")
 def get_catalog_summary(
     db: Session = Depends(get_db)
 ):
@@ -354,7 +354,12 @@ def get_catalog_summary(
     
     return result
 
-@router.get("/songs", response_model=List[SongResponse])
+@router.get(
+    "/songs",
+    response_model=List[SongResponse],
+    summary='List songs with optional filters (legacy catalog list)',
+    description="Returns the org's songs with optional filtering by catalog, status, or text. Lower-level than `/api/songs`.\n\n**Query:** `org_id`, `catalog_id`, `status`, `q`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `List[SongResponse]`.",
+)
 def get_songs(
     db: Session = Depends(get_db)
 ):
@@ -423,7 +428,12 @@ def get_songs(
         })
     return result
 
-@router.get("/songs/{song_id}", response_model=SongDetailResponse)
+@router.get(
+    "/songs/{song_id}",
+    response_model=SongDetailResponse,
+    summary="Get a song's full detail (legacy catalog endpoint)",
+    description="Returns the song with credits, splits, audio assets, and DSP links inlined. Lower-level than `/api/songs/{id}`.\n\n**Path parameter:** `song_id`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `SongDetailResponse`.",
+)
 def get_song(
     song_id: int,
     db: Session = Depends(get_db)
@@ -541,7 +551,7 @@ def get_song(
         "black_box_loss": round(black_box_loss, 2)
     }
 
-@router.post("/upload")
+@router.post("/upload", summary="Upload and parse Schedule A template", description='Uploads a Schedule A template (PDF or Excel), runs the AI parser, and creates a new Catalog with one Song per parsed row. The unparsed file is also archived for audit.\n\n**Body (multipart/form-data):** `file` — the Schedule A; `org_id`; `name?`.\n**Auth:** Bearer JWT — caller must be a member of `org_id`.\n**Response:** `{ catalog_id, name, parsed_rows, songs_created, warnings: [...] }`.')
 async def upload_schedule_a(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
@@ -908,7 +918,7 @@ async def upload_schedule_a(
         "songs": [{"id": s.id, "title": s.title} for s in created_songs]
     }
 
-@router.get("/search")
+@router.get("/search", summary="Search for songs by title or artist name", description='Searches the org\'s catalog by song title or primary artist. Falls back to a small mock external dataset if no local matches are found (used to demo the search UI on empty orgs).\n\n**Query:** `q` (required), `org_id`, `limit` (default 25).\n**Auth:** Bearer JWT.\n**Response:** `{ results: [{song_id?, title, artist, isrc?, source: "local"|"external"}] }`.')
 def search_songs(
     q: str,
     db: Session = Depends(get_db)
@@ -1044,7 +1054,7 @@ def search_songs(
     
     return {"results": results, "count": len(results)}
 
-@router.get("/export/{catalog_id}")
+@router.get("/export/{catalog_id}", summary="Generate comprehensive Excel report for a catalog", description="Renders an Excel report of the catalog (songs, splits, ISRCs, registration status) and streams it as a download.\n\n**Path parameter:** `catalog_id`.\n**Auth:** Bearer JWT — caller must be a member of the catalog's org.\n**Response:** `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` download.")
 def export_catalog_report(
     catalog_id: int,
     db: Session = Depends(get_db)
@@ -1340,7 +1350,7 @@ def export_catalog_report(
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
-@router.get("/template/schedule-a")
+@router.get("/template/schedule-a", summary="Generate and serve the official Cadence Schedule A upload template", description='Generates and serves the official Cadence Schedule A upload template (Excel) so users have the exact column set the parser expects.\n\n**Auth:** Bearer JWT.\n**Response:** `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` download containing the empty template with header row + sample row.')
 def download_schedule_a_template():
     """Generate and serve the official Cadence Schedule A upload template"""
     

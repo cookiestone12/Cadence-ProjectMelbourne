@@ -44,7 +44,11 @@ def verify_org_access(user: User, org_id: int, db: Session):
     return membership
 
 
-@router.put("/songs/{org_id}")
+@router.put(
+    "/songs/{org_id}",
+    summary='Bulk-update many songs in one call',
+    description='Applies the same patch to every supplied song id. Useful for tag/genre/artist re-labels.\n\n**Path parameter:** `org_id`.\n**Body:** `{ song_ids: int[], patch: {field: value, ...} }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ updated, failed: [{song_id, error}] }`.',
+)
 def bulk_update_songs(
     org_id: int,
     data: BulkSongUpdate,
@@ -79,7 +83,11 @@ def bulk_update_songs(
     return {"message": f"Updated {updated_count} songs", "updated_count": updated_count}
 
 
-@router.post("/songs/{org_id}/credits")
+@router.post(
+    "/songs/{org_id}/credits",
+    summary='Bulk-assign a credit to many songs',
+    description='Adds the supplied credit (writer/producer/etc.) to every song id in the list. Skips songs that already have an identical credit.\n\n**Path parameter:** `org_id`.\n**Body:** `{ song_ids: int[], credit: {contact_id?, name?, role, share_pct?} }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ added, skipped, failed: [...] }`.',
+)
 def bulk_assign_credits(
     org_id: int,
     data: BulkAssignCredit,
@@ -128,7 +136,11 @@ def bulk_assign_credits(
     return {"message": f"Added {added} credits, skipped {skipped} duplicates", "added": added, "skipped": skipped}
 
 
-@router.get("/search/{org_id}")
+@router.get(
+    "/search/{org_id}",
+    summary='Global cross-entity search for the org',
+    description='Type-ahead search across songs, works, releases, creators, contracts, and contacts in a single round-trip — drives the command palette / global search.\n\n**Path parameter:** `org_id`.\n**Query:** `q` (required), `limit` (default 5 per type).\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ songs: [...], works: [...], releases: [...], creators: [...], contracts: [...], contacts: [...] }`.',
+)
 def global_search(
     org_id: int,
     q: str = Query(..., min_length=1),

@@ -111,7 +111,11 @@ def _build_attachment(db: Session, item_type: str, item_id: int, org_id: int):
     return None
 
 
-@router.post("/email")
+@router.post(
+    "/email",
+    summary='Email a sharable document to one or more addresses',
+    description='Generates a one-time access link to the document and emails it to the supplied recipients via Resend.\n\n**Body:** `{ entity_type, entity_id, recipients: string[], subject?, message? }`.\n**Auth:** Bearer JWT.\n**Response:** `{ success: true, sent_to: int }`.',
+)
 def share_via_email(
     request: ShareViaEmailRequest,
     db: Session = Depends(get_db),
@@ -163,7 +167,11 @@ def share_via_email(
     return {"success": True, "sent_count": sent_count, "total": len(request.recipient_emails)}
 
 
-@router.post("/account")
+@router.post(
+    "/account",
+    summary='Share a document with another in-app account',
+    description='Creates a DocumentShare row visible to the target account under `/shared-with-me`.\n\n**Body:** `{ entity_type, entity_id, target_user_id, role? }`.\n**Auth:** Bearer JWT.\n**Response:** the created share.',
+)
 def share_to_account(
     request: ShareToAccountRequest,
     db: Session = Depends(get_db),
@@ -223,7 +231,11 @@ def share_to_account(
     return {"success": True, "shared_count": shared_count}
 
 
-@router.get("/shared-with-me")
+@router.get(
+    "/shared-with-me",
+    summary='List documents shared with the current user',
+    description='Inbox view — every DocumentShare addressed to the calling user.\n\n**Query:** `entity_type`, `unread` (bool).\n**Auth:** Bearer JWT.\n**Response:** `{ shares: [{id, entity_type, entity_id, title, from_user_id, from_org_name, created_at, dismissed_at}] }`.',
+)
 def get_shared_with_me(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -263,7 +275,11 @@ def get_shared_with_me(
     return results
 
 
-@router.get("/shared-by-me")
+@router.get(
+    "/shared-by-me",
+    summary='List documents the current user has shared out',
+    description='Outbox view of every DocumentShare the user originated.\n\n**Query:** `entity_type`, `target_user_id`.\n**Auth:** Bearer JWT.\n**Response:** `{ shares: [{id, entity_type, entity_id, target_email, status, created_at}] }`.',
+)
 def get_shared_by_me(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -299,7 +315,11 @@ def get_shared_by_me(
     return results
 
 
-@router.post("/{share_id}/revoke")
+@router.post(
+    "/{share_id}/revoke",
+    summary='Revoke a share you previously sent',
+    description='Marks the share as revoked so the receiver loses access.\n\n**Path parameter:** `share_id`.\n**Auth:** Bearer JWT — must be the sender.\n**Response:** `{ success: true }`.',
+)
 def revoke_share(
     share_id: int,
     db: Session = Depends(get_db),
@@ -316,7 +336,11 @@ def revoke_share(
     return {"success": True, "message": "Share revoked"}
 
 
-@router.post("/{share_id}/dismiss")
+@router.post(
+    "/{share_id}/dismiss",
+    summary='Dismiss a share from your inbox',
+    description='Hides the share from `/shared-with-me` without rejecting it. Receiver-only action.\n\n**Path parameter:** `share_id`.\n**Auth:** Bearer JWT — must be the receiver.\n**Response:** `{ success: true }`.',
+)
 def dismiss_share(
     share_id: int,
     db: Session = Depends(get_db),
@@ -333,7 +357,11 @@ def dismiss_share(
     return {"success": True, "message": "Share dismissed"}
 
 
-@router.get("/users/search")
+@router.get(
+    "/users/search",
+    summary='Type-ahead user search for the share-to-account picker',
+    description='Returns users matching the substring search across name + email; used to pick a target for a share.\n\n**Query:** `q` (required), `limit` (default 10).\n**Auth:** Bearer JWT.\n**Response:** `{ users: [{id, display_name, email, avatar_url}] }`.',
+)
 def search_users(
     q: str = "",
     db: Session = Depends(get_db),
@@ -423,7 +451,11 @@ def _contact_to_detail(contact: CreativeContact):
     }
 
 
-@router.get("/{share_id}/details")
+@router.get(
+    "/{share_id}/details",
+    summary='Get full metadata for a shared item',
+    description='Returns the underlying entity payload behind a share so the receiver can preview it before importing.\n\n**Path parameter:** `share_id`.\n**Auth:** Bearer JWT — must be the receiver or sender.\n**Response:** `{ entity_type, entity_id, payload: {...}, shared_by, shared_at }`.',
+)
 def get_shared_item_details(
     share_id: int,
     db: Session = Depends(get_db),
@@ -543,7 +575,11 @@ def get_shared_item_details(
     return detail
 
 
-@router.get("/{share_id}/download")
+@router.get(
+    "/{share_id}/download",
+    summary='Download the shared item as a file (CSV/PDF/etc.)',
+    description="Streams the shared entity's exportable representation as a file.\n\n**Path parameter:** `share_id`.\n**Auth:** Bearer JWT — must be the receiver or sender.\n**Response:** the file as a download.",
+)
 def download_shared_item(
     share_id: int,
     db: Session = Depends(get_db),
@@ -584,7 +620,11 @@ def download_shared_item(
         raise HTTPException(status_code=400, detail=f"Download not supported for {share.item_type} items")
 
 
-@router.post("/{share_id}/import")
+@router.post(
+    "/{share_id}/import",
+    summary="Import a shared item into the receiver's org",
+    description='Copies the shared entity (creator, song, work, contract, etc.) into the chosen target org owned by the receiver. Creates a fresh row, not a reference.\n\n**Path parameter:** `share_id`.\n**Body:** `{ target_org_id: int, options?: {...} }`.\n**Auth:** Bearer JWT — must be the receiver, must own the target org.\n**Response:** `{ imported_entity_id, entity_type }`.',
+)
 def import_shared_item(
     share_id: int,
     db: Session = Depends(get_db),

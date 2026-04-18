@@ -118,7 +118,7 @@ class CreatorDetailResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.get("/org/{org_id}", response_model=List[CreatorResponse], summary="List creators in an organization", description="Returns the creator roster for the org. Optional filters narrow by status, type, or text search.")
+@router.get("/org/{org_id}", response_model=List[CreatorResponse], summary="List creators in an organization", description="Returns the org's creator roster. Optional filters narrow the result by status, type, or text search across name/aliases.\n\n**Path parameter:** `org_id`.\n**Query:** `status` (`active|inactive|prospect`), `type` (`writer|artist|producer|...`), `q`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, creators: [{id, display_name, type, status, primary_email, song_count, photo_url}] }`.")
 def get_organization_creators(
     org_id: int,
     db: Session = Depends(get_db),
@@ -239,7 +239,7 @@ def check_roster_permission(membership):
         return True
     return getattr(membership, 'can_manage_roster', False) or False
 
-@router.post("/org/{org_id}", response_model=CreatorResponse, summary="Create a creator", description="Creates a new creator (writer / artist / producer / etc.) under the organization.")
+@router.post("/org/{org_id}", response_model=CreatorResponse, summary="Create a creator", description='Creates a new Creator (writer / artist / producer / etc.) under the organization.\n\n**Path parameter:** `org_id`.\n**Body:** `{ display_name, type, status?, ipi?, pro_society?, bio?, primary_email?, photo_url? }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the created Creator.')
 def create_creator(
     org_id: int,
     request: CreatorCreateRequest,
@@ -316,7 +316,7 @@ def create_creator(
         "roster_export_fields": creator.roster_export_fields or [],
     }
 
-@router.get("/{creator_id}", response_model=CreatorDetailResponse, summary="Get creator detail", description="Returns the full creator profile, including songs, credits, contacts, and aggregate stats.")
+@router.get("/{creator_id}", response_model=CreatorDetailResponse, summary="Get creator detail", description="Returns the full Creator profile, including songs, credits, contacts, and aggregate stats.\n\n**Path parameter:** `creator_id`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** `{ creator: {...}, songs: [...], credits: [...], contacts: [...], stats: {song_count, work_count, lifetime_earnings_cents} }`.")
 def get_creator(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -414,7 +414,7 @@ def get_creator(
         "is_shared": is_shared,
     }
 
-@router.put("/{creator_id}", response_model=CreatorResponse, summary="Update creator", description="Patch creator fields (name, bio, links, type, status, etc.).")
+@router.put("/{creator_id}", response_model=CreatorResponse, summary="Update creator", description="Patches Creator fields (name, bio, links, type, status, IPI, PRO).\n\n**Path parameter:** `creator_id`.\n**Body:** any subset of writable Creator fields.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** the updated Creator.")
 def update_creator(
     creator_id: int,
     request: CreatorUpdateRequest,
@@ -529,7 +529,7 @@ def update_creator(
     }
 
 
-@router.delete("/{creator_id}", summary="Delete creator", description="Permanently removes the creator record. Linked credits are detached.")
+@router.delete("/{creator_id}", summary="Delete creator", description="Permanently removes the Creator record. Linked credits are detached (not deleted) so historical statements stay intact.\n\n**Path parameter:** `creator_id`.\n**Auth:** Bearer JWT — caller must be an admin of the creator's org.\n**Response:** `{ success: true, detached_credits: int }`.")
 def delete_creator(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -571,7 +571,11 @@ ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
 
 
-@router.get("/{creator_id}/image")
+@router.get(
+    "/{creator_id}/image",
+    summary="Stream a creator's profile photo",
+    description="Serves the binary image for the creator's headshot.\n\n**Path parameter:** `creator_id`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** image bytes with the appropriate `Content-Type`.",
+)
 def serve_creator_image(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -607,7 +611,11 @@ def serve_creator_image(
     raise HTTPException(status_code=404, detail="No image found")
 
 
-@router.post("/{creator_id}/image")
+@router.post(
+    "/{creator_id}/image",
+    summary="Upload or replace a creator's profile photo",
+    description="Multipart upload — replaces the existing photo and updates `photo_url`.\n\n**Path parameter:** `creator_id`.\n**Body (multipart/form-data):** `file`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** `{ photo_url }`.",
+)
 async def upload_creator_image(
     creator_id: int,
     file: UploadFile = File(...),
@@ -649,7 +657,11 @@ class RosterPDFRequest(BaseModel):
     field_overrides: Optional[Dict[str, List[str]]] = None
 
 
-@router.post("/org/{org_id}/roster-pdf")
+@router.post(
+    "/org/{org_id}/roster-pdf",
+    summary='Export the creator roster as a branded PDF',
+    description='Renders one page per creator (photo, role, bio, contacts) tailored for sending to a publisher / sub-publisher.\n\n**Path parameter:** `org_id`.\n**Body:** `{ creator_ids?: int[], include_bio?: bool, include_contacts?: bool }` — when `creator_ids` is omitted, every creator is included.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `application/pdf` download.',
+)
 def export_roster_pdf(
     org_id: int,
     request: RosterPDFRequest,
@@ -923,7 +935,7 @@ class CreatorContactResponse(BaseModel):
         from_attributes = True
 
 
-@router.get("/{creator_id}/contacts", summary="List creator's contacts", description="Returns every contact assigned to the creator with their role and primary flag.")
+@router.get("/{creator_id}/contacts", summary="List creator's contacts", description="Returns every contact attached to the creator with their role and primary flag (manager, agent, attorney, A&R, etc.).\n\n**Path parameter:** `creator_id`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** `{ contacts: [{contact_link_id, contact_id, name, role, is_primary, email, phone}] }`.")
 async def get_creator_contacts(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -962,7 +974,7 @@ async def get_creator_contacts(
     return result
 
 
-@router.post("/{creator_id}/contacts", summary="Attach a contact to a creator", description="Links an existing creative-directory contact to the creator with a specific role (e.g. MANAGER, LAWYER).")
+@router.post("/{creator_id}/contacts", summary="Attach a contact to a creator", description="Links an existing creative-directory contact to the creator with a specific role (e.g. `MANAGER`, `LAWYER`).\n\n**Path parameter:** `creator_id`.\n**Body:** `{ contact_id, role, is_primary?: bool }`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** `{ contact_link_id, role, is_primary }`.")
 async def add_creator_contact(
     creator_id: int,
     data: CreatorContactCreate,
@@ -1025,7 +1037,7 @@ async def add_creator_contact(
     }
 
 
-@router.delete("/{creator_id}/contacts/{contact_link_id}", summary="Remove a contact from a creator", description="Detaches a contact-role link. Does not delete the underlying contact.")
+@router.delete("/{creator_id}/contacts/{contact_link_id}", summary="Remove a contact from a creator", description="Detaches a contact-role link. The underlying CreativeContact is preserved.\n\n**Path parameters:** `creator_id`, `contact_link_id`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** `{ success: true }`.")
 async def remove_creator_contact(
     creator_id: int,
     contact_link_id: int,
@@ -1056,7 +1068,11 @@ async def remove_creator_contact(
     return {"detail": "Contact removed"}
 
 
-@router.get("/{creator_id}/contacts/by-role/{role}")
+@router.get(
+    "/{creator_id}/contacts/by-role/{role}",
+    summary="Get a creator's contact for a given role",
+    description='Returns the single contact attached to a creator in the given role (e.g. `"manager"`, `"attorney"`), or 404 if none.\n\n**Path parameters:** `creator_id`, `role`.\n**Auth:** Bearer JWT — caller must be a member of the creator\'s org.\n**Response:** `{ contact: {...}, role }`.',
+)
 async def get_creator_contact_by_role(
     creator_id: int,
     role: str,

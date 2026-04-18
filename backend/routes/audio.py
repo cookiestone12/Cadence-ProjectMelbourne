@@ -128,7 +128,11 @@ def _serialize_asset(asset: AudioAsset) -> dict:
     }
 
 
-@router.get("/song/{song_id}")
+@router.get(
+    "/song/{song_id}",
+    summary='List the audio assets attached to a song',
+    description="Returns every AudioAsset linked to the song (master, instrumental, stems, demos, alts) in the order they were attached. Use this on the song detail page to render the audio block.\n\n**Path parameter:** `song_id`.\n**Auth:** Bearer JWT — caller must have access to the song's org.\n**Response:** `{ assets: [{id, kind, filename, duration_sec, bitrate, content_type, file_url, waveform_url, analysis_status, uploaded_at}] }`.",
+)
 def get_song_audio(
     song_id: int,
     db: Session = Depends(get_db),
@@ -145,7 +149,11 @@ def get_song_audio(
     return {"assets": [_serialize_asset(a) for a in assets]}
 
 
-@router.post("/song/{song_id}/link")
+@router.post(
+    "/song/{song_id}/link",
+    summary='Link an existing storage object as an audio asset on a song',
+    description='Creates an AudioAsset row pointing at a file already in the org\'s object store (uploaded via `/api/storage` or imported from a linked Dropbox/Drive). Pass `kind` to label it (master, instrumental, stem, etc.).\n\n**Path parameter:** `song_id`.\n**Body:** `{ storage_object_id: int, kind: "master"|"instrumental"|"stem"|"demo"|"alt", label?: string }`.\n**Auth:** Bearer JWT — caller must be a member of the song\'s org.\n**Response:** the new AudioAsset object.',
+)
 def link_audio_to_song(
     song_id: int,
     request: LinkAudioRequest,
@@ -174,7 +182,11 @@ def link_audio_to_song(
     return _serialize_asset(asset)
 
 
-@router.delete("/{asset_id}")
+@router.delete(
+    "/{asset_id}",
+    summary='Detach an audio asset from its song',
+    description="Deletes the AudioAsset link. The underlying storage object is preserved so it can be re-linked elsewhere.\n\n**Path parameter:** `asset_id` — AudioAsset id.\n**Auth:** Bearer JWT — caller must be a member of the asset's org.\n**Response:** `{ success: true }`.",
+)
 def unlink_audio(
     asset_id: int,
     db: Session = Depends(get_db),
@@ -192,7 +204,11 @@ def unlink_audio(
     return {"success": True, "message": "Audio asset unlinked"}
 
 
-@router.put("/{asset_id}/type")
+@router.put(
+    "/{asset_id}/type",
+    summary="Change an audio asset's kind label",
+    description="Switches an AudioAsset between `master`, `instrumental`, `stem`, `demo`, and `alt`. Used when an upload was tagged incorrectly.\n\n**Path parameter:** `asset_id`.\n**Body:** `{ kind: string }`.\n**Auth:** Bearer JWT — caller must be a member of the asset's org.\n**Response:** the updated AudioAsset object.",
+)
 def update_audio_type(
     asset_id: int,
     request: UpdateFileTypeRequest,
@@ -212,7 +228,11 @@ def update_audio_type(
     return _serialize_asset(asset)
 
 
-@router.get("/release/{release_id}")
+@router.get(
+    "/release/{release_id}",
+    summary='List audio assets attached to any track on a release',
+    description="Convenience endpoint for the release page: returns the union of AudioAssets across every Song on the release, grouped by track.\n\n**Path parameter:** `release_id`.\n**Auth:** Bearer JWT — caller must have access to the release's org.\n**Response:** `{ tracks: [{song_id, song_title, assets: [...]}] }`.",
+)
 def get_release_audio(
     release_id: int,
     db: Session = Depends(get_db),
@@ -252,7 +272,11 @@ def get_release_audio(
     }
 
 
-@router.post("/release/{release_id}/bulk-link")
+@router.post(
+    "/release/{release_id}/bulk-link",
+    summary='Bulk-link several storage objects to several tracks on a release',
+    description='Atomic multi-link helper. Each entry binds one storage object to one song with a chosen kind. Used by the "Attach a folder" uploader on the release page.\n\n**Path parameter:** `release_id`.\n**Body:** `{ links: [{song_id, storage_object_id, kind}] }`.\n**Auth:** Bearer JWT — caller must be a member of the release\'s org.\n**Response:** `{ created: [...], skipped: [...] }`.',
+)
 def bulk_link_audio(
     release_id: int,
     request: BulkLinkRequest,
@@ -296,7 +320,11 @@ def bulk_link_audio(
     return {"created": len(created), "assets": [_serialize_asset(a) for a in created]}
 
 
-@router.post("/{asset_id}/analyze")
+@router.post(
+    "/{asset_id}/analyze",
+    summary='Trigger waveform/loudness/key analysis on a single audio asset',
+    description='Queues the asset for the analysis worker which produces a waveform PNG, BPM/key estimate, LUFS reading, and `waveform_url`. Idempotent if analysis is already in progress.\n\n**Path parameter:** `asset_id`.\n**Auth:** Bearer JWT — caller must be a member of the asset\'s org.\n**Response:** `{ asset_id, status: "queued"|"running" }`.',
+)
 def trigger_analysis(
     asset_id: int,
     db: Session = Depends(get_db),
@@ -337,7 +365,11 @@ def trigger_analysis(
     return {"success": True, "analysis_id": analysis_id, "status": "QUEUED"}
 
 
-@router.post("/bulk-analyze")
+@router.post(
+    "/bulk-analyze",
+    summary='Queue analysis for many audio assets at once',
+    description="Bulk variant of `/analyze` — used to backfill analysis after a large import.\n\n**Body:** `{ asset_ids: int[] }`.\n**Auth:** Bearer JWT — caller must be a member of every asset's org.\n**Response:** `{ queued, skipped }`.",
+)
 def bulk_analyze(
     request: BulkAnalyzeRequest,
     db: Session = Depends(get_db),
@@ -381,7 +413,11 @@ def bulk_analyze(
     return {"queued": len(results), "results": results}
 
 
-@router.get("/{asset_id}/analysis")
+@router.get(
+    "/{asset_id}/analysis",
+    summary='Get the analysis result for an audio asset',
+    description="Returns the cached analysis output (waveform, BPM, key, LUFS, duration). Returns `status` = `pending` if the worker hasn't completed yet.\n\n**Path parameter:** `asset_id`.\n**Auth:** Bearer JWT — caller must be a member of the asset's org.\n**Response:** `{ status, duration_sec, bpm, key, lufs, waveform_url, analyzed_at }`.",
+)
 def get_analysis(
     asset_id: int,
     db: Session = Depends(get_db),
@@ -432,7 +468,11 @@ def get_analysis(
     }
 
 
-@router.get("/tags")
+@router.get(
+    "/tags",
+    summary='List the global library of audio tags',
+    description='Returns every AudioTag definition usable across the platform (genre, mood, instrumentation, energy levels). Used to populate the tag picker on assets.\n\n**Auth:** Bearer JWT.\n**Response:** `{ tags: [{id, name, category, color}] }`.',
+)
 def list_tags(
     tag_type: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -456,7 +496,11 @@ def list_tags(
     }
 
 
-@router.post("/{asset_id}/tags")
+@router.post(
+    "/{asset_id}/tags",
+    summary='Add a tag to an audio asset',
+    description="Attaches a tag from the global library to an AudioAsset. Idempotent: re-adding the same tag is a no-op.\n\n**Path parameter:** `asset_id`.\n**Body:** `{ tag_id: int }` (or `{ name: string }` to create-on-demand).\n**Auth:** Bearer JWT — caller must be a member of the asset's org.\n**Response:** `{ asset_id, tag: {id, name, category} }`.",
+)
 def add_tag(
     asset_id: int,
     request: AddTagRequest,
@@ -503,7 +547,11 @@ def add_tag(
     return {"id": tag.id, "name": tag.name, "tag_type": tag.tag_type, "source": "USER"}
 
 
-@router.delete("/{asset_id}/tags/{tag_id}")
+@router.delete(
+    "/{asset_id}/tags/{tag_id}",
+    summary='Remove a tag from an audio asset',
+    description="Detaches the tag link. Does not delete the global tag.\n\n**Path parameters:** `asset_id`, `tag_id`.\n**Auth:** Bearer JWT — caller must be a member of the asset's org.\n**Response:** `{ success: true }`.",
+)
 def remove_tag(
     asset_id: int,
     tag_id: int,

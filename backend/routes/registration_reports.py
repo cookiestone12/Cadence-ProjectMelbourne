@@ -244,7 +244,11 @@ def _compute_report_stats(report_items):
     }
 
 
-@router.get("/org/{org_id}/works")
+@router.get(
+    "/org/{org_id}/works",
+    summary='Get the works-side registration status report',
+    description='Returns one row per Work showing where it has been registered (PRO, MLC, SoundExchange, etc.), with a status (`registered`, `pending`, `not_started`). The work-centric counterpart of `/songs`.\n\n**Path parameter:** `org_id`.\n**Query:** `creator_id`, `status`, `pro`, `q`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, items: [{work_id, title, creators, registrations: [{pro, status, registered_at, work_number}]}] }`.',
+)
 def get_work_registration_report(
     org_id: int,
     creator_id: Optional[int] = None,
@@ -258,7 +262,11 @@ def get_work_registration_report(
     return {"type": "works", **stats, "items": report_items}
 
 
-@router.get("/org/{org_id}/songs")
+@router.get(
+    "/org/{org_id}/songs",
+    summary='Get the songs-side registration status report',
+    description='One row per Song showing its DSP/PRO registration health and ISRC/ISWC presence. Used to spot tracks missing a registration.\n\n**Path parameter:** `org_id`.\n**Query:** `creator_id`, `status`, `dsp`, `q`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, items: [{song_id, title, artist, isrc, iswc, registrations: [...]}] }`.',
+)
 def get_song_registration_report(
     org_id: int,
     creator_id: Optional[int] = None,
@@ -280,7 +288,11 @@ class InlineEditRequest(BaseModel):
     writers: Optional[List[Dict]] = None
 
 
-@router.patch("/org/{org_id}/inline-edit")
+@router.patch(
+    "/org/{org_id}/inline-edit",
+    summary='Inline-edit a registration field from inside the report',
+    description='Patches a single field on a single registration row (e.g. set the registered date, paste in a returned work number) without leaving the report. Records the edit in the audit trail.\n\n**Path parameter:** `org_id`.\n**Body:** `{ entity: "work"|"song", entity_id, pro, field, value }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ success: true, updated: {...} }`.',
+)
 def inline_edit_registration_item(
     org_id: int,
     request: InlineEditRequest,
@@ -364,7 +376,11 @@ def inline_edit_registration_item(
     return {"status": "no_changes", "changed": []}
 
 
-@router.get("/org/{org_id}/creators")
+@router.get(
+    "/org/{org_id}/creators",
+    summary='List creators eligible to filter the registration report by',
+    description="Lightweight name/id list of every creator with at least one registerable work or song. Drives the report's creator filter.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ creators: [{id, display_name, work_count, song_count}] }`.",
+)
 def get_creators_list(
     org_id: int,
     db: Session = Depends(get_db),
@@ -380,7 +396,11 @@ class SelectedItemsRequest(BaseModel):
     item_ids: List[int] = []
 
 
-@router.post("/org/{org_id}/export/pdf")
+@router.post(
+    "/org/{org_id}/export/pdf",
+    summary='Export a curated subset of the registration report as PDF',
+    description='Renders only the rows whose ids you specify into a branded PDF (useful when you only care about a few outstanding items). For the unfiltered/full export use the GET variant.\n\n**Path parameter:** `org_id`.\n**Body:** `{ entity: "work"|"song", ids: int[], pros?: string[], notes?: string }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `application/pdf` streaming download.',
+)
 def export_selected_registration_pdf(
     org_id: int,
     request: SelectedItemsRequest,
@@ -411,7 +431,11 @@ def export_selected_registration_pdf(
     )
 
 
-@router.get("/org/{org_id}/export/csv")
+@router.get(
+    "/org/{org_id}/export/csv",
+    summary='Export the entire registration report as CSV',
+    description='Streams the report (with current filters applied) as a CSV.\n\n**Path parameter:** `org_id`.\n**Query:** same filters as `/works` or `/songs`, plus `entity=works|songs`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `text/csv` download.',
+)
 def export_registration_csv(
     org_id: int,
     asset_type: str = "works",
@@ -504,7 +528,11 @@ def export_registration_csv(
     )
 
 
-@router.get("/org/{org_id}/export/pdf")
+@router.get(
+    "/org/{org_id}/export/pdf",
+    summary='Export the entire registration report as PDF',
+    description='Renders the report (with current filters applied) into a branded PDF.\n\n**Path parameter:** `org_id`.\n**Query:** same filters as `/works` or `/songs`, plus `entity=works|songs`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `application/pdf` download.',
+)
 def export_registration_pdf_get(
     org_id: int,
     asset_type: str = "works",
@@ -542,7 +570,11 @@ class EmailReportRequest(BaseModel):
     message: Optional[str] = None
 
 
-@router.post("/org/{org_id}/send-email")
+@router.post(
+    "/org/{org_id}/send-email",
+    summary='Email the registration report to one or more recipients',
+    description='Builds the report PDF and sends it via Resend to the supplied addresses (e.g. forward to your sub-publisher).\n\n**Path parameter:** `org_id`.\n**Body:** `{ entity: "work"|"song", recipients: string[], subject?, message?, ids?: int[], pros?: string[] }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ success: true, sent_to: int }`.',
+)
 def send_registration_report_email(
     org_id: int,
     request: EmailReportRequest,
@@ -670,7 +702,11 @@ class SaveReportRequest(BaseModel):
     filter_status: Optional[str] = None
 
 
-@router.get("/org/{org_id}/saved")
+@router.get(
+    "/org/{org_id}/saved",
+    summary='List saved registration reports for the org',
+    description='Returns each named SavedRegistrationReport snapshot (filter set + frozen results) the org has saved.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ reports: [{id, name, entity, created_at, row_count, last_refreshed_at}] }`.',
+)
 def list_saved_reports(
     org_id: int,
     db: Session = Depends(get_db),
@@ -702,7 +738,11 @@ def list_saved_reports(
     } for r in reports]
 
 
-@router.post("/org/{org_id}/save")
+@router.post(
+    "/org/{org_id}/save",
+    summary='Save the current registration report as a named snapshot',
+    description='Persists the supplied filter set + result snapshot so it can be re-opened or refreshed later.\n\n**Path parameter:** `org_id`.\n**Body:** `{ name, entity, filters: {...} }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the saved report header.',
+)
 def save_report(
     org_id: int,
     request: SaveReportRequest,
@@ -755,7 +795,11 @@ def save_report(
     }
 
 
-@router.get("/org/{org_id}/saved/{report_id}")
+@router.get(
+    "/org/{org_id}/saved/{report_id}",
+    summary='Open a previously saved registration report',
+    description='Returns the frozen rows captured the last time the snapshot was refreshed plus its filter set.\n\n**Path parameters:** `org_id`, `report_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ id, name, entity, filters, last_refreshed_at, rows: [...] }`.',
+)
 def get_saved_report(
     org_id: int,
     report_id: int,
@@ -793,7 +837,11 @@ def get_saved_report(
     }
 
 
-@router.put("/org/{org_id}/saved/{report_id}/refresh")
+@router.put(
+    "/org/{org_id}/saved/{report_id}/refresh",
+    summary='Re-run a saved report against the current data',
+    description='Re-applies the saved filter set to live data and updates the stored snapshot rows + `last_refreshed_at`.\n\n**Path parameters:** `org_id`, `report_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ id, last_refreshed_at, row_count }`.',
+)
 def refresh_saved_report(
     org_id: int,
     report_id: int,
@@ -843,7 +891,11 @@ def refresh_saved_report(
     }
 
 
-@router.delete("/org/{org_id}/saved/{report_id}")
+@router.delete(
+    "/org/{org_id}/saved/{report_id}",
+    summary='Delete a saved registration report',
+    description='Hard-deletes the snapshot.\n\n**Path parameters:** `org_id`, `report_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ success: true }`.',
+)
 def delete_saved_report(
     org_id: int,
     report_id: int,
@@ -865,7 +917,11 @@ def delete_saved_report(
     return {"detail": "Report deleted"}
 
 
-@router.get("/org/{org_id}/saved/{report_id}/pdf")
+@router.get(
+    "/org/{org_id}/saved/{report_id}/pdf",
+    summary='Download a saved registration report as PDF',
+    description='Renders the snapshot (NOT live data) into a branded PDF — useful for distributing a frozen point-in-time view.\n\n**Path parameters:** `org_id`, `report_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `application/pdf` download.',
+)
 def download_saved_report_pdf(
     org_id: int,
     report_id: int,

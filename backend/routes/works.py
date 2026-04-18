@@ -69,7 +69,7 @@ def verify_org_access(user: User, org_id: int, db: Session):
     return membership
 
 
-@router.get("/org/{org_id}", summary="List works in an organization", description="Returns the org's compositions (Works) with optional text search.")
+@router.get("/org/{org_id}", summary="List works in an organization", description="Returns the org's compositions (Works) with optional text search.\n\n**Path parameter:** `org_id`.\n**Query:** `q`, `status` (`pending|approved|rejected`), `creator_id`, `folder_id`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, works: [{id, title, status, iswc, writer_count, track_count, created_at}] }`.")
 def list_works(
     org_id: int,
     search: Optional[str] = None,
@@ -125,7 +125,7 @@ def list_works(
     return {"works": results, "total": total}
 
 
-@router.get("/{work_id}", summary="Get work detail", description="Returns the work, its tracks, credit splits, and approval status.")
+@router.get("/{work_id}", summary="Get work detail", description="Returns the work, its tracks (linked Songs), credit splits, and approval status.\n\n**Path parameter:** `work_id`.\n**Auth:** Bearer JWT — caller must be a member of the work's org.\n**Response:** `{ work: {...}, tracks: [{song_id, title, isrc}], credits: [...], splits: [...], status, approved_by, approved_at }`.")
 def get_work(work_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -178,7 +178,7 @@ def get_work(work_id: int, db: Session = Depends(get_db), current_user: User = D
     }
 
 
-@router.post("/org/{org_id}", summary="Create a work", description="Creates a new composition (Work). Defaults to PENDING approval.")
+@router.post("/org/{org_id}", summary="Create a work", description='Creates a new composition (Work). Defaults to `PENDING` approval.\n\n**Path parameter:** `org_id`.\n**Body:** `{ title, iswc?, alternate_titles?, language?, credits?: [{name, role, share_pct?}] }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the created Work with `status="pending"`.')
 def create_work(org_id: int, data: WorkCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(current_user, org_id, db)
 
@@ -212,7 +212,7 @@ def create_work(org_id: int, data: WorkCreate, db: Session = Depends(get_db), cu
     return {"id": work.id, "title": work.title, "message": "Work created successfully"}
 
 
-@router.put("/{work_id}", summary="Update work", description="Patches work fields. Mutating an APPROVED work generates an audit row.")
+@router.put("/{work_id}", summary="Update work", description="Patches Work fields. Mutating an `APPROVED` work generates an audit row.\n\n**Path parameter:** `work_id`.\n**Body:** any subset of writable Work fields.\n**Auth:** Bearer JWT — caller must be a member of the work's org.\n**Response:** the updated Work.")
 def update_work(work_id: int, data: WorkUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -227,7 +227,7 @@ def update_work(work_id: int, data: WorkUpdate, db: Session = Depends(get_db), c
     return {"id": work.id, "title": work.title, "message": "Work updated successfully"}
 
 
-@router.delete("/{work_id}", summary="Delete work", description="Removes the work and its associated track / credit links.")
+@router.delete("/{work_id}", summary="Delete work", description="Removes the work and its associated track / credit links.\n\n**Path parameter:** `work_id`.\n**Auth:** Bearer JWT — caller must be a member of the work's org.\n**Response:** `{ success: true }`.")
 def delete_work(work_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -240,7 +240,11 @@ def delete_work(work_id: int, db: Session = Depends(get_db), current_user: User 
     return {"message": "Work deleted successfully"}
 
 
-@router.post("/{work_id}/tracks")
+@router.post(
+    "/{work_id}/tracks",
+    summary='Link a Song (recording) to a Work (composition)',
+    description="Connects a Song to its underlying Work so royalty processing can correctly route earnings against the Work's RightsSplits.\n\n**Path parameter:** `work_id`.\n**Body:** `{ song_id: int }`.\n**Auth:** Bearer JWT — caller must be a member of the work's org.\n**Response:** `{ work_id, song_id, linked_at }`.",
+)
 def link_track_to_work(work_id: int, data: WorkTrackLink, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -261,7 +265,11 @@ def link_track_to_work(work_id: int, data: WorkTrackLink, db: Session = Depends(
     return {"message": "Track linked to work successfully"}
 
 
-@router.delete("/{work_id}/tracks/{song_id}")
+@router.delete(
+    "/{work_id}/tracks/{song_id}",
+    summary='Unlink a Song from a Work',
+    description="Removes the song↔work link.\n\n**Path parameters:** `work_id`, `song_id`.\n**Auth:** Bearer JWT — caller must be a member of the work's org.\n**Response:** `{ success: true }`.",
+)
 def unlink_track_from_work(work_id: int, song_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -277,7 +285,11 @@ def unlink_track_from_work(work_id: int, song_id: int, db: Session = Depends(get
     return {"message": "Track unlinked from work"}
 
 
-@router.post("/{work_id}/credits")
+@router.post(
+    "/{work_id}/credits",
+    summary='Add a credit to a work',
+    description="Attaches a writer/contributor credit to a Work with role and share. Used to build out the writer split sheet.\n\n**Path parameter:** `work_id`.\n**Body:** `{ contact_id?: int, name?: string, role: string, share_pct?: number, ipi?: string, pro_society?: string }`.\n**Auth:** Bearer JWT — caller must be a member of the work's org.\n**Response:** the created credit.",
+)
 def add_work_credit(work_id: int, data: WorkCreditCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -300,7 +312,11 @@ def add_work_credit(work_id: int, data: WorkCreditCreate, db: Session = Depends(
     return {"message": "Credit added to work"}
 
 
-@router.delete("/{work_id}/credits/{credit_id}")
+@router.delete(
+    "/{work_id}/credits/{credit_id}",
+    summary='Remove a credit from a work',
+    description="Detaches a writer/contributor credit from the Work.\n\n**Path parameters:** `work_id`, `credit_id`.\n**Auth:** Bearer JWT — caller must be a member of the work's org.\n**Response:** `{ success: true }`.",
+)
 def remove_work_credit(work_id: int, credit_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -316,7 +332,11 @@ def remove_work_credit(work_id: int, credit_id: int, db: Session = Depends(get_d
     return {"message": "Credit removed from work"}
 
 
-@router.get("/org/{org_id}/folders")
+@router.get(
+    "/org/{org_id}/folders",
+    summary='List the work folders for the org',
+    description='Returns the folder hierarchy used to organize the works grid (genre buckets, project folders, etc.).\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ folders: [{id, name, parent_id, work_count}] }`.',
+)
 def list_folders(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(current_user, org_id, db)
     folders = db.query(WorkFolder).filter(WorkFolder.organization_id == org_id).order_by(WorkFolder.name).all()
@@ -333,7 +353,11 @@ def list_folders(org_id: int, db: Session = Depends(get_db), current_user: User 
     return results
 
 
-@router.post("/org/{org_id}/folders")
+@router.post(
+    "/org/{org_id}/folders",
+    summary='Create a new work folder',
+    description='Adds a folder under an optional parent.\n\n**Path parameter:** `org_id`.\n**Body:** `{ name: string, parent_id?: int }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the created folder.',
+)
 def create_folder(org_id: int, data: FolderCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(current_user, org_id, db)
     folder = WorkFolder(organization_id=org_id, name=data.name)
@@ -343,7 +367,11 @@ def create_folder(org_id: int, data: FolderCreate, db: Session = Depends(get_db)
     return {"id": folder.id, "name": folder.name, "message": "Folder created successfully"}
 
 
-@router.put("/folders/{folder_id}")
+@router.put(
+    "/folders/{folder_id}",
+    summary='Rename or reparent a folder',
+    description="Updates a folder's name and/or parent. Cycles are prevented.\n\n**Path parameter:** `folder_id`.\n**Body:** `{ name?, parent_id? }`.\n**Auth:** Bearer JWT — caller must be a member of the folder's org.\n**Response:** the updated folder.",
+)
 def rename_folder(folder_id: int, data: FolderUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     folder = db.query(WorkFolder).filter(WorkFolder.id == folder_id).first()
     if not folder:
@@ -354,7 +382,11 @@ def rename_folder(folder_id: int, data: FolderUpdate, db: Session = Depends(get_
     return {"id": folder.id, "name": folder.name, "message": "Folder renamed successfully"}
 
 
-@router.delete("/folders/{folder_id}")
+@router.delete(
+    "/folders/{folder_id}",
+    summary='Delete a folder',
+    description="Deletes a folder. Works inside the folder are moved to the parent (or root). Empty subfolders are deleted recursively.\n\n**Path parameter:** `folder_id`.\n**Auth:** Bearer JWT — caller must be a member of the folder's org.\n**Response:** `{ success: true, moved_works: int }`.",
+)
 def delete_folder(folder_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     folder = db.query(WorkFolder).filter(WorkFolder.id == folder_id).first()
     if not folder:
@@ -366,7 +398,11 @@ def delete_folder(folder_id: int, db: Session = Depends(get_db), current_user: U
     return {"message": "Folder deleted successfully"}
 
 
-@router.put("/{work_id}/move")
+@router.put(
+    "/{work_id}/move",
+    summary='Move a work into a different folder',
+    description="Sets the work's `folder_id`. Pass `null` to move to root.\n\n**Path parameter:** `work_id`.\n**Body:** `{ folder_id: int | null }`.\n**Auth:** Bearer JWT — caller must be a member of the work's org.\n**Response:** the updated work.",
+)
 def move_work(work_id: int, data: WorkMove, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -413,7 +449,7 @@ def _is_work_admin(db: Session, current_user: User, work: Work) -> bool:
     return False
 
 
-@router.post("/{work_id}/approve", summary="Approve a work", description="Owner/Admin marks a PENDING work APPROVED and clears the related action item.")
+@router.post("/{work_id}/approve", summary="Approve a work", description='Owner/Admin marks a `PENDING` work `APPROVED` and clears the related action item.\n\n**Path parameter:** `work_id`.\n**Body:** `{ note?: string }`.\n**Auth:** Bearer JWT — caller must be Owner or Admin of the work\'s org.\n**Response:** `{ work_id, status: "approved", approved_by, approved_at }`.')
 def approve_work(work_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:
@@ -442,7 +478,7 @@ def approve_work(work_id: int, db: Session = Depends(get_db), current_user: User
     return {"message": "Work approved successfully", "id": work.id, "status": "APPROVED"}
 
 
-@router.post("/{work_id}/reject", summary="Reject a work", description="Owner/Admin rejects a PENDING work with a reason; notifies the submitter.")
+@router.post("/{work_id}/reject", summary="Reject a work", description='Owner/Admin rejects a `PENDING` work with a reason and notifies the submitter.\n\n**Path parameter:** `work_id`.\n**Body:** `{ reason: string }`.\n**Auth:** Bearer JWT — caller must be Owner or Admin of the work\'s org.\n**Response:** `{ work_id, status: "rejected", rejected_by, rejected_at, reason }`.')
 def reject_work(work_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     work = db.query(Work).filter(Work.id == work_id).first()
     if not work:

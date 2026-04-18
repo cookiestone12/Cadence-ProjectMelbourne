@@ -301,7 +301,7 @@ def placements_to_dicts(placements: List[Placement], db: Session) -> List[dict]:
     return result
 
 
-@router.get("/org/{org_id}", summary="List sync placements", description="Returns the org's sync licensing pipeline (PITCHED → APPROVED → CONFIRMED → INVOICED → PAID).")
+@router.get("/org/{org_id}", summary="List sync placements", description="Returns the org's sync licensing pipeline (PITCHED → APPROVED → CONFIRMED → INVOICED → PAID).\n\n**Path parameter:** `org_id`.\n**Query:** `status`, `creator_id`, `media_type`, `start_date`, `end_date`, `q`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, placements: [{id, title, project_name, media_type, status, song_id, fee_cents, currency, placed_at, client_name}] }`.")
 def get_placements(
     org_id: int,
     status: Optional[str] = None,
@@ -343,7 +343,11 @@ def get_placements(
     return placements_to_dicts(placements, db)
 
 
-@router.get("/org/{org_id}/summary")
+@router.get(
+    "/org/{org_id}/summary",
+    summary='Get sync placement KPI summary',
+    description='Returns counts and totals across the placement pipeline for the dashboard tiles.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, by_status: {...}, total_fees_cents, average_fee_cents }`.',
+)
 def get_placement_summary(
     org_id: int,
     db: Session = Depends(get_db),
@@ -377,7 +381,11 @@ def get_placement_summary(
     }
 
 
-@router.get("/org/{org_id}/creators")
+@router.get(
+    "/org/{org_id}/creators",
+    summary='List creators that appear on placements (filter source)',
+    description='Returns the distinct creators with at least one placement.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ creators: [{id, display_name, placement_count}] }`.',
+)
 def get_placement_creators(
     org_id: int,
     db: Session = Depends(get_db),
@@ -388,7 +396,11 @@ def get_placement_creators(
     return [{"id": c.id, "name": c.display_name} for c in creators]
 
 
-@router.get("/org/{org_id}/search/works")
+@router.get(
+    "/org/{org_id}/search/works",
+    summary='Type-ahead search for works to attach to a placement',
+    description="Used by the placement create/edit form's work picker.\n\n**Path parameter:** `org_id`.\n**Query:** `q` (required), `limit` (default 20).\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ works: [{id, title, writers}] }`.",
+)
 def search_works(
     org_id: int,
     search: str = "",
@@ -404,7 +416,11 @@ def search_works(
     return [{"id": w.id, "title": w.title, "iswc": w.iswc} for w in works]
 
 
-@router.get("/org/{org_id}/search/releases")
+@router.get(
+    "/org/{org_id}/search/releases",
+    summary='Type-ahead search for releases to attach to a placement',
+    description="Used by the placement create/edit form's release picker.\n\n**Path parameter:** `org_id`.\n**Query:** `q` (required), `limit` (default 20).\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ releases: [{id, name, artist, release_date}] }`.",
+)
 def search_releases(
     org_id: int,
     search: str = "",
@@ -420,7 +436,7 @@ def search_releases(
     return [{"id": r.id, "title": r.title, "primary_artist": r.primary_artist, "upc": r.upc} for r in releases]
 
 
-@router.get("/{placement_id}", summary="Get placement detail", description="Returns full placement data including financials, project metadata, and linked song(s).")
+@router.get("/{placement_id}", summary="Get placement detail", description="Returns full placement data including financials, project metadata, and linked song(s).\n\n**Path parameter:** `placement_id`.\n**Auth:** Bearer JWT — caller must be a member of the placement's org.\n**Response:** `{ id, title, project_name, media_type, license_type, status, song_id, song_title, fee_cents, currency, term_months, territory, client_name, contact_email, notes, placed_at, history: [...] }`.")
 def get_placement(
     placement_id: int,
     db: Session = Depends(get_db),
@@ -435,7 +451,7 @@ def get_placement(
     return placement_to_dict(placement, db)
 
 
-@router.post("/org/{org_id}", summary="Create a placement", description="Adds a new sync placement to the pipeline.")
+@router.post("/org/{org_id}", summary="Create a placement", description='Adds a new sync placement to the pipeline at the supplied status.\n\n**Path parameter:** `org_id`.\n**Body:** `{ title, project_name, media_type, license_type?, status?, song_id, fee_cents?, currency?, term_months?, territory?, client_name?, contact_email?, notes? }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the created placement.')
 def create_placement(
     org_id: int,
     data: PlacementCreate,
@@ -484,7 +500,7 @@ def create_placement(
     return placement_to_dict(placement, db)
 
 
-@router.put("/{placement_id}", summary="Update placement", description="Patches placement fields (project, status, fees, dates).")
+@router.put("/{placement_id}", summary="Update placement", description="Patches placement fields (project, status, fees, dates, contacts).\n\n**Path parameter:** `placement_id`.\n**Body:** any subset of writable placement fields.\n**Auth:** Bearer JWT — caller must be a member of the placement's org.\n**Response:** the updated placement.")
 def update_placement(
     placement_id: int,
     data: PlacementUpdate,
@@ -511,7 +527,7 @@ def update_placement(
     return placement_to_dict(placement, db)
 
 
-@router.post("/{placement_id}/transition", summary="Transition placement status", description="Moves a placement to the next pipeline status with validation; emits notifications.")
+@router.post("/{placement_id}/transition", summary="Transition placement status", description="Moves a placement to the next pipeline status with validation. Emits the appropriate notifications and audit row.\n\n**Path parameter:** `placement_id`.\n**Body:** `{ to_status: string, note?: string }`.\n**Auth:** Bearer JWT — caller must be a member of the placement's org.\n**Response:** `{ id, status, transitioned_at, transitioned_by }`.")
 def transition_placement(
     placement_id: int,
     target_status: str,
@@ -591,7 +607,7 @@ def transition_placement(
     return placement_to_dict(placement, db)
 
 
-@router.delete("/{placement_id}", summary="Delete placement", description="Permanently removes a placement record.")
+@router.delete("/{placement_id}", summary="Delete placement", description="Permanently removes a placement record.\n\n**Path parameter:** `placement_id`.\n**Auth:** Bearer JWT — caller must be a member of the placement's org.\n**Response:** `{ success: true }`.")
 def delete_placement(
     placement_id: int,
     db: Session = Depends(get_db),
@@ -612,7 +628,11 @@ def delete_placement(
     return {"message": "Placement deleted"}
 
 
-@router.get("/org/{org_id}/clients")
+@router.get(
+    "/org/{org_id}/clients",
+    summary='List the placement clients (sync supervisors / agencies)',
+    description='Returns the distinct counterparties (`client_name`) that appear on placements, used to populate the clients filter.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ clients: [{name, placement_count, total_fees_cents}] }`.',
+)
 def list_placement_clients(
     org_id: int,
     db: Session = Depends(get_db),
@@ -627,7 +647,7 @@ def list_placement_clients(
     return [c[0] for c in clients]
 
 
-@router.get("/org/{org_id}/sync-report", summary="Sync placement report", description="Aggregated, branded sync report for the organization. Supports CSV / PDF export downstream.")
+@router.get("/org/{org_id}/sync-report", summary="Sync placement report", description='Aggregated, branded sync report for the organization. Supports CSV / PDF export downstream.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `format` (`json|csv|pdf`, default `json`).\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** when `format=json`: `{ summary, placements: [...] }`; when `csv|pdf`: file download.')
 def generate_sync_report(
     org_id: int,
     client_name: Optional[str] = None,
@@ -813,7 +833,11 @@ def _generate_sync_report_pdf(placements, summary, client_name, status, date_fro
     )
 
 
-@router.get("/config/options")
+@router.get(
+    "/config/options",
+    summary='Get the static configuration options for the placements module',
+    description='Returns the curated dropdown vocabularies (media types, statuses, license types) the UI uses to render the placement form.\n\n**Auth:** Bearer JWT.\n**Response:** `{ media_types: [...], statuses: [...], license_types: [...] }`.',
+)
 def get_placement_options():
     return {
         "placement_types": PLACEMENT_TYPES,

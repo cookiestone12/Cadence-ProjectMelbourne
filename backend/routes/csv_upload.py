@@ -180,7 +180,7 @@ def parse_csv_file(content: bytes) -> tuple[list, list]:
     return headers, rows
 
 
-@router.post("/preview/{org_id}", response_model=CSVPreviewResponse, summary="Preview a CSV import", description="Parses the CSV, runs the AI column mapper, and returns a row-by-row preview with confidence scores. No data is written.")
+@router.post("/preview/{org_id}", response_model=CSVPreviewResponse, summary="Preview a CSV import", description='Parses the uploaded CSV, runs the AI column-mapping engine, and returns a row-by-row preview with confidence scores. **No data is written** — call `/import/{org_id}` to commit.\n\n**Path parameter:** `org_id`.\n**Body (multipart/form-data):** `file` — the CSV; `entity` (`songs|contacts|...`); `delimiter?`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ preview_id, total_rows, columns: [{source, mapped_to, confidence}], rows: [{row_index, mapped: {...}, errors: [...]}] }`.')
 async def preview_csv(
     org_id: int,
     file: UploadFile = File(...),
@@ -239,7 +239,7 @@ class TextPreviewRequest(BaseModel):
     text: str
 
 
-@router.post("/document-preview/{org_id}", summary="Preview a document (PDF/DOCX) import", description="Runs the AI document parser to preview a Schedule A or contract. No data is written.")
+@router.post("/document-preview/{org_id}", summary="Preview a document (PDF/DOCX) import", description='Runs the AI document parser to preview a Schedule A or contract uploaded as PDF/DOCX. **No data is written** — call `/import/{org_id}` to commit.\n\n**Path parameter:** `org_id`.\n**Body (multipart/form-data):** `file`; `document_type` (`schedule_a|contract|other`).\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ preview_id, document_type, parsed: {...}, warnings: [...] }`.')
 async def preview_document(
     org_id: int,
     file: UploadFile = File(...),
@@ -338,7 +338,7 @@ async def preview_document(
     return payload
 
 
-@router.post("/text-preview/{org_id}", summary="Preview pasted-text import", description="Same as document preview but accepts raw pasted text.")
+@router.post("/text-preview/{org_id}", summary="Preview pasted-text import", description='Same as `/document-preview` but accepts raw pasted text instead of an uploaded file. Useful for quick paste-and-import flows.\n\n**Path parameter:** `org_id`.\n**Body:** `{ text: string, document_type: string }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** same shape as `/document-preview`.')
 async def preview_pasted_text(
     org_id: int,
     payload: TextPreviewRequest,
@@ -386,7 +386,7 @@ async def preview_pasted_text(
     return out
 
 
-@router.post("/import/{org_id}", response_model=ImportResult, summary="Commit a previewed import", description="Executes the import based on the previously confirmed preview payload. Returns counts of created / updated / skipped rows.")
+@router.post("/import/{org_id}", response_model=ImportResult, summary="Commit a previewed import", description='Executes the import based on a previously confirmed preview. Returns counts of created / updated / skipped rows plus the resulting entity ids.\n\n**Path parameter:** `org_id`.\n**Body:** `{ preview_id, confirm: true, options?: {merge_strategy: "upsert"|"insert_only"} }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ created, updated, skipped, failed: [...], created_ids: [...] }`.')
 async def import_csv(
     org_id: int,
     request: CSVImportRequest,

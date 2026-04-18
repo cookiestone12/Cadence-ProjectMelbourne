@@ -637,7 +637,11 @@ def match_transaction_to_song(tx: RoyaltyTransaction, songs: List[Song]) -> tupl
     return None, None, "UNMATCHED"
 
 
-@router.post("/statements/{org_id}/preview")
+@router.post(
+    "/statements/{org_id}/preview",
+    summary='Preview Statement',
+    description='Parses an uploaded statement file in-memory (without persisting anything) and returns the detected source type, suggested column mapping, headers, and the first N rows so the operator can confirm before committing via `/upload`.\n\n**Path parameter:** `org_id`.\n**Body (multipart/form-data):** `file` — the statement (CSV/XLSX); `preview_rows?` (default 50).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ success, detected_source_type, headers, columns, mapping, preview_rows: [...], row_count }`.',
+)
 async def preview_statement(
     org_id: int,
     file: UploadFile = File(...),
@@ -663,7 +667,11 @@ async def preview_statement(
     }
 
 
-@router.get("/creators-summary/{org_id}")
+@router.get(
+    "/creators-summary/{org_id}",
+    summary='Get Creators Royalty Summary',
+    description="Per-creator earnings rollup across the org's statements: lifetime gross, paid-out total, outstanding balance, and the amount of revenue still floating in unassigned statements. Drives the creators table on the royalties dashboard.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `currency`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ creators: [{creator_id, name, gross_dollars, paid_dollars, balance_dollars, statement_count}], unassigned_count, unassigned_revenue_dollars }`.",
+)
 def get_creators_royalty_summary(
     org_id: int,
     db: Session = Depends(get_db),
@@ -725,7 +733,11 @@ def get_creators_royalty_summary(
     }
 
 
-@router.post("/statements/{org_id}/assign-unassigned")
+@router.post(
+    "/statements/{org_id}/assign-unassigned",
+    summary='Assign Unassigned Statements',
+    description='Bulk-assigns every RoyaltyStatement that currently has no creator attached to a single target creator. Used after import when a batch was uploaded without the creator id set.\n\n**Path parameter:** `org_id`.\n**Body:** `{ creator_id: int, statement_ids?: int[] }`. When `statement_ids` is omitted, every unassigned statement in the org is reassigned.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ assigned, creator_id, creator_name }`.',
+)
 def assign_unassigned_statements(
     org_id: int,
     body: dict,
@@ -750,7 +762,7 @@ def assign_unassigned_statements(
     return {"assigned": updated, "creator_id": creator_id, "creator_name": creator.display_name}
 
 
-@router.get("/statements/{org_id}", summary="List royalty statements", description="Returns every statement ingested for the organization with paging and status filters.")
+@router.get("/statements/{org_id}", summary="List royalty statements", description='Returns every royalty statement ingested for the organization with paging and status filters.\n\n**Path parameter:** `org_id`.\n**Query:** `status`, `source_type` (`dsp|label|publisher|sync|other`), `period_start`, `period_end`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, statements: [{id, source_name, source_type, period_start, period_end, total_amount_cents, currency, status, uploaded_at}] }`.')
 def list_statements(
     org_id: int,
     status: Optional[str] = None,
@@ -807,7 +819,7 @@ def list_statements(
     }
 
 
-@router.get("/statements/{org_id}/{statement_id}", summary="Get royalty statement detail", description="Returns the statement header plus a paged view of its transactions.")
+@router.get("/statements/{org_id}/{statement_id}", summary="Get royalty statement detail", description='Returns the statement header plus a paged view of its transactions.\n\n**Path parameters:** `org_id`, `statement_id`.\n**Query:** `limit` (default 50), `offset`, `unmatched_only?: bool`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ statement: {...}, transactions: {total, items: [{id, title, artist, isrc, units, amount_cents, matched_song_id}]} }`.')
 def get_statement(
     org_id: int,
     statement_id: int,
@@ -853,7 +865,7 @@ def get_statement(
     }
 
 
-@router.post("/statements/{org_id}/upload", summary="Upload royalty statement", description="Ingests a CSV / XLSX / PDF royalty statement, normalizes columns, and stages it for matching. Supports DSP, label, publisher, and PRO statement formats.")
+@router.post("/statements/{org_id}/upload", summary="Upload royalty statement", description='Ingests a CSV / XLSX / PDF royalty statement, normalizes columns, and stages it for matching. Supports DSP, label, publisher, and sync statement formats.\n\n**Path parameter:** `org_id`.\n**Body (multipart/form-data):** `file`; `source_name`; `source_type` (`dsp|label|publisher|sync|other`); `period_start?`; `period_end?`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ statement_id, status, total_rows, total_amount_cents, currency }`.')
 async def upload_statement(
     org_id: int,
     file: UploadFile = File(...),
@@ -1222,7 +1234,7 @@ def _safe_under_uploads(path: str) -> bool:
         return False
 
 
-@router.get("/statements/{org_id}/{statement_id}/delete-preview")
+@router.get("/statements/{org_id}/{statement_id}/delete-preview", summary="Return a non-mutating summary of what `DELETE` would remove", description='Returns a non-mutating summary of what `DELETE /statements/.../{statement_id}` would remove (matched transactions, advances to restore, payments to unwind, actions to clear).\n\n**Path parameters:** `org_id`, `statement_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ statement_id, transactions: int, allocations: int, advances_restored_cents: int, payments_unwound: int, action_items_cleared: int }`.')
 def delete_statement_preview(
     org_id: int,
     statement_id: int,
@@ -1529,7 +1541,7 @@ class BulkDeleteStatementsRequest(BaseModel):
     statement_ids: List[int]
 
 
-@router.delete("/statements/{org_id}/{statement_id}", summary="Delete a royalty statement", description="Hard-deletes the statement and all linked transactions. Use the preview endpoint first.")
+@router.delete("/statements/{org_id}/{statement_id}", summary="Delete a royalty statement", description='Hard-deletes the statement and all linked transactions, allocations, advance applications, and payment links. Call `/delete-preview` first to confirm the blast radius.\n\n**Path parameters:** `org_id`, `statement_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** same shape as `/delete-preview` with `success: true` added.')
 def delete_statement(
     org_id: int,
     statement_id: int,
@@ -1592,7 +1604,7 @@ def _aggregate_delete_summaries(summaries: List[Dict[str, Any]]) -> Dict[str, An
     }
 
 
-@router.post("/statements/{org_id}/bulk-delete-preview")
+@router.post("/statements/{org_id}/bulk-delete-preview", summary="Combined non-mutating preview for deleting many statements at once", description='Combined non-mutating preview for deleting many statements at once. Returns the same shape as the single-statement preview, summed.\n\n**Path parameter:** `org_id`.\n**Body:** `{ statement_ids: int[] }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ statements: int, transactions: int, allocations: int, advances_restored_cents: int, payments_unwound: int, action_items_cleared: int }`.')
 def bulk_delete_statement_preview(
     org_id: int,
     body: BulkDeleteStatementsRequest,
@@ -1623,7 +1635,7 @@ def bulk_delete_statement_preview(
     return _aggregate_delete_summaries(summaries)
 
 
-@router.post("/statements/{org_id}/bulk-delete")
+@router.post("/statements/{org_id}/bulk-delete", summary="Bulk Delete Statements", description='Deletes several statements in one transaction, running the same exhaustive cleanup (advance restore, payment unwind, action-item clearance).\n\n**Path parameter:** `org_id`.\n**Body:** `{ statement_ids: int[] }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ deleted: int, transactions: int, allocations: int, advances_restored_cents: int, payments_unwound: int, action_items_cleared: int }`.')
 def bulk_delete_statements(
     org_id: int,
     body: BulkDeleteStatementsRequest,
@@ -1666,7 +1678,11 @@ def bulk_delete_statements(
     }
 
 
-@router.get("/statements/{org_id}/{statement_id}/transactions")
+@router.get(
+    "/statements/{org_id}/{statement_id}/transactions",
+    summary='List Transactions',
+    description='Returns the per-track RoyaltyTransaction rows that were created from a statement (the v1 transaction model — see royalty-processing for the v2 statement-line model). Supports the transactions table on the statement detail page.\n\n**Path parameters:** `org_id`, `statement_id`.\n**Query:** `q` (search), `matched` (`true|false|null`), `limit` (default 100), `skip`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ total, limit, skip, transactions: [{id, track_title, artist, isrc, period, territory, amount_cents, currency, song_id, song_title, matched_at}] }`.',
+)
 def list_transactions(
     org_id: int,
     statement_id: int,
@@ -1721,7 +1737,11 @@ def list_transactions(
     return {"total": total, "skip": skip, "limit": limit, "transactions": results}
 
 
-@router.post("/statements/{org_id}/{statement_id}/match/{transaction_id}")
+@router.post(
+    "/statements/{org_id}/{statement_id}/match/{transaction_id}",
+    summary='Manual Match',
+    description='Manually attaches a single RoyaltyTransaction to a song so it will participate in royalty calculation. Overrides any prior auto-match.\n\n**Path parameters:** `org_id`, `statement_id`, `transaction_id`.\n**Body:** `{ song_id: int }`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ song_id, song_title, detail }`.',
+)
 def manual_match(
     org_id: int,
     statement_id: int,
@@ -1759,7 +1779,11 @@ def manual_match(
     return {"detail": "Transaction matched", "song_id": song.id, "song_title": song.title}
 
 
-@router.post("/statements/{org_id}/{statement_id}/rematch")
+@router.post(
+    "/statements/{org_id}/{statement_id}/rematch",
+    summary='Rematch Transactions',
+    description='Re-runs the auto-matcher across every unmatched RoyaltyTransaction on a statement (useful after editing the catalog or fixing ISRCs). Confirmed/manual matches are preserved.\n\n**Path parameters:** `org_id`, `statement_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ status, newly_matched, remaining_unmatched }`.',
+)
 def rematch_transactions(
     org_id: int,
     statement_id: int,
@@ -1805,7 +1829,7 @@ def rematch_transactions(
     }
 
 
-@router.post("/calculate/{org_id}/{statement_id}", summary="Calculate royalties for a statement", description="Runs the royalty engine: matches transactions to assets, applies rights splits and contract terms, and produces creator-level allocations.")
+@router.post("/calculate/{org_id}/{statement_id}", summary="Calculate royalties for a statement", description='Runs the royalty engine: matches transactions to assets, applies rights splits and contract terms, and produces creator allocations + recoupment applications.\n\n**Path parameters:** `org_id`, `statement_id`.\n**Body:** `{ recalculate?: bool }` — set true to wipe and recompute.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ statement_id, matched, unmatched, allocations_created, gross_cents, net_to_creators_cents }`.')
 def calculate_royalties(
     org_id: int,
     statement_id: int,
@@ -1898,7 +1922,11 @@ def calculate_royalties(
     }
 
 
-@router.get("/allocations/{org_id}")
+@router.get(
+    "/allocations/{org_id}",
+    summary='List Allocations',
+    description='Returns the RightsSplit-driven allocations computed from calculated statements: who owes how much to whom and from which underlying transaction. Drives the allocations explorer and feeds the payments workflow.\n\n**Path parameter:** `org_id`.\n**Query:** `creator_id`, `contract_id`, `song_id`, `statement_id`, `start_date`, `end_date`, `limit` (default 100), `skip`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ total, limit, skip, allocations: [{id, rights_holder_id, rights_holder_name, song_id, song_title, statement_id, contract_id, amount_cents, currency, share_pct, created_at}] }`.',
+)
 def list_allocations(
     org_id: int,
     contract_id: Optional[int] = None,
@@ -1957,7 +1985,7 @@ def list_allocations(
     return {"total": total, "skip": skip, "limit": limit, "allocations": results}
 
 
-@router.get("/dashboard/{org_id}", summary="Royalties dashboard summary", description="Aggregate financial overview: gross revenue, net to creators, fees, advances, and outstanding balances.")
+@router.get("/dashboard/{org_id}", summary="Royalties dashboard summary", description='Aggregate financial overview: gross revenue, net to creators, fees, advances, and outstanding balances.\n\n**Path parameter:** `org_id`.\n**Query:** `period_start`, `period_end`, `currency`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ gross_cents, net_to_creators_cents, fees_cents, advances_outstanding_cents, paid_cents, balance_cents, by_source: [...] }`.')
 def royalties_dashboard(
     org_id: int,
     creator_id: Optional[int] = None,
@@ -2126,7 +2154,11 @@ def royalties_dashboard(
     }
 
 
-@router.get("/earnings/{org_id}/by-holder")
+@router.get(
+    "/earnings/{org_id}/by-holder",
+    summary='Earnings By Holder',
+    description="Aggregates allocation totals grouped by rights-holder (creator or company). One row per holder with their share of the org's total earnings over the period.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `currency`, `min_amount_cents`, `limit`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ earnings: [{holder_id, holder_name, holder_type, amount_cents, currency, allocation_count, pct_of_total}] }` sorted by `amount_cents desc`.",
+)
 def earnings_by_holder(
     org_id: int,
     creator_id: Optional[int] = None,
@@ -2251,7 +2283,11 @@ def earnings_by_holder(
     return {"earnings": earnings}
 
 
-@router.get("/earnings/{org_id}/by-contract")
+@router.get(
+    "/earnings/{org_id}/by-contract",
+    summary='Earnings By Contract',
+    description='Aggregates allocation totals grouped by Contract — useful for evaluating whether a deal is recouping or how a publishing agreement is performing.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `currency`, `holder_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ earnings: [{contract_id, contract_name, amount_cents, currency, allocation_count}] }`.',
+)
 def earnings_by_contract(
     org_id: int,
     creator_id: Optional[int] = None,
@@ -2348,7 +2384,11 @@ def earnings_by_contract(
     return {"earnings": earnings}
 
 
-@router.get("/earnings/{org_id}/by-track")
+@router.get(
+    "/earnings/{org_id}/by-track",
+    summary='Earnings By Track',
+    description='Aggregates allocation totals grouped by Song. Powers the "top tracks" leaderboard.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `currency`, `creator_id`, `contract_id`, `limit` (default 50).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ earnings: [{song_id, song_title, artist, amount_cents, currency, allocation_count}] }`.',
+)
 def earnings_by_track(
     org_id: int,
     creator_id: Optional[int] = None,
@@ -2512,7 +2552,7 @@ def earnings_by_track(
     return {"earnings": earnings}
 
 
-@router.get("/payments/{org_id}", summary="List royalty payments", description="Returns recorded payments out to creators with status and amounts.")
+@router.get("/payments/{org_id}", summary="List royalty payments", description='Returns recorded payments out to creators with status and amounts.\n\n**Path parameter:** `org_id`.\n**Query:** `creator_id`, `status`, `period_start`, `period_end`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, payments: [{id, creator_id, creator_name, amount_cents, currency, paid_at, method, reference}] }`.')
 def list_payments(
     org_id: int,
     status: Optional[str] = None,
@@ -2558,7 +2598,7 @@ def list_payments(
     return {"total": total, "skip": skip, "limit": limit, "payments": results}
 
 
-@router.post("/payments/{org_id}", summary="Record a royalty payment", description="Records a cash disbursement to a creator. Updates outstanding balances accordingly.")
+@router.post("/payments/{org_id}", summary="Record a royalty payment", description='Records a cash disbursement to a creator. Updates outstanding balances accordingly and creates an audit entry.\n\n**Path parameter:** `org_id`.\n**Body:** `{ creator_id, amount_cents, currency, paid_at?: date, method?: string, reference?: string, note?: string }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the created payment.')
 def create_payment(
     org_id: int,
     body: PaymentCreate,
@@ -2602,7 +2642,11 @@ def create_payment(
     }
 
 
-@router.patch("/payments/{org_id}/{payment_id}")
+@router.patch(
+    "/payments/{org_id}/{payment_id}",
+    summary='Update Payment',
+    description='Patches editable fields on a recorded RoyaltyPayment — most commonly to update `status` (pending → paid → cleared) or fix a wrong `amount_cents` / `payment_date` after entry.\n\n**Path parameters:** `org_id`, `payment_id`.\n**Body:** any subset of `{ status, amount_cents, payment_date, memo, reference }`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ id, status, amount_cents, amount_dollars, payment_date }`.',
+)
 def update_payment(
     org_id: int,
     payment_id: int,
@@ -2740,7 +2784,11 @@ def advance_to_dict(a: Advance, db: Session) -> dict:
     }
 
 
-@router.get("/fees/{org_id}")
+@router.get(
+    "/fees/{org_id}",
+    summary='List Fees',
+    description="Returns the org's RoyaltyFee configurations — admin/processing fees that are subtracted from gross before allocation. Each fee has a scope (org-wide, contract, or creator) and a type (percentage or flat).\n\n**Path parameter:** `org_id`.\n**Query:** `creator_id`, `contract_id`, `active` (bool).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ total, fees: [{id, name, fee_type, rate_pct, flat_amount_cents, scope, creator_id, contract_id, active, effective_from, effective_to}] }`.",
+)
 def list_fees(
     org_id: int,
     creator_id: Optional[int] = None,
@@ -2758,7 +2806,11 @@ def list_fees(
     return {"fees": [fee_to_dict(f, db) for f in fees], "total": len(fees)}
 
 
-@router.post("/fees/{org_id}")
+@router.post(
+    "/fees/{org_id}",
+    summary='Create Fee',
+    description='Defines a new processing fee that future statement calculations will deduct.\n\n**Path parameter:** `org_id`.\n**Body:** `{ name, fee_type: "percentage"|"flat", rate_pct?, flat_amount_cents?, scope: "org"|"contract"|"creator", creator_id?, contract_id?, effective_from?, effective_to? }`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** the created fee object.',
+)
 def create_fee(
     org_id: int,
     body: FeeCreate,
@@ -2792,7 +2844,11 @@ def create_fee(
     return fee_to_dict(fee, db)
 
 
-@router.patch("/fees/{org_id}/{fee_id}")
+@router.patch(
+    "/fees/{org_id}/{fee_id}",
+    summary='Update Fee',
+    description='Patches an existing fee. Does **not** retroactively recompute already-calculated statements.\n\n**Path parameters:** `org_id`, `fee_id`.\n**Body:** any subset of writable fields from create.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** the updated fee object.',
+)
 def update_fee(
     org_id: int,
     fee_id: int,
@@ -2811,7 +2867,11 @@ def update_fee(
     return fee_to_dict(fee, db)
 
 
-@router.delete("/fees/{org_id}/{fee_id}")
+@router.delete(
+    "/fees/{org_id}/{fee_id}",
+    summary='Delete Fee',
+    description='Hard-deletes a fee. Allocations that previously applied this fee keep their historical numbers; only future calculations are affected.\n\n**Path parameters:** `org_id`, `fee_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ status: "deleted" }`.',
+)
 def delete_fee(
     org_id: int,
     fee_id: int,
@@ -2827,7 +2887,11 @@ def delete_fee(
     return {"status": "deleted"}
 
 
-@router.get("/advances/{org_id}")
+@router.get(
+    "/advances/{org_id}",
+    summary='List Advances',
+    description='Returns the legacy v1 Advance records for the org (see `/api/royalty-processing/.../advances` for the v2 model). Each advance has a principal, recouped amount, and remaining balance against a creator or contract.\n\n**Path parameter:** `org_id`.\n**Query:** `creator_id`, `contract_id`, `recouped` (bool).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ total, advances: [{id, name, principal_cents, recouped_cents, outstanding_cents, currency, creator_id, contract_id, advance_date, recoupable}] }`.',
+)
 def list_advances(
     org_id: int,
     creator_id: Optional[int] = None,
@@ -2845,7 +2909,11 @@ def list_advances(
     return {"advances": [advance_to_dict(a, db) for a in advances], "total": len(advances)}
 
 
-@router.post("/advances/{org_id}")
+@router.post(
+    "/advances/{org_id}",
+    summary='Create Advance',
+    description='Records a new advance against a creator or contract that future allocations will recoup against.\n\n**Path parameter:** `org_id`.\n**Body:** `{ name, principal_cents, currency?, creator_id?, contract_id?, advance_date?, recoupable? (default true), notes? }`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** the created advance object.',
+)
 def create_advance(
     org_id: int,
     body: AdvanceCreate,
@@ -2874,7 +2942,11 @@ def create_advance(
     return advance_to_dict(advance, db)
 
 
-@router.patch("/advances/{org_id}/{advance_id}")
+@router.patch(
+    "/advances/{org_id}/{advance_id}",
+    summary='Update Advance',
+    description='Patches editable fields on an advance. Does not retroactively rewrite recouped amounts.\n\n**Path parameters:** `org_id`, `advance_id`.\n**Body:** any subset of writable fields from create.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** the updated advance object.',
+)
 def update_advance(
     org_id: int,
     advance_id: int,
@@ -2895,7 +2967,11 @@ def update_advance(
     return advance_to_dict(advance, db)
 
 
-@router.delete("/advances/{org_id}/{advance_id}")
+@router.delete(
+    "/advances/{org_id}/{advance_id}",
+    summary='Delete Advance',
+    description='Hard-deletes an advance. Use with care — historical allocations that recouped against it stay numerically intact but lose the back-link.\n\n**Path parameters:** `org_id`, `advance_id`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ status: "deleted" }`.',
+)
 def delete_advance(
     org_id: int,
     advance_id: int,
@@ -2911,7 +2987,11 @@ def delete_advance(
     return {"status": "deleted"}
 
 
-@router.post("/confirm-contract-payment/{org_id}/{contract_id}")
+@router.post(
+    "/confirm-contract-payment/{org_id}/{contract_id}",
+    summary='Confirm Contract Payment',
+    description="Marks a contract-scoped advance/payment as confirmed — flips the contract's payment state to paid, posts the corresponding RoyaltyPayment, and records the audit trail. Used when an advance check has cleared.\n\n**Path parameters:** `org_id`, `contract_id`.\n**Body:** `{ amount_cents, payment_date, reference?, memo? }`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ contract_id, payment_id, status, amount_cents }`.",
+)
 def confirm_contract_payment(
     org_id: int,
     contract_id: int,
@@ -2961,7 +3041,7 @@ def confirm_contract_payment(
     return {"status": "confirmed", "contract_id": contract_id}
 
 
-@router.get("/creator-accounting/{org_id}/{creator_id}", summary="Per-creator accounting view", description="Full earnings + payments + advances + fees rollup for a single creator across all statements.")
+@router.get("/creator-accounting/{org_id}/{creator_id}", summary="Per-creator accounting view", description='Full earnings + payments + advances + fees rollup for a single creator across all statements.\n\n**Path parameters:** `org_id`, `creator_id`.\n**Query:** `period_start`, `period_end`, `currency`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ creator_id, gross_cents, net_cents, paid_cents, balance_cents, advances: [...], by_period: [...], by_source: [...] }`.')
 def get_creator_accounting(
     org_id: int,
     creator_id: int,

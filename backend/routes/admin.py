@@ -88,7 +88,19 @@ class OrganizationResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.get("/users", response_model=List[UserResponse])
+@router.get(
+    "/users",
+    response_model=List[UserResponse],
+    summary="List every user across the platform",
+    description=(
+        "Cross-tenant user listing for the platform super-admin console. "
+        "Includes inactive accounts and platform staff.\n\n"
+        "**Optional query:** `q` (substring match on username/email), "
+        "`limit`, `offset`.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `List[UserResponse]` ordered by `created_at` desc."
+    ),
+)
 def list_all_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin)
@@ -116,7 +128,21 @@ def list_all_users(
         ))
     return result
 
-@router.post("/users", response_model=UserResponse)
+@router.post(
+    "/users",
+    response_model=UserResponse,
+    summary="Create a user account (super-admin)",
+    description=(
+        "Provisions a new User row directly, bypassing the normal signup "
+        "and invite flows. Optionally attaches the user to an existing "
+        "organization with a specified role.\n\n"
+        "**Body (`UserCreate`):** `username`, `email`, `password`, "
+        "`role` (free-form), `is_active`, `is_admin`, `is_super_admin`, "
+        "`organization_id?`, `organization_role?` (`OWNER`/`ADMIN`/`MEMBER`).\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** the created `UserResponse`."
+    ),
+)
 def create_user(
     request: CreateUserRequest,
     db: Session = Depends(get_db),
@@ -171,7 +197,18 @@ def create_user(
         organizations=orgs
     )
 
-@router.get("/users/{user_id}", response_model=UserResponse)
+@router.get(
+    "/users/{user_id}",
+    response_model=UserResponse,
+    summary="Get a single user (super-admin)",
+    description=(
+        "Returns the full user record across tenants, including admin "
+        "flags and primary organization membership.\n\n"
+        "**Path parameter:** `user_id` — User row id.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `UserResponse`. 404 if not found."
+    ),
+)
 def get_user(
     user_id: int,
     db: Session = Depends(get_db),
@@ -201,7 +238,21 @@ def get_user(
         organizations=orgs
     )
 
-@router.put("/users/{user_id}", response_model=UserResponse)
+@router.put(
+    "/users/{user_id}",
+    response_model=UserResponse,
+    summary="Update a user account (super-admin)",
+    description=(
+        "Patches editable fields on any user, including platform admin "
+        "flags. To rotate a password, supply `password` in the body — it "
+        "is hashed server-side.\n\n"
+        "**Path parameter:** `user_id` — User row id.\n"
+        "**Body (`UserUpdate`):** any subset of `username`, `email`, "
+        "`password`, `role`, `is_active`, `is_admin`, `is_super_admin`.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** the updated `UserResponse`."
+    ),
+)
 def update_user(
     user_id: int,
     request: UpdateUserRequest,
@@ -254,7 +305,19 @@ def update_user(
         organizations=orgs
     )
 
-@router.delete("/users/{user_id}")
+@router.delete(
+    "/users/{user_id}",
+    summary="Hard-delete a user account (super-admin)",
+    description=(
+        "Permanently removes the User row and all OrganizationMember "
+        "rows attached to it. Audit and authorship rows that reference "
+        "the user are nulled rather than cascade-deleted. Cannot be used "
+        "on the calling super-admin (returns 400).\n\n"
+        "**Path parameter:** `user_id` — User row id.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ message: \"User deleted\" }`."
+    ),
+)
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
@@ -276,7 +339,18 @@ def delete_user(
     
     return {"message": "User deleted successfully"}
 
-@router.get("/organizations", response_model=List[OrganizationResponse])
+@router.get(
+    "/organizations",
+    response_model=List[OrganizationResponse],
+    summary="List every organization (super-admin)",
+    description=(
+        "Cross-tenant directory of every Organization row including "
+        "inactive ones. Used by the super-admin console to power tenant "
+        "switching, billing, and impersonation.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `List[OrganizationResponse]` ordered by `name`."
+    ),
+)
 def list_all_organizations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin)
@@ -300,7 +374,22 @@ def list_all_organizations(
         ))
     return result
 
-@router.post("/organizations", response_model=OrganizationResponse)
+@router.post(
+    "/organizations",
+    response_model=OrganizationResponse,
+    summary="Provision a new organization (super-admin)",
+    description=(
+        "Creates an Organization row with the requested account type and "
+        "branding defaults. Does **not** create members — use "
+        "`POST /organizations/{org_id}/members` afterwards (or trigger an "
+        "invite from `tenant-admin/org/{org_id}/invite`).\n\n"
+        "**Body (`OrganizationCreate`):** `name`, `display_name?`, "
+        "`account_type` (`ARTIST` / `LABEL` / `PUBLISHER` / etc.), "
+        "`primary_color?`, `secondary_color?`, `tagline?`.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** the created `OrganizationResponse`."
+    ),
+)
 def create_organization(
     request: CreateOrganizationRequest,
     db: Session = Depends(get_db),
@@ -334,7 +423,22 @@ def create_organization(
         creator_count=0
     )
 
-@router.put("/organizations/{org_id}", response_model=OrganizationResponse)
+@router.put(
+    "/organizations/{org_id}",
+    response_model=OrganizationResponse,
+    summary="Update an organization (super-admin)",
+    description=(
+        "Patches any field on the target Organization. Tenant admins "
+        "should use `PUT /api/tenant-admin/branding` for the user-facing "
+        "subset of these fields.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Body (`OrganizationUpdate`):** any subset of the writable "
+        "Organization fields (name, display_name, account_type, "
+        "branding, status, etc).\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** the updated `OrganizationResponse`."
+    ),
+)
 def update_organization(
     org_id: int,
     request: UpdateOrganizationRequest,
@@ -376,7 +480,18 @@ def update_organization(
         creator_count=len(org.creators)
     )
 
-@router.delete("/organizations/{org_id}")
+@router.delete(
+    "/organizations/{org_id}",
+    summary="Hard-delete an organization and its data (super-admin)",
+    description=(
+        "Permanently removes the Organization plus every row scoped to "
+        "it — Creators, Songs, Releases, Contracts, Royalties, etc. "
+        "Irreversible; only use after a customer offboarding.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ message: \"Organization deleted\" }`."
+    ),
+)
 def delete_organization(
     org_id: int,
     confirm: bool = False,
@@ -456,7 +571,20 @@ def delete_organization(
 
     return {"message": f"Organization '{org_name}' and all its data have been permanently deleted"}
 
-@router.post("/organizations/{org_id}/members")
+@router.post(
+    "/organizations/{org_id}/members",
+    summary="Attach an existing user to an organization (super-admin)",
+    description=(
+        "Creates an OrganizationMember row binding an existing User to "
+        "the target Organization with the requested role. Use the "
+        "tenant-admin invite endpoint for the standard email-driven "
+        "onboarding flow.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Body:** `{ user_id: int, role?: \"OWNER\"|\"ADMIN\"|\"MEMBER\" }`.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ message: \"Member added\" }`."
+    ),
+)
 def add_member_to_org(
     org_id: int,
     request: AddMemberRequest,
@@ -490,7 +618,18 @@ def add_member_to_org(
     
     return {"message": "Member added successfully"}
 
-@router.delete("/organizations/{org_id}/members/{user_id}")
+@router.delete(
+    "/organizations/{org_id}/members/{user_id}",
+    summary="Detach a user from an organization (super-admin)",
+    description=(
+        "Deletes the OrganizationMember row binding the user to the org. "
+        "The User account itself is preserved.\n\n"
+        "**Path parameters:** `org_id` — Organization ID; `user_id` — "
+        "User row id.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ message: \"Member removed\" }`."
+    ),
+)
 def remove_member_from_org(
     org_id: int,
     user_id: int,
@@ -510,7 +649,17 @@ def remove_member_from_org(
     
     return {"message": "Member removed successfully"}
 
-@router.get("/stats")
+@router.get(
+    "/stats",
+    summary="Platform-wide totals for the super-admin dashboard",
+    description=(
+        "Cheap aggregate counts used by the super-admin home page. "
+        "Numbers are computed live (no cache).\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ total_users, active_users, total_organizations, "
+        "total_creators, total_songs }`."
+    ),
+)
 def get_admin_stats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin)
@@ -531,7 +680,19 @@ def get_admin_stats(
         "total_creators": total_creators
     }
 
-@router.post("/impersonate/{org_id}")
+@router.post(
+    "/impersonate/{org_id}",
+    summary="Switch the super-admin's session into an organization",
+    description=(
+        "Sets the calling super-admin's effective organization context to "
+        "`org_id` for the remainder of the session, so subsequent calls "
+        "behave as if the admin were a member of that org. The action is "
+        "audit-logged.\n\n"
+        "**Path parameter:** `org_id` — Organization to impersonate.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ message, organization_id, organization_name }`."
+    ),
+)
 def impersonate_organization(
     org_id: int,
     db: Session = Depends(get_db),
@@ -561,7 +722,18 @@ def impersonate_organization(
         "organization_name": org.display_name or org.name
     }
 
-@router.post("/run-reminders")
+@router.post(
+    "/run-reminders",
+    summary="Manually trigger the daily reminder sweep",
+    description=(
+        "Runs the same reminder/notification job that the platform "
+        "scheduler executes once per day: finds upcoming releases, "
+        "expiring contracts, registration deadlines, etc., and writes "
+        "Notification rows for the relevant users.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ message, notifications_created }`."
+    ),
+)
 def trigger_reminders(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin)
@@ -575,7 +747,17 @@ def trigger_reminders(
         "notifications_created": results
     }
 
-@router.post("/sync-health-scores")
+@router.post(
+    "/sync-health-scores",
+    summary="Recompute song health scores across every organization",
+    description=(
+        "Forces a recompute of the cached `health_score` field on every "
+        "Song in the platform. Use after model/scoring changes; the "
+        "scheduler also runs this nightly.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ message, songs_synced }`."
+    ),
+)
 def sync_all_health_scores(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin)
@@ -589,7 +771,18 @@ def sync_all_health_scores(
         "songs_synced": synced_count
     }
 
-@router.post("/sync-health-scores/{org_id}")
+@router.post(
+    "/sync-health-scores/{org_id}",
+    summary="Recompute song health scores for one organization",
+    description=(
+        "Same as `/sync-health-scores` but scoped to a single org — much "
+        "faster when you only need to refresh after a tenant-specific "
+        "import.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ message, songs_synced }`."
+    ),
+)
 def sync_org_health_scores(
     org_id: int,
     db: Session = Depends(get_db),
@@ -605,7 +798,18 @@ def sync_org_health_scores(
     }
 
 
-@router.post("/run-action-reminders")
+@router.post(
+    "/run-action-reminders",
+    summary="Manually trigger the action-item reminder sweep",
+    description=(
+        "Companion to `/run-reminders` focused on user-assigned action "
+        "items: emits in-app notifications for items due soon and overdue. "
+        "Run nightly by the scheduler.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ message, upcoming_reminders, overdue_notifications, "
+        "details }`."
+    ),
+)
 def trigger_action_reminders(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin)
@@ -626,7 +830,18 @@ def trigger_action_reminders(
     }
 
 
-@router.post("/send-org-digest/{org_id}")
+@router.post(
+    "/send-org-digest/{org_id}",
+    summary="Send the weekly digest email to an organization",
+    description=(
+        "Renders and emails (via Resend) the weekly catalog/royalty "
+        "digest to every member of the org with `digest_opt_in = true`. "
+        "Useful for previewing digest contents on demand.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ message }`."
+    ),
+)
 def send_organization_digest(
     org_id: int,
     db: Session = Depends(get_db),
@@ -640,7 +855,18 @@ def send_organization_digest(
         "message": f"Digest sent for organization {org_id}"
     }
 
-@router.get("/integrations")
+@router.get(
+    "/integrations",
+    summary="List third-party integrations and connection status",
+    description=(
+        "Returns every supported integration (Spotify, Dropbox, Google "
+        "Drive, OpenAI, Resend, etc.) with whether platform credentials "
+        "are configured and how many tenants have connected an account.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ total, connected, integrations: [{id, name, "
+        "category, configured, tenants_connected, last_synced_at}] }`."
+    ),
+)
 def get_integration_status(
     current_user: User = Depends(get_current_super_admin)
 ):
@@ -723,7 +949,20 @@ def get_integration_status(
         "connected": len([i for i in integrations if i["status"] == "connected"])
     }
 
-@router.post("/integrations/{integration_id}/test")
+@router.post(
+    "/integrations/{integration_id}/test",
+    summary="Smoke-test an integration's platform credentials",
+    description=(
+        "Performs a no-op call against the third-party provider using the "
+        "platform-level credentials (e.g. fetch profile, list buckets) "
+        "and returns whether it succeeded. Does not exercise any tenant's "
+        "OAuth tokens.\n\n"
+        "**Path parameter:** `integration_id` — integration slug from "
+        "`GET /integrations`.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ success: bool, message }`."
+    ),
+)
 def test_integration_connection(
     integration_id: str,
     current_user: User = Depends(get_current_super_admin)
@@ -787,7 +1026,20 @@ def test_integration_connection(
         raise HTTPException(status_code=400, detail=f"Integration '{integration_id}' does not support testing")
 
 
-@router.get("/ai-usage")
+@router.get(
+    "/ai-usage",
+    summary="AI/LLM usage and spend across the platform",
+    description=(
+        "Aggregates AICall log rows by feature and month and returns "
+        "totals plus recent activity for the super-admin cost dashboard.\n\n"
+        "**Optional query:** `org_id` (scope to a single tenant), "
+        "`from`/`to` (ISO dates).\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ totals: { calls, prompt_tokens, completion_tokens, "
+        "cost_usd }, current_month: {...}, by_feature: [...], by_month: "
+        "[...], recent_calls: [...] }`."
+    ),
+)
 def get_ai_usage_stats(
     months: int = 3,
     db: Session = Depends(get_db),
@@ -900,7 +1152,19 @@ def get_ai_usage_stats(
     }
 
 
-@router.post("/ai-usage/log")
+@router.post(
+    "/ai-usage/log",
+    summary="Record an AI call (internal telemetry endpoint)",
+    description=(
+        "Internal endpoint used by background workers and other services "
+        "to log a single AI/LLM call into the AICall table for cost "
+        "tracking. Not intended for partner integrators.\n\n"
+        "**Body:** `{ feature, model, provider, prompt_tokens, "
+        "completion_tokens, cost_usd, org_id?, user_id?, metadata? }`.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ status: \"logged\" }`."
+    ),
+)
 def record_ai_usage(
     data: dict,
     db: Session = Depends(get_db),
@@ -935,7 +1199,19 @@ def record_ai_usage(
     return {"status": "ok"}
 
 
-@router.get("/cost-report")
+@router.get(
+    "/cost-report",
+    summary="Download the platform cost report as CSV",
+    description=(
+        "Streams a CSV summarising AI, storage, and integration costs per "
+        "organization for the requested period. One row per "
+        "(org, cost_category) tuple. Used for monthly invoicing.\n\n"
+        "**Optional query:** `from`, `to` (ISO dates; default = current "
+        "month).\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `text/csv` streaming download."
+    ),
+)
 def download_cost_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
@@ -1007,7 +1283,22 @@ def download_cost_report(
     )
 
 
-@router.get("/support-tickets")
+@router.get(
+    "/support-tickets",
+    summary="List support tickets with status counts",
+    description=(
+        "Returns every SupportTicket across the platform, plus aggregate "
+        "counts (`open_count`, `in_progress_count`, `resolved_count`, "
+        "`closed_count`) for the dashboard header.\n\n"
+        "**Optional query:** `status`, `category`, `org_id`, `q` "
+        "(substring match on subject/description), `limit`, `offset`.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ tickets: [{id, subject, description, category, "
+        "status, priority, org_id, user_id, created_at, closed_at, "
+        "admin_notes, attachments}], open_count, in_progress_count, "
+        "resolved_count, closed_count, total }`."
+    ),
+)
 def list_all_support_tickets(
     status: Optional[str] = None,
     category: Optional[str] = None,
@@ -1077,7 +1368,19 @@ def list_all_support_tickets(
     }
 
 
-@router.put("/support-tickets/{ticket_id}/status")
+@router.put(
+    "/support-tickets/{ticket_id}/status",
+    summary="Move a support ticket through its workflow",
+    description=(
+        "Transitions a SupportTicket between `OPEN`, `IN_PROGRESS`, "
+        "`RESOLVED`, and `CLOSED`. Setting `RESOLVED` or `CLOSED` stamps "
+        "`closed_at`; reopening clears it.\n\n"
+        "**Path parameter:** `ticket_id` — SupportTicket id.\n"
+        "**Body:** `{ status: \"OPEN\"|\"IN_PROGRESS\"|\"RESOLVED\"|\"CLOSED\" }`.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ ticket_id, status: \"updated\", new_status }`."
+    ),
+)
 def update_ticket_status(
     ticket_id: int,
     data: dict,
@@ -1106,7 +1409,19 @@ def update_ticket_status(
     return {"status": "ok", "ticket_id": ticket_id, "new_status": new_status}
 
 
-@router.put("/support-tickets/{ticket_id}/notes")
+@router.put(
+    "/support-tickets/{ticket_id}/notes",
+    summary="Update the admin-only notes on a support ticket",
+    description=(
+        "Overwrites the `admin_notes` field on a SupportTicket with the "
+        "supplied text. These notes are visible to platform staff only — "
+        "the requesting tenant cannot see them.\n\n"
+        "**Path parameter:** `ticket_id` — SupportTicket id.\n"
+        "**Body:** `{ admin_notes: string }`.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n\n"
+        "**Response:** `{ ticket_id, status: \"updated\" }`."
+    ),
+)
 def update_ticket_notes(
     ticket_id: int,
     data: dict,
@@ -1127,7 +1442,7 @@ def update_ticket_notes(
 # Internal operational endpoints  (mounted under /api/internal)
 # ---------------------------------------------------------------------------
 
-@internal_router.get("/migration-status")
+@internal_router.get("/migration-status", summary="Report Alembic migration state and lock status", description='Reports the current Alembic migration revision, head revision, and whether a long-running migration lock is held — used by ops to verify a deploy has run all migrations.\n\n**Auth:** Bearer JWT — platform super-admin only.\n**Response:** `{ current_revision, head_revision, is_at_head: bool, lock_held: bool, lock_held_since?: datetime }`.')
 def migration_status(
     current_user: User = Depends(get_current_super_admin),
 ):

@@ -99,7 +99,23 @@ def _contact_to_dict(contact: CreativeContact):
     }
 
 
-@router.get("/org/{org_id}")
+@router.get(
+    "/org/{org_id}",
+    summary="List the org's creative-directory contacts",
+    description=(
+        "Returns every CreativeContact in the organization — the directory "
+        "of writers, producers, A&Rs, attorneys, and other industry "
+        "contacts curated by the org. Supports text search and tag filtering "
+        "for the directory list view.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Optional query:** `q` (substring on name/email/company), "
+        "`tag` (single tag slug), `linked_creator_id`, `limit`, `offset`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ total, contacts: [{id, name, role, company, "
+        "email, phone, tags, photo_url, pro_society, ipi, linked_creator_id, "
+        "shared_to_client, updated_at}] }`."
+    ),
+)
 def list_creative_contacts(
     org_id: int,
     search: Optional[str] = Query(None),
@@ -133,7 +149,21 @@ def list_creative_contacts(
     return {"contacts": [_contact_to_dict(c) for c in contacts], "total": len(contacts)}
 
 
-@router.get("/{contact_id}")
+@router.get(
+    "/{contact_id}",
+    summary="Get a single creative-directory contact",
+    description=(
+        "Returns the full CreativeContact record including bio, social "
+        "handles, PRO/IPI metadata, tags, share state, and the optional "
+        "`linked_creator_id` if the contact mirrors a Creator in the org's "
+        "roster.\n\n"
+        "**Path parameter:** `contact_id` — CreativeContact id.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contact's "
+        "organization.\n\n"
+        "**Response:** the full contact object (see list endpoint for "
+        "fields, plus `bio`, `socials`, `notes`, `created_at`)."
+    ),
+)
 def get_creative_contact(
     contact_id: int,
     db: Session = Depends(get_db),
@@ -147,7 +177,21 @@ def get_creative_contact(
     return _contact_to_dict(contact)
 
 
-@router.post("/org/{org_id}")
+@router.post(
+    "/org/{org_id}",
+    summary="Create a creative-directory contact",
+    description=(
+        "Adds a new contact to the org's directory. Use the "
+        "`from-creator` endpoint instead when mirroring a Creator that "
+        "already exists in the roster, and `sync-creators` to bulk-import.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Body (`CreativeContactCreate`):** `name` (required), `role`, "
+        "`company`, `email`, `phone`, `bio`, `socials`, `pro_society`, "
+        "`ipi`, `tags`, `notes`, `linked_creator_id`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** the freshly created contact object."
+    ),
+)
 def create_creative_contact(
     org_id: int,
     data: CreativeContactCreate,
@@ -183,7 +227,20 @@ def create_creative_contact(
     return _contact_to_dict(contact)
 
 
-@router.put("/{contact_id}")
+@router.put(
+    "/{contact_id}",
+    summary="Update a creative-directory contact",
+    description=(
+        "Patches editable fields on a CreativeContact. Use the dedicated "
+        "image endpoints to change `photo_url`.\n\n"
+        "**Path parameter:** `contact_id` — CreativeContact id.\n"
+        "**Body (`CreativeContactUpdate`):** any subset of the writable "
+        "fields from the create endpoint. Unspecified fields are untouched.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contact's "
+        "organization.\n\n"
+        "**Response:** the updated contact object."
+    ),
+)
 def update_creative_contact(
     contact_id: int,
     data: CreativeContactUpdate,
@@ -229,7 +286,18 @@ def update_creative_contact(
     return _contact_to_dict(contact)
 
 
-@router.delete("/{contact_id}")
+@router.delete(
+    "/{contact_id}",
+    summary="Delete a creative-directory contact",
+    description=(
+        "Hard-deletes the CreativeContact and any associated client share "
+        "rows. The linked Creator (if any) is preserved.\n\n"
+        "**Path parameter:** `contact_id` — CreativeContact id.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contact's "
+        "organization.\n\n"
+        "**Response:** `{ message: \"Contact deleted\" }`."
+    ),
+)
 def delete_creative_contact(
     contact_id: int,
     db: Session = Depends(get_db),
@@ -246,7 +314,19 @@ def delete_creative_contact(
     return {"message": "Creative contact deleted successfully"}
 
 
-@router.get("/{contact_id}/image")
+@router.get(
+    "/{contact_id}/image",
+    summary="Stream a contact's profile image",
+    description=(
+        "Serves the binary image data behind the contact's `photo_url`. "
+        "Used by the directory UI when the photo is stored privately and "
+        "must be proxied with auth instead of fetched directly.\n\n"
+        "**Path parameter:** `contact_id` — CreativeContact id.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contact's "
+        "organization.\n\n"
+        "**Response:** the image bytes with the appropriate `Content-Type`."
+    ),
+)
 def serve_contact_image(
     contact_id: int,
     db: Session = Depends(get_db),
@@ -268,7 +348,20 @@ def serve_contact_image(
     raise HTTPException(status_code=404, detail="No image found")
 
 
-@router.post("/{contact_id}/image")
+@router.post(
+    "/{contact_id}/image",
+    summary="Upload or replace a contact's profile image",
+    description=(
+        "Multipart upload of a new profile photo. The file is persisted to "
+        "the configured object store and `photo_url` is updated to the "
+        "resulting URL. Replaces any existing photo.\n\n"
+        "**Path parameter:** `contact_id` — CreativeContact id.\n"
+        "**Body (multipart/form-data):** `file` — the image (PNG/JPEG).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contact's "
+        "organization.\n\n"
+        "**Response:** `{ photo_url }`."
+    ),
+)
 async def upload_contact_image(
     contact_id: int,
     file: UploadFile = File(...),
@@ -296,7 +389,18 @@ async def upload_contact_image(
     return {"photo_url": contact.photo_url}
 
 
-@router.delete("/{contact_id}/image")
+@router.delete(
+    "/{contact_id}/image",
+    summary="Delete a contact's profile image",
+    description=(
+        "Removes the contact's photo from object storage and clears "
+        "`photo_url`.\n\n"
+        "**Path parameter:** `contact_id` — CreativeContact id.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contact's "
+        "organization.\n\n"
+        "**Response:** `{ message: \"Image deleted\" }`."
+    ),
+)
 def delete_contact_image(
     contact_id: int,
     db: Session = Depends(get_db),
@@ -316,7 +420,20 @@ def delete_contact_image(
     return {"message": "Photo removed"}
 
 
-@router.post("/org/{org_id}/from-creator/{creator_id}")
+@router.post(
+    "/org/{org_id}/from-creator/{creator_id}",
+    summary="Mirror a Creator into the creative directory",
+    description=(
+        "Creates a CreativeContact whose fields are pre-filled from an "
+        "existing Creator in the roster (name, photo, contact info, "
+        "PRO/IPI), and sets `linked_creator_id` so future edits to either "
+        "side can be kept in sync.\n\n"
+        "**Path parameters:** `org_id` — Organization ID; `creator_id` — "
+        "Creator to mirror.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** the created CreativeContact object."
+    ),
+)
 def create_from_creator(
     org_id: int,
     creator_id: int,
@@ -359,7 +476,20 @@ def create_from_creator(
     return _contact_to_dict(contact)
 
 
-@router.get("/org/{org_id}/sync-creators")
+@router.get(
+    "/org/{org_id}/sync-creators",
+    summary="Bulk-sync the creative directory from the Creator roster",
+    description=(
+        "Walks every Creator in the org and ensures a corresponding "
+        "CreativeContact exists with `linked_creator_id` set. New contacts "
+        "are created, existing linked contacts have their core fields "
+        "refreshed from the Creator. Idempotent.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ message, created_count, created_names: [...], "
+        "updated_count, updated_names: [...] }`."
+    ),
+)
 def sync_creators(
     org_id: int,
     db: Session = Depends(get_db),
@@ -429,7 +559,20 @@ class ShareContactRequest(BaseModel):
     include_pdf: Optional[bool] = True
 
 
-@router.post("/{contact_id}/share")
+@router.post(
+    "/{contact_id}/share",
+    summary="Email a contact's card to one or more recipients",
+    description=(
+        "Renders the contact card as HTML/PDF and emails it (via Resend) "
+        "to the supplied addresses. Sender is the calling user's display "
+        "name on behalf of the organization.\n\n"
+        "**Path parameter:** `contact_id` — CreativeContact id.\n"
+        "**Body:** `{ emails: string[], subject?, message? }`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contact's "
+        "organization.\n\n"
+        "**Response:** `{ success: true, message }`."
+    ),
+)
 def share_contact_card(
     contact_id: int,
     data: ShareContactRequest,
@@ -490,7 +633,20 @@ def share_contact_card(
     return {"success": True, "message": f"Contact card shared with {data.recipient_email}"}
 
 
-@router.get("/{contact_id}/pro-info")
+@router.get(
+    "/{contact_id}/pro-info",
+    summary="Get the contact's PRO / publisher info card",
+    description=(
+        "Returns a structured + plain-text snapshot of the contact's "
+        "PRO/IPI/publisher metadata, ready to paste into a split sheet, "
+        "email, or licensing form.\n\n"
+        "**Path parameter:** `contact_id` — CreativeContact id.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contact's "
+        "organization.\n\n"
+        "**Response:** `{ data: { name, ipi, pro_society, "
+        "publisher_name, publisher_ipi, publisher_pro }, text }`."
+    ),
+)
 def get_pro_info(
     contact_id: int,
     db: Session = Depends(get_db),
@@ -532,7 +688,19 @@ class QuickShareProRequest(BaseModel):
     message: Optional[str] = None
 
 
-@router.post("/{contact_id}/quick-share-pro")
+@router.post(
+    "/{contact_id}/quick-share-pro",
+    summary="Email the contact's PRO/publisher info",
+    description=(
+        "Convenience wrapper around `/share` that emails just the formatted "
+        "PRO info text (from `/pro-info`) to the supplied recipients.\n\n"
+        "**Path parameter:** `contact_id` — CreativeContact id.\n"
+        "**Body:** `{ emails: string[], subject?, message? }`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contact's "
+        "organization.\n\n"
+        "**Response:** `{ success: true, message }`."
+    ),
+)
 def quick_share_pro_info(
     contact_id: int,
     data: QuickShareProRequest,
@@ -586,7 +754,19 @@ def quick_share_pro_info(
     return {"success": True, "message": f"PRO info shared with {data.recipient_email}"}
 
 
-@router.get("/{contact_id}/pdf")
+@router.get(
+    "/{contact_id}/pdf",
+    summary="Download the contact's profile as a branded PDF card",
+    description=(
+        "Renders the contact's profile (photo, role, contact info, PRO "
+        "details, bio) into a one-page PDF that follows the org's branding "
+        "and streams it as an attachment.\n\n"
+        "**Path parameter:** `contact_id` — CreativeContact id.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contact's "
+        "organization.\n\n"
+        "**Response:** `application/pdf` streaming download."
+    ),
+)
 def download_creative_card_pdf(
     contact_id: int,
     db: Session = Depends(get_db),
@@ -779,7 +959,20 @@ class BulkShareRequest(BaseModel):
     include_pdf: Optional[bool] = True
 
 
-@router.post("/org/{org_id}/bulk-share")
+@router.post(
+    "/org/{org_id}/bulk-share",
+    summary="Email a batch of directory contacts to recipients",
+    description=(
+        "Sends a single combined email containing several contact cards "
+        "to the supplied addresses. Each recipient gets one email with "
+        "every selected contact rendered inline.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Body:** `{ contact_ids: int[], emails: string[], subject?, "
+        "message? }`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ success: true, message }`."
+    ),
+)
 def bulk_share_contacts(
     org_id: int,
     data: BulkShareRequest,
@@ -859,7 +1052,21 @@ class ShareLinkRequest(BaseModel):
     expires_in_days: Optional[int] = 7
 
 
-@router.post("/org/{org_id}/share-link")
+@router.post(
+    "/org/{org_id}/share-link",
+    summary="Mint a public share link for a set of contacts",
+    description=(
+        "Creates a tokenised, optionally expiring URL that anyone can use "
+        "(no auth) to view a curated subset of the org's directory in a "
+        "read-only public page.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Body:** `{ contact_ids: int[], expires_in_days?: int }`. "
+        "`expires_in_days` defaults to 30; pass `null` for no expiry.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ success: true, token, contact_count, expires_at }`. "
+        "Public URL is `/share/directory/<token>`."
+    ),
+)
 def create_share_link(
     org_id: int,
     data: ShareLinkRequest,
@@ -900,7 +1107,22 @@ def create_share_link(
     }
 
 
-@public_router.get("/shared-contacts/{token}")
+@public_router.get(
+    "/shared-contacts/{token}",
+    summary="Public read-only view of contacts behind a share token",
+    description=(
+        "Public, unauthenticated counterpart to `/share-link`. Resolves a "
+        "share token to the curated subset of CreativeContacts the org "
+        "exposed and returns them in a read-only payload, or 404/410 if "
+        "the token is invalid or expired.\n\n"
+        "**Path parameter:** `token` — the opaque share token issued by "
+        "`/org/{org_id}/share-link`.\n\n"
+        "**Auth:** None — public endpoint.\n\n"
+        "**Response:** `{ organization_name, expires_at, contacts: "
+        "[{name, role, company, email, phone, photo_url, bio, "
+        "socials, pro_society, ipi}] }`."
+    ),
+)
 def get_shared_contacts(
     token: str,
     db: Session = Depends(get_db),
@@ -930,7 +1152,20 @@ class ShareToClientRequest(BaseModel):
     client_user_ids: List[int]
 
 
-@router.post("/org/{org_id}/share-to-client")
+@router.post(
+    "/org/{org_id}/share-to-client",
+    summary="Share contacts with a single client (creator) account",
+    description=(
+        "Grants a creator user persistent in-app visibility into a set of "
+        "the org's directory contacts — the contacts will appear in their "
+        "creator portal under \"Shared with me.\" Idempotent per "
+        "(creator, contact) pair.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Body:** `{ creator_id: int, contact_ids: int[] }`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ success: true, message, created_count }`."
+    ),
+)
 def share_contacts_to_client(
     org_id: int,
     data: ShareToClientRequest,
@@ -992,7 +1227,19 @@ class UnshareFromClientRequest(BaseModel):
     client_user_id: int
 
 
-@router.delete("/org/{org_id}/unshare-from-client")
+@router.delete(
+    "/org/{org_id}/unshare-from-client",
+    summary="Revoke client access to one or more shared contacts",
+    description=(
+        "Inverse of `/share-to-client`. Removes the share rows so the "
+        "supplied creator no longer sees the listed contacts in their "
+        "portal.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Body:** `{ creator_id: int, contact_ids: int[] }`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ success: true, message, deleted_count }`."
+    ),
+)
 def unshare_contacts_from_client(
     org_id: int,
     data: UnshareFromClientRequest,
@@ -1016,7 +1263,20 @@ def unshare_contacts_from_client(
     }
 
 
-@router.get("/org/{org_id}/client-shares")
+@router.get(
+    "/org/{org_id}/client-shares",
+    summary="List which contacts are shared with which creators",
+    description=(
+        "Audit/lookup endpoint: returns every active "
+        "(creator, contact) share pair in the org.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Optional query:** `creator_id` (filter to one creator), "
+        "`contact_id` (filter to one contact).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ total, shares: [{creator_id, creator_name, "
+        "contact_id, contact_name, shared_at}] }`."
+    ),
+)
 def get_client_shares(
     org_id: int,
     db: Session = Depends(get_db),
@@ -1054,7 +1314,19 @@ class ShareToAccountsRequest(BaseModel):
     message: Optional[str] = ""
 
 
-@router.post("/org/{org_id}/share-to-accounts")
+@router.post(
+    "/org/{org_id}/share-to-accounts",
+    summary="Share contacts with multiple client (creator) accounts at once",
+    description=(
+        "Bulk variant of `/share-to-client`: grants every supplied creator "
+        "user persistent in-app visibility into every supplied contact. "
+        "Idempotent per (creator, contact) pair.\n\n"
+        "**Path parameter:** `org_id` — Organization ID.\n"
+        "**Body:** `{ contact_ids: int[], client_user_ids: int[] }`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ success: true, shared_count }`."
+    ),
+)
 def share_contacts_to_accounts(
     org_id: int,
     data: ShareToAccountsRequest,

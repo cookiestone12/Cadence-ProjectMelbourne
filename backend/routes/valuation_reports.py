@@ -73,7 +73,7 @@ class SongDetailWithValuation(BaseModel):
     valuation: Dict[str, Any]
     credits: List[Dict[str, Any]]
 
-@router.get("/catalog/summary")
+@router.get("/catalog/summary", summary="Get comprehensive catalog valuation summary for the organization", description="Returns the comprehensive catalog valuation summary used by the valuation dashboard (NPV band, multiples, top contributors, last underwriting run).\n\n**Query:** `org_id` (defaults to caller's current org), `discount_rate?`, `multiple?`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ npv_cents, low_high_band: [low, high], multiple_value_cents, top_contributors: [...], last_run_at }`.")
 def get_catalog_valuation_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -175,7 +175,7 @@ def get_catalog_valuation_summary(
         "territory_breakdown": territory_breakdown
     }
 
-@router.get("/song/{song_id}/detail")
+@router.get("/song/{song_id}/detail", summary="Get detailed valuation information for a specific song", description="Returns detailed valuation information for a specific song (cashflow history, decay fit, NPV breakdown).\n\n**Path parameter:** `song_id`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ song_id, title, npv_cents, historical: [{period, cents}], projected: [{period, cents}], decay: {a, k, r2}, share_of_catalog_pct }`.")
 def get_song_valuation_detail(
     song_id: int,
     db: Session = Depends(get_db),
@@ -268,7 +268,7 @@ def get_song_valuation_detail(
         ]
     }
 
-@router.get("/catalog/download/excel")
+@router.get("/catalog/download/excel", summary="Download catalog valuation report as Excel file", description='Renders the catalog valuation report as an Excel workbook for download.\n\n**Query:** `org_id`, `discount_rate?`, `multiple?`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` download.')
 def download_catalog_valuation_excel(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -372,7 +372,11 @@ class UnderwritingRunRequest(BaseModel):
     use_gross: bool = False
 
 
-@router.post("/underwriting/run")
+@router.post(
+    "/underwriting/run",
+    summary='Trigger a fresh underwriting run on the catalog',
+    description="Kicks off the underwriting engine which produces a snapshot of the catalog's value: spine groupings, decay fits, concentration metrics. Synchronous; returns when complete.\n\n**Body:** `{ org_id: int, params?: {discount_rate, horizon_years, ...} }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ run_id, status, started_at, completed_at }`.",
+)
 def trigger_underwriting_run(
     request: UnderwritingRunRequest,
     db: Session = Depends(get_db),
@@ -404,7 +408,11 @@ def trigger_underwriting_run(
         raise HTTPException(status_code=500, detail=f"Underwriting run failed: {str(e)}")
 
 
-@router.get("/underwriting/runs")
+@router.get(
+    "/underwriting/runs",
+    summary='List historical underwriting runs',
+    description='Returns the audit trail of `/run` invocations.\n\n**Query:** `org_id`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ runs: [{id, started_at, completed_at, params, npv_cents, status}] }`.',
+)
 def list_underwriting_runs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -434,7 +442,11 @@ def list_underwriting_runs(
     ]
 
 
-@router.get("/underwriting/runs/{run_id}")
+@router.get(
+    "/underwriting/runs/{run_id}",
+    summary='Get the headline result of a single underwriting run',
+    description="Returns the run's summary numbers: NPV, multiples, top contributors, model parameters.\n\n**Path parameter:** `run_id`.\n**Auth:** Bearer JWT — caller must be a member of the run's org.\n**Response:** `{ id, params, summary: {...}, top_contributors: [...], completed_at }`.",
+)
 def get_underwriting_run(
     run_id: int,
     db: Session = Depends(get_db),
@@ -470,7 +482,11 @@ def get_underwriting_run(
     }
 
 
-@router.get("/underwriting/runs/{run_id}/spine")
+@router.get(
+    "/underwriting/runs/{run_id}/spine",
+    summary='Get the spine breakdown of an underwriting run',
+    description='The "spine" is the cohort grouping used by the model — returns per-cohort cashflows, weights, and projected NPV.\n\n**Path parameter:** `run_id`.\n**Auth:** Bearer JWT — caller must be a member of the run\'s org.\n**Response:** `{ spine: [{cohort_label, weight, historical: [...], projected: [...], npv_cents}] }`.',
+)
 def get_underwriting_spine(
     run_id: int,
     db: Session = Depends(get_db),
@@ -492,7 +508,11 @@ def get_underwriting_spine(
     return run.spine_data or {"entries": [], "total_entries": 0}
 
 
-@router.get("/underwriting/runs/{run_id}/decay")
+@router.get(
+    "/underwriting/runs/{run_id}/decay",
+    summary='Get the decay-curve fits from an underwriting run',
+    description="Returns the per-cohort exponential decay parameters used to project earnings.\n\n**Path parameter:** `run_id`.\n**Auth:** Bearer JWT — caller must be a member of the run's org.\n**Response:** `{ fits: [{cohort_label, a, k, r2, data_points}] }`.",
+)
 def get_underwriting_decay(
     run_id: int,
     db: Session = Depends(get_db),
@@ -514,7 +534,11 @@ def get_underwriting_decay(
     return run.decay_data or {}
 
 
-@router.get("/underwriting/runs/{run_id}/concentration")
+@router.get(
+    "/underwriting/runs/{run_id}/concentration",
+    summary='Get the concentration risk metrics for an underwriting run',
+    description="How concentrated catalog earnings are in a small set of songs/creators (HHI, top-N share, Gini coefficient).\n\n**Path parameter:** `run_id`.\n**Auth:** Bearer JWT — caller must be a member of the run's org.\n**Response:** `{ hhi, top10_share_pct, gini, top_concentrations: [...] }`.",
+)
 def get_underwriting_concentration(
     run_id: int,
     db: Session = Depends(get_db),
@@ -536,7 +560,11 @@ def get_underwriting_concentration(
     return run.concentration_data or {}
 
 
-@router.get("/underwriting/latest")
+@router.get(
+    "/underwriting/latest",
+    summary='Get the latest underwriting run for the org',
+    description="Convenience endpoint that returns the most recent completed run headline so dashboards don't have to list-then-fetch.\n\n**Query:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** same shape as `/runs/{run_id}` or `null` if no run exists yet.",
+)
 def get_latest_underwriting(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -573,7 +601,11 @@ def get_latest_underwriting(
     }
 
 
-@router.get("/statements/{statement_id}/reconciliation")
+@router.get(
+    "/statements/{statement_id}/reconciliation",
+    summary='Get the reconciliation snapshot tied to a statement',
+    description="Returns the underwriting-side reconciliation for a specific RoyaltyStatement (matched vs. unmatched cashflow, valuation adjustments).\n\n**Path parameter:** `statement_id`.\n**Auth:** Bearer JWT — caller must be a member of the statement's org.\n**Response:** `{ statement_id, reported_total, matched_total, valuation_delta }`.",
+)
 def get_statement_reconciliation(
     statement_id: int,
     db: Session = Depends(get_db),

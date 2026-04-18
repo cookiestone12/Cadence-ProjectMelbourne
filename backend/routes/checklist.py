@@ -28,12 +28,21 @@ class ChecklistStatusUpdateRequest(BaseModel):
 class ChecklistBatchUpdateRequest(BaseModel):
     updates: List[ChecklistStatusUpdateRequest]
 
-@router.get("/checklist-items", response_model=List[ChecklistItemResponse])
+@router.get(
+    "/checklist-items",
+    response_model=List[ChecklistItemResponse],
+    summary='List the global catalog of song-checklist items',
+    description='Returns every checklist item type the platform defines (with labels, descriptions, due-by rules) — used to render the checklist editor and to validate `PATCH /{song_id}/checklist`.\n\n**Auth:** Bearer JWT.\n**Response:** `List[ChecklistItemResponse]`.',
+)
 def get_checklist_items(db: Session = Depends(get_db)):
     items = db.query(ChecklistItem).all()
     return items
 
-@router.get("/{song_id}/checklist")
+@router.get(
+    "/{song_id}/checklist",
+    summary="Get a song's release-readiness checklist",
+    description="Returns the ordered set of checklist items the user must tick off for a song before it's ready (lyrics, splits, ISRC, audio, registration, etc.) plus their state.\n\n**Path parameter:** `song_id`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ items: [{key, label, complete, due_at, completed_at, completed_by}], pct_complete }`.",
+)
 def get_song_checklist(
     song_id: int,
     db: Session = Depends(get_db),
@@ -73,7 +82,11 @@ def get_song_checklist(
         ]
     }
 
-@router.patch("/{song_id}/checklist")
+@router.patch(
+    "/{song_id}/checklist",
+    summary="Update a song's checklist items",
+    description="Bulk-updates the supplied checklist items' completion state.\n\n**Path parameter:** `song_id`.\n**Body:** `{ items: [{key, complete: bool}] }`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** the updated checklist (same shape as GET).",
+)
 def update_song_checklist(
     song_id: int,
     request: ChecklistBatchUpdateRequest,

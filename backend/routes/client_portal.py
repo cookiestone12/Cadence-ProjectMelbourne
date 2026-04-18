@@ -30,7 +30,11 @@ def get_client_context(db: Session, current_user: User):
     return membership, creator
 
 
-@router.get("/me")
+@router.get(
+    "/me",
+    summary='Get the current creator/client profile',
+    description="Returns the calling user's CreatorProfile (when they're acting as a creator/client logged in to the portal): contact info, linked Creator id, theming, and which orgs they're linked to.\n\n**Auth:** Bearer JWT — creator role.\n**Response:** `{ id, display_name, email, linked_creator_id, linked_orgs: [...], theme }`.",
+)
 def get_client_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -84,7 +88,11 @@ def get_client_profile(
     }
 
 
-@router.get("/clients")
+@router.get(
+    "/clients",
+    summary='List creator/client profiles visible to the user',
+    description='For org users: returns every creator profile the org manages or has shared access to.\n\n**Query:** `q`, `org_id`.\n**Auth:** Bearer JWT.\n**Response:** `{ clients: [{id, display_name, email, linked_creator_id, last_login_at}] }`.',
+)
 def list_client_profiles(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -137,7 +145,11 @@ class UpdateCreatorProfileRequest(BaseModel):
     primary_ipi: Optional[str] = None
 
 
-@router.put("/profile")
+@router.put(
+    "/profile",
+    summary="Update the current creator's portal profile",
+    description="Patches the calling creator's portal-only profile fields (display name, contact email, theme).\n\n**Body:** `{ display_name?, email?, theme? }`.\n**Auth:** Bearer JWT — creator role.\n**Response:** the updated profile.",
+)
 def update_client_profile(
     request: UpdateCreatorProfileRequest,
     db: Session = Depends(get_db),
@@ -155,7 +167,11 @@ def update_client_profile(
     return {"message": "Profile updated", "creator_id": creator.id}
 
 
-@router.get("/catalog")
+@router.get(
+    "/catalog",
+    summary='Get the catalog visible to the current creator/client',
+    description='Returns songs, works, and releases the calling creator owns or has been granted access to via sharing.\n\n**Query:** `org_id`, `q`, `limit`, `offset`.\n**Auth:** Bearer JWT — creator role.\n**Response:** `{ songs: [...], works: [...], releases: [...] }`.',
+)
 def get_client_catalog(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -221,7 +237,11 @@ def get_client_catalog(
     return {"songs": songs, "works": works}
 
 
-@router.get("/placements")
+@router.get(
+    "/placements",
+    summary='Get sync placements visible to the current creator/client',
+    description="Returns the sync placements where the creator's songs appear.\n\n**Query:** `org_id`, `status`, `start_date`, `end_date`.\n**Auth:** Bearer JWT — creator role.\n**Response:** `{ placements: [{id, title, project_name, media_type, status, song_id, song_title, fee_cents, placed_at}] }`.",
+)
 def get_client_placements(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -259,7 +279,11 @@ def get_client_placements(
     return result
 
 
-@router.get("/contracts")
+@router.get(
+    "/contracts",
+    summary='Get contracts visible to the current creator/client',
+    description='Returns contracts where the creator is a counterparty.\n\n**Query:** `org_id`, `status`.\n**Auth:** Bearer JWT — creator role.\n**Response:** `{ contracts: [{id, name, type, status, effective_date, term_end_date}] }`.',
+)
 def get_client_contracts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -290,7 +314,11 @@ def get_client_contracts(
     return result
 
 
-@router.get("/accounting")
+@router.get(
+    "/accounting",
+    summary='Get the creator/client accounting summary',
+    description='Returns the creator-facing accounting view: lifetime royalties earned, paid, and balance, plus latest statement period.\n\n**Query:** `org_id`, `currency`.\n**Auth:** Bearer JWT — creator role.\n**Response:** `{ lifetime_earned_cents, lifetime_paid_cents, balance_cents, last_statement_period, by_org: [...] }`.',
+)
 def get_client_accounting(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -359,7 +387,11 @@ class GrantAccessRequest(BaseModel):
     permission_level: str = "VIEW_ONLY"
 
 
-@router.get("/managed-access")
+@router.get(
+    "/managed-access",
+    summary='Get the managed-access links for the current creator',
+    description='Returns the access grants the creator has issued to other people (managers, accountants) to view their portal.\n\n**Auth:** Bearer JWT — creator role.\n**Response:** `{ links: [{id, target_email, role, modules, accepted_at, created_at}] }`.',
+)
 def get_managed_access(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -387,7 +419,11 @@ def get_managed_access(
     return result
 
 
-@router.post("/grant-access")
+@router.post(
+    "/grant-access",
+    summary="Grant another user managed access to the creator's portal",
+    description="Issues a managed-access invite that lets the target user log in to the creator's portal in a delegated capacity.\n\n**Body:** `{ email, role, modules: string[] }`.\n**Auth:** Bearer JWT — creator role.\n**Response:** the created link.",
+)
 def grant_access(
     request: GrantAccessRequest,
     db: Session = Depends(get_db),
@@ -432,7 +468,11 @@ def grant_access(
     return {"message": "Access request sent — pending company approval", "link_id": link.id}
 
 
-@router.put("/revoke-access/{link_id}")
+@router.put(
+    "/revoke-access/{link_id}",
+    summary='Revoke a previously-granted managed-access link',
+    description='Disables the link so the delegate can no longer use it.\n\n**Path parameter:** `link_id`.\n**Auth:** Bearer JWT — creator role.\n**Response:** `{ success: true }`.',
+)
 def revoke_access(
     link_id: int,
     db: Session = Depends(get_db),
@@ -454,7 +494,11 @@ def revoke_access(
     return {"message": "Access revoked"}
 
 
-@router.get("/shared-contacts")
+@router.get(
+    "/shared-contacts",
+    summary='Get the directory contacts shared with the current creator',
+    description='Lists creative-directory contacts the org has shared with the calling creator via `/api/creative-directory/.../share-to-client`.\n\n**Auth:** Bearer JWT — creator role.\n**Response:** `{ contacts: [{id, name, role, company, email, phone, photo_url, from_org_id, from_org_name}] }`.',
+)
 def get_shared_contacts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)

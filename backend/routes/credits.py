@@ -65,7 +65,7 @@ class DSPLinkResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.post("/{song_id}/credits", response_model=CreditResponse, summary="Add a credit to a song", description="Adds a creator credit (writer / producer / featured / etc.) with a publishing % and master % share.")
+@router.post("/{song_id}/credits", response_model=CreditResponse, summary="Add a credit to a song", description="Adds a creator credit (writer / producer / featured / etc.) with a publishing % and master % share. Recomputes the song's split totals.\n\n**Path parameter:** `song_id`.\n**Body:** `{ creator_id?: int, name?: string, role: string, publishing_pct?: number, master_pct?: number, notes?: string, ipi?: string, pro_society?: string }`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** the created credit.")
 def create_credit(
     song_id: int,
     request: CreditCreateRequest,
@@ -151,7 +151,7 @@ def create_credit(
     
     return credit
 
-@router.patch("/{song_id}/credits/{credit_id}", summary="Update a song credit", description="Patches a credit's role, publishing %, master %, or notes.")
+@router.patch("/{song_id}/credits/{credit_id}", summary="Update a song credit", description="Patches a credit's role, publishing %, master %, or notes.\n\n**Path parameters:** `song_id`, `credit_id`.\n**Body:** any subset of `{ role, publishing_pct, master_pct, notes }`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** the updated credit.")
 def update_credit(
     song_id: int,
     credit_id: int,
@@ -226,7 +226,7 @@ def update_credit(
         "master_share": credit.master_share
     }
 
-@router.delete("/{song_id}/credits/{credit_id}", summary="Delete a song credit", description="Removes a credit from the song. Splits totals are recomputed.")
+@router.delete("/{song_id}/credits/{credit_id}", summary="Delete a song credit", description="Removes a credit from the song. Splits totals are recomputed automatically.\n\n**Path parameters:** `song_id`, `credit_id`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ success: true }`.")
 def delete_credit(
     song_id: int,
     credit_id: int,
@@ -307,7 +307,11 @@ class ResolveCreditRequest(BaseModel):
     creator_id: Optional[int] = None
     new_creator_name: Optional[str] = None
 
-@router.post("/{song_id}/credits/{credit_id}/resolve")
+@router.post(
+    "/{song_id}/credits/{credit_id}/resolve",
+    summary='Resolve a pending credit conflict',
+    description='Used when a credit was scraped from DSPs and conflicts with the manual catalog. Lets the user accept, reject, or merge it.\n\n**Path parameters:** `song_id`, `credit_id`.\n**Body:** `{ resolution: "accept"|"reject"|"merge", merge_into_credit_id?: int }`.\n**Auth:** Bearer JWT — caller must be a member of the song\'s org.\n**Response:** `{ song_id, credit_id, resolution, resulting_credit_id }`.',
+)
 def resolve_credit(
     song_id: int,
     credit_id: int,
@@ -390,7 +394,12 @@ def resolve_credit(
     }
 
 
-@router.post("/{song_id}/dsp-links", response_model=DSPLinkResponse)
+@router.post(
+    "/{song_id}/dsp-links",
+    response_model=DSPLinkResponse,
+    summary='Attach a DSP link (Spotify, Apple, etc.) to a song',
+    description='Records a DSP id (and optional URL) on a Song so the platform can pull stream counts and credits from it later.\n\n**Path parameter:** `song_id`.\n**Body:** `{ dsp: "spotify"|"apple"|..., dsp_id, url? }`.\n**Auth:** Bearer JWT — caller must be a member of the song\'s org.\n**Response:** `DSPLinkResponse` — the created link row.',
+)
 def create_dsp_link(
     song_id: int,
     request: DSPLinkCreateRequest,
@@ -425,7 +434,11 @@ def create_dsp_link(
     
     return dsp_link
 
-@router.delete("/{song_id}/dsp-links/{link_id}")
+@router.delete(
+    "/{song_id}/dsp-links/{link_id}",
+    summary='Delete a DSP link from a song',
+    description="Removes a stored DSP id (Spotify/Apple/etc.) from a song. The DSP record itself is unaffected.\n\n**Path parameters:** `song_id`, `link_id`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ success: true }`.",
+)
 def delete_dsp_link(
     song_id: int,
     link_id: int,

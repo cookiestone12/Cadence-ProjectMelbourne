@@ -19,7 +19,7 @@ logger = logging.getLogger("cadence")
 router = APIRouter(prefix="/api/schedule-a", tags=["Schedule A"])
 
 
-@router.post("/upload/{org_id}", summary="Upload a Schedule A document", description="Stages a Schedule A PDF/DOCX, runs AI extraction, and returns a parsed preview for review.")
+@router.post("/upload/{org_id}", summary="Upload a Schedule A document", description='Stages a Schedule A PDF/DOCX, runs AI extraction, and returns a parsed preview for review.\n\n**Path parameter:** `org_id`.\n**Body (multipart/form-data):** `file`; `creator_id?`; `notes?`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ import_id, parsed_rows, creator_id, warnings: [...], preview: [{title, isrc?, splits: [...]}] }`.')
 async def upload_schedule_a(
     org_id: int,
     file: UploadFile = File(...),
@@ -182,7 +182,7 @@ def format_bool(val):
     return "N/A"
 
 
-@router.get("/creator/{creator_id}/data", summary="Get a creator's Schedule A data", description="Returns the structured Schedule A rows (titles, splits, contracts) for a creator.")
+@router.get("/creator/{creator_id}/data", summary="Get a creator's Schedule A data", description="Returns the structured Schedule A rows (titles, splits, contracts) for a creator.\n\n**Path parameter:** `creator_id`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** `{ creator: {...}, rows: [{title, isrc, iswc, writer_splits: [...], contracts: [...]}] }`.")
 def get_schedule_a_data(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -292,7 +292,7 @@ def get_schedule_a_data(
     }
 
 
-@router.get("/creator/{creator_id}/csv", summary="Export Schedule A as CSV", description="Streams the creator's Schedule A as a CSV download.")
+@router.get("/creator/{creator_id}/csv", summary="Export Schedule A as CSV", description="Streams the creator's Schedule A as a CSV download.\n\n**Path parameter:** `creator_id`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** `text/csv` download.")
 def export_schedule_a_csv(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -383,7 +383,7 @@ def export_schedule_a_csv(
     )
 
 
-@router.get("/creator/{creator_id}/pdf", summary="Export Schedule A as PDF", description="Renders a branded PDF Schedule A for the creator.")
+@router.get("/creator/{creator_id}/pdf", summary="Export Schedule A as PDF", description="Renders a branded PDF Schedule A for the creator with the org logo.\n\n**Path parameter:** `creator_id`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** `application/pdf` download.")
 def export_schedule_a_pdf(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -611,7 +611,7 @@ def export_schedule_a_pdf(
     )
 
 
-@router.get("/creator/{creator_id}/schedule-a-pdf")
+@router.get("/creator/{creator_id}/schedule-a-pdf", summary="Export simplified Schedule A PDF for external sharing", description="Renders a simplified, share-friendly Schedule A PDF (less internal detail) suitable for sending to a sub-publisher or counterparty.\n\n**Path parameter:** `creator_id`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** `application/pdf` download.")
 def export_simplified_schedule_a_pdf(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -780,7 +780,7 @@ def export_simplified_schedule_a_pdf(
 
 
 # Keep backward compatibility with old endpoint
-@router.get("/creator/{creator_id}")
+@router.get("/creator/{creator_id}", summary="Legacy CSV export - redirects to new CSV endpoint", description="Legacy CSV export endpoint that 308-redirects to `/creator/{creator_id}/csv`. Kept for backward compatibility with older integrations.\n\n**Path parameter:** `creator_id`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** 308 redirect to the new CSV endpoint.")
 def export_schedule_a_legacy(
     creator_id: int,
     db: Session = Depends(get_db),

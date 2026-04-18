@@ -8,7 +8,7 @@ from ..services.schedule_a_service import generate_schedule_a_csv
 
 router = APIRouter(prefix="/api/creators", tags=["Exports"])
 
-@router.get("/{creator_id}/schedule-a")
+@router.get("/{creator_id}/schedule-a", summary="Export Schedule A CSV for a creator's catalog", description="Renders a creator's catalog as a Schedule A CSV download.\n\n**Path parameter:** `creator_id`.\n**Query:** `include_inactive?: bool`, `as_of?: date`.\n**Auth:** Bearer JWT — caller must be a member of the creator's org.\n**Response:** `text/csv` download with one row per song (title, ISRC, ISWC, writer splits, contracts).")
 def export_schedule_a(
     creator_id: int,
     db: Session = Depends(get_db),

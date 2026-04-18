@@ -346,7 +346,22 @@ def _contract_to_dict(contract: Contract, db: Session, include_details: bool = F
     return result
 
 
-@router.get("/contracts/creator/{creator_id}")
+@router.get(
+    "/contracts/creator/{creator_id}",
+    summary="List a creator's contracts",
+    description=(
+        "Returns every contract in the creator's organization where the creator "
+        "is either the primary `creator_id` on the Contract row or named as a "
+        "ContractParty. Useful for the creator profile page's Contracts tab.\n\n"
+        "**Path parameter:** `creator_id` — Cadence Creator ID.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the creator's "
+        "organization (admins of the org or super-admins always pass).\n\n"
+        "**Response:** `{ contracts: [...], total: int }`. Each contract entry "
+        "carries `id`, `title`, `contract_type`, `status`, `reference_number`, "
+        "`start_date` and `end_date`. Returns `{ contracts: [], total: 0 }` if "
+        "there are no matches."
+    ),
+)
 def list_contracts_by_creator(
     creator_id: int,
     db: Session = Depends(get_db),
@@ -379,7 +394,23 @@ def list_contracts_by_creator(
     return {"contracts": [_contract_to_dict(c, db) for c in contracts], "total": len(contracts)}
 
 
-@router.get("/contracts/song/{song_id}")
+@router.get(
+    "/contracts/song/{song_id}",
+    summary="List contracts attached to a song",
+    description=(
+        "Returns every Contract that has the song linked as a ContractAsset "
+        "(`asset_type=SONG, asset_id={song_id}`). The result is the same shape "
+        "the song detail page uses to render the Rights / Splits sidebar.\n\n"
+        "**Path parameter:** `song_id` — Cadence Song ID.\n\n"
+        "**Auth:** Bearer JWT. The caller must be a member of the song's "
+        "organization (or, if the song has a primary credit, of that creator's "
+        "shared scope).\n\n"
+        "**Response:** `{ contracts: [...] }` with a slim record per contract: "
+        "`id`, `title`, `contract_type`, `status`, `reference_number`, "
+        "`start_date`, `end_date`. Returns `{ contracts: [] }` when nothing is "
+        "linked. 404 if the song doesn't exist."
+    ),
+)
 def get_contracts_for_song(
     song_id: int,
     db: Session = Depends(get_db),
@@ -417,7 +448,26 @@ def get_contracts_for_song(
     } for c in contracts]}
 
 
-@router.get("/song-splits/{song_id}")
+@router.get(
+    "/song-splits/{song_id}",
+    summary="List rights splits for a song",
+    description=(
+        "Returns the merged set of RightsSplit rows attached to the song "
+        "across every linked Contract plus the song's standalone "
+        "`Song Splits: <title>` SPLIT_SHEET (the implicit container Cadence "
+        "creates when a user adds a split with no source contract).\n\n"
+        "**Path parameter:** `song_id` — Cadence Song ID.\n\n"
+        "**Auth:** Bearer JWT. Caller must belong to the song's org or share "
+        "the primary creator's scope.\n\n"
+        "**Response:** `{ splits: [...] }`. Each split exposes `id`, "
+        "`contract_asset_id`, `rights_holder_id`, `rights_holder_name` "
+        "(de-referenced through the Creator table when possible), "
+        "`rights_type` (MASTER / PUBLISHING / PERFORMANCE / MECHANICAL / "
+        "DISTRIBUTION / SYNC / OTHER), `share_percentage` (0–100), `role`, "
+        "`notes`, `contract_title`, `contract_id`, and `is_standalone=true` "
+        "for splits that live in the auto-created split sheet."
+    ),
+)
 def get_song_splits(
     song_id: int,
     db: Session = Depends(get_db),
@@ -499,7 +549,29 @@ def get_song_splits(
     return {"splits": splits}
 
 
-@router.post("/song-splits/{song_id}")
+@router.post(
+    "/song-splits/{song_id}",
+    summary="Add a rights split to a song",
+    description=(
+        "Adds a single RightsSplit row to the song's standalone split sheet, "
+        "creating the SPLIT_SHEET Contract and ContractAsset on first use. "
+        "Side effects: refreshes the song's cached `publishing_percentage` / "
+        "`master_percentage`, syncs the matching SongCredit when the split "
+        "type is PUBLISHING or MASTER, ensures a CreativeContact exists for "
+        "the holder, and writes a `record_split_change` audit row.\n\n"
+        "**Path parameter:** `song_id` — Cadence Song ID.\n\n"
+        "**Body (`SplitCreate`):** one of `rights_holder_id` (Creator FK) or "
+        "`rights_holder_name` is required; `rights_type` must be one of "
+        "MASTER / PUBLISHING / PERFORMANCE / MECHANICAL / DISTRIBUTION / "
+        "SYNC / OTHER; `share_percentage` is 0.01–100; optional `role`, "
+        "`notes`, `ipi`, `pro`, `contact_id`. The endpoint rejects with 400 "
+        "if the new total per `rights_type` would exceed 100%.\n\n"
+        "**Auth:** Bearer JWT, caller must belong to the song's organization.\n\n"
+        "**Response:** `{ id, rights_holder_name, rights_type, "
+        "share_percentage, role, ipi, message }`. 404 if song or named "
+        "rights holder isn't in the org."
+    ),
+)
 def add_song_split(
     song_id: int,
     data: SplitCreate,
@@ -671,7 +743,23 @@ def add_song_split(
     }
 
 
-@router.delete("/song-splits/{split_id}")
+@router.delete(
+    "/song-splits/{split_id}",
+    summary="Delete a song rights split",
+    description=(
+        "Deletes the RightsSplit row, recomputes the song's cached "
+        "publishing/master percentages, re-syncs the matching SongCredit, "
+        "and writes a `record_split_change` audit entry capturing the prior "
+        "share value.\n\n"
+        "**Path parameter:** `split_id` — RightsSplit row id.\n"
+        "**Optional query:** `notes` — free-text reason captured in the "
+        "edit-history record.\n\n"
+        "**Auth:** Bearer JWT. Caller must belong to the parent contract's "
+        "organization.\n\n"
+        "**Response:** `{ message: \"Split deleted successfully\" }`. "
+        "404 if the split or its asset row is missing."
+    ),
+)
 def delete_song_split(
     split_id: int,
     notes: str = None,
@@ -714,7 +802,20 @@ def delete_song_split(
     return {"message": "Split deleted successfully"}
 
 
-@router.get("/release-splits/{release_id}")
+@router.get(
+    "/release-splits/{release_id}",
+    summary="List rights splits for a release",
+    description=(
+        "Mirrors `GET /song-splits/{song_id}` but for Release-level (master) "
+        "splits. Returns the merged split list across linked contracts plus "
+        "the release's standalone `Release Splits: <title>` SPLIT_SHEET.\n\n"
+        "**Path parameter:** `release_id` — Cadence Release ID.\n\n"
+        "**Auth:** Bearer JWT. Caller must belong to the release's "
+        "organization.\n\n"
+        "**Response:** `{ splits: [...] }` with the same per-split fields as "
+        "the song endpoint."
+    ),
+)
 def get_release_splits(
     release_id: int,
     db: Session = Depends(get_db),
@@ -802,7 +903,21 @@ def get_release_splits(
     return {"splits": splits}
 
 
-@router.post("/release-splits/{release_id}")
+@router.post(
+    "/release-splits/{release_id}",
+    summary="Add a rights split to a release",
+    description=(
+        "Release counterpart of `POST /song-splits/{song_id}`. Adds a single "
+        "RightsSplit row to the release's standalone SPLIT_SHEET, creating "
+        "the contract container on first call. Enforces the per-rights-type "
+        "100% cap and ensures a CreativeContact exists for the holder.\n\n"
+        "**Path parameter:** `release_id` — Cadence Release ID.\n"
+        "**Body (`SplitCreate`):** identical to the song endpoint.\n\n"
+        "**Auth:** Bearer JWT. Caller must belong to the release's organization.\n\n"
+        "**Response:** `{ id, rights_holder_name, rights_type, "
+        "share_percentage, role, ipi, message }`."
+    ),
+)
 def add_release_split(
     release_id: int,
     data: SplitCreate,
@@ -929,7 +1044,21 @@ def add_release_split(
     }
 
 
-@router.get("/contracts/org/{org_id}")
+@router.get(
+    "/contracts/org/{org_id}",
+    summary="List an organization's contracts",
+    description=(
+        "Returns the contract registry for the given organization, ordered by "
+        "most recently created. Backs the org-level Contracts list view.\n\n"
+        "**Path parameter:** `org_id` — Cadence Organization ID.\n"
+        "**Optional query:** `status` — when provided, narrows the result to "
+        "contracts whose `status` matches exactly (e.g. `ACTIVE`, `DRAFT`, "
+        "`EXPIRED`).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ contracts: [...], total: int }`. Each contract uses "
+        "the same slim shape as `GET /contracts/song/{song_id}`."
+    ),
+)
 def list_contracts(
     org_id: int,
     status: Optional[str] = None,
@@ -949,7 +1078,24 @@ def list_contracts(
     return {"contracts": [_contract_to_dict(c, db) for c in contracts], "total": len(contracts)}
 
 
-@router.post("/contracts/parse-document")
+@router.post(
+    "/contracts/parse-document",
+    summary="Parse a contract upload into structured fields",
+    description=(
+        "Accepts a contract document (PDF / DOCX / TXT) as multipart upload "
+        "and runs Cadence's contract parser to extract suggested fields the "
+        "Create-Contract form can pre-fill (title, type, parties, dates, "
+        "reference number, asset list).\n\n"
+        "**Body (multipart):** `file` — the document, ≤ 10 MB.\n\n"
+        "**Auth:** Bearer JWT. Read-only with respect to the database — "
+        "nothing is persisted; the parsed payload is returned for the "
+        "caller to inspect and POST back to `/contracts/org/{org_id}`.\n\n"
+        "**Response:** the raw parser dict — typically "
+        "`{ title, contract_type, reference_number, start_date, end_date, "
+        "parties: [...], assets: [...], confidence: { ... } }`. 400 on "
+        "unparsable input."
+    ),
+)
 async def parse_contract_doc(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -979,7 +1125,23 @@ async def parse_contract_doc(
     return result
 
 
-@router.post("/contracts/org/{org_id}")
+@router.post(
+    "/contracts/org/{org_id}",
+    summary="Create a contract in an organization",
+    description=(
+        "Creates a Contract row, optionally seeded with parties and asset "
+        "links in the same call. Use the parser endpoint first to draft the "
+        "payload from an uploaded document.\n\n"
+        "**Path parameter:** `org_id` — Cadence Organization ID.\n"
+        "**Body (`ContractCreate`):** `title` (required), `contract_type`, "
+        "`status`, `reference_number`, `start_date`, `end_date`, `notes`, "
+        "`creator_id` (primary creator), `parties: [{party_role, party_name, "
+        "creator_id?, contact_email?}]`, `assets: [{asset_type, asset_id}]`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** the full contract record (same shape as "
+        "`GET /contracts/{contract_id}` with `include_details=true`)."
+    ),
+)
 def create_contract(
     org_id: int,
     data: ContractCreate,
@@ -1025,7 +1187,23 @@ def create_contract(
     return _contract_to_dict(contract, db)
 
 
-@router.get("/contracts/{contract_id}")
+@router.get(
+    "/contracts/{contract_id}",
+    summary="Get a contract with full details",
+    description=(
+        "Returns the full Contract record with parties, linked assets, "
+        "rights splits, and document attachments. This is the source-of-"
+        "truth fetch the Contract Detail page uses.\n\n"
+        "**Path parameter:** `contract_id` — Contract row id.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contract's "
+        "organization.\n\n"
+        "**Response:** `{ id, title, contract_type, status, reference_number, "
+        "start_date, end_date, notes, organization_id, creator_id, "
+        "parties: [...], assets: [{id, asset_type, asset_id, asset_label, "
+        "splits: [...]}], documents: [...], created_at, updated_at }`. "
+        "404 if not found."
+    ),
+)
 def get_contract(
     contract_id: int,
     db: Session = Depends(get_db),
@@ -1038,7 +1216,22 @@ def get_contract(
     return _contract_to_dict(contract, db, include_details=True)
 
 
-@router.put("/contracts/{contract_id}")
+@router.put(
+    "/contracts/{contract_id}",
+    summary="Update a contract",
+    description=(
+        "Patches the top-level Contract fields. Parties, assets and splits "
+        "have their own dedicated endpoints; this call does not touch them.\n\n"
+        "**Path parameter:** `contract_id` — Contract row id.\n"
+        "**Body (`ContractUpdate`):** any subset of `title`, `contract_type`, "
+        "`status`, `reference_number`, `start_date`, `end_date`, `notes`, "
+        "`creator_id`. Unspecified fields are left untouched.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contract's "
+        "organization.\n\n"
+        "**Response:** the updated contract record (same shape as "
+        "`GET /contracts/{contract_id}`)."
+    ),
+)
 def update_contract(
     contract_id: int,
     data: ContractUpdate,
@@ -1058,7 +1251,21 @@ def update_contract(
     return _contract_to_dict(contract, db)
 
 
-@router.delete("/contracts/{contract_id}")
+@router.delete(
+    "/contracts/{contract_id}",
+    summary="Delete a contract",
+    description=(
+        "Hard-deletes the Contract along with its parties, asset links and "
+        "RightsSplit rows (cascade). Cached publishing/master percentages on "
+        "linked songs are not recomputed automatically — re-fetch them via "
+        "the song split endpoint if needed.\n\n"
+        "**Path parameter:** `contract_id` — Contract row id.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contract's "
+        "organization.\n\n"
+        "**Response:** `{ message: \"Contract deleted successfully\" }`. "
+        "404 if the contract is missing."
+    ),
+)
 def delete_contract(
     contract_id: int,
     db: Session = Depends(get_db),
@@ -1077,7 +1284,21 @@ def delete_contract(
     return {"message": "Contract deleted successfully"}
 
 
-@router.post("/contracts/{contract_id}/parties")
+@router.post(
+    "/contracts/{contract_id}/parties",
+    summary="Attach a party to a contract",
+    description=(
+        "Adds a ContractParty row to an existing contract.\n\n"
+        "**Path parameter:** `contract_id` — Contract row id.\n"
+        "**Body (`PartyCreate`):** `party_role` (e.g. `WRITER`, `PUBLISHER`, "
+        "`LICENSOR`, `LICENSEE`), `party_name` (required when no `creator_id`), "
+        "`creator_id` (optional Creator FK), `contact_email` (optional).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contract's "
+        "organization.\n\n"
+        "**Response:** `{ id, party_role, party_name, creator_id, "
+        "contact_email, message }`."
+    ),
+)
 def add_party(
     contract_id: int,
     data: PartyCreate,
@@ -1110,7 +1331,19 @@ def add_party(
     }
 
 
-@router.delete("/contracts/{contract_id}/parties/{party_id}")
+@router.delete(
+    "/contracts/{contract_id}/parties/{party_id}",
+    summary="Remove a party from a contract",
+    description=(
+        "Detaches and deletes a single ContractParty row from the contract. "
+        "Does not affect the underlying Creator or CreativeContact record.\n\n"
+        "**Path parameters:** `contract_id`, `party_id`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contract's "
+        "organization.\n\n"
+        "**Response:** `{ message: \"Party removed successfully\" }`. "
+        "404 if the party doesn't belong to the contract."
+    ),
+)
 def remove_party(
     contract_id: int,
     party_id: int,
@@ -1134,7 +1367,21 @@ def remove_party(
     return {"message": "Party removed successfully"}
 
 
-@router.post("/contracts/{contract_id}/assets")
+@router.post(
+    "/contracts/{contract_id}/assets",
+    summary="Link an asset (song / release / work) to a contract",
+    description=(
+        "Creates a ContractAsset row that pins a Song, Release or Work to "
+        "the contract. Idempotent: a duplicate (`asset_type, asset_id`) pair "
+        "returns the existing row instead of erroring.\n\n"
+        "**Path parameter:** `contract_id` — Contract row id.\n"
+        "**Body (`AssetLink`):** `asset_type` (one of `SONG`, `RELEASE`, "
+        "`WORK`), `asset_id` (target row id in the matching table).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contract's "
+        "organization.\n\n"
+        "**Response:** `{ id, asset_type, asset_id, message }`."
+    ),
+)
 def link_asset(
     contract_id: int,
     data: AssetLink,
@@ -1177,7 +1424,19 @@ def link_asset(
     return {"id": ca.id, "asset_type": ca.asset_type, "asset_id": ca.asset_id, "message": "Asset linked successfully"}
 
 
-@router.delete("/contracts/{contract_id}/assets/{asset_id}")
+@router.delete(
+    "/contracts/{contract_id}/assets/{asset_id}",
+    summary="Unlink an asset from a contract",
+    description=(
+        "Deletes a ContractAsset row by its own primary key (the `asset_id` "
+        "in the path is the ContractAsset.id, **not** the Song / Release / "
+        "Work id). Cascades to the RightsSplit rows underneath it.\n\n"
+        "**Path parameters:** `contract_id`, `asset_id` (ContractAsset id).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contract's "
+        "organization.\n\n"
+        "**Response:** `{ message: \"Asset unlinked successfully\" }`."
+    ),
+)
 def unlink_asset(
     contract_id: int,
     asset_id: int,
@@ -1202,7 +1461,23 @@ def unlink_asset(
     return {"message": "Asset unlinked successfully"}
 
 
-@router.post("/contracts/{contract_id}/assets/{asset_id}/splits")
+@router.post(
+    "/contracts/{contract_id}/assets/{asset_id}/splits",
+    summary="Add a rights split under a specific contract asset",
+    description=(
+        "Lower-level than the song/release split endpoints: writes a "
+        "RightsSplit directly against an existing ContractAsset, bypassing "
+        "the auto-created split-sheet logic. Use this when entering splits "
+        "from a real source contract (publishing deal, recording agreement).\n\n"
+        "**Path parameters:** `contract_id`, `asset_id` (ContractAsset id).\n"
+        "**Body (`SplitCreate`):** same shape as the song-split endpoint. "
+        "The 100% per-rights-type cap is still enforced.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contract's "
+        "organization.\n\n"
+        "**Response:** `{ id, rights_holder_id, rights_type, "
+        "share_percentage, message }`."
+    ),
+)
 def add_split(
     contract_id: int,
     asset_id: int,
@@ -1278,7 +1553,23 @@ def add_split(
     }
 
 
-@router.put("/splits/{split_id}")
+@router.put(
+    "/splits/{split_id}",
+    summary="Update a rights split",
+    description=(
+        "Patches share/role/notes/holder on a RightsSplit row. If the split "
+        "belongs to a song's contract asset, the song's cached "
+        "publishing/master percentages and the matching SongCredit are "
+        "re-synced. Edit history is recorded.\n\n"
+        "**Path parameter:** `split_id` — RightsSplit row id.\n"
+        "**Body (`SplitUpdate`):** any subset of `share_percentage`, `role`, "
+        "`notes`, `rights_holder_id`, `rights_holder_name`, `rights_type`. "
+        "The 100% per-rights-type cap is rechecked.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contract's "
+        "organization.\n\n"
+        "**Response:** `{ id, rights_type, share_percentage, message }`."
+    ),
+)
 def update_split(
     split_id: int,
     data: SplitUpdate,
@@ -1350,7 +1641,19 @@ def update_split(
     }
 
 
-@router.delete("/splits/{split_id}")
+@router.delete(
+    "/splits/{split_id}",
+    summary="Delete a contract-asset rights split",
+    description=(
+        "Generic counterpart to `DELETE /song-splits/{split_id}` for splits "
+        "that don't live in the auto-created song split sheet. Cascade-safe "
+        "and re-syncs cached song percentages / SongCredits when applicable.\n\n"
+        "**Path parameter:** `split_id` — RightsSplit row id.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contract's "
+        "organization.\n\n"
+        "**Response:** `{ message: \"Split deleted successfully\" }`."
+    ),
+)
 def delete_split(
     split_id: int,
     db: Session = Depends(get_db),
@@ -1390,7 +1693,23 @@ def delete_split(
     return {"message": "Split removed successfully"}
 
 
-@router.get("/asset/{org_id}")
+@router.get(
+    "/asset/{org_id}",
+    summary="Look up the rights stack for any asset",
+    description=(
+        "Generic asset-keyed view: given an organization plus an "
+        "(`asset_type`, `asset_id`) pair, returns every contract that "
+        "touches the asset together with the rights splits attached to it. "
+        "Used by song / release / work detail pages to render a unified "
+        "Rights tab.\n\n"
+        "**Path parameter:** `org_id` — Cadence Organization ID.\n"
+        "**Required query:** `asset_type` (`SONG` / `RELEASE` / `WORK`), "
+        "`asset_id` (target row id).\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ asset_type, asset_id, contracts: [{contract_id, "
+        "title, contract_type, status, splits: [...]}] }`."
+    ),
+)
 def get_asset_rights(
     org_id: int,
     asset_type: str = Query(...),
@@ -1457,7 +1776,20 @@ def get_asset_rights(
     return {"asset_type": asset_type, "asset_id": asset_id, "contracts": results}
 
 
-@router.get("/holder/{org_id}/{creator_id}")
+@router.get(
+    "/holder/{org_id}/{creator_id}",
+    summary="List a rights holder's contracts and shares",
+    description=(
+        "Holder-keyed inverse of `GET /asset/{org_id}`. Returns every "
+        "contract in the org where the creator appears as a `rights_holder_id` "
+        "on a RightsSplit row, grouped under their parent contracts.\n\n"
+        "**Path parameters:** `org_id` — Organization ID; `creator_id` — "
+        "Creator ID acting as rights holder.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the organization.\n\n"
+        "**Response:** `{ creator_id, creator_name, contracts: [{contract_id, "
+        "title, contract_type, status, splits: [...]}] }`."
+    ),
+)
 def get_holder_rights(
     org_id: int,
     creator_id: int,
@@ -1521,7 +1853,22 @@ def get_holder_rights(
     }
 
 
-@router.get("/contracts/{contract_id}/split-sheet")
+@router.get(
+    "/contracts/{contract_id}/split-sheet",
+    summary="Export a contract's split sheet as CSV",
+    description=(
+        "Streams a CSV split sheet for the contract: one row per "
+        "(asset, rights_holder, rights_type) tuple with `share_percentage`, "
+        "`role`, IPI/PRO if known, and totals per rights type at the bottom. "
+        "Filename is `<contract-title>-split-sheet.csv`.\n\n"
+        "**Path parameter:** `contract_id` — Contract row id.\n"
+        "**Optional query:** `split_type` — `publishing`, `master`, or "
+        "`both` (default). Filters which rights types are included.\n\n"
+        "**Auth:** Bearer JWT. Caller must be a member of the contract's "
+        "organization.\n\n"
+        "**Response:** `text/csv` streaming download."
+    ),
+)
 def export_split_sheet(
     contract_id: int,
     split_type: str = Query(default="both"),

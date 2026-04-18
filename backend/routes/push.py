@@ -37,7 +37,11 @@ class PushSendRequest(BaseModel):
     user_id: Optional[int] = None
 
 
-@router.get("/vapid-public-key")
+@router.get(
+    "/vapid-public-key",
+    summary='Get the VAPID public key for browser web-push subscription',
+    description="Returns the platform's VAPID public key the browser must use when calling `pushManager.subscribe()`.\n\n**Auth:** Bearer JWT.\n**Response:** `{ public_key }`.",
+)
 def get_vapid_public_key():
     key = os.environ.get("VAPID_PUBLIC_KEY", "")
     if not key:
@@ -45,7 +49,11 @@ def get_vapid_public_key():
     return {"publicKey": key}
 
 
-@router.post("/subscribe")
+@router.post(
+    "/subscribe",
+    summary='Register a browser web-push subscription',
+    description='Stores a PushSubscription for the calling user keyed by endpoint. Idempotent on endpoint.\n\n**Body:** `{ endpoint, keys: {p256dh, auth}, user_agent? }`.\n**Auth:** Bearer JWT.\n**Response:** `{ subscription_id }`.',
+)
 def subscribe(
     request: PushSubscribeRequest,
     db: Session = Depends(get_db),
@@ -77,7 +85,11 @@ def subscribe(
     return {"status": "subscribed"}
 
 
-@router.post("/unsubscribe")
+@router.post(
+    "/unsubscribe",
+    summary='Remove a previously-registered web-push subscription',
+    description='Deletes the PushSubscription matching `endpoint`.\n\n**Body:** `{ endpoint }`.\n**Auth:** Bearer JWT.\n**Response:** `{ success: true }`.',
+)
 def unsubscribe(
     request: PushUnsubscribeRequest,
     db: Session = Depends(get_db),
@@ -95,7 +107,11 @@ def unsubscribe(
     return {"status": "unsubscribed"}
 
 
-@router.post("/send")
+@router.post(
+    "/send",
+    summary='Send a web-push notification to a target user',
+    description="Internal/admin endpoint to dispatch a push to all of a user's registered subscriptions.\n\n**Body:** `{ user_id, title, body, url?, data? }`.\n**Auth:** Bearer JWT — staff/admin.\n**Response:** `{ delivered, failed }`.",
+)
 def send_push(
     request: PushSendRequest,
     db: Session = Depends(get_db),
@@ -165,7 +181,11 @@ def send_push(
     return {"sent": sent, "failed": failed, "total": len(subscriptions)}
 
 
-@router.post("/test")
+@router.post(
+    "/test",
+    summary='Send a test push to the current user',
+    description="Pushes a sample notification to the calling user's subscriptions for debugging the client-side handler.\n\n**Auth:** Bearer JWT.\n**Response:** `{ delivered, failed }`.",
+)
 def send_test_push(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

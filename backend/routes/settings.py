@@ -18,7 +18,12 @@ class SettingResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.get("/", response_model=List[SettingResponse])
+@router.get(
+    "/",
+    response_model=List[SettingResponse],
+    summary='List platform-wide settings',
+    description='Returns every Setting key/value the platform defines (system feature flags, pricing tiers, rate limits, etc.).\n\n**Auth:** Bearer JWT — platform admin only.\n**Response:** `List[SettingResponse]`.',
+)
 def get_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin_user)
@@ -26,7 +31,12 @@ def get_settings(
     settings = db.query(Settings).all()
     return settings
 
-@router.post("/", response_model=SettingResponse)
+@router.post(
+    "/",
+    response_model=SettingResponse,
+    summary='Create or update a platform setting (upsert)',
+    description='Inserts a new Setting or overwrites an existing one keyed by `key`. Values are JSON.\n\n**Body:** `{ key: string, value: any, description?: string }`.\n**Auth:** Bearer JWT — platform admin only.\n**Response:** `SettingResponse` — the persisted row.',
+)
 def create_or_update_setting(
     request: SettingRequest,
     db: Session = Depends(get_db),
@@ -44,7 +54,7 @@ def create_or_update_setting(
     db.refresh(setting)
     return setting
 
-@router.get("/api-status")
+@router.get("/api-status", summary="Public endpoint to check which APIs are configured", description='Public health probe returning which optional API integrations are configured in this deployment (Spotify, OpenAI, Resend, etc.). Used by the marketing site to indicate live capabilities. **Does not** expose secrets.\n\n**Auth:** None — public.\n**Response:** `{ spotify: bool, openai: bool, resend: bool, dropbox: bool, google_drive: bool }`.')
 def get_api_status(db: Session = Depends(get_db)):
     """Public endpoint to check which APIs are configured"""
     import os

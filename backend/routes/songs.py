@@ -302,7 +302,7 @@ class SongUpdateRequest(BaseModel):
                 return False
         return v
 
-@router.get("/org/{org_id}", response_model=List[SongResponse], summary="List songs in an organization", description="Returns the org's songs. Supports text search, release-status filter, type filter, and pagination.")
+@router.get("/org/{org_id}", response_model=List[SongResponse], summary="List songs in an organization", description="Returns the org's songs. Supports text search, release-status filter, type filter, and pagination.\n\n**Path parameter:** `org_id`.\n**Query:** `q`, `release_status` (`unreleased|released|archived`), `type`, `creator_id`, `limit`, `offset`, `sort`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, songs: [{id, title, artist, isrc, iswc, release_status, health_score, primary_creator_id, updated_at}] }`.")
 def get_organization_songs(
     org_id: int,
     db: Session = Depends(get_db),
@@ -459,7 +459,11 @@ class GroupSongsRequest(BaseModel):
     song_ids: List[int]
 
 
-@router.post("/group")
+@router.post(
+    "/group",
+    summary='Group several songs together as variants of one master',
+    description="Assigns the supplied songs a shared `group_id` so the catalog treats them as variants (radio edit, instrumental, etc.) of one underlying track.\n\n**Body:** `{ song_ids: int[], primary_song_id?: int }`. The primary song's metadata is treated as canonical.\n**Auth:** Bearer JWT — caller must be a member of every song's org.\n**Response:** `{ group_id, song_ids: [...] }`.",
+)
 def group_songs(
     request: GroupSongsRequest,
     db: Session = Depends(get_db),
@@ -528,7 +532,7 @@ def _get_also_represented(db: Session, song) -> list:
     return result
 
 
-@router.get("/{song_id}/history", summary="Get song edit history", description="Returns the full audit trail of field-level changes on a song with user attribution and timestamps.")
+@router.get("/{song_id}/history", summary="Get song edit history", description="Returns the full audit trail of field-level changes on a song with user attribution and timestamps.\n\n**Path parameter:** `song_id`.\n**Query:** `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ total, history: [{id, field, old_value, new_value, changed_by, changed_at}] }`.")
 def get_song_history(
     song_id: int,
     limit: int = Query(100, le=500),
@@ -578,7 +582,11 @@ def get_song_history(
     return {"total": total, "entries": results}
 
 
-@router.get("/{song_id}/history/export")
+@router.get(
+    "/{song_id}/history/export",
+    summary="Export a song's edit history as PDF",
+    description="Renders the audit trail of edits made to a song into a branded PDF — useful for compliance reviews.\n\n**Path parameter:** `song_id`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `application/pdf` download.",
+)
 def export_song_history_pdf(
     song_id: int,
     db: Session = Depends(get_db),
@@ -693,7 +701,7 @@ def export_song_history_pdf(
         raise HTTPException(status_code=500, detail="PDF generation not available")
 
 
-@router.get("/{song_id}", response_model=SongDetailResponse, summary="Get song detail", description="Returns the full song record, including credits, splits, contracts, releases, and health score.")
+@router.get("/{song_id}", response_model=SongDetailResponse, summary="Get song detail", description="Returns the full song record, including credits, splits, contracts, releases, and health score.\n\n**Path parameter:** `song_id`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ song: {...}, credits: [...], splits: [...], contracts: [...], releases: [...], audio_assets: [...], health: {...} }`.")
 def get_song(
     song_id: int,
     db: Session = Depends(get_db),
@@ -803,7 +811,11 @@ def get_song(
         ]
     }
 
-@router.get("/{song_id}/streaming")
+@router.get(
+    "/{song_id}/streaming",
+    summary="Get a song's streaming/DSP performance summary",
+    description="Aggregates DSP stream counts, listener counts, and chart positions for a song across connected DSPs.\n\n**Path parameter:** `song_id`.\n**Query:** `dsp` (`spotify|apple|all`), `start_date`, `end_date`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ totals: {streams, listeners}, by_dsp: [...], by_period: [{period, streams}] }`.",
+)
 def get_song_streaming(
     song_id: int,
     db: Session = Depends(get_db),
@@ -883,7 +895,7 @@ def get_song_streaming(
 class BulkDeleteRequest(BaseModel):
     song_ids: List[int]
 
-@router.post("/bulk-delete", summary="Bulk delete songs", description="Deletes multiple songs in a single transaction. Only songs the caller's organization owns are removed.")
+@router.post("/bulk-delete", summary="Bulk delete songs", description="Deletes multiple songs in a single transaction. Only songs the caller's organization owns are removed; foreign songs are silently skipped.\n\n**Body:** `{ song_ids: int[] }`.\n**Auth:** Bearer JWT.\n**Response:** `{ deleted, skipped }`.")
 def bulk_delete_songs(
     request: BulkDeleteRequest,
     db: Session = Depends(get_db),
@@ -923,7 +935,7 @@ def bulk_delete_songs(
         logging.getLogger("cadence").error(f"Failed to delete songs {request.song_ids}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete songs: {str(e)}")
 
-@router.delete("/{song_id}", summary="Delete song", description="Permanently removes the song. Linked credits, splits, and contract assets are cleaned up.")
+@router.delete("/{song_id}", summary="Delete song", description="Permanently removes the song. Linked credits, splits, and contract assets are cleaned up.\n\n**Path parameter:** `song_id`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ success: true }`.")
 def delete_song(
     song_id: int,
     db: Session = Depends(get_db),
@@ -959,7 +971,11 @@ def delete_song(
         logging.getLogger("cadence").error(f"Failed to delete song {song_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete song: {str(e)}")
 
-@router.get("/org/{org_id}/duplicates")
+@router.get(
+    "/org/{org_id}/duplicates",
+    summary='Find candidate duplicate songs in the org',
+    description='Runs the dedup heuristic (ISRC + title+artist fuzzy) and returns groups of suspected duplicates for human review.\n\n**Path parameter:** `org_id`.\n**Query:** `min_score` (0–1, default 0.85).\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ groups: [{score, reason, songs: [{id, title, artist, isrc}]}] }`.',
+)
 def find_duplicates(
     org_id: int,
     db: Session = Depends(get_db),
@@ -1030,7 +1046,7 @@ def find_duplicates(
     
     return {"groups": duplicate_groups, "total_groups": len(duplicate_groups)}
 
-@router.post("/org/{org_id}", response_model=SongResponse, summary="Create a song", description="Adds a new song to the catalog. Creator credits can be supplied at creation; missing creators are auto-created.")
+@router.post("/org/{org_id}", response_model=SongResponse, summary="Create a song", description='Adds a new song to the catalog. Creator credits can be supplied at creation; missing creators are auto-created.\n\n**Path parameter:** `org_id`.\n**Body:** `{ title, artist?, isrc?, iswc?, type?, release_status?, credits?: [{name, role, publishing_pct?, master_pct?}] }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the created song.')
 def create_song(
     org_id: int,
     request: SongCreateRequest,
@@ -1107,7 +1123,7 @@ def create_song(
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to create song. Please try again.")
 
-@router.patch("/{song_id}", response_model=SongResponse, summary="Update song", description="Patches song metadata (title, ISRC, ISWC, release_status, etc.). Edit history captures every field change.")
+@router.patch("/{song_id}", response_model=SongResponse, summary="Update song", description="Patches song metadata (title, ISRC, ISWC, release_status, etc.). Edit history captures every field change.\n\n**Path parameter:** `song_id`.\n**Body:** any subset of writable song fields.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** the updated song.")
 async def update_song(
     song_id: int,
     request: SongUpdateRequest,
@@ -1243,7 +1259,11 @@ class MergeSongsRequest(BaseModel):
     merge_song_ids: List[int]
 
 
-@router.post("/org/{org_id}/merge")
+@router.post(
+    "/org/{org_id}/merge",
+    summary='Merge duplicate songs into a single canonical record',
+    description='Picks `keep_song_id` as the survivor and folds metadata, credits, audio, and statement matches from `merge_song_ids` into it.\n\n**Path parameter:** `org_id`.\n**Body:** `{ keep_song_id: int, merge_song_ids: int[] }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ keep_song_id, merged_count, transferred: {credits, audio_assets, transactions} }`.',
+)
 def merge_songs(
     org_id: int,
     request: MergeSongsRequest,
@@ -1403,7 +1423,7 @@ def merge_songs(
         "merged_count": len(merge_ids),
     }
 
-@router.post("/{song_id}/duplicate", summary="Duplicate a song", description="Creates a duplicate entry that links back to the original via parent_song_id.")
+@router.post("/{song_id}/duplicate", summary="Duplicate a song", description="Creates a duplicate entry that links back to the original via `parent_song_id`. Useful for creating remix/edit variants from an existing master.\n\n**Path parameter:** `song_id`.\n**Body:** `{ title?: string }` to override the duplicated title.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** the new duplicated song.")
 def duplicate_song(
     song_id: int,
     db: Session = Depends(get_db),
@@ -1488,7 +1508,11 @@ def duplicate_song(
     return _song_to_response(new_song)
 
 
-@router.delete("/{song_id}/group")
+@router.delete(
+    "/{song_id}/group",
+    summary='Remove a song from its variant group',
+    description="Detaches the song from its `group_id` so it stands alone again.\n\n**Path parameter:** `song_id`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ success: true }`.",
+)
 def ungroup_song(
     song_id: int,
     db: Session = Depends(get_db),
@@ -1519,7 +1543,7 @@ def ungroup_song(
     return {"msg": "Song removed from group"}
 
 
-@router.post("/{song_id}/mark-released", summary="Mark song as released", description="Flips release_status to RELEASED and stamps the release date.")
+@router.post("/{song_id}/mark-released", summary="Mark song as released", description="Flips `release_status` to `RELEASED` and stamps the release date.\n\n**Path parameter:** `song_id`.\n**Body:** `{ release_date?: date }` — defaults to today.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** the updated song.")
 def mark_song_released(
     song_id: int,
     db: Session = Depends(get_db),

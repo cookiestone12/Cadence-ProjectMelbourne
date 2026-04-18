@@ -45,7 +45,7 @@ class OrganizationMemberResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.get("/current", response_model=OrganizationResponse, summary="Get the current user's organization", description="Returns the organization the authenticated user is currently scoped to. Cadence staff and master admin see organization 1 by default if they are not a member of any org.")
+@router.get("/current", response_model=OrganizationResponse, summary="Get the current user's organization", description="Returns the organization the authenticated user is currently scoped to. Cadence staff and master admin see the organization they're impersonating.\n\n**Auth:** Bearer JWT.\n**Response:** `{ id, name, plan, account_type, created_at, owner_user_id }`.")
 def get_current_organization(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -84,7 +84,7 @@ def get_current_organization(
         "account_type": org.account_type,
     }
 
-@router.get("/current/membership", summary="Get current user's role in their org", description="Returns the role (OWNER/ADMIN/MEMBER) of the current user inside their current organization.")
+@router.get("/current/membership", summary="Get current user's role in their org", description='Returns the role of the current user inside their current organization (`OWNER` / `ADMIN` / `MEMBER`).\n\n**Auth:** Bearer JWT.\n**Response:** `{ org_id, role, joined_at }`.')
 def get_current_membership(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -112,7 +112,7 @@ def get_current_membership(
         "linked_creator_id": getattr(membership, 'linked_creator_id', None),
     }
 
-@router.get("/{org_id}", response_model=OrganizationResponse, summary="Get organization by id", description="Fetch an organization the caller is a member of. Master admin and is_cadence_staff users have cross-org read.")
+@router.get("/{org_id}", response_model=OrganizationResponse, summary="Get organization by id", description='Fetches an organization the caller is a member of. Master admin and `is_cadence_staff` users have cross-org read.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member, or a Cadence staff/admin.\n**Response:** `{ id, name, plan, account_type, created_at, member_count }`.')
 def get_organization(
     org_id: int,
     db: Session = Depends(get_db),
@@ -144,7 +144,7 @@ def get_organization(
         "created_at": org.created_at.isoformat() if org.created_at else ""
     }
 
-@router.post("/", response_model=OrganizationResponse, summary="Create a new organization", description="Creates an organization owned by the current user. The caller is added as the OWNER member.")
+@router.post("/", response_model=OrganizationResponse, summary="Create a new organization", description='Creates an organization owned by the current user. The caller is added as the OWNER member.\n\n**Body:** `{ name, account_type?: "PUBLISHER"|"INDIVIDUAL"|"LABEL", plan? }`.\n**Auth:** Bearer JWT.\n**Response:** the created organization.')
 def create_organization(
     request: OrganizationCreateRequest,
     db: Session = Depends(get_db),
@@ -175,7 +175,7 @@ def create_organization(
         "created_at": org.created_at.isoformat() if org.created_at else ""
     }
 
-@router.get("/{org_id}/access-code", summary="Get the org's join access code", description="Returns the access code other users can redeem to join this organization. Owner/admin only.")
+@router.get("/{org_id}/access-code", summary="Get the org's join access code", description='Returns the access code other users can redeem to join this organization.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be Owner or Admin of the org.\n**Response:** `{ access_code, regenerated_at, regenerated_by }`.')
 def get_access_code(
     org_id: int,
     db: Session = Depends(get_db),
@@ -243,7 +243,7 @@ def set_access_code(
     return {"access_code": org.access_code}
 
 
-@router.post("/{org_id}/regenerate-access-code", summary="Regenerate the org access code", description="Rotates the organization's join code, invalidating the previous one. Owner/admin only.")
+@router.post("/{org_id}/regenerate-access-code", summary="Regenerate the org access code", description="Rotates the organization's join code, invalidating the previous one.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be Owner or Admin of the org.\n**Response:** `{ access_code, regenerated_at }`.")
 def regenerate_access_code(
     org_id: int,
     db: Session = Depends(get_db),
@@ -269,7 +269,7 @@ def regenerate_access_code(
     return {"access_code": org.access_code}
 
 
-@router.get("/{org_id}/members", response_model=List[OrganizationMemberResponse], summary="List organization members", description="Returns every user attached to the organization with their role.")
+@router.get("/{org_id}/members", response_model=List[OrganizationMemberResponse], summary="List organization members", description='Returns every user attached to the organization with their role and join time.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ members: [{user_id, email, full_name, role, joined_at, last_seen_at}] }`.')
 def get_organization_members(
     org_id: int,
     db: Session = Depends(get_db),

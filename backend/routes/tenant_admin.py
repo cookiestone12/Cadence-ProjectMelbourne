@@ -90,7 +90,20 @@ class UpdateBrandingRequest(BaseModel):
     tagline: Optional[str] = None
 
 
-@router.get("/members", response_model=List[TenantUserResponse])
+@router.get(
+    "/members",
+    response_model=List[TenantUserResponse],
+    summary="List members of the caller's organization",
+    description=(
+        "Returns every User attached to the caller's organization, with their "
+        "OrganizationMember role, roster permission, linked Creator (if any) "
+        "and the list of creators they've been individually granted access to. "
+        "Drives the Team / Members tab of the Tenant Admin console.\n\n"
+        "**Auth:** Bearer JWT. Caller must be an OWNER, ADMIN, or platform "
+        "super-admin. Members of the org without admin role get 403.\n\n"
+        "**Response:** `List[TenantUserResponse]` ordered by username."
+    ),
+)
 def list_tenant_members(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -133,7 +146,24 @@ def list_tenant_members(
     return result
 
 
-@router.post("/members", response_model=TenantUserResponse)
+@router.post(
+    "/members",
+    response_model=TenantUserResponse,
+    summary="Create a new member in the caller's organization",
+    description=(
+        "Creates a User row, hashes the supplied password, and attaches the "
+        "user to the caller's organization with the requested role. Optionally "
+        "links the new account to an existing Creator so the user sees only "
+        "their own catalog by default.\n\n"
+        "**Body (`CreateTenantUserRequest`):** `username`, `email`, "
+        "`password` (plain — hashed server-side), `role` (`OWNER` / `ADMIN` / "
+        "`MEMBER`, default `MEMBER`), `creator_id` (optional Creator FK), "
+        "`client_access_scope` (`OWN` / `ASSIGNED` / `ALL`, default `OWN`).\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin. "
+        "Conflicts on duplicate `username`/`email` return 400.\n\n"
+        "**Response:** the freshly created `TenantUserResponse`."
+    ),
+)
 def create_tenant_member(
     request: CreateTenantUserRequest,
     db: Session = Depends(get_db),
@@ -208,7 +238,23 @@ def create_tenant_member(
     )
 
 
-@router.put("/members/{user_id}", response_model=TenantUserResponse)
+@router.put(
+    "/members/{user_id}",
+    response_model=TenantUserResponse,
+    summary="Update a member's profile or role",
+    description=(
+        "Patches the editable fields on a member in the caller's org: "
+        "`username`, `email`, `role`, `is_active`. Use the dedicated "
+        "permissions / reset-password / link-creator endpoints for those "
+        "specific concerns.\n\n"
+        "**Path parameter:** `user_id` — User row id; must belong to the "
+        "caller's organization.\n"
+        "**Body (`UpdateTenantUserRequest`):** any subset of the editable "
+        "fields. Unspecified fields are untouched.\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** the updated `TenantUserResponse`."
+    ),
+)
 def update_tenant_member(
     user_id: int,
     request: UpdateTenantUserRequest,
@@ -280,7 +326,19 @@ class LinkCreatorRequest(BaseModel):
     creator_id: Optional[int] = None
 
 
-@router.put("/members/{user_id}/link-creator")
+@router.put(
+    "/members/{user_id}/link-creator",
+    summary="Link or unlink a member to a Creator profile",
+    description=(
+        "Sets (or clears) the `linked_creator_id` on a member account so the "
+        "creator can sign in and see their own catalog through the artist "
+        "portal. Pass `creator_id=null` in the body to unlink.\n\n"
+        "**Path parameter:** `user_id` — User row id within the caller's org.\n"
+        "**Body:** `{ creator_id: int | null }`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** `{ message }`."
+    ),
+)
 def link_creator_to_member(
     user_id: int,
     request: LinkCreatorRequest,
@@ -329,7 +387,19 @@ def link_creator_to_member(
     return {"message": "Creator link updated"}
 
 
-@router.post("/members/{user_id}/reset-password")
+@router.post(
+    "/members/{user_id}/reset-password",
+    summary="Force-reset a member's password",
+    description=(
+        "Hashes and writes a new password for the target member. The user is "
+        "**not** notified by email — surface the new password to whoever is "
+        "performing the reset out-of-band.\n\n"
+        "**Path parameter:** `user_id` — target user, must be in caller's org.\n"
+        "**Body (`ResetPasswordRequest`):** `{ new_password }` (plain).\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** `{ message: \"Password reset successfully\" }`."
+    ),
+)
 def reset_member_password(
     user_id: int,
     request: ResetPasswordRequest,
@@ -359,7 +429,20 @@ def reset_member_password(
     return {"message": f"Password reset successfully for {user.username}"}
 
 
-@router.delete("/members/{user_id}")
+@router.delete(
+    "/members/{user_id}",
+    summary="Remove a member from the organization",
+    description=(
+        "Detaches the user from the caller's organization (deletes the "
+        "OrganizationMember row). The underlying User account is kept so "
+        "audit trails and historical authorship are preserved; the user "
+        "simply loses access to org data on next login.\n\n"
+        "**Path parameter:** `user_id` — must be a member of caller's org. "
+        "Removing the last OWNER is rejected with 400.\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** `{ message: \"Member removed successfully\" }`."
+    ),
+)
 def remove_tenant_member(
     user_id: int,
     db: Session = Depends(get_db),
@@ -392,7 +475,22 @@ def remove_tenant_member(
     return {"message": "Member removed from organization"}
 
 
-@router.patch("/members/{user_id}/permissions")
+@router.patch(
+    "/members/{user_id}/permissions",
+    summary="Update a member's roster + client-access permissions",
+    description=(
+        "Toggles fine-grained access flags independent of the OrganizationMember "
+        "role: who can manage the artist roster and how broadly they can see "
+        "client (creator) data.\n\n"
+        "**Path parameter:** `user_id` — must be in caller's org.\n"
+        "**Body (`UpdatePermissionsRequest`):** any subset of "
+        "`can_manage_roster` (bool) and `client_access_scope` (`OWN` — only "
+        "their linked creator; `ASSIGNED` — explicitly assigned creators; "
+        "`ALL` — everything in the org).\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** the updated `TenantUserResponse`."
+    ),
+)
 def update_member_permissions(
     user_id: int,
     request: UpdatePermissionsRequest,
@@ -438,7 +536,20 @@ def update_member_permissions(
     )
 
 
-@router.post("/members/{user_id}/assign-creators")
+@router.post(
+    "/members/{user_id}/assign-creators",
+    summary="Replace a member's set of assigned creators",
+    description=(
+        "Sets the explicit list of Creator IDs the member can see when their "
+        "`client_access_scope` is `ASSIGNED`. The supplied list **replaces** "
+        "any prior assignments; pass `[]` to clear.\n\n"
+        "**Path parameter:** `user_id` — must be in caller's org.\n"
+        "**Body (`AssignCreatorRequest`):** `{ creator_ids: int[] }`. IDs not "
+        "in the org are silently dropped.\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** `{ message, assigned_creators: [{id, name}] }`."
+    ),
+)
 def assign_creators_to_member(
     user_id: int,
     request: AssignCreatorRequest,
@@ -481,7 +592,19 @@ def assign_creators_to_member(
     }
 
 
-@router.get("/branding")
+@router.get(
+    "/branding",
+    summary="Get the caller's organization branding",
+    description=(
+        "Returns the cosmetic + identity fields used to skin the artist "
+        "portal and PDF/CSV exports for the caller's organization: name, "
+        "display name, logo, colors, tagline, account type.\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** `{ id, name, display_name, account_type, logo_url, "
+        "logo_orientation, primary_color, secondary_color, tagline, "
+        "updated_at }`."
+    ),
+)
 def get_org_branding(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -511,7 +634,20 @@ def get_org_branding(
     }
 
 
-@router.put("/branding")
+@router.put(
+    "/branding",
+    summary="Update the caller's organization branding",
+    description=(
+        "Patches branding fields on the caller's organization. Use the "
+        "logo upload endpoint to change the logo URL itself; this endpoint "
+        "is for text/colour fields and pre-uploaded URLs.\n\n"
+        "**Body (`UpdateBrandingRequest`):** any subset of `display_name`, "
+        "`logo_url`, `logo_orientation`, `primary_color` (hex), "
+        "`secondary_color` (hex), `tagline`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** `{ message, branding: { ...same shape as GET } }`."
+    ),
+)
 def update_org_branding(
     request: UpdateBrandingRequest,
     db: Session = Depends(get_db),
@@ -550,7 +686,19 @@ def update_org_branding(
     }
 
 
-@router.post("/branding/logo")
+@router.post(
+    "/branding/logo",
+    summary="Upload the organization logo image",
+    description=(
+        "Multipart upload of a PNG/JPEG/SVG logo. The file is persisted to "
+        "the configured object store and the resulting public URL is written "
+        "to the organization's `logo_url`. Replaces any previous logo.\n\n"
+        "**Body (multipart/form-data):** `file` — the image. Max size and "
+        "allowed mime types follow the platform upload limits.\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** `{ message, logo_url }` (the new public URL)."
+    ),
+)
 async def upload_org_logo(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -591,7 +739,21 @@ class InviteUserRequest(BaseModel):
     message: Optional[str] = None
 
 
-@router.post("/org/{org_id}/invite")
+@router.post(
+    "/org/{org_id}/invite",
+    summary="Email an invitation to join an organization",
+    description=(
+        "Sends a Resend-backed invite email containing a tokenised signup "
+        "link to the supplied address. The recipient becomes an "
+        "OrganizationMember with the requested role once they accept. Safe "
+        "to call multiple times — a fresh token is issued each call.\n\n"
+        "**Path parameter:** `org_id` — target Organization ID.\n"
+        "**Body:** `{ email, role?, message? }`. `role` defaults to `MEMBER`.\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER/ADMIN of `org_id`, or a "
+        "platform super-admin.\n\n"
+        "**Response:** `{ success: true, message }`."
+    ),
+)
 def invite_user(
     org_id: int,
     request: InviteUserRequest,
@@ -639,7 +801,17 @@ def invite_user(
     return {"success": True, "message": f"Invitation sent to {request.email}"}
 
 
-@router.get("/creators")
+@router.get(
+    "/creators",
+    summary="List creators in the caller's organization",
+    description=(
+        "Lightweight roster lookup used by the assign-creators picker. "
+        "Returns every Creator visible to the caller's org as `{id, name}` "
+        "tuples so the admin UI can build a multi-select.\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** `List[{ id, name }]` sorted by `name`."
+    ),
+)
 def list_org_creators(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)

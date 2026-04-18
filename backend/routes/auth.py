@@ -67,7 +67,7 @@ class TokenResponse(BaseModel):
     token_type: str
     user: dict
 
-@router.post("/register", response_model=TokenResponse, summary="Register new user", description="Create a new user account. The very first user in a fresh deployment is automatically promoted to admin. Returns a Bearer JWT and the new user record. Also opens a UserSession row so the token can be revoked server-side.")
+@router.post("/register", response_model=TokenResponse, summary="Register new user", description='Creates a new user account. The very first user in a fresh deployment is automatically promoted to admin. Returns a Bearer JWT plus the user payload so the client can sign the user in immediately.\n\n**Body:** `{ email, password, full_name?, organization_name? }`.\n**Auth:** None — public sign-up.\n**Response:** `{ access_token, token_type: "bearer", user: {id, email, full_name, role, organization_id} }`.')
 def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     # Check if user exists
     if db.query(User).filter(func.lower(User.username) == payload.username.lower()).first():
@@ -107,7 +107,7 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
         }
     }
 
-@router.post("/login", response_model=TokenResponse, summary="Log in (username + password)", description="Username login is case-insensitive. Returns a Bearer JWT plus the user payload. Use the token in the `Authorization: Bearer <token>` header on every other endpoint. Records a UserSession row so the token can be revoked mid-flight.")
+@router.post("/login", response_model=TokenResponse, summary="Log in (username + password)", description='Username login is case-insensitive. Returns a Bearer JWT plus the user payload. Use the token in the `Authorization: Bearer ...` header on subsequent calls. Supports OAuth2 password-flow form encoding for the OpenAPI playground.\n\n**Body (form-encoded):** `username, password`.\n**Auth:** None.\n**Response:** `{ access_token, token_type: "bearer", user: {id, email, full_name, role, organization_id} }`. Returns 401 on bad credentials.')
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
     user = db.query(User).filter(func.lower(User.username) == payload.username.lower()).first()
     
@@ -150,7 +150,7 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     }
 
 
-@router.put("/change-password", summary="Change current user's password", description="Verifies the supplied current_password before rotating to new_password. Existing sessions are not invalidated by a password change.")
+@router.put("/change-password", summary="Change current user's password", description='Verifies the supplied `current_password` before rotating to `new_password`. Existing sessions are not invalidated by a password change — call `/auth/logout-all` after if you want to force re-login on every device.\n\n**Body:** `{ current_password, new_password }`.\n**Auth:** Bearer JWT.\n**Response:** `{ success: true }`. Returns 401 if `current_password` is wrong.')
 def change_password(
     request: ChangePasswordRequest,
     db: Session = Depends(get_db),

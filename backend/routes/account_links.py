@@ -44,7 +44,12 @@ class LinkResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.post("/request", response_model=LinkResponse)
+@router.post(
+    "/request",
+    response_model=LinkResponse,
+    summary='Request to link a target account to the org',
+    description='Initiates an AccountLink between the requesting org and a target user/account. The target must consent via `/consent` before the link goes live.\n\n**Body:** `{ org_id, target_email, role?, modules?: string[], message? }`.\n**Auth:** Bearer JWT — caller must be a member of `org_id`.\n**Response:** `LinkResponse` — the pending link header with `status="pending_consent"`.',
+)
 def request_link(
     request: CreateLinkRequest, 
     db: Session = Depends(get_db),
@@ -99,7 +104,12 @@ def request_link(
     
     return _build_link_response(link, db)
 
-@router.post("/{link_id}/consent", response_model=LinkResponse)
+@router.post(
+    "/{link_id}/consent",
+    response_model=LinkResponse,
+    summary='Consent to a pending account link',
+    description='Marks the link as `active` so the requesting org can begin exercising the granted access.\n\n**Path parameter:** `link_id`.\n**Auth:** Bearer JWT — must be the target user.\n**Response:** `LinkResponse` — the link with `status="active"`.',
+)
 def give_consent(
     link_id: int, 
     request: ConsentRequest, 
@@ -138,7 +148,12 @@ def give_consent(
     
     return _build_link_response(link, db)
 
-@router.post("/{link_id}/revoke", response_model=LinkResponse)
+@router.post(
+    "/{link_id}/revoke",
+    response_model=LinkResponse,
+    summary='Revoke an active account link',
+    description='Marks the link as `revoked` so the granted access stops immediately. Either side of a link may revoke.\n\n**Path parameter:** `link_id`.\n**Auth:** Bearer JWT — must be either side of the link.\n**Response:** `LinkResponse` — the link with `status="revoked"`.',
+)
 def revoke_link(
     link_id: int, 
     db: Session = Depends(get_db),
@@ -167,7 +182,12 @@ def revoke_link(
     
     return _build_link_response(link, db)
 
-@router.get("/organization/{org_id}", response_model=List[LinkResponse])
+@router.get(
+    "/organization/{org_id}",
+    response_model=List[LinkResponse],
+    summary='List every account link for an organization',
+    description="Returns the org's full set of links regardless of status — pending, active, revoked.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `List[LinkResponse]`.",
+)
 def get_links_for_organization(
     org_id: int, 
     db: Session = Depends(get_db),
@@ -188,7 +208,12 @@ def get_links_for_organization(
     
     return [_build_link_response(link, db) for link in links]
 
-@router.get("/pending/{org_id}", response_model=List[LinkResponse])
+@router.get(
+    "/pending/{org_id}",
+    response_model=List[LinkResponse],
+    summary='List pending account links for an organization',
+    description='Filtered convenience variant of `/organization/{org_id}` — only returns links awaiting target consent.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `List[LinkResponse]`.',
+)
 def get_pending_links(
     org_id: int, 
     db: Session = Depends(get_db),
@@ -209,7 +234,12 @@ def get_pending_links(
     
     return [_build_link_response(link, db) for link in links]
 
-@router.get("/active/{org_id}", response_model=List[LinkResponse])
+@router.get(
+    "/active/{org_id}",
+    response_model=List[LinkResponse],
+    summary='List active account links for an organization',
+    description='Filtered convenience variant of `/organization/{org_id}` — only returns links that are currently active.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `List[LinkResponse]`.',
+)
 def get_active_links(
     org_id: int, 
     db: Session = Depends(get_db),
@@ -240,7 +270,12 @@ def get_active_links(
     
     return [_build_link_response(link, db) for link in active_links]
 
-@router.put("/{link_id}", response_model=LinkResponse)
+@router.put(
+    "/{link_id}",
+    response_model=LinkResponse,
+    summary="Update an account link's role or modules",
+    description="Patches the granted role and/or module set on an active link. Only the requesting org may modify; target may only revoke.\n\n**Path parameter:** `link_id`.\n**Body:** `{ role?, modules?: string[] }`.\n**Auth:** Bearer JWT — caller must be a member of the link's requesting org.\n**Response:** `LinkResponse`.",
+)
 def update_link(
     link_id: int, 
     request: UpdateLinkRequest, 

@@ -62,7 +62,7 @@ class ContractResponse(BaseModel):
     class Config:
         from_attributes = True
 
-@router.post("/upload/{song_id}", response_model=ContractResponse, summary="Upload a contract document for a song", description="Uploads a PDF/DOCX, persists the binary, and runs AI parsing to extract terms (parties, dates, splits, advances).")
+@router.post("/upload/{song_id}", response_model=ContractResponse, summary="Upload a contract document for a song", description="Uploads a PDF/DOCX, persists the binary in object storage, and runs the AI parser to extract terms (parties, dates, royalty splits, advances). The Contract row is linked to the supplied song.\n\n**Path parameter:** `song_id`.\n**Body (multipart/form-data):** `file` — the contract document; `name?`; `type?`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ contract_id, name, type, status, extracted: {parties, effective_date, term_end_date, splits, advance_cents}, warnings: [...] }`.")
 async def upload_contract(
     song_id: int,
     file: UploadFile = File(...),
@@ -126,7 +126,7 @@ async def upload_contract(
     
     return contract
 
-@router.get("/song/{song_id}", response_model=List[ContractResponse], summary="List contracts for a song", description="Returns every contract linked to the song, newest first.")
+@router.get("/song/{song_id}", response_model=List[ContractResponse], summary="List contracts for a song", description="Returns every Contract linked to the song, newest first.\n\n**Path parameter:** `song_id`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ contracts: [{id, name, type, status, effective_date, term_end_date, counterparty, uploaded_at}] }`.")
 def get_contracts_for_song(
     song_id: int, 
     db: Session = Depends(get_db),
@@ -149,7 +149,7 @@ def get_contracts_for_song(
     contracts = db.query(SongContract).filter(SongContract.song_id == song_id).all()
     return contracts
 
-@router.get("/download/{contract_id}", summary="Download contract file", description="Streams the original uploaded contract document.")
+@router.get("/download/{contract_id}", summary="Download contract file", description="Streams the original uploaded contract file as an attachment download.\n\n**Path parameter:** `contract_id`.\n**Auth:** Bearer JWT — caller must be a member of the contract's org.\n**Response:** the file with the appropriate `Content-Type` header.")
 def download_contract(
     contract_id: int, 
     db: Session = Depends(get_db),
@@ -190,7 +190,7 @@ def download_contract(
         media_type="application/pdf"
     )
 
-@router.delete("/{contract_id}", summary="Delete contract", description="Removes a contract record and its stored file.")
+@router.delete("/{contract_id}", summary="Delete contract", description="Removes a contract record and its stored file. Cascades to ContractDocument rows.\n\n**Path parameter:** `contract_id`.\n**Auth:** Bearer JWT — caller must be a member of the contract's org.\n**Response:** `{ success: true }`.")
 def delete_contract(
     contract_id: int, 
     db: Session = Depends(get_db),

@@ -53,7 +53,11 @@ def verify_org_access(user: User, org_id: int, db: Session):
     return membership
 
 
-@router.post("/playlist/preview/{org_id}")
+@router.post(
+    "/playlist/preview/{org_id}",
+    summary='Preview a Spotify playlist before import',
+    description='Resolves a Spotify playlist URL/ID and returns the tracklist with metadata so the user can confirm before import. Nothing is persisted.\n\n**Path parameter:** `org_id`.\n**Body:** `{ playlist_url_or_id: string }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ playlist_name, owner, track_count, tracks: [{spotify_id, title, artist, album, isrc, duration_ms}] }`.',
+)
 def preview_playlist_import(
     org_id: int,
     data: PlaylistImportRequest,
@@ -139,7 +143,11 @@ def preview_playlist_import(
     }
 
 
-@router.post("/playlist/import/{org_id}")
+@router.post(
+    "/playlist/import/{org_id}",
+    summary='Import tracks from a Spotify playlist into the catalog',
+    description='Creates a Song for each selected playlist track (deduping by ISRC) and links to the supplied creator.\n\n**Path parameter:** `org_id`.\n**Body:** `{ playlist_url_or_id, creator_id?, selected_spotify_ids?: string[] }`. When `selected_spotify_ids` is omitted every track is imported.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ created, skipped, song_ids: [...] }`.',
+)
 def import_playlist_tracks(
     org_id: int,
     data: PlaylistImportConfirm,
@@ -294,7 +302,11 @@ def import_playlist_tracks(
     }
 
 
-@router.post("/search")
+@router.post(
+    "/search",
+    summary='Search Spotify for tracks/artists/albums',
+    description='Proxies a Spotify search query through the platform\'s API credentials so the UI can offer a search-first import flow.\n\n**Body:** `{ q, type?: "track"|"album"|"artist" (default track), limit?: int }`.\n**Auth:** Bearer JWT.\n**Response:** `{ results: [{spotify_id, type, name, artist, isrc?, image_url}] }`.',
+)
 def search_spotify(
     data: SpotifySearchRequest,
     current_user: User = Depends(get_current_user)
@@ -317,7 +329,11 @@ class SpotifyLinkRequest(BaseModel):
     popularity: Optional[int] = None
 
 
-@router.post("/link-to-song")
+@router.post(
+    "/link-to-song",
+    summary='Link a Spotify track to an existing Song',
+    description="Stores the Spotify track id on the Song so future scrapes/credit pulls know where to look.\n\n**Body:** `{ song_id, spotify_id }`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ song_id, spotify_id, linked_at }`.",
+)
 def link_spotify_to_song(
     data: SpotifyLinkRequest,
     current_user: User = Depends(get_current_user),

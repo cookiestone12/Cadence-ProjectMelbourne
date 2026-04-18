@@ -64,7 +64,11 @@ class StatusUpdate(BaseModel):
     status: str
 
 
-@router.get("/org/{org_id}")
+@router.get(
+    "/org/{org_id}",
+    summary='List recoupable expenses for the org',
+    description="Returns the org's RecoupableExpense rows — costs that should be recouped from royalties before paying the artist.\n\n**Path parameter:** `org_id`.\n**Query:** `creator_id`, `contract_id`, `status`, `start_date`, `end_date`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, expenses: [{id, name, amount_cents, currency, expense_date, creator_id, contract_id, status, category}] }`.",
+)
 def list_expenses(
     org_id: int,
     category: Optional[str] = Query(None),
@@ -113,7 +117,11 @@ def list_expenses(
     return results
 
 
-@router.post("/org/{org_id}")
+@router.post(
+    "/org/{org_id}",
+    summary='Create a recoupable expense',
+    description='Records a recoupable cost (recording, mixing, marketing, etc.) to be recouped from future royalties.\n\n**Path parameter:** `org_id`.\n**Body:** `{ name, amount_cents, currency?, expense_date?, creator_id?, contract_id?, category?, notes? }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the created expense.',
+)
 def create_expense(
     org_id: int,
     data: ExpenseCreate,
@@ -146,7 +154,11 @@ def create_expense(
     return {"id": expense.id, "message": "Expense created successfully"}
 
 
-@router.put("/{expense_id}")
+@router.put(
+    "/{expense_id}",
+    summary="Update a recoupable expense's metadata",
+    description="Patches editable fields. Does not retroactively rewrite already-applied recoupments.\n\n**Path parameter:** `expense_id`.\n**Body:** any subset of writable fields from create.\n**Auth:** Bearer JWT — caller must be a member of the expense's org.\n**Response:** the updated expense.",
+)
 def update_expense(
     expense_id: int,
     data: ExpenseUpdate,
@@ -166,7 +178,11 @@ def update_expense(
     return {"message": "Expense updated successfully"}
 
 
-@router.patch("/{expense_id}/status")
+@router.patch(
+    "/{expense_id}/status",
+    summary="Change an expense's status",
+    description="Moves an expense between `pending`, `approved`, `recouping`, and `recouped`.\n\n**Path parameter:** `expense_id`.\n**Body:** `{ status: string, note?: string }`.\n**Auth:** Bearer JWT — caller must be a member of the expense's org.\n**Response:** the updated expense.",
+)
 def update_expense_status(
     expense_id: int,
     data: StatusUpdate,
@@ -184,7 +200,11 @@ def update_expense_status(
     return {"message": f"Expense status updated to {data.status}"}
 
 
-@router.delete("/{expense_id}")
+@router.delete(
+    "/{expense_id}",
+    summary='Delete a recoupable expense',
+    description="Hard-deletes the expense. Use with care.\n\n**Path parameter:** `expense_id`.\n**Auth:** Bearer JWT — caller must be a member of the expense's org.\n**Response:** `{ success: true }`.",
+)
 def delete_expense(
     expense_id: int,
     db: Session = Depends(get_db),
@@ -199,7 +219,11 @@ def delete_expense(
     return {"message": "Expense deleted successfully"}
 
 
-@router.get("/org/{org_id}/summary")
+@router.get(
+    "/org/{org_id}/summary",
+    summary='Aggregate expense totals by status / category',
+    description='Rolls expenses into the dashboard summary tiles.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `currency`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ totals: {pending_cents, approved_cents, recouped_cents}, by_category: [{category, amount_cents}] }`.',
+)
 def get_expense_summary(
     org_id: int,
     db: Session = Depends(get_db),

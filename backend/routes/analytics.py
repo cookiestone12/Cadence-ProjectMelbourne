@@ -27,7 +27,11 @@ def verify_org_access(db: Session, user_id: int, org_id: int):
     return member
 
 
-@router.get("/org/{org_id}/overview")
+@router.get(
+    "/org/{org_id}/overview",
+    summary='Get the org-wide analytics overview / KPI tiles',
+    description='Returns the top-of-page KPIs (catalog size, active contracts, earnings YTD, pending action items, etc.) used on the analytics dashboard.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `currency`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ catalog_size, active_contracts, earnings_ytd_cents, pending_actions, creator_count, release_count, ... }`.',
+)
 def get_overview_analytics(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(db, current_user.id, org_id)
 
@@ -85,7 +89,11 @@ def get_overview_analytics(org_id: int, db: Session = Depends(get_db), current_u
     }
 
 
-@router.get("/org/{org_id}/catalog-growth")
+@router.get(
+    "/org/{org_id}/catalog-growth",
+    summary='Catalog growth time series',
+    description='Returns the cumulative count of songs/works/releases over time, bucketed by month.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `granularity` (`month|quarter`).\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ series: [{period, songs, works, releases}] }`.',
+)
 def get_catalog_growth(org_id: int, months: int = 12, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(db, current_user.id, org_id)
 
@@ -139,7 +147,11 @@ def get_catalog_growth(org_id: int, months: int = 12, db: Session = Depends(get_
     return {"timeline": timeline}
 
 
-@router.get("/org/{org_id}/health-distribution")
+@router.get(
+    "/org/{org_id}/health-distribution",
+    summary='Distribution of release-readiness health scores',
+    description='Returns the count of songs/releases in each health bucket (green/yellow/red) and the most common failure reasons. Used by the catalog-health donut.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ by_status: {green, yellow, red}, top_failures: [{key, label, count}] }`.',
+)
 def get_health_distribution(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(db, current_user.id, org_id)
 
@@ -194,7 +206,11 @@ def get_health_distribution(org_id: int, db: Session = Depends(get_db), current_
     }
 
 
-@router.get("/org/{org_id}/revenue")
+@router.get(
+    "/org/{org_id}/revenue",
+    summary='Revenue analytics time series',
+    description='Aggregates royalty allocation amounts over time, optionally grouped by source or holder.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `granularity` (`month|quarter|year`), `group_by` (`source|holder|none`), `currency`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ series: [{key, points: [{period, amount_cents}]}] }`.',
+)
 def get_revenue_analytics(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(db, current_user.id, org_id)
 
@@ -282,7 +298,11 @@ def get_revenue_analytics(org_id: int, db: Session = Depends(get_db), current_us
     }
 
 
-@router.get("/org/{org_id}/creators")
+@router.get(
+    "/org/{org_id}/creators",
+    summary='Per-creator analytics summary',
+    description='Returns ranked creator metrics (catalog size, earnings, placements) used by the analytics > creators tab.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `metric` (`earnings|songs|placements`), `limit`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ creators: [{creator_id, name, song_count, earnings_cents, placement_count}] }`.',
+)
 def get_creator_analytics(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(db, current_user.id, org_id)
 
@@ -343,7 +363,11 @@ def get_creator_analytics(org_id: int, db: Session = Depends(get_db), current_us
     }
 
 
-@router.get("/org/{org_id}/placements")
+@router.get(
+    "/org/{org_id}/placements",
+    summary='Sync placement analytics over time',
+    description='Counts of placements by status and revenue per period.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`, `granularity`, `media_type`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ series: [{period, placed, fee_cents}], by_media_type: [...] }`.',
+)
 def get_placement_analytics(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(db, current_user.id, org_id)
 
@@ -407,7 +431,11 @@ def get_placement_analytics(org_id: int, db: Session = Depends(get_db), current_
     }
 
 
-@router.get("/org/{org_id}/rights-coverage")
+@router.get(
+    "/org/{org_id}/rights-coverage",
+    summary='Rights/splits coverage analytics',
+    description='How much of the catalog has fully-allocated splits vs. partially allocated vs. missing.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total_works, fully_allocated, partially_allocated, missing, by_pro: [...] }`.',
+)
 def get_rights_coverage(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(db, current_user.id, org_id)
 
@@ -456,7 +484,11 @@ def get_rights_coverage(org_id: int, db: Session = Depends(get_db), current_user
     }
 
 
-@router.get("/org/{org_id}/valuation")
+@router.get(
+    "/org/{org_id}/valuation",
+    summary='Catalog valuation snapshot',
+    description='Returns the current portfolio valuation summary (DCF + multiples) for the catalog. Lighter weight than the underwriting endpoint.\n\n**Path parameter:** `org_id`.\n**Query:** `discount_rate`, `multiple`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ npv_cents, multiple_value_cents, low_high_band: [low, high], top_contributors: [...] }`.',
+)
 def get_valuation_analytics(org_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(db, current_user.id, org_id)
 
@@ -504,7 +536,11 @@ def get_valuation_analytics(org_id: int, db: Session = Depends(get_db), current_
     }
 
 
-@router.get("/org/{org_id}/expiring-contracts")
+@router.get(
+    "/org/{org_id}/expiring-contracts",
+    summary='Contracts expiring in the configurable window',
+    description='Returns contracts whose `term_end_date` falls inside the lookahead window so the user can renegotiate / renew in time.\n\n**Path parameter:** `org_id`.\n**Query:** `days_ahead` (default 90).\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ contracts: [{id, name, counterparty, term_end_date, days_remaining}] }`.',
+)
 def get_expiring_contracts(org_id: int, days: int = 90, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(db, current_user.id, org_id)
 
@@ -538,7 +574,11 @@ def get_expiring_contracts(org_id: int, days: int = 90, db: Session = Depends(ge
     return {"contracts": result}
 
 
-@router.get("/admin/platform-stats")
+@router.get(
+    "/admin/platform-stats",
+    summary='Platform-wide cross-org analytics for staff',
+    description='Returns totals across every org in the system (orgs, users, songs, releases, contracts, statements). Used on the admin dashboard.\n\n**Auth:** Bearer JWT — platform admin only.\n**Response:** `{ orgs, users, creators, songs, works, releases, contracts, statements, by_plan: {...} }`.',
+)
 def get_platform_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user.is_super_admin:
         raise HTTPException(status_code=403, detail="Super admin access required")
@@ -591,7 +631,11 @@ def get_platform_stats(db: Session = Depends(get_db), current_user: User = Depen
     }
 
 
-@router.get("/org/{org_id}/export/{report_type}")
+@router.get(
+    "/org/{org_id}/export/{report_type}",
+    summary='Export an analytics report as CSV/PDF',
+    description="Renders the named analytics report into the chosen format.\n\n**Path parameters:** `org_id`; `report_type` (`overview|catalog-growth|revenue|creators|placements|rights-coverage|valuation`).\n**Query:** `format` (`csv|pdf`), plus the same filters as the report's GET endpoint.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the rendered file as a download.",
+)
 def export_analytics(org_id: int, report_type: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(db, current_user.id, org_id)
 

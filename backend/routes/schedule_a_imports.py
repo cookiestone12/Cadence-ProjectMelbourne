@@ -63,7 +63,12 @@ def _file_available(rec: ScheduleAImport) -> bool:
         return False
 
 
-@router.get("/{org_id}", response_model=List[ScheduleAImportSummary])
+@router.get(
+    "/{org_id}",
+    response_model=List[ScheduleAImportSummary],
+    summary='List Schedule A imports for the organization',
+    description='Returns every ScheduleAImport the org has run with summary metrics (rows imported, errors, original filename).\n\n**Path parameter:** `org_id`.\n**Query:** `status`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `List[ScheduleAImportSummary]`.',
+)
 async def list_schedule_a_imports(
     org_id: int,
     limit: int = 50,
@@ -103,7 +108,11 @@ async def list_schedule_a_imports(
     return out
 
 
-@router.get("/{org_id}/{import_id}/download")
+@router.get(
+    "/{org_id}/{import_id}/download",
+    summary='Download the original Schedule A import file',
+    description='Streams the original spreadsheet that was uploaded to create this import — useful for forensics when the import produced unexpected data.\n\n**Path parameters:** `org_id`, `import_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the file with the appropriate `Content-Type`.',
+)
 async def download_schedule_a_import(
     org_id: int,
     import_id: int,
@@ -149,7 +158,7 @@ class ReExtractResult(BaseModel):
     creator_name: Optional[str] = None
 
 
-@router.post("/{org_id}/{import_id}/re-extract", response_model=ReExtractResult)
+@router.post("/{org_id}/{import_id}/re-extract", response_model=ReExtractResult, summary="Re-run the unified document parser against the saved original file", description='Re-runs the unified document parser against the saved original file for an existing import — useful when the parser was upgraded after the original run.\n\n**Path parameters:** `org_id`, `import_id`.\n**Body:** `{ options?: {...} }` — optional parser overrides.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ import_id, status, parsed_rows, warnings: [...] }`.')
 async def re_extract_schedule_a_import(
     org_id: int,
     import_id: int,

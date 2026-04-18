@@ -282,7 +282,7 @@ def list_organizations(
 @router.get(
     "/organizations/{org_id}",
     summary="Get organization detail",
-    description="Members, recent audit log and counts for a single org. Read-only.",
+    description='Returns members, recent audit log, and aggregate counts for a single org. Read-only support view.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — Cadence staff or master admin.\n**Response:** `{ org: {id, name, plan, created_at}, members: [...], recent_audit: [...], counts: {users, creators, songs, releases, contracts} }`.',
 )
 def organization_detail(
     org_id: int,
@@ -396,7 +396,7 @@ def list_users(
 @router.get(
     "/users/{user_id}/sessions",
     summary="Active sessions for a user",
-    description="Returns non-revoked, unexpired UserSession rows for a single user.",
+    description='Returns non-revoked, unexpired UserSession rows for a single user — used by support to see active devices before revoking them.\n\n**Path parameter:** `user_id`.\n**Auth:** Bearer JWT — Cadence staff or master admin.\n**Response:** `{ sessions: [{id, created_at, last_seen_at, expires_at, user_agent, ip_address}] }`.',
 )
 def user_sessions(
     user_id: int,

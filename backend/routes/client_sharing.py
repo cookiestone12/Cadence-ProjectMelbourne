@@ -101,7 +101,11 @@ def share_to_dict(share, db, include_passcode=False):
     return result
 
 
-@router.post("/share")
+@router.post(
+    "/share",
+    summary='Share an entity with another account',
+    description='Creates a ClientShare row offering one of the org\'s entities (creator, contract, etc.) to a target account with a chosen role + module set. The target sees it under `/received` until they accept.\n\n**Body:** `{ entity_type: string, entity_id: int, target_user_id: int, role: "viewer"|"editor"|"manager", modules: string[] }`.\n**Auth:** Bearer JWT.\n**Response:** the created ClientShare object.',
+)
 def create_share(
     req: ShareRequest,
     db: Session = Depends(get_db),
@@ -174,7 +178,11 @@ def create_share(
     return {"id": share.id, "passcode": share.passcode, "message": "Share invitation created successfully"}
 
 
-@router.get("/sent")
+@router.get(
+    "/sent",
+    summary='List shares the current user has sent out',
+    description='Returns every ClientShare the calling user originated, with the current acceptance status.\n\n**Query:** `status` (`pending|accepted|rejected|revoked`), `entity_type`.\n**Auth:** Bearer JWT.\n**Response:** `{ shares: [{id, entity_type, entity_id, target_user_id, target_email, role, modules, status, created_at}] }`.',
+)
 def get_sent_shares(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -186,7 +194,11 @@ def get_sent_shares(
     return [share_to_dict(s, db, include_passcode=True) for s in shares]
 
 
-@router.get("/received")
+@router.get(
+    "/received",
+    summary='List shares offered to the current user',
+    description='Returns every ClientShare addressed to the calling user regardless of status (pending invites + already accepted/rejected).\n\n**Query:** `status`.\n**Auth:** Bearer JWT.\n**Response:** `{ shares: [{id, entity_type, entity_id, from_user_id, from_org_name, role, modules, status, created_at}] }`.',
+)
 def get_received_shares(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -198,7 +210,11 @@ def get_received_shares(
     return [share_to_dict(s, db) for s in shares]
 
 
-@router.get("/received-active")
+@router.get(
+    "/received-active",
+    summary='List actively-accepted shares for the current user',
+    description='Convenience filter on `/received` returning only `status = accepted` rows. This is what populates the user\'s "shared with me" workspace.\n\n**Auth:** Bearer JWT.\n**Response:** `{ shares: [...] }`.',
+)
 def get_received_active_shares(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -211,7 +227,11 @@ def get_received_active_shares(
     return [share_to_dict(s, db) for s in shares]
 
 
-@router.post("/accept/{share_id}")
+@router.post(
+    "/accept/{share_id}",
+    summary='Accept a pending share',
+    description='Marks the share as `accepted` so the receiver can begin using the granted access.\n\n**Path parameter:** `share_id`.\n**Auth:** Bearer JWT — must be the receiver.\n**Response:** `{ success: true, share: {...} }`.',
+)
 def accept_share(
     share_id: int,
     req: AcceptRequest,
@@ -261,7 +281,11 @@ def accept_share(
     return {"message": "Share accepted successfully"}
 
 
-@router.post("/reject/{share_id}")
+@router.post(
+    "/reject/{share_id}",
+    summary='Reject a pending share',
+    description='Marks the share as `rejected`. Sender is notified.\n\n**Path parameter:** `share_id`.\n**Auth:** Bearer JWT — must be the receiver.\n**Response:** `{ success: true }`.',
+)
 def reject_share(
     share_id: int,
     db: Session = Depends(get_db),
@@ -296,7 +320,11 @@ def reject_share(
     return {"message": "Share rejected"}
 
 
-@router.post("/revoke/{share_id}")
+@router.post(
+    "/revoke/{share_id}",
+    summary='Revoke a share you previously sent',
+    description='Marks the share as `revoked` so the receiver loses access. Different from delete — keeps audit history.\n\n**Path parameter:** `share_id`.\n**Auth:** Bearer JWT — must be the sender.\n**Response:** `{ success: true }`.',
+)
 def revoke_share(
     share_id: int,
     db: Session = Depends(get_db),
@@ -356,7 +384,11 @@ def revoke_share(
     return {"message": "Share invitation cancelled" if was_pending else "Share access revoked"}
 
 
-@router.put("/{share_id}/role")
+@router.put(
+    "/{share_id}/role",
+    summary="Change a share's access role",
+    description="Upgrades/downgrades the receiver's role between `viewer`, `editor`, and `manager`.\n\n**Path parameter:** `share_id`.\n**Body:** `{ role: string }`.\n**Auth:** Bearer JWT — must be the sender.\n**Response:** `{ share: {...} }`.",
+)
 def update_share_role(
     share_id: int,
     req: RoleUpdateRequest,
@@ -392,7 +424,11 @@ def update_share_role(
     return {"message": "Role updated successfully"}
 
 
-@router.put("/{share_id}/modules")
+@router.put(
+    "/{share_id}/modules",
+    summary='Update which modules a share grants access to',
+    description="Replaces the share's module list (catalog, royalties, contracts, etc.). Only the listed modules are visible to the receiver.\n\n**Path parameter:** `share_id`.\n**Body:** `{ modules: string[] }`.\n**Auth:** Bearer JWT — must be the sender.\n**Response:** `{ share: {...} }`.",
+)
 def update_share_modules(
     share_id: int,
     req: ModulesUpdateRequest,
@@ -431,7 +467,11 @@ def update_share_modules(
     return {"message": "Shared modules updated successfully", "shared_modules": req.shared_modules}
 
 
-@router.get("/shared-clients")
+@router.get(
+    "/shared-clients",
+    summary='List clients (creators) the user has access to via shares',
+    description="Aggregates over the user's accepted shares to return the distinct creator set they can see across all sharing orgs.\n\n**Auth:** Bearer JWT.\n**Response:** `{ creators: [{id, display_name, from_org_id, from_org_name, role, modules}] }`.",
+)
 def get_shared_clients(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -462,7 +502,11 @@ def get_shared_clients(
     return results
 
 
-@router.get("/shared-songs")
+@router.get(
+    "/shared-songs",
+    summary='List songs the user has access to via shares',
+    description="Aggregates over the user's accepted shares to return the distinct song set they can see.\n\n**Query:** `creator_id` (filter to one shared creator), `q`.\n**Auth:** Bearer JWT.\n**Response:** `{ songs: [{id, title, artist, creator_id, from_org_id, role}] }`.",
+)
 def get_shared_songs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)

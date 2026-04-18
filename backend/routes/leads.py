@@ -82,7 +82,11 @@ def _send_lead_notification(lead_type: str, email: str, name: str = None, compan
         logger.error(f"Failed to send lead notification email: {e}")
 
 
-@router.post("/waitlist")
+@router.post(
+    "/waitlist",
+    summary='Join the public waitlist (marketing site)',
+    description='Public, unauthenticated form-submission endpoint that captures an email + role for the marketing waitlist and triggers the welcome email.\n\n**Body:** `{ email, role?, source?, referrer? }`.\n**Auth:** None — public.\n**Response:** `{ success: true }`. Idempotent on email.',
+)
 def join_waitlist(request: WaitlistRequest, db: Session = Depends(get_db)):
     email = _validate_email(request.email)
 
@@ -105,7 +109,11 @@ def join_waitlist(request: WaitlistRequest, db: Session = Depends(get_db)):
     return {"message": "You've been added to the waitlist!", "status": "created"}
 
 
-@router.post("/demo-request")
+@router.post(
+    "/demo-request",
+    summary='Submit a sales demo request',
+    description='Public form: captures contact + company info, notifies sales via email, and stores a Lead row.\n\n**Body:** `{ name, email, company?, role?, message? }`.\n**Auth:** None — public.\n**Response:** `{ success: true }`.',
+)
 def request_demo(request: DemoRequest, db: Session = Depends(get_db)):
     email = _validate_email(request.email)
 
@@ -135,7 +143,11 @@ class InvestorInquiryRequest(BaseModel):
     message: Optional[str] = None
 
 
-@router.post("/investor-inquiry")
+@router.post(
+    "/investor-inquiry",
+    summary='Submit an investor inquiry',
+    description='Public form for catalog/investor inquiries — captures contact + interest and notifies the team.\n\n**Body:** `{ name, email, firm?, check_size?, message? }`.\n**Auth:** None — public.\n**Response:** `{ success: true }`.',
+)
 def submit_investor_inquiry(request: InvestorInquiryRequest, db: Session = Depends(get_db)):
     email = _validate_email(request.email)
 
@@ -193,7 +205,11 @@ ALLOWED_RESUME_TYPES = {
 MAX_RESUME_SIZE = 10 * 1024 * 1024
 
 
-@router.post("/intern-application")
+@router.post(
+    "/intern-application",
+    summary='Submit an intern application',
+    description='Public form for the careers page — captures applicant details and resume URL.\n\n**Body:** `{ name, email, school?, role_interest?, resume_url?, message? }`.\n**Auth:** None — public.\n**Response:** `{ success: true }`.',
+)
 async def submit_intern_application(
     name: str = Form(...),
     email: str = Form(...),
@@ -302,7 +318,11 @@ async def submit_intern_application(
     return {"message": "Application submitted! We'll review it and reach out if there's a fit.", "status": "created"}
 
 
-@admin_router.get("/leads")
+@admin_router.get(
+    "/leads",
+    summary='List leads in the admin console',
+    description='Returns every Lead record (waitlist, demo request, investor inquiry, intern application) for the platform admin lead-management view.\n\n**Query:** `kind` (`waitlist|demo|investor|intern`), `status`, `q` (substring on name/email/company), `limit`, `offset`.\n**Auth:** Bearer JWT — platform super-admin only.\n**Response:** `{ total, leads: [{id, kind, name, email, company, status, source, created_at}] }`.',
+)
 def list_leads(
     lead_type: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -331,7 +351,11 @@ def list_leads(
     }
 
 
-@admin_router.get("/leads/{lead_id}/resume")
+@admin_router.get(
+    "/leads/{lead_id}/resume",
+    summary="Download a lead's submitted resume",
+    description='Streams the resume file an applicant uploaded as part of an intern application.\n\n**Path parameter:** `lead_id`.\n**Auth:** Bearer JWT — platform super-admin only.\n**Response:** the resume file with the appropriate `Content-Type`.',
+)
 def download_resume(
     lead_id: int,
     db: Session = Depends(get_db),

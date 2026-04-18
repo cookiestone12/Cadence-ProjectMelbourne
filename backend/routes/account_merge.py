@@ -35,7 +35,11 @@ class MergeVerify(BaseModel):
     code: str
 
 
-@router.post("/request")
+@router.post(
+    "/request",
+    summary='Request a merge of two user accounts',
+    description='Initiates a merge between the calling user\'s account and a second account they own (e.g. signed up twice). Sends a verification email to the target.\n\n**Body:** `{ target_email: string, reason?: string }`.\n**Auth:** Bearer JWT.\n**Response:** `{ request_id, status: "pending_verification", verification_email_sent_to }`.',
+)
 def create_merge_request(
     body: MergeRequestCreate,
     db: Session = Depends(get_db),
@@ -120,7 +124,11 @@ def create_merge_request(
     }
 
 
-@router.post("/verify")
+@router.post(
+    "/verify",
+    summary='Verify and complete an account-merge request',
+    description='Completes a merge using the token from the verification email. Moves the target\'s data into the calling user, then disables the target login.\n\n**Body:** `{ token: string }`.\n**Auth:** Bearer JWT.\n**Response:** `{ status: "completed", merged_user_id }`.',
+)
 def verify_merge_request(
     body: MergeVerify,
     db: Session = Depends(get_db),
@@ -156,7 +164,11 @@ def verify_merge_request(
     }
 
 
-@router.get("/my-requests")
+@router.get(
+    "/my-requests",
+    summary="List the calling user's merge requests",
+    description='Returns every merge request the user has initiated and its current status.\n\n**Auth:** Bearer JWT.\n**Response:** `{ requests: [{id, target_email, status, created_at, completed_at}] }`.',
+)
 def get_my_merge_requests(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -190,7 +202,11 @@ def get_my_merge_requests(
     return result
 
 
-@router.delete("/{request_id}")
+@router.delete(
+    "/{request_id}",
+    summary='Cancel a pending merge request',
+    description="Voids a merge that hasn't been verified yet.\n\n**Path parameter:** `request_id`.\n**Auth:** Bearer JWT — must be the request initiator.\n**Response:** `{ success: true }`.",
+)
 def cancel_merge_request(
     request_id: int,
     db: Session = Depends(get_db),
@@ -213,7 +229,11 @@ def cancel_merge_request(
 
 # ─── Admin endpoints ───
 
-@admin_router.get("")
+@admin_router.get(
+    "",
+    summary='List all account-merge requests for staff review',
+    description="Returns every AccountMergeRequest in the system regardless of user, with the calling user's review actions enabled.\n\n**Query:** `status` (`pending|verified|approved|rejected|cancelled`), `q` (email substring), `limit`, `offset`.\n**Auth:** Bearer JWT — platform super-admin only.\n**Response:** `{ total, requests: [{id, source_user_id, target_user_id, target_email, status, created_at, completed_at, reason}] }`.",
+)
 def list_merge_requests(
     status: str = Query(None),
     db: Session = Depends(get_db),
@@ -270,7 +290,11 @@ class AdminMergeAction(BaseModel):
     notes: str = ""
 
 
-@admin_router.put("/{request_id}/approve")
+@admin_router.put(
+    "/{request_id}/approve",
+    summary='Approve a pending account-merge request',
+    description='Marks a verified merge request as `approved` and runs the actual data merge — the source user inherits the target\'s organizations, creators, and history.\n\n**Path parameter:** `request_id`.\n**Body:** `{ note?: string }`.\n**Auth:** Bearer JWT — platform super-admin only.\n**Response:** `{ status: "approved", message }`.',
+)
 def approve_merge_request(
     request_id: int,
     body: AdminMergeAction = None,
@@ -341,7 +365,11 @@ def approve_merge_request(
     }
 
 
-@admin_router.put("/{request_id}/reject")
+@admin_router.put(
+    "/{request_id}/reject",
+    summary='Reject an account-merge request',
+    description='Marks the request as `rejected` and notifies the requester. No data is moved.\n\n**Path parameter:** `request_id`.\n**Body:** `{ reason?: string }`.\n**Auth:** Bearer JWT — platform super-admin only.\n**Response:** `{ status: "rejected", message }`.',
+)
 def reject_merge_request(
     request_id: int,
     body: AdminMergeAction = None,

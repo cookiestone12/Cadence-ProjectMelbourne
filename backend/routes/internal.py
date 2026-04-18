@@ -76,7 +76,7 @@ def _require_audit(db: Session, actor: User, **kwargs) -> None:
     log_action(db, organization_id=org_id, user_id=actor.id, **kwargs)
 
 
-@router.post("/provision-staff-user", response_model=StaffUserResponse, status_code=201, summary="Provision a Cadence staff user", description="Creates a user with is_cadence_staff=True (cross-org READ access only). Callable by Cadence staff or master admin. Writes a STAFF_PROVISIONED audit row and emails a welcome message.")
+@router.post("/provision-staff-user", response_model=StaffUserResponse, status_code=201, summary="Provision a Cadence staff user", description="Creates a user with `is_cadence_staff=True` (cross-org READ access only). Cadence staff users can browse every org's data for support but cannot mutate. Writes an audit row.\n\n**Body:** `{ email, full_name, password? }` — password is auto-generated and emailed if omitted.\n**Auth:** Bearer JWT — Cadence staff or master admin.\n**Response:** `{ user_id, email, is_cadence_staff: true, temp_password? }`.")
 def provision_staff_user(
     payload: ProvisionStaffRequest,
     db: Session = Depends(get_db),
@@ -134,7 +134,7 @@ def provision_staff_user(
     return user
 
 
-@router.post("/deprovision-staff-user", response_model=StaffUserResponse, summary="Deprovision a Cadence staff user", description="Flips is_cadence_staff off and revokes every active session for the user, cutting any in-flight JWT immediately. Callable by Cadence staff or master admin. Writes a STAFF_DEPROVISIONED audit row.")
+@router.post("/deprovision-staff-user", response_model=StaffUserResponse, summary="Deprovision a Cadence staff user", description='Flips `is_cadence_staff` off and revokes every active session for the user, cutting any in-flight JWT immediately. Writes an audit row.\n\n**Body:** `{ user_id }`.\n**Auth:** Bearer JWT — Cadence staff or master admin.\n**Response:** `{ user_id, is_cadence_staff: false, sessions_revoked: int }`.')
 def deprovision_staff_user(
     payload: DeprovisionStaffRequest,
     db: Session = Depends(get_db),

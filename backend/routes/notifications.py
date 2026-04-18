@@ -98,7 +98,7 @@ def get_notifications(
         created_at=n.created_at
     ) for n in notifications]
 
-@router.get("/unread-count", summary="Unread notification count", description="Returns the count of unread notifications for the current user. Cheap; safe to poll for badge counts.")
+@router.get("/unread-count", summary="Unread notification count", description='Returns the count of unread notifications for the current user. Cheap; safe to poll for badge counts.\n\n**Auth:** Bearer JWT.\n**Response:** `{ count: int }`.')
 def get_unread_count(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -110,7 +110,7 @@ def get_unread_count(
     
     return {"unread_count": count}
 
-@router.put("/{notification_id}/read", summary="Mark notification as read", description="Flips a single notification's read flag for the current user.")
+@router.put("/{notification_id}/read", summary="Mark notification as read", description="Flips a single notification's `read` flag for the current user.\n\n**Path parameter:** `notification_id`.\n**Auth:** Bearer JWT — must be the recipient.\n**Response:** `{ success: true }`.")
 def mark_as_read(
     notification_id: int,
     db: Session = Depends(get_db),
@@ -130,7 +130,7 @@ def mark_as_read(
     
     return {"message": "Notification marked as read"}
 
-@router.put("/read-all", summary="Mark all notifications as read", description="Bulk-marks every unread notification for the current user as read.")
+@router.put("/read-all", summary="Mark all notifications as read", description='Bulk-marks every unread notification for the current user as read.\n\n**Auth:** Bearer JWT.\n**Response:** `{ success: true, marked: int }`.')
 def mark_all_as_read(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -144,7 +144,7 @@ def mark_all_as_read(
     
     return {"message": "All notifications marked as read"}
 
-@router.delete("/{notification_id}", summary="Delete a notification", description="Removes a single notification from the current user's inbox.")
+@router.delete("/{notification_id}", summary="Delete a notification", description="Removes a single notification from the current user's inbox.\n\n**Path parameter:** `notification_id`.\n**Auth:** Bearer JWT — must be the recipient.\n**Response:** `{ success: true }`.")
 def delete_notification(
     notification_id: int,
     db: Session = Depends(get_db),
@@ -163,7 +163,7 @@ def delete_notification(
     
     return {"message": "Notification deleted"}
 
-@router.get("/preferences", response_model=List[NotificationPreferenceResponse], summary="Get notification preferences", description="Returns the current user's per-channel (in-app / email) preferences for each notification type.")
+@router.get("/preferences", response_model=List[NotificationPreferenceResponse], summary="Get notification preferences", description="Returns the current user's per-channel (in-app / email) preferences for each notification type.\n\n**Auth:** Bearer JWT.\n**Response:** `{ preferences: [{type, in_app: bool, email: bool, push: bool}] }`.")
 def get_preferences(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -197,7 +197,7 @@ def get_preferences(
     
     return result
 
-@router.put("/preferences", summary="Update notification preferences", description="Bulk-updates the current user's per-type, per-channel notification preferences.")
+@router.put("/preferences", summary="Update notification preferences", description="Bulk-updates the current user's per-type, per-channel notification preferences.\n\n**Body:** `{ preferences: [{type, in_app?: bool, email?: bool, push?: bool}] }`.\n**Auth:** Bearer JWT.\n**Response:** the updated preferences (same shape as GET).")
 def update_preference(
     request: NotificationPreferenceRequest,
     db: Session = Depends(get_db),
@@ -337,7 +337,11 @@ class EmailDigestPreferenceResponse(BaseModel):
         from_attributes = True
 
 
-@router.get("/email-digest")
+@router.get(
+    "/email-digest",
+    summary="Get the current user's email digest preference",
+    description='Returns when (if at all) the user receives the rolled-up email of pending action items / changes.\n\n**Auth:** Bearer JWT.\n**Response:** `{ frequency: "off"|"daily"|"weekly", send_hour_utc, last_sent_at }`.',
+)
 def get_email_digest_preference(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -367,7 +371,11 @@ def get_email_digest_preference(
     }
 
 
-@router.put("/email-digest")
+@router.put(
+    "/email-digest",
+    summary="Update the current user's email digest preference",
+    description='Patches frequency/send-hour. Pass `frequency="off"` to opt out.\n\n**Body:** `{ frequency: "off"|"daily"|"weekly", send_hour_utc?: int }`.\n**Auth:** Bearer JWT.\n**Response:** the updated preference.',
+)
 def update_email_digest_preference(
     request: EmailDigestPreferenceRequest,
     db: Session = Depends(get_db),
@@ -398,7 +406,11 @@ def update_email_digest_preference(
     return {"message": "Email digest preference updated"}
 
 
-@router.post("/email-digest/send-test")
+@router.post(
+    "/email-digest/send-test",
+    summary='Send a test digest email to the current user immediately',
+    description="Builds a digest from the user's current pending items and sends it via Resend right now (regardless of frequency). Used to preview formatting.\n\n**Auth:** Bearer JWT.\n**Response:** `{ success: true }`.",
+)
 def send_test_digest(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -477,7 +489,11 @@ class PushEmailRequest(BaseModel):
         from_attributes = True
 
 
-@router.post("/push-email")
+@router.post(
+    "/push-email",
+    summary='Email a recipient their pending action items now',
+    description='Manually pushes a one-off action-items email to the supplied address (typically a creator/client). Bypasses digest schedule.\n\n**Body:** `{ recipient_email, scope: "creator"|"org", creator_id?, org_id?, message? }`.\n**Auth:** Bearer JWT.\n**Response:** `{ success: true }`.',
+)
 def send_action_items_email(
     request: PushEmailRequest,
     db: Session = Depends(get_db),
@@ -552,7 +568,11 @@ def send_action_items_email(
     return {"message": f"Email sent to {recipient_email}", "email": recipient_email}
 
 
-@router.post("/push-email/creator/{creator_id}")
+@router.post(
+    "/push-email/creator/{creator_id}",
+    summary='(Legacy) Email a creator their pending action items',
+    description="Older variant of `/push-email` scoped to a specific creator. Prefer `/push-email`.\n\n**Path parameter:** `creator_id`.\n**Body:** `{ recipient_email?, message? }` — defaults to creator's primary email when omitted.\n**Auth:** Bearer JWT.\n**Response:** `{ success: true }`.",
+)
 def send_creator_action_items_email_legacy(
     creator_id: int,
     send_to_creator: bool = False,
@@ -566,7 +586,11 @@ def send_creator_action_items_email_legacy(
     return send_action_items_email(request, db, current_user)
 
 
-@router.get("/digest-pdf")
+@router.get(
+    "/digest-pdf",
+    summary='Download the current digest as a PDF',
+    description="Renders the calling user's pending action-items digest into a PDF for offline review.\n\n**Query:** `org_id?`, `creator_id?`.\n**Auth:** Bearer JWT.\n**Response:** `application/pdf` download.",
+)
 def get_digest_pdf(
     creator_id: Optional[int] = None,
     db: Session = Depends(get_db),
@@ -652,7 +676,7 @@ def get_digest_pdf(
     )
 
 
-@router.get("/org/{org_id}/settings", response_model=List[OrgNotificationSettingResponse], summary="Get org-level notification settings", description="Owner/Admin: returns the organization-wide defaults for each notification type.")
+@router.get("/org/{org_id}/settings", response_model=List[OrgNotificationSettingResponse], summary="Get org-level notification settings", description='Returns organization-wide defaults for each notification type.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be an Owner or Admin of the org.\n**Response:** `{ settings: [{type, default_in_app: bool, default_email: bool, slack_webhook?: string}] }`.')
 def get_org_notification_settings(
     org_id: int,
     db: Session = Depends(get_db),
@@ -704,7 +728,11 @@ def get_org_notification_settings(
     return result
 
 
-@router.put("/org/{org_id}/settings")
+@router.put(
+    "/org/{org_id}/settings",
+    summary='Update org-level notification settings',
+    description='Patches org-wide notification toggles (e.g. who receives system-wide digests, default channels for new members).\n\n**Path parameter:** `org_id`.\n**Body:** `{ digest_default_frequency?, slack_webhook_url?, system_alerts_enabled?: bool, ... }`.\n**Auth:** Bearer JWT — org admin only.\n**Response:** the updated settings object.',
+)
 def update_org_notification_setting(
     org_id: int,
     request: OrgNotificationSettingRequest,

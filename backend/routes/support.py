@@ -61,7 +61,11 @@ def _ticket_to_dict(ticket: SupportTicket, include_admin_notes: bool = False):
     return result
 
 
-@router.post("/tickets")
+@router.post(
+    "/tickets",
+    summary='File a support ticket',
+    description='Creates a SupportTicket on behalf of the calling user. Optionally attach a screenshot via the attachment fields. Notifies platform staff.\n\n**Body:** `{ subject, body, severity?: "low"|"normal"|"high", attachment_storage_object_ids?: int[] }`.\n**Auth:** Bearer JWT.\n**Response:** the created ticket.',
+)
 async def create_ticket(
     category: str = Form(...),
     subject: str = Form(...),
@@ -142,7 +146,11 @@ async def create_ticket(
     return _ticket_to_dict(ticket)
 
 
-@router.get("/tickets")
+@router.get(
+    "/tickets",
+    summary="List the calling user's support tickets",
+    description='Returns every ticket the user has filed and its current status.\n\n**Query:** `status`, `limit`, `offset`.\n**Auth:** Bearer JWT.\n**Response:** `{ total, tickets: [{id, subject, status, severity, created_at, last_reply_at}] }`.',
+)
 def list_my_tickets(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -156,7 +164,11 @@ def list_my_tickets(
     return {"tickets": [_ticket_to_dict(t) for t in tickets]}
 
 
-@router.get("/tickets/{ticket_id}")
+@router.get(
+    "/tickets/{ticket_id}",
+    summary='Get a single support ticket with its replies',
+    description='Returns the ticket header plus the full reply thread (visible fields only — admin-only notes are excluded).\n\n**Path parameter:** `ticket_id`.\n**Auth:** Bearer JWT — must be the ticket creator.\n**Response:** `{ id, subject, body, status, severity, replies: [{id, author, body, created_at}], attachments: [...] }`.',
+)
 def get_ticket(
     ticket_id: int,
     db: Session = Depends(get_db),
@@ -172,7 +184,11 @@ def get_ticket(
     return _ticket_to_dict(ticket, include_admin_notes=current_user.is_super_admin)
 
 
-@router.get("/attachments/{attachment_id}")
+@router.get(
+    "/attachments/{attachment_id}",
+    summary='Download a support-ticket attachment',
+    description='Streams the binary attachment file.\n\n**Path parameter:** `attachment_id`.\n**Auth:** Bearer JWT — must be the ticket creator or staff.\n**Response:** the file with the appropriate `Content-Type`.',
+)
 def get_attachment(
     attachment_id: int,
     db: Session = Depends(get_db),

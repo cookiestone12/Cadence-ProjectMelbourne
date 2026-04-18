@@ -259,7 +259,7 @@ def _build_track_export_data(release: Release, tracks: list, db: Session) -> lis
     return rows
 
 
-@router.get("/org/{org_id}", summary="List releases in an organization", description="Returns the org's releases with filters for status, type, and creator.")
+@router.get("/org/{org_id}", summary="List releases in an organization", description="Returns the org's releases with filters for status, type, and creator.\n\n**Path parameter:** `org_id`.\n**Query:** `status` (`draft|ready|distributing|released|archived`), `type` (`single|ep|album|compilation`), `creator_id`, `q`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, releases: [{id, name, artist, type, status, release_date, track_count, artwork_url}] }`.")
 def list_releases(
     org_id: int,
     search: Optional[str] = None,
@@ -317,7 +317,7 @@ def list_releases(
     return {"releases": results, "total": total}
 
 
-@router.get("/{release_id}", summary="Get release detail", description="Returns the release with ordered tracks, artwork, distribution metadata, and readiness state.")
+@router.get("/{release_id}", summary="Get release detail", description="Returns the release with ordered tracks, artwork URL, distribution metadata, and readiness state.\n\n**Path parameter:** `release_id`.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** `{ release: {...}, tracks: [{position, song_id, title, duration, isrc}], distribution: {...}, readiness: {...} }`.")
 def get_release(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -379,7 +379,7 @@ def get_release(release_id: int, db: Session = Depends(get_db), current_user: Us
     }
 
 
-@router.post("/org/{org_id}", summary="Create a release", description="Creates a new release shell. Tracks are added separately via /tracks.")
+@router.post("/org/{org_id}", summary="Create a release", description='Creates a new release shell. Tracks are added separately via `/tracks`.\n\n**Path parameter:** `org_id`.\n**Body:** `{ name, artist, type, release_date?, label?, upc? }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the created release.')
 def create_release(org_id: int, data: ReleaseCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     verify_org_access(current_user, org_id, db)
 
@@ -408,7 +408,7 @@ def create_release(org_id: int, data: ReleaseCreate, db: Session = Depends(get_d
     return {"id": release.id, "title": release.title, "message": "Release created successfully"}
 
 
-@router.put("/{release_id}", summary="Update release", description="Patches release fields (title, type, release date, label, etc.).")
+@router.put("/{release_id}", summary="Update release", description="Patches release fields (title, type, release date, label, UPC, etc.).\n\n**Path parameter:** `release_id`.\n**Body:** any subset of writable release fields.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** the updated release.")
 def update_release(release_id: int, data: ReleaseUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -423,7 +423,7 @@ def update_release(release_id: int, data: ReleaseUpdate, db: Session = Depends(g
     return {"id": release.id, "title": release.title, "message": "Release updated successfully"}
 
 
-@router.delete("/{release_id}", summary="Delete release", description="Removes the release and detaches its track links.")
+@router.delete("/{release_id}", summary="Delete release", description="Removes the release and detaches its track links. Underlying songs are kept.\n\n**Path parameter:** `release_id`.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** `{ success: true }`.")
 def delete_release(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -435,7 +435,7 @@ def delete_release(release_id: int, db: Session = Depends(get_db), current_user:
     return {"message": "Release deleted successfully"}
 
 
-@router.post("/{release_id}/tracks", summary="Add a track to a release", description="Appends a song to the release as a new ReleaseTrack with a track / disc number.")
+@router.post("/{release_id}/tracks", summary="Add a track to a release", description="Appends a song to the release as a new ReleaseTrack with a track / disc number.\n\n**Path parameter:** `release_id`.\n**Body:** `{ song_id, position?: int, disc_number?: int }`.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** `{ track: {position, song_id, disc_number} }`.")
 def add_track_to_release(release_id: int, data: ReleaseTrackAdd, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -471,7 +471,7 @@ def add_track_to_release(release_id: int, data: ReleaseTrackAdd, db: Session = D
     return {"message": "Track added to release", "track_number": track_number}
 
 
-@router.delete("/{release_id}/tracks/{song_id}", summary="Remove a track from a release", description="Detaches a track from the release without deleting the underlying song.")
+@router.delete("/{release_id}/tracks/{song_id}", summary="Remove a track from a release", description="Detaches a track from the release without deleting the underlying song.\n\n**Path parameters:** `release_id`, `song_id`.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** `{ success: true }`.")
 def remove_track_from_release(release_id: int, song_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -495,7 +495,11 @@ def remove_track_from_release(release_id: int, song_id: int, db: Session = Depen
     return {"message": "Track removed from release"}
 
 
-@router.put("/{release_id}/tracks/reorder")
+@router.put(
+    "/{release_id}/tracks/reorder",
+    summary='Reorder tracks on a release',
+    description="Sets the track order on a release in one atomic call by supplying the desired song id sequence.\n\n**Path parameter:** `release_id`.\n**Body:** `{ song_ids: int[] }` — must contain exactly the release's current tracks.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** `{ release_id, tracks: [{song_id, position}] }`.",
+)
 def reorder_tracks(release_id: int, tracks: List[ReleaseTrackReorder], db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -512,7 +516,11 @@ def reorder_tracks(release_id: int, tracks: List[ReleaseTrackReorder], db: Sessi
     return {"message": "Tracks reordered successfully"}
 
 
-@router.get("/{release_id}/health")
+@router.get(
+    "/{release_id}/health",
+    summary='Run health/readiness checks on a release',
+    description='Returns the per-check pass/fail breakdown the release page renders as the "health" badge — covers metadata completeness, ISRCs, artwork, splits, and contract coverage.\n\n**Path parameter:** `release_id`.\n**Auth:** Bearer JWT — caller must be a member of the release\'s org.\n**Response:** `{ overall: "green"|"yellow"|"red", checks: [{key, label, status, severity, detail}] }`.',
+)
 def check_release_health(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -523,7 +531,7 @@ def check_release_health(release_id: int, db: Session = Depends(get_db), current
     return get_release_health(release, release_tracks, db)
 
 
-@router.get("/{release_id}/readiness", summary="Release distribution readiness", description="Computes the readiness checklist for distribution: metadata completeness, artwork, splits, ISRCs, etc.")
+@router.get("/{release_id}/readiness", summary="Release distribution readiness", description='Computes the readiness checklist for distribution: metadata completeness, artwork, splits, ISRCs, etc.\n\n**Path parameter:** `release_id`.\n**Auth:** Bearer JWT — caller must be a member of the release\'s org.\n**Response:** `{ overall: "green"|"yellow"|"red", checks: [{key, label, status, severity, detail}] }`.')
 def check_distribution_readiness(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -542,7 +550,11 @@ class StatusTransition(BaseModel):
     force: Optional[bool] = False
 
 
-@router.post("/{release_id}/transition")
+@router.post(
+    "/{release_id}/transition",
+    summary='Move a release through its workflow status',
+    description="Transitions the release between `draft → ready → distributing → released → archived`. Validates the source/target combination.\n\n**Path parameter:** `release_id`.\n**Body:** `{ status: string, note?: string }`.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** `{ release_id, status, transitioned_at }`.",
+)
 def transition_release_status(release_id: int, data: StatusTransition, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -588,7 +600,11 @@ def transition_release_status(release_id: int, data: StatusTransition, db: Sessi
     }
 
 
-@router.get("/{release_id}/export/csv")
+@router.get(
+    "/{release_id}/export/csv",
+    summary='Export the release tracklist as CSV',
+    description="Streams a CSV with one row per track and core metadata (title, artist, ISRC, splits, duration).\n\n**Path parameter:** `release_id`.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** `text/csv` download.",
+)
 def export_release_csv(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -619,7 +635,11 @@ def export_release_csv(release_id: int, db: Session = Depends(get_db), current_u
     )
 
 
-@router.get("/{release_id}/export/pdf")
+@router.get(
+    "/{release_id}/export/pdf",
+    summary='Export the release one-sheet as PDF',
+    description="Renders the release with artwork, tracklist, credits, and splits into a branded one-sheet PDF.\n\n**Path parameter:** `release_id`.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** `application/pdf` download.",
+)
 def export_release_pdf(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import letter
@@ -793,7 +813,11 @@ def export_release_pdf(release_id: int, db: Session = Depends(get_db), current_u
     )
 
 
-@router.get("/{release_id}/export/json")
+@router.get(
+    "/{release_id}/export/json",
+    summary='Export the release as a portable JSON bundle',
+    description="Returns the full release object plus its tracks, splits, and credits as a single JSON document — useful for backups or external integrations.\n\n**Path parameter:** `release_id`.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** the JSON bundle as `application/json`.",
+)
 def export_release_json(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
@@ -864,7 +888,11 @@ def export_release_json(release_id: int, db: Session = Depends(get_db), current_
     )
 
 
-@router.get("/{release_id}/artwork")
+@router.get(
+    "/{release_id}/artwork",
+    summary="Stream the release's cover artwork",
+    description="Returns the binary artwork image; used by the UI when artwork is stored privately and proxied through the API.\n\n**Path parameter:** `release_id`.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** image bytes with `Content-Type` set.",
+)
 async def get_release_artwork(
     release_id: int,
     db: Session = Depends(get_db),
@@ -889,7 +917,11 @@ async def get_release_artwork(
     raise HTTPException(status_code=404, detail="No artwork uploaded")
 
 
-@router.post("/{release_id}/artwork")
+@router.post(
+    "/{release_id}/artwork",
+    summary="Upload or replace a release's cover artwork",
+    description="Multipart upload — persists the file to object storage and updates `artwork_url`. Replaces any existing artwork.\n\n**Path parameter:** `release_id`.\n**Body (multipart/form-data):** `file` — image (PNG/JPEG, ideally 3000×3000).\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** `{ artwork_url }`.",
+)
 async def upload_release_artwork(
     release_id: int,
     file: UploadFile = File(...),
@@ -925,7 +957,11 @@ async def upload_release_artwork(
     return {"cover_art_url": release.cover_art_url}
 
 
-@router.delete("/{release_id}/artwork")
+@router.delete(
+    "/{release_id}/artwork",
+    summary="Delete a release's cover artwork",
+    description="Removes the artwork file from storage and clears `artwork_url`.\n\n**Path parameter:** `release_id`.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** `{ success: true }`.",
+)
 async def delete_release_artwork(
     release_id: int,
     db: Session = Depends(get_db),
@@ -959,7 +995,11 @@ class SendToDistributionRequest(BaseModel):
     message: Optional[str] = None
 
 
-@router.post("/{release_id}/send-to-distribution")
+@router.post(
+    "/{release_id}/send-to-distribution",
+    summary='Hand a release off to the distribution provider',
+    description='Enqueues the release for the configured distributor (e.g. DistroKid/CD Baby/SonoSuite) — runs the readiness checks, packages metadata + assets, and creates a DistributionJob the UI can poll.\n\n**Path parameter:** `release_id`.\n**Body:** `{ provider, dsps?: string[], release_date?: date }`.\n**Auth:** Bearer JWT — caller must be a member of the release\'s org.\n**Response:** `{ job_id, provider, status: "queued" }`.',
+)
 def send_release_to_distribution(
     release_id: int,
     data: SendToDistributionRequest,
@@ -1035,7 +1075,11 @@ class SpotifyLookupRequest(BaseModel):
     spotify_url: str
 
 
-@router.post("/spotify-lookup")
+@router.post(
+    "/spotify-lookup",
+    summary='Look up a release on Spotify by URL or ID',
+    description='Resolves a Spotify album URL/URI/ID into release metadata (title, artist, label, tracklist, artwork) without importing anything. Used to pre-fill the create-release form.\n\n**Body:** `{ spotify_url_or_id: string }`.\n**Auth:** Bearer JWT.\n**Response:** `{ name, artist, label, release_date, spotify_id, artwork_url, tracks: [{position, title, isrc, duration_ms}] }`.',
+)
 async def spotify_lookup(
     body: SpotifyLookupRequest,
     current_user: User = Depends(get_current_user)

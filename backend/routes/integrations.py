@@ -29,7 +29,11 @@ def _get_org_id(current_user: User, db: Session) -> int:
     return membership.organization_id
 
 
-@router.get("/status")
+@router.get(
+    "/status",
+    summary='Get the integration connection status for the current user',
+    description='Returns whether the calling user has connected each supported third-party storage integration (Dropbox, Google Drive) plus the configured default folder for each.\n\n**Auth:** Bearer JWT.\n**Response:** `{ dropbox: {connected, account_email, default_folder}, google_drive: {connected, account_email, default_folder} }`.',
+)
 def get_integration_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -53,7 +57,11 @@ def get_integration_status(
     return {"integrations": result}
 
 
-@router.get("/dropbox/auth-url")
+@router.get(
+    "/dropbox/auth-url",
+    summary='Get the OAuth URL to start a Dropbox connection',
+    description='Returns the URL the browser should redirect to so the user can grant Dropbox access. The state parameter is signed and round-trips through `/dropbox/callback`.\n\n**Query:** `redirect_uri` (where Dropbox should send the user back to after consent).\n**Auth:** Bearer JWT.\n**Response:** `{ auth_url }`.',
+)
 def get_dropbox_auth_url(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -66,7 +74,11 @@ def get_dropbox_auth_url(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/dropbox/callback")
+@router.post(
+    "/dropbox/callback",
+    summary='Complete the Dropbox OAuth flow',
+    description="Exchanges the OAuth `code` returned by Dropbox for an access token, stores it on the user's IntegrationConnection row, and returns the connected account's email.\n\n**Body:** `{ code: string, state: string, redirect_uri: string }`.\n**Auth:** Bearer JWT.\n**Response:** `{ connected: true, account_email }`.",
+)
 def dropbox_oauth_callback(
     request: OAuthCallbackRequest,
     db: Session = Depends(get_db),
@@ -92,7 +104,11 @@ def dropbox_oauth_callback(
         raise HTTPException(status_code=400, detail=f"OAuth failed: {str(e)}")
 
 
-@router.delete("/dropbox")
+@router.delete(
+    "/dropbox",
+    summary='Disconnect Dropbox for the current user',
+    description='Revokes the stored access token and deletes the IntegrationConnection.\n\n**Auth:** Bearer JWT.\n**Response:** `{ success: true }`.',
+)
 def disconnect_dropbox(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -104,7 +120,11 @@ def disconnect_dropbox(
     return {"success": True, "message": "Dropbox disconnected"}
 
 
-@router.get("/dropbox/files")
+@router.get(
+    "/dropbox/files",
+    summary="Browse the user's Dropbox folder tree",
+    description='Lists files and folders at a given Dropbox path so the UI can render a picker. Pagination via `cursor`.\n\n**Query:** `path` (default `""` for root), `cursor`, `limit`.\n**Auth:** Bearer JWT — must have a connected Dropbox.\n**Response:** `{ entries: [{id, name, path, kind: "file"|"folder", size, modified}], cursor }`.',
+)
 async def list_dropbox_files(
     path: str = Query("/"),
     db: Session = Depends(get_db),
@@ -126,7 +146,11 @@ async def list_dropbox_files(
     raise HTTPException(status_code=400, detail=str(last_error))
 
 
-@router.put("/dropbox/default-folder")
+@router.put(
+    "/dropbox/default-folder",
+    summary='Set the default Dropbox upload folder',
+    description='Stores a default folder path that uploads/imports will land in by default.\n\n**Body:** `{ path: string }`.\n**Auth:** Bearer JWT.\n**Response:** `{ default_folder }`.',
+)
 def set_default_folder(
     request: DefaultFolderRequest,
     db: Session = Depends(get_db),
@@ -141,7 +165,11 @@ def set_default_folder(
     return {"success": True, "default_folder_path": request.path}
 
 
-@router.get("/google-drive/auth-url")
+@router.get(
+    "/google-drive/auth-url",
+    summary='Get the OAuth URL to start a Google Drive connection',
+    description='Returns the Google OAuth consent URL. State round-trips through `/google-drive/callback`.\n\n**Query:** `redirect_uri`.\n**Auth:** Bearer JWT.\n**Response:** `{ auth_url }`.',
+)
 def get_google_drive_auth_url(
     redirect_uri: str = Query(...),
     db: Session = Depends(get_db),
@@ -155,7 +183,11 @@ def get_google_drive_auth_url(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/google-drive/callback")
+@router.post(
+    "/google-drive/callback",
+    summary='Complete the Google Drive OAuth flow',
+    description="Exchanges the OAuth `code` for an access + refresh token and stores it on the user's IntegrationConnection.\n\n**Body:** `{ code, state, redirect_uri }`.\n**Auth:** Bearer JWT.\n**Response:** `{ connected: true, account_email }`.",
+)
 def google_drive_oauth_callback(
     request: OAuthCallbackRequest,
     db: Session = Depends(get_db),
@@ -180,7 +212,11 @@ def google_drive_oauth_callback(
         raise HTTPException(status_code=400, detail=f"OAuth failed: {str(e)}")
 
 
-@router.delete("/google-drive")
+@router.delete(
+    "/google-drive",
+    summary='Disconnect Google Drive for the current user',
+    description='Revokes the stored token and deletes the IntegrationConnection.\n\n**Auth:** Bearer JWT.\n**Response:** `{ success: true }`.',
+)
 def disconnect_google_drive(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -192,7 +228,11 @@ def disconnect_google_drive(
     return {"success": True, "message": "Google Drive disconnected"}
 
 
-@router.get("/google-drive/files")
+@router.get(
+    "/google-drive/files",
+    summary="Browse the user's Google Drive",
+    description='Lists files and folders. Pagination via `page_token`.\n\n**Query:** `parent_id` (default `"root"`), `page_token`, `limit`, `q` (Drive search expression).\n**Auth:** Bearer JWT — must have a connected Google Drive.\n**Response:** `{ entries: [{id, name, mime_type, size, modified}], page_token }`.',
+)
 def list_google_drive_files(
     folder_id: str = Query("root"),
     db: Session = Depends(get_db),
@@ -206,7 +246,11 @@ def list_google_drive_files(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/files")
+@router.get(
+    "/files",
+    summary='Unified browse across all connected providers',
+    description='Single endpoint that proxies to the right provider browser based on `provider` — used by the file picker that supports both Dropbox and Drive.\n\n**Query:** `provider` (`dropbox|google_drive`), `path`/`parent_id`, `cursor`/`page_token`, `limit`.\n**Auth:** Bearer JWT — must have the requested provider connected.\n**Response:** `{ provider, entries: [...], next }`.',
+)
 def list_provider_files(
     provider: str = Query(...),
     path: str = Query("/"),

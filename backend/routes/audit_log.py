@@ -21,7 +21,7 @@ def verify_org_access(user: User, org_id: int, db: Session):
     return membership
 
 
-@router.get("/org/{org_id}", summary="List org audit log entries", description="Returns the org's audit trail (provisioning, deletes, role changes, payments, etc.) with paging.")
+@router.get("/org/{org_id}", summary="List org audit log entries", description="Returns the org's audit trail (provisioning, deletes, role changes, payments, etc.) with paging. Used by the org settings > audit log page.\n\n**Path parameter:** `org_id`.\n**Query:** `category` (`auth|catalog|royalties|admin|...`), `actor_user_id`, `start_date`, `end_date`, `limit` (default 50), `offset`.\n**Auth:** Bearer JWT — caller must be an admin of the org.\n**Response:** `{ total, entries: [{id, category, action, actor_user_id, actor_email, target_type, target_id, summary, metadata, created_at}] }`.")
 def get_audit_logs(
     org_id: int,
     action: Optional[str] = None,
@@ -78,7 +78,7 @@ def get_audit_logs(
     }
 
 
-@router.get("/org/{org_id}/summary", summary="Audit log summary", description="Aggregated counts of audit events per category for dashboard tiles.")
+@router.get("/org/{org_id}/summary", summary="Audit log summary", description='Aggregated counts of audit events per category for the dashboard tile.\n\n**Path parameter:** `org_id`.\n**Query:** `start_date`, `end_date`.\n**Auth:** Bearer JWT — caller must be an admin of the org.\n**Response:** `{ totals: {by_category: {...}, by_actor: [...]}, period: {start, end} }`.')
 def get_audit_summary(
     org_id: int,
     db: Session = Depends(get_db),

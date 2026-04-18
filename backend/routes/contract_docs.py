@@ -74,7 +74,11 @@ def _document_to_dict(doc: ContractDocument, db: Session = None):
     }
 
 
-@router.post("/contracts/{contract_id}/documents")
+@router.post(
+    "/contracts/{contract_id}/documents",
+    summary='Attach a document file to a contract',
+    description="Multipart upload of a contract document (PDF, Word, scanned image). Stored in object storage and recorded as a ContractDocument.\n\n**Path parameter:** `contract_id`.\n**Body (multipart/form-data):** `file` (the document); `category?` (`signed`, `draft`, `redline`, `attachment`); `notes?`.\n**Auth:** Bearer JWT — caller must be a member of the contract's org.\n**Response:** `{ id, filename, size, content_type, category, uploaded_at }`.",
+)
 async def upload_document(
     contract_id: int,
     file: UploadFile = File(...),
@@ -146,7 +150,11 @@ async def upload_document(
     return _document_to_dict(doc, db)
 
 
-@router.get("/contracts/{contract_id}/documents")
+@router.get(
+    "/contracts/{contract_id}/documents",
+    summary='List documents attached to a contract',
+    description="Returns every ContractDocument for the contract.\n\n**Path parameter:** `contract_id`.\n**Auth:** Bearer JWT — caller must be a member of the contract's org.\n**Response:** `{ documents: [{id, filename, size, content_type, category, uploaded_at, uploaded_by}] }`.",
+)
 def list_documents(
     contract_id: int,
     db: Session = Depends(get_db),
@@ -164,7 +172,11 @@ def list_documents(
     return [_document_to_dict(d, db) for d in docs]
 
 
-@router.get("/contracts/documents/{document_id}/download")
+@router.get(
+    "/contracts/documents/{document_id}/download",
+    summary='Download a contract document',
+    description="Streams the binary file as an attachment download.\n\n**Path parameter:** `document_id`.\n**Auth:** Bearer JWT — caller must be a member of the document's contract org.\n**Response:** the file with the appropriate `Content-Type`.",
+)
 def download_document(
     document_id: int,
     db: Session = Depends(get_db),
@@ -186,7 +198,11 @@ def download_document(
     )
 
 
-@router.delete("/contracts/documents/{document_id}")
+@router.delete(
+    "/contracts/documents/{document_id}",
+    summary='Delete a contract document',
+    description="Removes the file from storage and deletes the ContractDocument row.\n\n**Path parameter:** `document_id`.\n**Auth:** Bearer JWT — caller must be a member of the document's contract org.\n**Response:** `{ success: true }`.",
+)
 def delete_document(
     document_id: int,
     db: Session = Depends(get_db),
