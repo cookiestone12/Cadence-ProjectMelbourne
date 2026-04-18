@@ -123,6 +123,16 @@ def test_does_not_silently_use_invoice_dates():
     assert e is None
 
 
+def test_period_beside_statement_number_bmi_variant():
+    """BMI sometimes places the period inline with the statement number on
+    the same row, with no labeled "Period:" header. We rely on the generic
+    'period' fallback in `_PERIOD_HEADER_RE` to still find it."""
+    text = "Statement #BMI-2024-001234   Period: Jan - Jun 2024   Distribution: 09/15/2024"
+    s, e = parse_period_from_text(text)
+    assert s == date(2024, 1, 1)
+    assert e == date(2024, 6, 30)
+
+
 def test_period_buried_after_client_block():
     """Real BMI statements carry a 1-page client/header block before the
     period header. Make sure the parser still finds the period when it's

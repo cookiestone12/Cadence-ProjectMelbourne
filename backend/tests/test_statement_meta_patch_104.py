@@ -19,7 +19,7 @@ from sqlalchemy.pool import StaticPool
 from backend.main import app
 from backend.models.database import Base, get_db as original_get_db
 from backend.models.models import (
-    User, Organization, OrganizationMember, RoyaltyStatement, AuditLog,
+    User, Organization, OrganizationMember, RoyaltyStatement, AuditLog, Creator,
 )
 from backend.utils.auth import get_current_user
 
@@ -152,7 +152,7 @@ def test_owner_can_set_period_and_audit_row_written(db, client):
     assert "period_start" in (audit.details or {}).get("changes", {})
 
 
-def test_period_start_after_end_returns_422(db, client):
+def test_period_start_after_end_returns_400(db, client):
     owner = _make_user(db, "owner2")
     org = _make_org(db)
     _make_member(db, org.id, owner.id, "OWNER")
@@ -165,15 +165,33 @@ def test_period_start_after_end_returns_422(db, client):
         )
     finally:
         _logout()
-    assert res.status_code == 422, res.text
+    assert res.status_code == 400, res.text
 
 
-def test_viewer_cannot_edit_returns_403(db, client):
-    viewer = _make_user(db, "viewer1")
+def test_member_role_can_edit(db, client):
+    """MEMBER stands in for the 'royalty-write' permission tier the task
+    description references. CLIENT-tier members are still blocked."""
+    member = _make_user(db, "member1")
     org = _make_org(db)
-    _make_member(db, org.id, viewer.id, "VIEWER")
+    _make_member(db, org.id, member.id, "MEMBER")
     stmt = _make_stmt(db, org.id)
-    _login(viewer)
+    _login(member)
+    try:
+        res = client.patch(
+            f"/api/royalties/statements/{org.id}/{stmt.id}",
+            json={"source_name": "BMI 2024 H1 (corrected)"},
+        )
+    finally:
+        _logout()
+    assert res.status_code == 200, res.text
+
+
+def test_client_role_cannot_edit_returns_403(db, client):
+    cli = _make_user(db, "client1")
+    org = _make_org(db)
+    _make_member(db, org.id, cli.id, "CLIENT")
+    stmt = _make_stmt(db, org.id)
+    _login(cli)
     try:
         res = client.patch(
             f"/api/royalties/statements/{org.id}/{stmt.id}",
@@ -182,6 +200,50 @@ def test_viewer_cannot_edit_returns_403(db, client):
     finally:
         _logout()
     assert res.status_code == 403, res.text
+
+
+def test_can_reassign_creator_id_and_audit_records_diff(db, client):
+    owner = _make_user(db, "owner_reassign")
+    org = _make_org(db)
+    _make_member(db, org.id, owner.id, "OWNER")
+    creator_a = Creator(organization_id=org.id, display_name="Creator A")
+    creator_b = Creator(organization_id=org.id, display_name="Creator B")
+    db.add_all([creator_a, creator_b]); db.commit()
+    db.refresh(creator_a); db.refresh(creator_b)
+    stmt = _make_stmt(db, org.id, creator_id=creator_a.id)
+    _login(owner)
+    try:
+        res = client.patch(
+            f"/api/royalties/statements/{org.id}/{stmt.id}",
+            json={"creator_id": creator_b.id},
+        )
+    finally:
+        _logout()
+    assert res.status_code == 200, res.text
+    assert res.json()["changes"]["creator_id"] == {"old": creator_a.id, "new": creator_b.id}
+    db.expire_all()
+    refreshed = db.query(RoyaltyStatement).filter(RoyaltyStatement.id == stmt.id).first()
+    assert refreshed.creator_id == creator_b.id
+
+
+def test_creator_id_from_other_org_returns_400(db, client):
+    owner = _make_user(db, "owner_x_org")
+    org_a = _make_org(db, "OrgA2")
+    org_b = _make_org(db, "OrgB2")
+    _make_member(db, org_a.id, owner.id, "OWNER")
+    _make_member(db, org_b.id, owner.id, "OWNER")
+    foreign_creator = Creator(organization_id=org_b.id, display_name="Wrong Org Creator")
+    db.add(foreign_creator); db.commit(); db.refresh(foreign_creator)
+    stmt = _make_stmt(db, org_a.id)
+    _login(owner)
+    try:
+        res = client.patch(
+            f"/api/royalties/statements/{org_a.id}/{stmt.id}",
+            json={"creator_id": foreign_creator.id},
+        )
+    finally:
+        _logout()
+    assert res.status_code == 400, res.text
 
 
 def test_statement_in_other_org_returns_404(db, client):

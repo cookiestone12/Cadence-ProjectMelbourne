@@ -328,9 +328,10 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
   const [bulkResults, setBulkResults] = useState([])
 
   const [editStmt, setEditStmt] = useState(null)
-  const [editForm, setEditForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD' })
+  const [editForm, setEditForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD', creator_id: '' })
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState(null)
+  const [editCreatorOptions, setEditCreatorOptions] = useState([])
 
   const openEditStatement = (stmt) => {
     setEditStmt(stmt)
@@ -340,8 +341,15 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
       period_start: stmt.period_start || '',
       period_end: stmt.period_end || '',
       currency: stmt.currency || 'USD',
+      creator_id: stmt.creator_id != null ? String(stmt.creator_id) : '',
     })
     setEditError(null)
+    // Lazy-load creator options for the assignee dropdown.
+    if (orgId && editCreatorOptions.length === 0) {
+      axios.get(`/api/creators/org/${orgId}`)
+        .then(res => setEditCreatorOptions(Array.isArray(res.data) ? res.data : []))
+        .catch(() => setEditCreatorOptions([]))
+    }
   }
 
   const closeEditStatement = () => {
@@ -365,6 +373,7 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
         period_start: editForm.period_start || null,
         period_end: editForm.period_end || null,
         currency: editForm.currency || null,
+        creator_id: editForm.creator_id === '' ? null : Number(editForm.creator_id),
       }
       await axios.patch(`/api/royalties/statements/${orgId}/${editStmt.id}`, body)
       setEditStmt(null)
@@ -1178,6 +1187,19 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                   className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
                 >
                   {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#3D4A44] mb-1">Assigned Client</label>
+                <select
+                  value={editForm.creator_id}
+                  onChange={e => setEditForm(f => ({ ...f, creator_id: e.target.value }))}
+                  className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
+                >
+                  <option value="">— Unassigned (org-wide) —</option>
+                  {editCreatorOptions.map(c => (
+                    <option key={c.id} value={c.id}>{c.name || c.display_name || `Creator #${c.id}`}</option>
+                  ))}
                 </select>
               </div>
               {editError && (

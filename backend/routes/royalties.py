@@ -909,6 +909,10 @@ class StatementMetaUpdate(BaseModel):
     period_start: Optional[date] = None
     period_end: Optional[date] = None
     currency: Optional[str] = None
+    # Allow re-assigning the statement to a different client/creator
+    # within the same org (or clearing it with `null`). Used to fix
+    # mis-assigned uploads (e.g. duplicate row in the wrong org).
+    creator_id: Optional[int] = None
 
 
 @router.patch(
@@ -936,14 +940,16 @@ def update_statement_meta(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Owner/Admin only — Viewers/Editors must request a role bump to correct
-    # statement metadata (it has financial-reporting consequences).
+    # Owner / Admin / Member can correct statement metadata (a "royalty
+    # write" capability — there is no granular permission flag in this
+    # codebase yet, so MEMBER is treated as the equivalent role).
+    # CLIENT-tier members and external viewers are blocked.
     membership = verify_org_access(current_user, org_id, db)
     role = (getattr(membership, "role", "") or "").upper()
-    if not current_user.is_super_admin and role not in ("OWNER", "ADMIN"):
+    if not current_user.is_super_admin and role not in ("OWNER", "ADMIN", "MEMBER"):
         raise HTTPException(
             status_code=403,
-            detail="Editing statement metadata requires Owner or Admin role.",
+            detail="Editing statement metadata requires royalty-write access (Owner, Admin, or Member role).",
         )
 
     stmt = db.query(RoyaltyStatement).filter(
@@ -973,14 +979,36 @@ def update_statement_meta(
             changes["currency"] = {"old": stmt.currency, "new": new_cur}
             stmt.currency = new_cur
 
-    # Period validation: if both supplied, start must be ≤ end.
+    # Period validation: if both supplied, start must be ≤ end. Returns
+    # 400 (per task spec) so the frontend treats it as an actionable
+    # form-validation error rather than a Pydantic schema rejection.
     new_start = body.period_start if body.period_start is not None else stmt.period_start
     new_end = body.period_end if body.period_end is not None else stmt.period_end
     if new_start and new_end and new_start > new_end:
         raise HTTPException(
-            status_code=422,
+            status_code=400,
             detail="period_start must be on or before period_end",
         )
+
+    # creator_id: validate the target creator exists in this org (or
+    # explicitly clear with null). Treats `0` as "no change" because
+    # some HTML form serializations coerce blank → 0.
+    if "creator_id" in body.model_fields_set:
+        new_creator_id = body.creator_id  # may be None to unassign
+        if new_creator_id is not None:
+            from ..models.models import Creator
+            target = db.query(Creator).filter(
+                Creator.id == new_creator_id,
+                Creator.organization_id == org_id,
+            ).first()
+            if not target:
+                raise HTTPException(
+                    status_code=400,
+                    detail="creator_id does not belong to this organization",
+                )
+        if new_creator_id != stmt.creator_id:
+            changes["creator_id"] = {"old": stmt.creator_id, "new": new_creator_id}
+            stmt.creator_id = new_creator_id
 
     if body.period_start is not None and body.period_start != stmt.period_start:
         changes["period_start"] = {
