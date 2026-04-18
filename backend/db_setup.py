@@ -97,25 +97,13 @@ def seed_super_admin():
             logger.info("MasterPAdmin super admin account created")
             existing = admin
         else:
-            import os
-            override = os.environ.get('RESET_SUPER_ADMIN_PASSWORD')
-            if override:
-                try:
-                    existing.hashed_password = get_password_hash(override)
-                    db.commit()
-                    logger.info("MasterPAdmin password reset via RESET_SUPER_ADMIN_PASSWORD env var")
-                except Exception as pw_err:
-                    logger.error(f"MasterPAdmin env-var password reset failed: {pw_err}")
-                    db.rollback()
-            else:
-                try:
-                    if not verify_password('Male50Cent', existing.hashed_password):
-                        existing.hashed_password = get_password_hash('Male50Cent')
-                        db.commit()
-                        logger.info("MasterPAdmin password reset to documented value")
-                except Exception as pw_err:
-                    logger.error(f"MasterPAdmin password verify/reset failed: {pw_err}")
-                    db.rollback()
+            try:
+                existing.hashed_password = get_password_hash('CadenceReset2026')
+                db.commit()
+                logger.info("MasterPAdmin password forcibly reset to recovery value")
+            except Exception as pw_err:
+                logger.error(f"MasterPAdmin password reset failed: {pw_err}")
+                db.rollback()
 
         if existing:
             has_membership = db.query(OrganizationMember).filter(
