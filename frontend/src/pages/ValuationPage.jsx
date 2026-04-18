@@ -88,11 +88,11 @@ export default function ValuationPage() {
   const loadAll = async (creatorId = null) => {
     setLoading(true)
     try {
-      const latestUrl = creatorId
-        ? `/api/valuation/underwriting/latest?scope_creator_id=${creatorId}`
-        : '/api/valuation/underwriting/latest'
+      const scopeQs = creatorId ? `?scope_creator_id=${creatorId}` : ''
+      const latestUrl = `/api/valuation/underwriting/latest${scopeQs}`
+      const catalogUrl = `/api/valuation/catalog/summary${scopeQs}`
       const [catRes, uwRes, runsRes] = await Promise.allSettled([
-        axios.get('/api/valuation/catalog/summary'),
+        axios.get(catalogUrl),
         axios.get(latestUrl),
         axios.get('/api/valuation/underwriting/runs'),
       ])
@@ -734,6 +734,13 @@ export default function ValuationPage() {
               {runs.map(run => (
                 <div key={run.id} className="p-4 hover:bg-[#EEF1EC] cursor-pointer" onClick={async () => {
                   try {
+                    // Restore the scope filter the run was originally executed
+                    // under so the rest of the page (and the URL) reflect what
+                    // the historical numbers actually represent.
+                    const runScopeId = run.scope_creator_id ?? null
+                    if (runScopeId !== scopeCreatorId) {
+                      setScopeCreatorId(runScopeId)
+                    }
                     const res = await axios.get(`/api/valuation/underwriting/runs/${run.id}`)
                     setUwData({ ...res.data, has_data: true })
                     setActiveTab('overview')
@@ -744,6 +751,9 @@ export default function ValuationPage() {
                       <div className={`w-2 h-2 rounded-full ${run.status === 'COMPLETED' ? 'bg-[#5B9A6E]' : run.status === 'FAILED' ? 'bg-[#C47068]' : 'bg-[#C4956B]'}`} />
                       <span className="text-sm font-medium text-[#3D4A44]">Run #{run.id}</span>
                       <span className="text-xs text-[#7A8580]">{run.status}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${run.scope_creator_id ? 'bg-[#E5EEDF] text-[#5B8A72]' : 'bg-[rgba(59,77,67,0.08)] text-[#7A8580]'}`}>
+                        {run.scope_creator_id ? (run.scope_creator_name || `Creator #${run.scope_creator_id}`) : 'Org-wide'}
+                      </span>
                     </div>
                     <div className="text-right">
                       {run.valuation && <span className="text-sm font-semibold text-[#5B8A72] mr-4">{fmt(run.valuation.base)}</span>}

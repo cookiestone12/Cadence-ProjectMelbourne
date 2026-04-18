@@ -199,6 +199,61 @@ def test_latest_endpoint_filters_by_scope(db, client):
         app.dependency_overrides.pop(get_current_user, None)
 
 
+def test_latest_rejects_cross_org_scope_creator(db, client):
+    """A scope_creator_id belonging to another org must 404, not silently
+    return that org's underwriting run or leak its existence."""
+    org, user, _, _, _, _, _ = _seed_two_creators_with_lines(db)
+
+    other_org = Organization(name="Other", type="LABEL", account_type="ENTERPRISE", display_name="Other")
+    db.add(other_org); db.commit(); db.refresh(other_org)
+    other_creator = Creator(organization_id=other_org.id, display_name="Foreign")
+    db.add(other_creator); db.commit(); db.refresh(other_creator)
+    db.add(UnderwritingRun(
+        organization_id=other_org.id, created_by_user_id=user.id,
+        kb_version="test", status="COMPLETED", scope_creator_id=other_creator.id,
+        inputs={}, valuation_data={"blended": {"base": 99999}},
+    ))
+    db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        r = client.get(f"/api/valuation/underwriting/latest?scope_creator_id={other_creator.id}")
+        assert r.status_code == 404, "must not allow scoping to a creator outside the caller's org"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_runs_list_does_not_leak_cross_org_creator_name(db, client):
+    """If a stray UnderwritingRun in the caller's org references a
+    scope_creator_id that belongs to another org (legacy data, manual edit),
+    the runs listing must NOT return the other org's display_name."""
+    org, user, _, _, _, _, _ = _seed_two_creators_with_lines(db)
+
+    other_org = Organization(name="Other", type="LABEL", account_type="ENTERPRISE", display_name="Other")
+    db.add(other_org); db.commit(); db.refresh(other_org)
+    foreign = Creator(organization_id=other_org.id, display_name="Foreign Creator")
+    db.add(foreign); db.commit(); db.refresh(foreign)
+
+    # A run rooted in the caller's org but pointing at a foreign creator id.
+    db.add(UnderwritingRun(
+        organization_id=org.id, created_by_user_id=user.id,
+        kb_version="test", status="COMPLETED", scope_creator_id=foreign.id,
+        inputs={}, valuation_data={"blended": {"base": 1}},
+    ))
+    db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        r = client.get("/api/valuation/underwriting/runs")
+        assert r.status_code == 200
+        runs = r.json()
+        target = next(x for x in runs if x["scope_creator_id"] == foreign.id)
+        assert target["scope_creator_name"] is None, \
+            "must not leak display_name of a creator from a different org"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_runs_list_includes_scope_creator(db, client):
     org, user, a, _, _, _, _ = _seed_two_creators_with_lines(db)
     db.add_all([

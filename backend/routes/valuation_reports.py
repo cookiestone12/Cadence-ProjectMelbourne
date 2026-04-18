@@ -73,12 +73,18 @@ class SongDetailWithValuation(BaseModel):
     valuation: Dict[str, Any]
     credits: List[Dict[str, Any]]
 
-@router.get("/catalog/summary", summary="Get comprehensive catalog valuation summary for the organization", description="Returns the comprehensive catalog valuation summary used by the valuation dashboard (NPV band, multiples, top contributors, last underwriting run).\n\n**Query:** `org_id` (defaults to caller's current org), `discount_rate?`, `multiple?`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ npv_cents, low_high_band: [low, high], multiple_value_cents, top_contributors: [...], last_run_at }`.")
+@router.get("/catalog/summary", summary="Get comprehensive catalog valuation summary for the organization", description="Returns the comprehensive catalog valuation summary used by the valuation dashboard (NPV band, multiples, top contributors, last underwriting run).\n\n**Query:** `org_id` (defaults to caller's current org), `discount_rate?`, `multiple?`, `scope_creator_id?` (restricts the summary to songs credited to a single creator in the caller's org).\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ npv_cents, low_high_band: [low, high], multiple_value_cents, top_contributors: [...], last_run_at }`.")
 def get_catalog_valuation_summary(
+    scope_creator_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get comprehensive catalog valuation summary for the organization"""
+    """Get comprehensive catalog valuation summary for the organization.
+
+    When ``scope_creator_id`` is provided, the summary is restricted to songs
+    credited to that creator. The creator must belong to the caller's org or
+    the request is rejected with 404 to avoid cross-org data exposure.
+    """
     
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == current_user.id
@@ -88,8 +94,30 @@ def get_catalog_valuation_summary(
         raise HTTPException(status_code=404, detail="Organization membership not found")
     
     org = db.query(Organization).filter(Organization.id == membership.organization_id).first()
-    
-    songs = db.query(Song).filter(Song.organization_id == org.id).all()
+
+    if scope_creator_id is not None:
+        from ..models.models import Creator as _Creator, SongCredit as _SongCredit
+        creator_in_org = db.query(_Creator.id).filter(
+            _Creator.id == scope_creator_id,
+            _Creator.organization_id == org.id,
+        ).first()
+        if not creator_in_org:
+            raise HTTPException(status_code=404, detail="Creator not found in this org")
+        scoped_song_ids = [
+            sid for (sid,) in db.query(_SongCredit.song_id)
+            .filter(_SongCredit.creator_id == scope_creator_id)
+            .distinct()
+            .all()
+        ]
+        if scoped_song_ids:
+            songs = db.query(Song).filter(
+                Song.organization_id == org.id,
+                Song.id.in_(scoped_song_ids),
+            ).all()
+        else:
+            songs = []
+    else:
+        songs = db.query(Song).filter(Song.organization_id == org.id).all()
     
     valuations = db.query(ValuationCalculation).filter(
         ValuationCalculation.organization_id == org.id
@@ -388,6 +416,15 @@ def trigger_underwriting_run(
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
+    if request.scope_creator_id is not None:
+        from ..models.models import Creator as _Creator
+        belongs = db.query(_Creator.id).filter(
+            _Creator.id == request.scope_creator_id,
+            _Creator.organization_id == membership.organization_id,
+        ).first()
+        if not belongs:
+            raise HTTPException(status_code=404, detail="Creator not found in this org")
+
     try:
         result = run_underwriting(
             db=db,
@@ -431,7 +468,13 @@ def list_underwriting_runs(
     name_by_id: dict[int, str] = {}
     if creator_ids:
         from ..models.models import Creator as _Creator
-        for c in db.query(_Creator.id, _Creator.display_name).filter(_Creator.id.in_(creator_ids)).all():
+        # Restrict creator-name lookup to the caller's org so a stray
+        # cross-org scope_creator_id (legacy or malicious) cannot leak the
+        # display name of a creator from another tenant.
+        for c in db.query(_Creator.id, _Creator.display_name).filter(
+            _Creator.id.in_(creator_ids),
+            _Creator.organization_id == membership.organization_id,
+        ).all():
             name_by_id[c.id] = c.display_name
 
     return [
@@ -584,6 +627,15 @@ def get_latest_underwriting(
     ).first()
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    if scope_creator_id is not None:
+        from ..models.models import Creator as _Creator
+        belongs = db.query(_Creator.id).filter(
+            _Creator.id == scope_creator_id,
+            _Creator.organization_id == membership.organization_id,
+        ).first()
+        if not belongs:
+            raise HTTPException(status_code=404, detail="Creator not found in this org")
 
     q = db.query(UnderwritingRun).filter(
         UnderwritingRun.organization_id == membership.organization_id,
