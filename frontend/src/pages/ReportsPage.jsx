@@ -202,6 +202,11 @@ export default function ReportsPage() {
                 )}
                 Reports totals may differ from Royalties until these are resolved.
               </p>
+              {reconciliation.generated_at && (
+                <p className="text-[11px] text-[#A98A4A] mt-1">
+                  As of last reconciliation: {new Date(reconciliation.generated_at).toLocaleString()}
+                </p>
+              )}
             </div>
             <Link
               to="/royalties"

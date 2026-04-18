@@ -799,18 +799,40 @@ def get_reconciliation_report(
         ledger_cents = int(ledger_sums.get(s.id, 0) or 0)
         n_total, n_zero = line_counts.get(s.id, (0, 0))
 
+        # PDF cover-page grand total when the parser captured it on upload
+        # (stored on RoyaltyStatement.reported_net / reported_gross, in dollars).
+        pdf_grand_total_dollars = s.reported_net if s.reported_net is not None else s.reported_gross
+        pdf_grand_total_cents = (
+            int(round(float(pdf_grand_total_dollars) * 100))
+            if pdf_grand_total_dollars is not None else None
+        )
+
         flags = []
         if s.id in duplicate_ids:
             flags.append("DUPLICATE_FILE")
         if header_cents == 0 and n_total > 0:
             flags.append("ZERO_AMOUNT_HEADER")
         if n_total > 0 and n_zero == n_total:
+            # Plan vocabulary alias — every line parsed as $0 means the parser
+            # likely missed the amount column entirely.
+            flags.append("ZERO_AMOUNT_LINES")
             flags.append("ALL_LINES_ZERO_AMOUNT")
         elif n_total > 0 and n_zero > 0:
             flags.append("SOME_LINES_ZERO_AMOUNT")
         if abs(header_cents - line_cents) > 1 and n_total > 0:
             flags.append("HEADER_VS_LINES_VARIANCE")
+        # PDF cover-page total > sum-of-lines means the parser captured the
+        # right header but missed individual line items (BMI 2023 case).
+        if (
+            pdf_grand_total_cents is not None
+            and pdf_grand_total_cents > 0
+            and abs(pdf_grand_total_cents - line_cents) > 1
+            and pdf_grand_total_cents > line_cents
+        ):
+            flags.append("LINES_MISSING_AMOUNTS")
         if (s.status or "").upper() == "PROCESSED" and ledger_cents == 0 and header_cents > 0:
+            # Plan vocabulary alias for the same condition.
+            flags.append("LEDGER_MISSING")
             flags.append("PROCESSED_WITHOUT_LEDGER")
         if header_cents > 0 and ledger_cents > 0 and abs(header_cents - ledger_cents) > 1:
             flags.append("HEADER_VS_LEDGER_VARIANCE")
@@ -850,6 +872,7 @@ def get_reconciliation_report(
             "header_total_cents": header_cents,
             "sum_of_lines_cents": line_cents,
             "ledger_total_cents": ledger_cents,
+            "pdf_grand_total_cents": pdf_grand_total_cents,
             "variance_cents": header_cents - line_cents,
             "line_count": n_total,
             "zero_amount_line_count": n_zero,
@@ -858,6 +881,7 @@ def get_reconciliation_report(
         })
 
     return {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
         "totals": {
             "statement_count": len(statements),
             "flagged_count": flagged,

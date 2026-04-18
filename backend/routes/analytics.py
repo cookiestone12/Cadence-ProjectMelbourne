@@ -621,7 +621,9 @@ def get_platform_stats(db: Session = Depends(get_db), current_user: User = Depen
     total_releases = db.query(func.count(Release.id)).scalar() or 0
     total_contracts = db.query(func.count(Contract.id)).scalar() or 0
     total_placements = db.query(func.count(Placement.id)).scalar() or 0
-    total_revenue = db.query(func.sum(RoyaltyTransaction.revenue_cents)).scalar() or 0
+    # Authoritative source: royalty_statements.total_revenue_cents (matches Reports & Royalties page).
+    # The legacy royalty_transactions table only carries a partial view.
+    total_revenue = db.query(func.sum(RoyaltyStatement.total_revenue_cents)).scalar() or 0
 
     top_orgs = db.query(
         Organization.id,
