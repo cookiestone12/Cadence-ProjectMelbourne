@@ -180,6 +180,197 @@ def parse_period_from_pdf(content: bytes) -> Tuple[Optional[date], Optional[date
         return None, None
 
 
+VANGUARD_REV_TYPE_PREFIXES = [
+    ("Performance Royalties (Domestic)", "Performance Royalties (Do"),
+    ("Performance Royalties (International)", "Performance Royalties (In"),
+    ("Mechanical Royalties - Streaming", "Mechanical Royalties - St"),
+    ("Mechanical Royalties - Physical", "Mechanical Royalties - Ph"),
+    ("Mechanical Royalties - Downloads", "Mechanical Royalties - Do"),
+    ("Synchronization Fees", "Synchronization Fees"),
+    ("Print Royalties", "Print Royalties"),
+    ("Micro-Sync / User Generated Content", "Micro-Sync / User Generat"),
+]
+
+VANGUARD_ISRC_RE = re.compile(r"\b([A-Z]{2}[A-Z0-9]{3}\d{7})\b")
+VANGUARD_DETAIL_RE = re.compile(
+    r"^(?P<prefix>.+?)\s+(?P<units>[\d,]+|--|-)\s+(?P<rate>\$[\d,]+\.\d+|--|-)\s+\$(?P<amount>[\d,]+\.\d{2})$"
+)
+VANGUARD_WORK_TOTAL_RE = re.compile(r"^Work Total:\s*\$([\d,]+\.\d{2})$", re.IGNORECASE)
+VANGUARD_GRAND_TOTAL_RE = re.compile(
+    r"(?i)Gross\s+Royalties\s+Earned:\s*\$([\d,]+\.\d{2})"
+)
+VANGUARD_TABLE_HEADER_RE = re.compile(
+    r"^WORK\s+TITLE\s+ISRC\s+REVENUE\s+TYPE", re.IGNORECASE
+)
+
+
+def is_vanguard_statement(content: bytes) -> bool:
+    try:
+        import pdfplumber
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            for page in pdf.pages[:3]:
+                text = page.extract_text() or ""
+                if "VANGUARD" in text.upper() and (
+                    "VANGUARD MUSIC PUBLISHING" in text.upper()
+                    or "VANGUARD ROYALTY STATEMENT" in text.upper()
+                ):
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def _split_vanguard_prefix(prefix: str, current_rev_type: str) -> tuple:
+    """Strip a known revenue-type prefix from `prefix` and return
+    (revenue_type_full, source). If no prefix matches, source = full prefix and
+    revenue_type stays at current_rev_type."""
+    for full_name, marker in VANGUARD_REV_TYPE_PREFIXES:
+        if prefix.startswith(marker + " "):
+            return full_name, prefix[len(marker):].strip()
+        if prefix == marker:
+            return full_name, ""
+    return current_rev_type, prefix
+
+
+def parse_vanguard_statement(content: bytes) -> Optional[dict]:
+    """Parser for the Vanguard Music Publishing statement format.
+
+    The Vanguard PDF text layout (no detectable tables) looks like:
+        WORK TITLE ISRC REVENUE TYPE SOURCE UNITS/PLAYS RATE AMOUNT
+        Break My Soul USSM12202365 Performance Royalties (Do Pandora 9,766 $6.1253 $59.82
+            TikTok 7,167 $3.4087 $24.43
+            Performance Royalties (In Facebook/Meta 3,540 $2.0282 $7.18
+            ...
+            Work Total: $2,032.61
+        Deja Vu USUG12100660 Performance Royalties (Do Deezer ...
+
+    Revenue-type names are truncated by the column width ("Performance
+    Royalties (Do" = Domestic, "Mechanical Royalties - Do" = Downloads).
+    The first row of each work carries the work title + ISRC; subsequent
+    rows for the same work omit them. Subsequent rows for the same revenue
+    type omit the type. Rate/units may be "--".
+    """
+    import pdfplumber
+
+    metadata = {
+        "client_name": None,
+        "period": None,
+        "grand_total_net": None,
+    }
+    rows = []
+
+    try:
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            full_text = ""
+            for page in pdf.pages:
+                t = page.extract_text()
+                if t:
+                    full_text += t + "\n"
+    except Exception as e:
+        logger.error(f"Vanguard parser: failed to open PDF: {e}")
+        return None
+
+    if not full_text:
+        return None
+
+    grand_match = VANGUARD_GRAND_TOTAL_RE.search(full_text)
+    if grand_match:
+        try:
+            metadata["grand_total_net"] = float(grand_match.group(1).replace(",", ""))
+        except ValueError:
+            pass
+
+    writer_match = re.search(r"(?im)^Writer:\s*(.+?)(?:\s+Publisher:|$)", full_text)
+    if writer_match:
+        metadata["client_name"] = writer_match.group(1).strip()
+
+    period_match = re.search(r"(?i)Statement\s+Period:\s*(.+?)(?:\n|$)", full_text)
+    if period_match:
+        metadata["period"] = period_match.group(1).strip()
+
+    current_work_title = ""
+    current_isrc = ""
+    current_rev_type = ""
+
+    for raw_line in full_text.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        if VANGUARD_TABLE_HEADER_RE.match(line):
+            continue
+        if "VANGUARD MUSIC PUBLISHING" in line.upper() and "Royalty Statement" in line:
+            continue
+        if "CONFIDENTIAL" in line and "Page" in line:
+            continue
+        if line.startswith("PAYMENT SUMMARY") or line.startswith("TERMS"):
+            break
+
+        wt = VANGUARD_WORK_TOTAL_RE.match(line)
+        if wt:
+            continue
+
+        isrc_m = VANGUARD_ISRC_RE.search(line)
+        m = VANGUARD_DETAIL_RE.match(line)
+        if not m:
+            continue
+
+        prefix = m.group("prefix").strip()
+        units_raw = m.group("units")
+        rate_raw = m.group("rate")
+        amount_raw = m.group("amount")
+
+        if isrc_m and isrc_m.group(1) in prefix:
+            isrc = isrc_m.group(1)
+            before, after = prefix.split(isrc, 1)
+            new_title = before.strip()
+            if new_title:
+                current_work_title = new_title
+            current_isrc = isrc
+            remainder = after.strip()
+            current_rev_type, source = _split_vanguard_prefix(remainder, current_rev_type)
+        else:
+            current_rev_type, source = _split_vanguard_prefix(prefix, current_rev_type)
+
+        units_val = "" if units_raw in ("--", "-") else units_raw.replace(",", "")
+        amount_val = amount_raw.replace(",", "")
+
+        rows.append({
+            "Track Title": current_work_title,
+            "Writer/Artist": metadata.get("client_name") or "",
+            "ISRC": current_isrc,
+            "Source/Collector": "Vanguard Music Publishing",
+            "Source Detail": source,
+            "Income Type": current_rev_type,
+            "Territory": "",
+            "Units": units_val,
+            "Rate": "" if rate_raw in ("--", "-") else rate_raw,
+            "Gross Amount": amount_val,
+            "Net Amount": amount_val,
+        })
+
+    if not rows:
+        logger.warning("Vanguard parser produced 0 rows")
+        return None
+
+    headers = [
+        "Track Title", "Writer/Artist", "ISRC", "Source/Collector", "Source Detail",
+        "Income Type", "Territory", "Units", "Rate", "Gross Amount", "Net Amount",
+    ]
+
+    parsed_sum = sum(float(r["Net Amount"]) for r in rows if r["Net Amount"])
+    logger.info(
+        f"Vanguard parser extracted {len(rows)} rows, parsed_sum=${parsed_sum:.2f}, "
+        f"grand_total=${metadata.get('grand_total_net') or 0:.2f}"
+    )
+
+    return {
+        "headers": headers,
+        "rows": rows,
+        "metadata": metadata,
+    }
+
+
 def is_publishing_statement(content: bytes) -> bool:
     try:
         import pdfplumber

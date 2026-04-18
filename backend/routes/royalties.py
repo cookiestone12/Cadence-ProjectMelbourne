@@ -500,7 +500,27 @@ def parse_uploaded_file(content: bytes, filename: str, org_id: int = None) -> tu
         if len(content) > MAX_PDF_SIZE_BYTES:
             raise HTTPException(status_code=400, detail=f"PDF file is too large (max {MAX_PDF_SIZE_BYTES // (1024*1024)}MB)")
         try:
-            from ..utils.pdf_statement_parser import is_publishing_statement, parse_publishing_statement
+            from ..utils.pdf_statement_parser import (
+                is_publishing_statement, parse_publishing_statement,
+                is_vanguard_statement, parse_vanguard_statement,
+            )
+            if is_vanguard_statement(content):
+                vresult = parse_vanguard_statement(content)
+                if vresult and vresult.get("rows"):
+                    logger.info(f"Vanguard parser: {len(vresult['rows'])} rows extracted")
+                    vmeta = vresult.get("metadata", {})
+                    vmeta["suggested_mapping"] = {
+                        "track_title": "Track Title",
+                        "artist": "Writer/Artist",
+                        "isrc": "ISRC",
+                        "revenue": "Net Amount",
+                        "quantity": "Units",
+                        "platform": "Source/Collector",
+                        "revenue_type": "Income Type",
+                        "gross_amount": "Gross Amount",
+                        "release_title": "Source Detail",
+                    }
+                    return vresult["headers"], vresult["rows"], vmeta
             if is_publishing_statement(content):
                 result = parse_publishing_statement(content)
                 if result and result.get("rows"):
