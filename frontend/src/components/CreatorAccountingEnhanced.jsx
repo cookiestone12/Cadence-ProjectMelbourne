@@ -497,6 +497,20 @@ function StatementsSubTab({ orgId, creatorId }) {
   const [songSearchTerm, setSongSearchTerm] = useState({})
   const [songDropdownOpen, setSongDropdownOpen] = useState({})
 
+  const [canEditStatements, setCanEditStatements] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    axios.get('/api/organizations/current/membership')
+      .then(res => {
+        if (!alive) return
+        const role = res.data?.role
+        setCanEditStatements(role === 'OWNER' || role === 'ADMIN' || role === 'MEMBER')
+      })
+      .catch(() => { if (alive) setCanEditStatements(false) })
+    return () => { alive = false }
+  }, [])
+
   const [editStmt, setEditStmt] = useState(null)
   const [editForm, setEditForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD', creator_id: '' })
   const [editSaving, setEditSaving] = useState(false)
@@ -1072,9 +1086,11 @@ function StatementsSubTab({ orgId, creatorId }) {
                           <button onClick={() => loadTransactions(stmt)} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors" title="View Transactions">
                             <EyeIcon className="w-4 h-4" />
                           </button>
+                          {canEditStatements && (
                           <button onClick={() => openEditStmt(stmt)} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors" title="Edit period & metadata">
                             <PencilSquareIcon className="w-4 h-4" />
                           </button>
+                          )}
                           <button onClick={() => handleCalculate(stmt.id)} disabled={calculating[stmt.id]} className="p-1.5 text-[#5B8A72] hover:bg-[rgba(91,138,114,0.1)] rounded-lg transition-colors disabled:opacity-40" title="Calculate">
                             <CalculatorIcon className="w-4 h-4" />
                           </button>
