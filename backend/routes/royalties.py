@@ -1174,7 +1174,7 @@ async def upload_statement(
     if (p_start is None or p_end is None) and (file.filename or "").lower().endswith(".pdf"):
         try:
             from ..utils.pdf_statement_parser import parse_period_from_pdf
-            auto_start, auto_end = parse_period_from_pdf(content)
+            auto_start, auto_end = parse_period_from_pdf(content, file_name=file.filename)
             if p_start is None and auto_start is not None:
                 p_start = auto_start
             if p_end is None and auto_end is not None:

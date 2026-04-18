@@ -272,7 +272,7 @@ def parse_period_from_text(text: str) -> Tuple[Optional[date], Optional[date]]:
     return None, None
 
 
-def parse_period_from_pdf(content: bytes) -> Tuple[Optional[date], Optional[date]]:
+def parse_period_from_pdf(content: bytes, file_name: Optional[str] = None) -> Tuple[Optional[date], Optional[date]]:
     try:
         import pdfplumber
         with pdfplumber.open(io.BytesIO(content)) as pdf:
@@ -283,9 +283,17 @@ def parse_period_from_pdf(content: bytes) -> Tuple[Optional[date], Optional[date
                 t = page.extract_text()
                 if t:
                     text += t + "\n"
-        return parse_period_from_text(text)
+        start, end = parse_period_from_text(text)
+        if start is None and end is None:
+            logger.warning(
+                "period_auto_parse_no_match file=%s text_len=%d preview=%r",
+                file_name or "<unknown>",
+                len(text),
+                (text[:200].replace("\n", " ") if text else ""),
+            )
+        return start, end
     except Exception as e:
-        logger.warning(f"parse_period_from_pdf failed: {e}")
+        logger.warning(f"parse_period_from_pdf failed file={file_name or '<unknown>'}: {e}")
         return None, None
 
 
