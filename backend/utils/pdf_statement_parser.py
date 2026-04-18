@@ -270,6 +270,19 @@ def parse_vanguard_statement(content: bytes) -> Optional[dict]:
         logger.error(f"Vanguard parser: failed to open PDF: {e}")
         return None
 
+    return _parse_vanguard_text(full_text)
+
+
+def _parse_vanguard_text(full_text: str) -> Optional[dict]:
+    """Pure-text Vanguard parser. Split out from parse_vanguard_statement so
+    it can be unit-tested without a real PDF on disk."""
+    metadata = {
+        "client_name": None,
+        "period": None,
+        "grand_total_net": None,
+    }
+    rows = []
+
     if not full_text:
         return None
 
@@ -299,11 +312,12 @@ def parse_vanguard_statement(content: bytes) -> Optional[dict]:
 
         if VANGUARD_TABLE_HEADER_RE.match(line):
             continue
-        if "VANGUARD MUSIC PUBLISHING" in line.upper() and "Royalty Statement" in line:
+        upper_line = line.upper()
+        if "VANGUARD MUSIC PUBLISHING" in upper_line and "ROYALTY STATEMENT" in upper_line:
             continue
-        if "CONFIDENTIAL" in line and "Page" in line:
+        if "CONFIDENTIAL" in upper_line and "PAGE" in upper_line:
             continue
-        if line.startswith("PAYMENT SUMMARY") or line.startswith("TERMS"):
+        if upper_line.startswith("PAYMENT SUMMARY") or upper_line.startswith("TERMS"):
             break
 
         wt = VANGUARD_WORK_TOTAL_RE.match(line)
