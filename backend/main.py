@@ -102,6 +102,12 @@ def _deferred_startup_tasks():
     log = logging.getLogger("cadence")
 
     try:
+        from .db_setup import seed_super_admin
+        seed_super_admin()
+    except Exception as e:
+        log.warning(f"seed_super_admin failed at startup: {e}")
+
+    try:
         from .services.email_scheduler import start_scheduler
         start_scheduler()
     except Exception as e:
