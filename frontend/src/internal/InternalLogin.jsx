@@ -27,7 +27,7 @@ export default function InternalLogin() {
         { access_token: accessToken }
       )
       localStorage.setItem('internal_user', JSON.stringify(data.user))
-      navigate('/internal/dashboard')
+      window.location.href = '/internal/dashboard'
     } catch (e) {
       setErr(e?.response?.data?.detail || 'Login failed')
     } finally {
