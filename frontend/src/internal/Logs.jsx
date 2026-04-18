@@ -41,7 +41,7 @@ export default function Logs() {
     load()
     if (auto) tref.current = setInterval(load, 10_000)
     return () => clearInterval(tref.current)
-  }, [auto, level, since, q, requestId])
+  }, [auto, level, since, until, q, requestId])
 
   const downloadJsonl = async () => {
     const params = new URLSearchParams()
