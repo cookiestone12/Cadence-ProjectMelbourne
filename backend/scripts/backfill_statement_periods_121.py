@@ -56,7 +56,13 @@ def _resolve_period(stmt: RoyaltyStatement):
 def backfill(org_id=None, dry_run=False):
     db = SessionLocal()
     try:
-        q = db.query(RoyaltyStatement).filter(RoyaltyStatement.period_start.is_(None))
+        # Treat a statement as missing-period when EITHER endpoint is NULL —
+        # a statement with start but no end can't be placed in the right
+        # bucket either, and the underwriting engine ignores half-open ranges.
+        from sqlalchemy import or_
+        q = db.query(RoyaltyStatement).filter(
+            or_(RoyaltyStatement.period_start.is_(None), RoyaltyStatement.period_end.is_(None))
+        )
         if org_id is not None:
             q = q.filter(RoyaltyStatement.organization_id == org_id)
         statements = q.order_by(RoyaltyStatement.id).all()
