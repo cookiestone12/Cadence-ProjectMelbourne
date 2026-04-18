@@ -69,7 +69,8 @@ async def upload_schedule_a(
             organization=organization,
             file_content=file_content,
             filename=file.filename,
-            creator_name_override=creator_name
+            creator_name_override=creator_name,
+            user_id=current_user.id,
         )
         
         if result.errors:

@@ -135,6 +135,7 @@ def sync_credit_to_splits(db: Session, song: Song, creator_id: int, pub_share, m
         elif existing:
             db.delete(existing)
 
+    db.flush()
     _sync_song_pub_percentage(db, song.id)
 
 

@@ -204,6 +204,8 @@ def get_client_catalog(
                 "creator_name": creators_map.get(c.creator_id, "Unknown"),
                 "role": c.role,
                 "share_percentage": c.share_percentage,
+                "pub_share": c.pub_share,
+                "master_share": c.master_share,
             })
 
         for s in song_rows:
@@ -214,6 +216,8 @@ def get_client_catalog(
                 "isrc": s.isrc,
                 "release_date": str(s.release_date) if s.release_date else None,
                 "status": getattr(s, 'status', None),
+                "publishing_percentage": s.publishing_percentage,
+                "master_percentage": s.master_percentage,
                 "credits": credits_by_song.get(s.id, []),
             })
 

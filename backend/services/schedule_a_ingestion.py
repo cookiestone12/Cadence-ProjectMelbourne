@@ -188,7 +188,8 @@ def ingest_schedule_a(
     organization: Organization,
     file_content: bytes,
     filename: str,
-    creator_name_override: Optional[str] = None
+    creator_name_override: Optional[str] = None,
+    user_id: Optional[int] = None,
 ) -> ScheduleAIngestionResult:
     """
     Ingest a Schedule A / Placement Status Sheet file.
@@ -369,17 +370,43 @@ def ingest_schedule_a(
                     SongCredit.song_id == song.id,
                     SongCredit.creator_id == creator.id
                 ).first()
-                
-                if not existing_credit:
+
+                if existing_credit:
+                    if publishing_pct is not None:
+                        existing_credit.pub_share = publishing_pct
+                    if master_pct is not None:
+                        existing_credit.master_share = master_pct
+                else:
                     credit = SongCredit(
                         song_id=song.id,
                         creator_id=creator.id,
                         role="Producer",
-                        share_percentage=publishing_pct or 100.0
+                        share_percentage=publishing_pct or 100.0,
+                        pub_share=publishing_pct,
+                        master_share=master_pct,
                     )
                     db.add(credit)
                     result.credits_created += 1
-                    
+
+                db.flush()
+
+                if user_id is not None and (publishing_pct is not None or master_pct is not None):
+                    try:
+                        from backend.routes.contracts_mgmt import sync_credit_to_splits
+                        sync_credit_to_splits(
+                            db,
+                            song,
+                            creator.id,
+                            publishing_pct,
+                            master_pct,
+                            "Producer",
+                            user_id,
+                        )
+                    except Exception as split_err:
+                        result.warnings.append(
+                            f"Row {row_num}: created credit but failed to materialize splits: {split_err}"
+                        )
+
             except Exception as e:
                 result.warnings.append(f"Row {row_num}: {str(e)}")
                 continue

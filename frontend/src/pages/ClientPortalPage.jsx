@@ -585,6 +585,8 @@ function CatalogTab({ organizationId, creatorId }) {
                 <th className="text-left px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Artist</th>
                 <th className="text-left px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">ISRC</th>
                 <th className="text-left px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Release Date</th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Pub %</th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Master %</th>
                 <th className="text-left px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Credits</th>
               </tr>
             </thead>
@@ -599,13 +601,26 @@ function CatalogTab({ organizationId, creatorId }) {
                   <td className="px-4 py-3 text-sm text-[#7A8580]">{s.artist}</td>
                   <td className="px-4 py-3 text-sm text-[#7A8580] font-mono">{s.isrc || '-'}</td>
                   <td className="px-4 py-3 text-sm text-[#7A8580]">{s.release_date || '-'}</td>
+                  <td className="px-4 py-3 text-sm text-right text-[#3D4A44] tabular-nums">
+                    {s.publishing_percentage != null ? `${Number(s.publishing_percentage).toFixed(2)}%` : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right text-[#3D4A44] tabular-nums">
+                    {s.master_percentage != null ? `${Number(s.master_percentage).toFixed(2)}%` : '—'}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">
-                      {s.credits?.map((c, i) => (
-                        <span key={i} className="inline-flex px-1.5 py-0.5 text-xs bg-[#EEF1EC] text-[#5B8A72] rounded">
-                          {c.creator_name} ({c.role}{c.share_percentage ? ` ${c.share_percentage}%` : ''})
-                        </span>
-                      ))}
+                      {s.credits?.map((c, i) => {
+                        const parts = []
+                        if (c.pub_share != null) parts.push(`Pub ${Number(c.pub_share).toFixed(2)}%`)
+                        if (c.master_share != null) parts.push(`Mas ${Number(c.master_share).toFixed(2)}%`)
+                        if (!parts.length && c.share_percentage) parts.push(`${c.share_percentage}%`)
+                        const tail = parts.length ? ` · ${parts.join(' / ')}` : ''
+                        return (
+                          <span key={i} className="inline-flex px-1.5 py-0.5 text-xs bg-[#EEF1EC] text-[#5B8A72] rounded">
+                            {c.creator_name} ({c.role}{tail})
+                          </span>
+                        )
+                      })}
                     </div>
                   </td>
                 </tr>
