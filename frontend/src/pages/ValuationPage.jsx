@@ -108,9 +108,38 @@ export default function ValuationPage() {
         axios.get('/api/valuation/underwriting/runs'),
       ])
       if (catRes.status === 'fulfilled') setCatalogData(catRes.value.data)
-      if (uwRes.status === 'fulfilled' && uwRes.value.data?.has_data) setUwData(uwRes.value.data)
+      const latestData = uwRes.status === 'fulfilled' ? uwRes.value.data : null
+      if (latestData?.has_data) setUwData(latestData)
       else setUwData(null)
       if (runsRes.status === 'fulfilled') setRuns(runsRes.value.data)
+
+      // If the user just switched to a scope that has never been valued
+      // (per-creator view with no prior run), auto-fire one underwriting
+      // run so the panels populate without requiring a manual click.
+      // Org-wide loads do NOT auto-fire (the "Run" button stays the
+      // explicit gesture there to avoid surprise cost on first page load).
+      if (creatorId && latestData && !latestData.has_data && !running) {
+        try {
+          setRunning(true)
+          await axios.post('/api/valuation/underwriting/run', {
+            ...runConfig,
+            scope_creator_id: creatorId,
+          })
+          const [uwRes2, runsRes2] = await Promise.allSettled([
+            axios.get(latestUrl),
+            axios.get('/api/valuation/underwriting/runs'),
+          ])
+          if (uwRes2.status === 'fulfilled' && uwRes2.value.data?.has_data) {
+            setUwData(uwRes2.value.data)
+          }
+          if (runsRes2.status === 'fulfilled') setRuns(runsRes2.value.data)
+        } catch (e) {
+          // Don't crash the page; the user can still hit "Run" manually.
+          console.warn('Auto-run for scoped creator failed:', e?.response?.data || e?.message)
+        } finally {
+          setRunning(false)
+        }
+      }
     } catch (e) {
       console.error('Error loading data:', e)
     } finally {
