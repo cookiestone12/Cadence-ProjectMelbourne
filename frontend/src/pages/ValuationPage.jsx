@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import axios from 'axios'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from 'recharts'
 import {
@@ -71,7 +71,18 @@ export default function ValuationPage() {
     return () => { alive = false }
   }, [])
 
+  // When the user clicks a row in Run History we need to set the scope
+  // *and* show the historical run's payload, but the scope-change effect
+  // would race against that and overwrite uwData with whatever
+  // /underwriting/latest returns. Setting this ref to true tells the
+  // scope effect to skip its loadAll for exactly one tick.
+  const skipNextLoadRef = useRef(false)
+
   useEffect(() => {
+    if (skipNextLoadRef.current) {
+      skipNextLoadRef.current = false
+      return
+    }
     loadAll(scopeCreatorId)
   }, [scopeCreatorId])
 
@@ -734,15 +745,23 @@ export default function ValuationPage() {
               {runs.map(run => (
                 <div key={run.id} className="p-4 hover:bg-[#EEF1EC] cursor-pointer" onClick={async () => {
                   try {
-                    // Restore the scope filter the run was originally executed
-                    // under so the rest of the page (and the URL) reflect what
-                    // the historical numbers actually represent.
+                    // Restore the scope the run was executed under so the URL
+                    // and surrounding panels match. We fetch the run + catalog
+                    // summary FIRST, then suppress the scope-effect's loadAll
+                    // (via skipNextLoadRef) so it can't race-overwrite uwData
+                    // with /underwriting/latest for the new scope.
                     const runScopeId = run.scope_creator_id ?? null
+                    const scopeQs = runScopeId ? `?scope_creator_id=${runScopeId}` : ''
+                    const [runRes, catRes] = await Promise.allSettled([
+                      axios.get(`/api/valuation/underwriting/runs/${run.id}`),
+                      axios.get(`/api/valuation/catalog/summary${scopeQs}`),
+                    ])
                     if (runScopeId !== scopeCreatorId) {
+                      skipNextLoadRef.current = true
                       setScopeCreatorId(runScopeId)
                     }
-                    const res = await axios.get(`/api/valuation/underwriting/runs/${run.id}`)
-                    setUwData({ ...res.data, has_data: true })
+                    if (runRes.status === 'fulfilled') setUwData({ ...runRes.value.data, has_data: true })
+                    if (catRes.status === 'fulfilled') setCatalogData(catRes.value.data)
                     setActiveTab('overview')
                   } catch (e) { console.error(e) }
                 }}>

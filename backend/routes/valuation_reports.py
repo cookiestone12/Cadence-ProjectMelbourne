@@ -95,6 +95,7 @@ def get_catalog_valuation_summary(
     
     org = db.query(Organization).filter(Organization.id == membership.organization_id).first()
 
+    scoped_song_ids: Optional[set] = None
     if scope_creator_id is not None:
         from ..models.models import Creator as _Creator, SongCredit as _SongCredit
         creator_in_org = db.query(_Creator.id).filter(
@@ -103,12 +104,12 @@ def get_catalog_valuation_summary(
         ).first()
         if not creator_in_org:
             raise HTTPException(status_code=404, detail="Creator not found in this org")
-        scoped_song_ids = [
+        scoped_song_ids = {
             sid for (sid,) in db.query(_SongCredit.song_id)
             .filter(_SongCredit.creator_id == scope_creator_id)
             .distinct()
             .all()
-        ]
+        }
         if scoped_song_ids:
             songs = db.query(Song).filter(
                 Song.organization_id == org.id,
@@ -119,9 +120,19 @@ def get_catalog_valuation_summary(
     else:
         songs = db.query(Song).filter(Song.organization_id == org.id).all()
     
-    valuations = db.query(ValuationCalculation).filter(
+    valuations_q = db.query(ValuationCalculation).filter(
         ValuationCalculation.organization_id == org.id
-    ).order_by(ValuationCalculation.calculation_date.desc()).all()
+    )
+    if scoped_song_ids is not None:
+        # Restrict org-wide valuation rows to the scoped creator's songs so
+        # totals/top-songs/avg-growth reflect ONLY that creator's catalog.
+        if scoped_song_ids:
+            valuations_q = valuations_q.filter(
+                ValuationCalculation.song_id.in_(scoped_song_ids)
+            )
+        else:
+            valuations_q = valuations_q.filter(False)
+    valuations = valuations_q.order_by(ValuationCalculation.calculation_date.desc()).all()
     
     valuation_by_song = {}
     for v in valuations:
@@ -165,7 +176,7 @@ def get_catalog_valuation_summary(
                 "risk_score": val.risk_score
             })
     
-    territory_data = db.query(
+    territory_q = db.query(
         TerritoryRevenue.territory_code,
         TerritoryRevenue.territory_name,
         func.sum(TerritoryRevenue.total_streams).label("total_streams"),
@@ -174,7 +185,13 @@ def get_catalog_valuation_summary(
         func.sum(TerritoryRevenue.total_revenue_cents).label("total_revenue_cents")
     ).filter(
         TerritoryRevenue.organization_id == org.id
-    ).group_by(
+    )
+    if scoped_song_ids is not None:
+        if scoped_song_ids:
+            territory_q = territory_q.filter(TerritoryRevenue.song_id.in_(scoped_song_ids))
+        else:
+            territory_q = territory_q.filter(False)
+    territory_data = territory_q.group_by(
         TerritoryRevenue.territory_code,
         TerritoryRevenue.territory_name
     ).order_by(desc("total_revenue_cents")).all()

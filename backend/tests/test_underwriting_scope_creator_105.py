@@ -21,6 +21,7 @@ from backend.models.database import Base, get_db as original_get_db
 from backend.models.models import (
     User, Organization, OrganizationMember, Creator, Song, SongCredit,
     RoyaltyStatement, RoyaltyStatementLine, UnderwritingRun,
+    ValuationCalculation, TerritoryRevenue,
 )
 from backend.utils.auth import get_current_user
 from backend.services.underwriting_engine import build_song_period_spine
@@ -250,6 +251,71 @@ def test_runs_list_does_not_leak_cross_org_creator_name(db, client):
         target = next(x for x in runs if x["scope_creator_id"] == foreign.id)
         assert target["scope_creator_name"] is None, \
             "must not leak display_name of a creator from a different org"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_catalog_summary_scope_filters_aggregates(db, client):
+    """`/catalog/summary?scope_creator_id=A` must restrict total_catalog_value,
+    total_thirty_day_revenue, top_songs and territory_breakdown to A's
+    songs only — NOT return org-wide aggregates with a creator label."""
+    org, user, a, b, song_a, song_b, _ = _seed_two_creators_with_lines(db)
+
+    db.add_all([
+        ValuationCalculation(
+            song_id=song_a.id, organization_id=org.id,
+            final_valuation_cents=100_00, thirty_day_revenue_cents=10_00,
+            annual_revenue_cents=120_00, growth_rate=0.10,
+        ),
+        ValuationCalculation(
+            song_id=song_b.id, organization_id=org.id,
+            final_valuation_cents=900_00, thirty_day_revenue_cents=90_00,
+            annual_revenue_cents=1080_00, growth_rate=0.50,
+        ),
+        TerritoryRevenue(
+            song_id=song_a.id, organization_id=org.id,
+            period_date=date(2024, 1, 1), territory_code="US", territory_name="USA",
+            total_streams=1000, publishing_revenue_cents=50_00,
+            master_revenue_cents=50_00, total_revenue_cents=100_00,
+        ),
+        TerritoryRevenue(
+            song_id=song_b.id, organization_id=org.id,
+            period_date=date(2024, 1, 1), territory_code="GB", territory_name="UK",
+            total_streams=5000, publishing_revenue_cents=200_00,
+            master_revenue_cents=200_00, total_revenue_cents=400_00,
+        ),
+    ])
+    db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        # Org-wide totals include both songs.
+        r = client.get("/api/valuation/catalog/summary")
+        assert r.status_code == 200
+        org_wide = r.json()
+        assert org_wide["total_songs"] == 2
+        assert abs(org_wide["total_catalog_value"] - 1000.0) < 0.001
+        assert abs(org_wide["total_thirty_day_revenue"] - 100.0) < 0.001
+        assert {t["territory_code"] for t in org_wide["territory_breakdown"]} == {"US", "GB"}
+
+        # Scoped to creator A: only song_a counts toward totals + territory.
+        r = client.get(f"/api/valuation/catalog/summary?scope_creator_id={a.id}")
+        assert r.status_code == 200
+        scoped = r.json()
+        assert scoped["total_songs"] == 1
+        assert abs(scoped["total_catalog_value"] - 100.0) < 0.001, \
+            "scoped total_catalog_value must reflect ONLY creator A's songs"
+        assert abs(scoped["total_thirty_day_revenue"] - 10.0) < 0.001
+        assert {t["territory_code"] for t in scoped["territory_breakdown"]} == {"US"}, \
+            "scoped territory_breakdown must NOT include creator B's territories"
+
+        # Cross-org scope_creator_id must 404.
+        other_org = Organization(name="X", type="LABEL", account_type="ENTERPRISE", display_name="X")
+        db.add(other_org); db.commit(); db.refresh(other_org)
+        foreign = Creator(organization_id=other_org.id, display_name="Foreign")
+        db.add(foreign); db.commit(); db.refresh(foreign)
+        r = client.get(f"/api/valuation/catalog/summary?scope_creator_id={foreign.id}")
+        assert r.status_code == 404
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
