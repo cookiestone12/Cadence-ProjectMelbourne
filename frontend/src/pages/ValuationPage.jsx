@@ -42,20 +42,63 @@ export default function ValuationPage() {
   const [songDetail, setSongDetail] = useState(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
 
+  // Per-creator scope (Task #105)
+  const [creators, setCreators] = useState([])
+  const [scopeCreatorId, setScopeCreatorId] = useState(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const v = params.get('creatorId')
+      return v ? parseInt(v, 10) : null
+    } catch { return null }
+  })
+
+  // Load creator list once. Org id comes from /current.
   useEffect(() => {
-    loadAll()
+    let alive = true
+    ;(async () => {
+      try {
+        const orgRes = await axios.get('/api/organizations/current')
+        if (!alive) return
+        const orgId = orgRes.data?.id
+        if (!orgId) return
+        const creatorsRes = await axios.get(`/api/creators/${orgId}`)
+        if (!alive) return
+        setCreators(Array.isArray(creatorsRes.data) ? creatorsRes.data : [])
+      } catch (e) {
+        if (alive) console.error('Failed to load creators for scope dropdown:', e)
+      }
+    })()
+    return () => { alive = false }
   }, [])
 
-  const loadAll = async () => {
+  useEffect(() => {
+    loadAll(scopeCreatorId)
+  }, [scopeCreatorId])
+
+  // Keep URL in sync so the page is shareable / refresh-safe.
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href)
+      if (scopeCreatorId) url.searchParams.set('creatorId', String(scopeCreatorId))
+      else url.searchParams.delete('creatorId')
+      window.history.replaceState({}, '', url.toString())
+    } catch {}
+  }, [scopeCreatorId])
+
+  const loadAll = async (creatorId = null) => {
     setLoading(true)
     try {
+      const latestUrl = creatorId
+        ? `/api/valuation/underwriting/latest?scope_creator_id=${creatorId}`
+        : '/api/valuation/underwriting/latest'
       const [catRes, uwRes, runsRes] = await Promise.allSettled([
         axios.get('/api/valuation/catalog/summary'),
-        axios.get('/api/valuation/underwriting/latest'),
+        axios.get(latestUrl),
         axios.get('/api/valuation/underwriting/runs'),
       ])
       if (catRes.status === 'fulfilled') setCatalogData(catRes.value.data)
       if (uwRes.status === 'fulfilled' && uwRes.value.data?.has_data) setUwData(uwRes.value.data)
+      else setUwData(null)
       if (runsRes.status === 'fulfilled') setRuns(runsRes.value.data)
     } catch (e) {
       console.error('Error loading data:', e)
@@ -67,9 +110,12 @@ export default function ValuationPage() {
   const triggerRun = async () => {
     setRunning(true)
     try {
-      await axios.post('/api/valuation/underwriting/run', runConfig)
+      await axios.post('/api/valuation/underwriting/run', {
+        ...runConfig,
+        scope_creator_id: scopeCreatorId || null,
+      })
       setRunModalOpen(false)
-      await loadAll()
+      await loadAll(scopeCreatorId)
     } catch (e) {
       console.error('Underwriting run failed:', e)
       alert('Underwriting run failed. Check that you have processed royalty statements with matched assets.')
@@ -77,6 +123,12 @@ export default function ValuationPage() {
       setRunning(false)
     }
   }
+
+  const scopeCreatorName = useMemo(() => {
+    if (!scopeCreatorId) return null
+    const c = creators.find(x => x.id === scopeCreatorId)
+    return c?.display_name || c?.name || `Creator #${scopeCreatorId}`
+  }, [scopeCreatorId, creators])
 
   const loadSongDetail = async (songId) => {
     setLoadingDetail(true)
@@ -184,9 +236,28 @@ export default function ValuationPage() {
             <h1 className="text-2xl sm:text-3xl font-bold text-[#3D4A44]">Catalog Valuation</h1>
             <span className="px-1.5 py-0.5 text-[9px] font-semibold tracking-wide uppercase bg-[#5B8A72]/10 text-[#5B8A72] rounded-md">Beta</span>
           </div>
-          <p className="text-[#7A8580] text-sm mt-1">{catalogData?.organization_name || 'Your Organization'}</p>
+          <p className="text-[#7A8580] text-sm mt-1">
+            {catalogData?.organization_name || 'Your Organization'}
+            {scopeCreatorName && (
+              <> · <span className="text-[#5B8A72] font-medium">Scoped to {scopeCreatorName}</span></>
+            )}
+          </p>
         </div>
         <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
+            <label className="text-xs font-medium text-[#7A8580] hidden sm:inline">Scope:</label>
+            <select
+              value={scopeCreatorId || ''}
+              onChange={e => setScopeCreatorId(e.target.value ? parseInt(e.target.value, 10) : null)}
+              className="border border-[rgba(59,77,67,0.15)] bg-white text-[#3D4A44] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent min-w-[180px]"
+              title="Limit valuation to a single client's catalog"
+            >
+              <option value="">All clients (org-wide)</option>
+              {creators.map(c => (
+                <option key={c.id} value={c.id}>{c.display_name || c.name || `Creator #${c.id}`}</option>
+              ))}
+            </select>
+          </div>
           <button onClick={() => setRunModalOpen(true)} className="flex items-center space-x-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-all text-sm font-medium shadow-sm">
             <SparklesIcon className="w-4 h-4" />
             <span>Run Underwriting</span>

@@ -427,12 +427,21 @@ def list_underwriting_runs(
         UnderwritingRun.organization_id == membership.organization_id
     ).order_by(UnderwritingRun.created_at.desc()).limit(20).all()
 
+    creator_ids = {r.scope_creator_id for r in runs if r.scope_creator_id}
+    name_by_id: dict[int, str] = {}
+    if creator_ids:
+        from ..models.models import Creator as _Creator
+        for c in db.query(_Creator.id, _Creator.display_name).filter(_Creator.id.in_(creator_ids)).all():
+            name_by_id[c.id] = c.display_name
+
     return [
         {
             "id": r.id,
             "status": r.status,
             "kb_version": r.kb_version,
             "inputs": r.inputs,
+            "scope_creator_id": r.scope_creator_id,
+            "scope_creator_name": name_by_id.get(r.scope_creator_id) if r.scope_creator_id else None,
             "portfolio_summary": r.outputs,
             "valuation": r.valuation_data.get("blended") if r.valuation_data else None,
             "created_at": r.created_at.isoformat() if r.created_at else None,
@@ -566,6 +575,7 @@ def get_underwriting_concentration(
     description="Convenience endpoint that returns the most recent completed run headline so dashboards don't have to list-then-fetch.\n\n**Query:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** same shape as `/runs/{run_id}` or `null` if no run exists yet.",
 )
 def get_latest_underwriting(
+    scope_creator_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -575,10 +585,15 @@ def get_latest_underwriting(
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
-    run = db.query(UnderwritingRun).filter(
+    q = db.query(UnderwritingRun).filter(
         UnderwritingRun.organization_id == membership.organization_id,
         UnderwritingRun.status == "COMPLETED",
-    ).order_by(UnderwritingRun.created_at.desc()).first()
+    )
+    if scope_creator_id is not None:
+        q = q.filter(UnderwritingRun.scope_creator_id == scope_creator_id)
+    else:
+        q = q.filter(UnderwritingRun.scope_creator_id.is_(None))
+    run = q.order_by(UnderwritingRun.created_at.desc()).first()
 
     if not run:
         return {"has_data": False}

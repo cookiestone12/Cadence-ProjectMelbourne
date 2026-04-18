@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon, CloudArrowUpIcon, PaperClipIcon, LinkIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline'
+import { ArrowLeftIcon, ArrowDownTrayIcon, ArrowUpTrayIcon, CheckIcon, XMarkIcon, PencilIcon, DocumentTextIcon, DocumentArrowDownIcon, PlusIcon, MusicalNoteIcon, TrashIcon, CloudArrowUpIcon, PaperClipIcon, LinkIcon, DocumentDuplicateIcon, SparklesIcon } from '@heroicons/react/24/outline'
 import { CheckCircleIcon, XCircleIcon, MinusCircleIcon } from '@heroicons/react/24/solid'
 import ActionsTab from '../components/ActionsTab'
 import CreatorAccountingEnhanced from '../components/CreatorAccountingEnhanced'
@@ -1251,6 +1251,14 @@ export default function CreatorDetailPage() {
                   title="Edit Creator"
                 >
                   <PencilIcon className="w-5 h-5 text-white" />
+                </button>
+                <button
+                  onClick={() => navigate(`/valuation?creatorId=${creator.id}`)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 transition-colors text-white text-xs font-medium"
+                  title="Run a catalog valuation scoped to this client"
+                >
+                  <SparklesIcon className="w-4 h-4" />
+                  <span>Run Valuation</span>
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-white/90">
