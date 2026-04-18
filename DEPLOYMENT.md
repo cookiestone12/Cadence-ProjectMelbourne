@@ -388,12 +388,22 @@ module is touched in normal feature work:
    summary. Backfill order is documented in
    `docs/openapi.json` review notes (and was the §6 backlog of
    the previous DEPLOYMENT.md stub).
-2. **Drift items in `backend/db_setup.py`'s DDL backstop.** The
-   `ensure_schema_updates()` function still applies a long list
-   of historical `ALTER TABLE` statements that never got Alembic
-   revisions. Each one should be migrated into a real
-   `alembic/versions/` revision and removed from the backstop,
-   one feature module at a time.
+2. **~~Drift items in `backend/db_setup.py`'s DDL backstop.~~**
+   ✅ **COMPLETED — Task #83 (Apr 2026).** Every historical
+   `ALTER TABLE` / `CREATE INDEX` / `CREATE TABLE` /
+   data-backfill statement that previously lived in
+   `ensure_schema_updates()` has been promoted into Alembic
+   revision `d3e4f5a6b7c8`
+   (`alembic/versions/d3e4f5a6b7c8_consolidate_ddl_drift_backstop.py`).
+   The revision is written with Postgres-native idempotent
+   constructs (`ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT
+   EXISTS`, `DO $$ ... $$` blocks) so it is a no-op on databases
+   where the backstop had already applied the same DDL.
+   `ensure_schema_updates()` is now a thin shim that logs a
+   single deprecation notice per process and returns; it is kept
+   (rather than deleted) as a placeholder for any future drift
+   work. New schema changes must go through Alembic from now on
+   — see §4 for the migration workflow.
 3. **Real log shipper.** The in-process ring buffer powering
    `/internal/logs` is convenient for recent debugging but
    bounded to 10k records and lost on restart. For longer
