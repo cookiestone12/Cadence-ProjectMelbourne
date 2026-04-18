@@ -272,6 +272,109 @@ def parse_period_from_text(text: str) -> Tuple[Optional[date], Optional[date]]:
     return None, None
 
 
+_FILENAME_MONTH_RANGE_RE = re.compile(
+    r"(?i)(?<![A-Za-z])(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)"
+    r"[a-z]*\s*[\-_\u2013to]+\s*"
+    r"(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*"
+    r"[\s_\-]*((?:19|20)\d{2})?"
+)
+_FILENAME_HALF_RE = re.compile(
+    r"(?i)(?<![A-Za-z0-9])(?:(?:([12])\s*h|h\s*([12]))[\s_\-]*((?:19|20)\d{2})|"
+    r"((?:19|20)\d{2})[\s_\-]*(?:([12])\s*h|h\s*([12])))"
+)
+_FILENAME_QUARTER_RE = re.compile(
+    r"(?i)(?<![A-Za-z0-9])(?:q([1-4])[\s_\-]*((?:19|20)\d{2})|"
+    r"((?:19|20)\d{2})[\s_\-]*q([1-4]))"
+)
+_FILENAME_YEAR_RE = re.compile(r"(?<![0-9])((?:19|20)\d{2})(?![0-9])")
+
+
+def parse_period_from_filename(file_name: Optional[str]) -> Tuple[Optional[date], Optional[date]]:
+    """Lighter-weight period heuristic for legacy uploads where the PDF is no
+    longer reachable on disk. Recognizes patterns commonly used by ops staff
+    when naming statement files:
+
+      * "BMI 2023 Jul-Dec.pdf"            → 2023-07-01 .. 2023-12-31
+      * "BMI Jan-Jun 2024.pdf"            → 2024-01-01 .. 2024-06-30
+      * "ASCAP 2024 H1.pdf" / "1H 2024"   → 2024-01-01 .. 2024-06-30
+      * "Vanguard Q3 2024.pdf"            → 2024-07-01 .. 2024-09-30
+      * "Marri 2026.pdf"                  → 2026-01-01 .. 2026-12-31  (full year)
+
+    Returns (None, None) when the filename has no recognizable period token —
+    callers are expected to leave the statement in PERIOD_MISSING state for
+    manual correction rather than guessing.
+    """
+    if not file_name:
+        return None, None
+    stem = file_name.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    if "." in stem:
+        stem = stem.rsplit(".", 1)[0]
+
+    # Month range first (most specific).
+    m = _FILENAME_MONTH_RANGE_RE.search(stem)
+    if m:
+        start_mon = _MONTH_TO_NUM.get(m.group(1).lower())
+        end_mon = _MONTH_TO_NUM.get(m.group(2).lower())
+        year_str = m.group(3)
+        if not year_str:
+            year_match = _FILENAME_YEAR_RE.search(stem)
+            year_str = year_match.group(1) if year_match else None
+        if start_mon and end_mon and year_str:
+            try:
+                year = int(year_str)
+                return (
+                    date(year, start_mon, 1),
+                    date(year, end_mon, _last_day_of_month(year, end_mon)),
+                )
+            except (TypeError, ValueError):
+                pass
+
+    h = _FILENAME_HALF_RE.search(stem)
+    if h:
+        hnum_str = h.group(1) or h.group(2) or h.group(5) or h.group(6)
+        year_str = h.group(3) or h.group(4)
+        if hnum_str and year_str:
+            try:
+                hnum = int(hnum_str)
+                year = int(year_str)
+                if hnum == 1:
+                    return date(year, 1, 1), date(year, 6, 30)
+                if hnum == 2:
+                    return date(year, 7, 1), date(year, 12, 31)
+            except (TypeError, ValueError):
+                pass
+
+    q = _FILENAME_QUARTER_RE.search(stem)
+    if q:
+        qnum_str = q.group(1) or q.group(4)
+        year_str = q.group(2) or q.group(3)
+        if qnum_str and year_str:
+            try:
+                qnum = int(qnum_str)
+                year = int(year_str)
+                s_mon = (qnum - 1) * 3 + 1
+                e_mon = s_mon + 2
+                return (
+                    date(year, s_mon, 1),
+                    date(year, e_mon, _last_day_of_month(year, e_mon)),
+                )
+            except (TypeError, ValueError):
+                pass
+
+    # Bare year — only honour it when there's exactly one year in the stem so
+    # filenames like "BMI 2023 Jul-Dec" don't accidentally fall back to a
+    # full-year window when the month range parser fails.
+    years = _FILENAME_YEAR_RE.findall(stem)
+    if len(years) == 1:
+        try:
+            year = int(years[0])
+            return date(year, 1, 1), date(year, 12, 31)
+        except (TypeError, ValueError):
+            pass
+
+    return None, None
+
+
 def parse_period_from_pdf(content: bytes, file_name: Optional[str] = None) -> Tuple[Optional[date], Optional[date]]:
     try:
         import pdfplumber

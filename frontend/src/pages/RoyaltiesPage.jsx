@@ -756,7 +756,25 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                     />
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-[#3D4A44]">{stmt.source_name || '—'}</td>
-                  <td className="px-6 py-4 text-sm text-[#7A8580]">{formatDate(stmt.period_start)} — {formatDate(stmt.period_end)}</td>
+                  <td className="px-6 py-4 text-sm text-[#7A8580]">
+                    {stmt.period_start || stmt.period_end ? (
+                      <>{formatDate(stmt.period_start)} — {formatDate(stmt.period_end)}</>
+                    ) : (
+                      canEditStatements ? (
+                        <button
+                          onClick={() => openEditStatement(stmt)}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200 transition-colors"
+                          title="Decay analytics can't bucket this statement until a period is set"
+                        >
+                          Period missing — fix
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-800">
+                          Period missing
+                        </span>
+                      )
+                    )}
+                  </td>
                   <td className="px-6 py-4 text-sm text-[#7A8580]">{stmt.currency || 'USD'}</td>
                   <td className="px-6 py-4 text-sm text-right font-medium text-[#3D4A44]">{formatCents(stmt.total_revenue_cents)}</td>
                   <td className="px-6 py-4"><StatusBadge status={stmt.status || 'PENDING'} colorMap={STATEMENT_STATUS_COLORS} /></td>
