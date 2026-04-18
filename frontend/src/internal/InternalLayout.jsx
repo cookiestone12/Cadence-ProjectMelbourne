@@ -1,16 +1,21 @@
 import React from 'react'
 import { NavLink, useNavigate, Outlet } from 'react-router-dom'
+import {
+  ChartBarIcon, BuildingOffice2Icon, UsersIcon, CircleStackIcon,
+  DocumentTextIcon, CodeBracketIcon, AdjustmentsHorizontalIcon,
+  RocketLaunchIcon,
+} from '@heroicons/react/24/outline'
 import internal from './api'
 
 const NAV = [
-  { to: '/internal/dashboard', label: 'Dashboard' },
-  { to: '/internal/organizations', label: 'Organizations' },
-  { to: '/internal/users', label: 'Users' },
-  { to: '/internal/database', label: 'Database' },
-  { to: '/internal/logs', label: 'Logs' },
-  { to: '/internal/source', label: 'Source viewer' },
-  { to: '/internal/config', label: 'Feature flags' },
-  { to: '/internal/onboarding', label: 'Onboarding' },
+  { to: '/internal/dashboard', label: 'Dashboard', Icon: ChartBarIcon },
+  { to: '/internal/organizations', label: 'Organizations', Icon: BuildingOffice2Icon },
+  { to: '/internal/users', label: 'Users', Icon: UsersIcon },
+  { to: '/internal/database', label: 'Database', Icon: CircleStackIcon },
+  { to: '/internal/logs', label: 'Logs', Icon: DocumentTextIcon },
+  { to: '/internal/source', label: 'Source viewer', Icon: CodeBracketIcon },
+  { to: '/internal/config', label: 'Feature flags', Icon: AdjustmentsHorizontalIcon },
+  { to: '/internal/onboarding', label: 'Onboarding', Icon: RocketLaunchIcon },
 ]
 
 export default function InternalLayout() {
@@ -31,21 +36,25 @@ export default function InternalLayout() {
           <div className="text-xs text-slate-400 mt-0.5">Internal Portal</div>
         </div>
         <nav className="flex-1 px-2 py-3 space-y-0.5">
-          {NAV.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `block px-3 py-2 rounded-md text-sm transition-colors ${
-                  isActive
-                    ? 'bg-slate-700 text-white font-medium'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
+          {NAV.map(item => {
+            const Icon = item.Icon
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  `flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    isActive
+                      ? 'bg-slate-700 text-white font-medium'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`
+                }
+              >
+                {Icon && <Icon className="w-4 h-4 shrink-0" />}
+                <span>{item.label}</span>
+              </NavLink>
+            )
+          })}
         </nav>
         <div className="border-t border-slate-700 px-4 py-3 text-xs text-slate-400">
           <div className="text-slate-200 font-medium truncate">

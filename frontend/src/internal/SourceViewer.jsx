@@ -1,5 +1,37 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
+import hljs from 'highlight.js/lib/common'
+import 'highlight.js/styles/github.css'
 import internal from './api'
+
+const EXT_LANG = {
+  js: 'javascript', jsx: 'javascript',
+  ts: 'typescript', tsx: 'typescript',
+  py: 'python', json: 'json', css: 'css', html: 'xml',
+  md: 'markdown', sh: 'bash', yml: 'yaml', yaml: 'yaml',
+  sql: 'sql', toml: 'ini',
+}
+
+function HighlightedCode({ content, language }) {
+  const html = useMemo(() => {
+    const lang = EXT_LANG[language] || (hljs.getLanguage(language) ? language : null)
+    try {
+      if (lang) return hljs.highlight(content, { language: lang, ignoreIllegals: true }).value
+      return hljs.highlightAuto(content).value
+    } catch {
+      // Fallback to a safely-escaped raw view if highlighting blows up.
+      const div = document.createElement('div'); div.textContent = content
+      return div.innerHTML
+    }
+  }, [content, language])
+  return (
+    <pre className="overflow-auto text-xs p-3 leading-relaxed whitespace-pre flex-1">
+      <code
+        className={`hljs language-${EXT_LANG[language] || language || 'plaintext'}`}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </pre>
+  )
+}
 
 function FileTree({ items, onPick, picked }) {
   return (
@@ -110,9 +142,7 @@ export default function SourceViewer() {
               {file.is_binary ? (
                 <div className="p-4 text-sm text-slate-500">Binary file — preview unavailable.</div>
               ) : (
-                <pre className="overflow-auto text-xs font-mono p-3 leading-relaxed whitespace-pre flex-1">
-                  {file.content}
-                </pre>
+                <HighlightedCode content={file.content} language={file.language} />
               )}
             </>
           )}

@@ -137,6 +137,7 @@ def tail_logs(
     level: Optional[str] = None,
     since: Optional[datetime] = None,
     limit: int = 200,
+    until: Optional[datetime] = None,
 ) -> list[dict]:
     """Return the most recent log entries from the in-process ring
     buffer, newest last. ``level`` filters by minimum severity (e.g.
@@ -155,6 +156,9 @@ def tail_logs(
     if since is not None:
         cutoff = since.isoformat()
         entries = [e for e in entries if e.get("timestamp", "") >= cutoff]
+    if until is not None:
+        upper = until.isoformat()
+        entries = [e for e in entries if e.get("timestamp", "") <= upper]
     if limit and len(entries) > limit:
         entries = entries[-limit:]
     return entries

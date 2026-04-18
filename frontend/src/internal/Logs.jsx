@@ -14,6 +14,7 @@ const COLOR = {
 export default function Logs() {
   const [level, setLevel] = useState('')
   const [since, setSince] = useState('')
+  const [until, setUntil] = useState('')
   const [q, setQ] = useState('')
   const [requestId, setRequestId] = useState('')
   const [entries, setEntries] = useState([])
@@ -26,6 +27,7 @@ export default function Logs() {
         params: {
           level: level || undefined,
           since: since || undefined,
+          until: until || undefined,
           q: q || undefined,
           request_id: requestId || undefined,
           limit: 500,
@@ -45,6 +47,7 @@ export default function Logs() {
     const params = new URLSearchParams()
     if (level) params.set('level', level)
     if (since) params.set('since', since)
+    if (until) params.set('until', until)
     if (q) params.set('q', q)
     if (requestId) params.set('request_id', requestId)
     const r = await fetch(
@@ -77,12 +80,24 @@ export default function Logs() {
         >
           {LEVELS.map((l) => <option key={l} value={l}>{l || 'All levels'}</option>)}
         </select>
-        <input
-          type="datetime-local"
-          className="border border-slate-300 rounded-md px-2 py-1 text-sm"
-          value={since}
-          onChange={(e) => setSince(e.target.value)}
-        />
+        <label className="text-xs flex items-center gap-1">
+          From
+          <input
+            type="datetime-local"
+            className="border border-slate-300 rounded-md px-2 py-1 text-sm"
+            value={since}
+            onChange={(e) => setSince(e.target.value)}
+          />
+        </label>
+        <label className="text-xs flex items-center gap-1">
+          To
+          <input
+            type="datetime-local"
+            className="border border-slate-300 rounded-md px-2 py-1 text-sm"
+            value={until}
+            onChange={(e) => setUntil(e.target.value)}
+          />
+        </label>
         <input
           type="text"
           placeholder="search message…"

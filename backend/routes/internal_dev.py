@@ -280,6 +280,15 @@ def update_config(
 # Logs (server-side filters + JSONL download)
 # ---------------------------------------------------------------------
 
+def _parse_dt(value: Optional[str], field: str) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"{field} must be ISO-8601")
+
+
 def _filter_logs(entries: list[dict], q: Optional[str], request_id: Optional[str]) -> list[dict]:
     if q:
         ql = q.lower()
@@ -304,17 +313,17 @@ def logs_search(
     q: Optional[str] = Query(default=None),
     level: Optional[str] = Query(default=None),
     since: Optional[str] = Query(default=None),
+    until: Optional[str] = Query(default=None),
     request_id: Optional[str] = Query(default=None),
     limit: int = Query(default=500, ge=1, le=5000),
     current_user: User = Depends(get_current_staff_or_admin),
 ):
-    parsed_since: Optional[datetime] = None
-    if since:
-        try:
-            parsed_since = datetime.fromisoformat(since)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="since must be ISO-8601")
-    entries = tail_logs(level=level, since=parsed_since, limit=10_000)
+    entries = tail_logs(
+        level=level,
+        since=_parse_dt(since, "since"),
+        until=_parse_dt(until, "until"),
+        limit=10_000,
+    )
     entries = _filter_logs(entries, q, request_id)
     if len(entries) > limit:
         entries = entries[-limit:]
@@ -331,17 +340,17 @@ def logs_download(
     q: Optional[str] = Query(default=None),
     level: Optional[str] = Query(default=None),
     since: Optional[str] = Query(default=None),
+    until: Optional[str] = Query(default=None),
     request_id: Optional[str] = Query(default=None),
     limit: int = Query(default=10_000, ge=1, le=10_000),
     current_user: User = Depends(get_current_staff_or_admin),
 ):
-    parsed_since: Optional[datetime] = None
-    if since:
-        try:
-            parsed_since = datetime.fromisoformat(since)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="since must be ISO-8601")
-    entries = tail_logs(level=level, since=parsed_since, limit=10_000)
+    entries = tail_logs(
+        level=level,
+        since=_parse_dt(since, "since"),
+        until=_parse_dt(until, "until"),
+        limit=10_000,
+    )
     entries = _filter_logs(entries, q, request_id)
     if len(entries) > limit:
         entries = entries[-limit:]
