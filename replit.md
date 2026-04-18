@@ -1,7 +1,7 @@
 # Cadence - Catalog Intelligence - Multi-Tenant Rights & Catalog Administration
 
 ## Overview
-Cadence is a multi-tenant platform designed for music industry professionals to manage music catalogs, rights, and creator relationships. It provides tools for catalog valuation, rights administration, creator management, and placement tracking, offering insights into catalog performance and value. The platform aims for an intuitive user interface inspired by Apple Music, serving as a comprehensive solution for music professionals.
+Cadence is a multi-tenant platform for music industry professionals to manage music catalogs, rights, and creator relationships. It provides tools for catalog valuation, rights administration, creator management, and placement tracking, offering insights into catalog performance and value. The platform aims for an intuitive user interface inspired by Apple Music, serving as a comprehensive solution for music professionals to maximize catalog value and streamline operations.
 
 ## User Preferences
 ### Coding Style
@@ -11,78 +11,33 @@ Cadence is a multi-tenant platform designed for music industry professionals to 
 - Imports: Absolute imports for backend modules
 
 ## System Architecture
-Cadence utilizes a modern tech stack with React 18 and Tailwind CSS for the frontend, and FastAPI with SQLAlchemy and PostgreSQL for the backend.
+Cadence uses a modern tech stack with React 18 and Tailwind CSS for the frontend, and FastAPI with SQLAlchemy and PostgreSQL for the backend.
 
 ### UI/UX Decisions
-The frontend adopts an Apple Music-style aesthetic, featuring a collapsible sidebar, gradient headers, rounded cards, and smooth transitions, optimized for mobile devices. The primary color scheme is sage-green. Key dashboards include Creator Roster, Creator Profiles, Catalog View, Placement Tracking Timeline, Reports with Recharts, and Catalog Valuation.
+The frontend adopts an Apple Music-style aesthetic, featuring a collapsible sidebar, gradient headers, rounded cards, and smooth transitions, optimized for mobile devices. The primary color scheme is sage-green. Key dashboards include Creator Roster, Creator Profiles, Catalog View, Placement Tracking Timeline, Reports with Recharts, and Catalog Valuation. Modular widget dashboards and grid/list view toggles enhance user experience.
 
 ### Technical Implementations
 - **Multi-Tenant Architecture**: Ensures data isolation and organization-scoped access control.
-- **Authentication**: JWT-based authentication with bcrypt for password hashing, supporting master admin and case-insensitive username login.
+- **Authentication**: JWT-based authentication with bcrypt for password hashing.
 - **Data Models**: Comprehensive schema for Organizations, Users, Creators, Songs, Works, Releases, Contracts, Placements, and Royalty data.
-- **Rights & Contract Tracking**: Supports deal-level contracts, asset-to-contract linking, and validates per-asset rights splits to 100%. Song-level Publishing % and Master % are read-only and derived from credit-level splits.
-- **Multi-Client Song Grouping**: Facilitates shared song management across multiple clients via a `shared_song_group_id`, enabling linked actions and notifications.
-- **Auto-Create Creator**: Automatically creates creator records when new creator names are added via credits.
-- **MLC Statement Processing**: Handles MLC statements for multi-client royalty distribution, normalizing split shares.
-- **Health Score System**: Dynamically calculates song health based on a weighted checklist.
-- **Catalog Valuation Tool**: Employs a weighted average of industry metrics and a proprietary Black Box Algorithm, including an underwriting engine for statement-driven valuations.
-- **API Security**: Enforces JWT authentication, user-organization membership, and organization-scoped queries.
-- **AI-Powered Data Ingestion**: Utilizes OpenAI for intelligent column mapping in CSV imports and parsing PDF/Word Schedule A documents.
-- **Notification System**: Customizable in-app and email notifications with user and organization-level preferences.
-- **Action Items System**: Manages proactive, deadline-driven action items, auto-generated based on catalog gaps.
-- **Placement Management**: Tracks sync licensing placements through a status pipeline (PITCHED to PAID) with financial and accounting integration.
-- **Sync Reports**: Customizable sync placement reports with PDF/CSV export options and branded templates.
-- **Cross-Organization Client Sharing**: Secure sharing workflow with email invitations, role-based catalog synchronization, and granular module-level permissions.
-- **Expense Tracking**: Integrated Expense model within the Royalties page.
-- **Works Approval Workflow**: Manages composition approval with PENDING status, requiring OWNER/ADMIN approval and generating associated action items.
-- **Works Folder Organization**: Supports hierarchical folder structures for Works.
-- **Core Catalog & Creator Management**: Expanded data models for `Works` and `Releases` with `work_type` and `IPAssetType`.
-- **Creative Directory**: Contact management system with private/public visibility, per-user ownership, and Quick Share PRO Info features.
-- **Creator Contact Roles**: Allows assigning multiple contacts to creators with specific roles.
-- **Unified Email System**: App-wide email infrastructure powered by Resend with branded HTML templates.
-- **Bulk Registration**: Operational PRO registration workflow for tracking and generating branded PDF reports with submission history.
-- **Roster Deck Configuration**: Pre-export configuration for PDF roster decks, allowing selection of per-creator bio, links, and custom fields.
-- **Spotify Integration**: Integrates with Spotify API for playlist import, track search, and release metadata lookup.
-- **Cloud Storage Integration**: Multi-provider integration (Dropbox, Google Drive) for linking audio files.
-- **AI Contract Parsing**: Uses OpenAI to extract key terms from PDF/DOCX contracts.
-- **AI Audio Analysis**: Background analysis pipeline using OpenAI for generating BPM, key, loudness, mood/texture/sync tags from audio files.
-- **Audio Tagging System**: AI-generated tags with confidence scores and user-editable overrides.
-- **Brief Builder**: Sync brief matching tool using OpenAI for natural language query parsing and structured filtering.
-- **Org-Wide Audio Linking Pipeline**: Organization-level Dropbox scan that fuzzy-matches audio files to catalog songs, auto-links high-confidence matches, and queues AI analysis.
-- **Royalty Accounting System**: Financial engine for statement ingestion, asset matching, royalty calculation, and payment management, supporting multi-currency and PRO statements.
-- **Release Delivery & Distribution Readiness**: Validation checks for release and track metadata, artwork, legal, and credits.
-- **Per-Creator Storage Linking**: Links creators to cloud storage folders with AI-powered file scanning and fuzzy matching.
+- **Rights & Contract Tracking**: Supports deal-level contracts, asset-to-contract linking, and validates per-asset rights splits. Song-level Publishing % and Master % are read-only and derived from credit-level splits.
+- **Multi-Client Song Grouping**: Facilitates shared song management across multiple clients.
+- **Catalog Valuation Tool**: Employs a weighted average of industry metrics and a proprietary Black Box Algorithm, including an underwriting engine for statement-driven valuations and per-creator scope. Decay analytics provide insights into songs awaiting more data.
+- **AI-Powered Data Ingestion**: Utilizes OpenAI for intelligent column mapping in CSV imports, parsing PDF/Word Schedule A documents, and extracting key terms from contracts.
+- **Notification & Action Items System**: Customizable in-app and email notifications and a system for managing proactive, deadline-driven action items.
+- **Placement Management**: Tracks sync licensing placements through a status pipeline.
+- **Cross-Organization Client Sharing**: Secure sharing workflow with email invitations, role-based catalog synchronization, and granular permissions.
+- **Royalty Accounting System**: Financial engine for statement ingestion, asset matching, royalty calculation, and payment management, supporting multi-currency and PRO statements, with a focus on single source of truth and reconciliation.
+- **Release Delivery & Distribution Readiness**: Validation checks for release and track metadata.
+- **Cloud Storage Integration**: Multi-provider integration (Dropbox, Google Drive) for linking audio files, with AI audio analysis (BPM, key, loudness, tags) and an organization-wide audio linking pipeline. Per-creator storage linking is also supported.
 - **Client Portal**: Org-managed client login system for creators with full catalog management capabilities, including adding/editing songs, contract creation with AI parsing, document uploads, and royalty statement ingestion.
-- **Bulk & Cross-Org Contact Sharing**: Multi-select contact cards for bulk email sharing and shareable public links.
-- **Per-Client Contact Sharing**: Admins can explicitly share creative directory contacts with client accounts.
-- **Client Account Merge**: Allows client portal users to merge their client account into an independent Cadence account.
-- **Editable Credit Roles**: Inline editing of song credits on Creator Detail pages.
-- **Streaming Credits & Intelligence**: Muso.ai-inspired streaming intelligence system with chart data ingestion, ISRC-based track matching, and cross-platform stream estimation, featuring shareable public profiles.
+- **Streaming Credits & Intelligence**: Muso.ai-inspired streaming intelligence system with chart data ingestion, ISRC-based track matching, and cross-platform stream estimation.
 - **Progressive Web App (PWA)**: Includes a web manifest and service worker for offline caching and push notifications.
-- **Modular Widget Dashboard**: Home page uses a customizable widget-based architecture.
-- **Grid/List View Toggle**: Supports toggling between card grid and table list views on various pages.
-- **Universal Document & Item Sharing**: Allows sharing documents, audio files, statements, catalog entries, contacts, and contracts via email or directly to other Cadence accounts, with import functionality for recipients.
-- **Catalog Refactor — Released/Unreleased Model**: Introduces "Unreleased" catalog section, `release_status`, `entry_type`, and `parent_song_id` for duplicate tracking. Automated and manual release status management.
-- **Duplicate Catalog Entry**: Feature to quickly duplicate songs, linking back to the original.
-- **Song Edit History**: Verifiable audit trail for song mutations, tracking field-level changes with user attribution and exportable PDF history.
-- **Comprehensive Audit Logging**: Organization-scoped audit trail for critical actions, accessible via Tenant Admin.
-- **Infrastructure Cost Tracker**: Master Admin feature for tracking categorized service costs, AI usage, and generating branded PDF cost reports.
-- **Support Ticket System**: User-facing support page for submitting tickets with image attachments and annotation tools. Admin interface for managing tickets.
-- **AI Assistant Chat**: Floating chat button providing natural language guidance about the app, powered by OpenAI `gpt-4o-mini`, with role-aware responses.
-- **Public Website Pages**: Landing page with waitlist/demo forms, Careers page, and Investor Relations page with inquiry forms.
-- **Production Infrastructure Foundation**: APP_ENV-driven environment separation (development vs production), `/health` endpoint with real DB connectivity probe, hardened CORS (locks down `*` in production), per-request `X-Request-ID` propagated via ContextVar through structured JSON logs (request_id, user_id, route, duration_ms), HTTPS enforcement via `X-Forwarded-Proto` (fail-closed, /health exempt), in-process ring buffer log handler (last 10k records, accessible via `tail_logs()`) for the upcoming internal logs viewer, and global exception handlers (SQLAlchemyError→503, JWTError→401, generic→500 with traceback hidden in production).
-- **Duplicate-Statement Cleanup Script (Task #98)**: One-shot admin cleanup at `backend/scripts/cleanup_duplicate_statements_98.py` for the two known pre-guard prod duplicates (#17→#18 BMI 2024 H1 $18,622.98; #11→#15 Marri BMI 2026 $48.30). Re-uses the production-grade `_perform_statement_delete` helper so it cascades through lines, ledger entries, action items, transactions/allocations, restores advance balances, unwinds payouts, removes the file from disk, and writes an `AuditLog` DELETE row. Defaults to dry-run; requires `--apply` and `--as-user-id <master_admin_id>` to mutate. Idempotent (re-runs report SKIPPED). Refuses to delete if duplicate and original disagree on `organization_id` or `total_revenue_cents`, or if the original is missing. Covered by 6 unit tests in `backend/tests/test_cleanup_duplicate_statements_98.py`.
-- **Catalog Valuation — Per-Creator Scope (Task #105)**: The Catalog Valuation page now has a "Scope" dropdown (top right) defaulting to "All clients (org-wide)" and listing every creator. Changing the scope re-runs all data loads (`/underwriting/latest`, `/underwriting/runs`, `/catalog/summary`) for that creator only and re-renders every panel (multiplier/DCF cards, spine, decay, concentration, projections). The selection is mirrored to the URL as `?creatorId=…` so the view is shareable and refresh-safe. Creator detail pages now render a "Run Valuation" pill next to the edit pencil that deep-links to `/valuation?creatorId={id}`. The underwriting engine already accepted `scope_creator_id` end-to-end and persisted it to `underwriting_runs.scope_creator_id`; the new `GET /api/valuation/underwriting/latest?scope_creator_id=N` endpoint filters the most-recent-run lookup by that scope (and explicitly returns `IS NULL` runs when no scope is given so org-wide and per-creator histories don't bleed into each other), and the runs list response now includes `scope_creator_id` + `scope_creator_name` so the History tab can label which scope each run used. Covered by 4 tests in `backend/tests/test_underwriting_scope_creator_105.py` (spine filter happy-path, no-credit creator returns empty (no leakage), `/latest` filter, runs list shape).
-- **Royalty Engine — Single Source of Truth & Reconciliation**: `analytics.py` (Reports tab) now reads from the authoritative `royalty_statements.total_revenue_cents` (org-wide totals), `royalty_statement_lines.net_amount` joined to `matched_song_id` (top tracks), and `royalty_statement_lines.store/territory` (platform/territory breakdowns) — NOT the legacy `royalty_transactions` table, which only has data for some statements and was making Reports disagree with the Royalties page. Statement upload rejects same-org duplicate filenames with HTTP 409 (override via `force=true`), and auto-extracts `period_start/period_end` from PDF headers (`Performance Period: Jul - Dec 2023`, `Statement Period: ...`, etc.) when not supplied. New `GET /api/royalty-processing/{org_id}/reconciliation` returns per-statement variance (header total vs sum of lines vs ledger), flags `DUPLICATE_FILE | ZERO_AMOUNT_HEADER | ALL_LINES_ZERO_AMOUNT | SOME_LINES_ZERO_AMOUNT | HEADER_VS_LINES_VARIANCE | PROCESSED_WITHOUT_LEDGER | HEADER_VS_LEDGER_VARIANCE | PERIOD_MISSING | UNASSIGNED`, and a net-of-duplicates org total that matches the corrected Reports figure. The frontend Reports page renders a yellow reconciliation banner (count of flagged statements + duplicate-file count) linking to the Royalties page whenever any statement is flagged.
-
-## Source Control
-The codebase is set up to mirror from this Replit workspace to a private GitHub repository (the workspace is the live editor; GitHub is the off-site backup). Day-to-day pushes happen through Replit's built-in **Git** panel — open it, write a short commit message, click **Commit & Push**.
-
-> **GitHub repo URL:** _to be filled in by the owner after the one-time `Connect to GitHub` → `Create & Push` step in the Git panel (browser OAuth required, can't be automated)._ Update this line with the URL once the repo exists.
-
-See `CONTRIBUTING.md` for the full plain-language walkthrough, including how to recover the workspace from GitHub if it's ever lost, and the strict rule that **secrets never leave Replit's secret manager**.
-
-`.gitignore` is configured to keep `attached_assets/` (chat-pasted scratch files), `uploads/`, local databases, log files, build output, and most of `.local/` out of source control. Only `.local/tasks/` is intentionally tracked, since it's the project-task history.
+- **Universal Document & Item Sharing**: Allows sharing various items via email or directly to other Cadence accounts.
+- **Catalog Refactor — Released/Unreleased Model**: Introduces "Unreleased" catalog section and related statuses.
+- **Comprehensive Audit Logging**: Organization-scoped audit trail for critical actions, including song edit history.
+- **AI Assistant Chat**: Floating chat button providing natural language guidance about the app, powered by OpenAI `gpt-4o-mini`.
+- **Production Infrastructure Foundation**: APP_ENV-driven environment separation, `/health` endpoint, hardened CORS, per-request `X-Request-ID` for structured JSON logs, HTTPS enforcement, in-process ring buffer log handler, and global exception handlers.
 
 ## External Dependencies
 - PostgreSQL

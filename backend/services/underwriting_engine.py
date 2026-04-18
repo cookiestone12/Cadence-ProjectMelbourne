@@ -588,7 +588,14 @@ def run_underwriting(
         master_share = master_annual / total_rev if total_rev > 0 else 0.5
 
         decay_ks = [d["k"] for d in decay_results.values() if d.get("k") and d["k"] > 0]
-        portfolio_k = sum(decay_ks) / len(decay_ks) if decay_ks else 0.1
+        # `portfolio_k_for_projection` is the value fed into project_forward
+        # so the UI can still render scenario lines on a brand-new catalog
+        # (we fall back to the KB default of 0.1). `portfolio_k_reported` is
+        # what we expose to the frontend — it stays None when no song fit so
+        # the user sees an honest "Insufficient data" state instead of a
+        # made-up 0.1000.
+        portfolio_k_reported = sum(decay_ks) / len(decay_ks) if decay_ks else None
+        portfolio_k = portfolio_k_reported if portfolio_k_reported is not None else 0.1
 
         half_lives = [d["half_life_periods"] for d in decay_results.values() if d.get("half_life_periods")]
         portfolio_half_life = sum(half_lives) / len(half_lives) if half_lives else None
@@ -654,7 +661,7 @@ def run_underwriting(
             "master_annual": round(master_annual, 2),
             "publisher_share": round(pub_share, 4),
             "master_share": round(master_share, 4),
-            "portfolio_decay_k": round(portfolio_k, 4),
+            "portfolio_decay_k": round(portfolio_k_reported, 4) if portfolio_k_reported is not None else None,
             "portfolio_half_life": round(portfolio_half_life, 2) if portfolio_half_life else None,
             "stability_signals": stability_signals,
             "unmatched_revenue": {
@@ -673,9 +680,12 @@ def run_underwriting(
         }
         run.decay_data = {
             "per_song": {k: {kk: vv for kk, vv in v.items() if kk != "series"} for k, v in decay_results.items()},
-            "portfolio_k": round(portfolio_k, 4),
+            "portfolio_k": round(portfolio_k_reported, 4) if portfolio_k_reported is not None else None,
             "portfolio_half_life": round(portfolio_half_life, 2) if portfolio_half_life else None,
             "half_life_distribution": _compute_half_life_distribution(decay_results),
+            "awaiting_data": awaiting_data,
+            "min_data_points": min_points,
+            "has_revenue_spine": len(spine) > 0,
         }
         run.concentration_data = concentration_by_period
         run.projection_data = projection_scenarios

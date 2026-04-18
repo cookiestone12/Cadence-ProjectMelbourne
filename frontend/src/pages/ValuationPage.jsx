@@ -574,20 +574,65 @@ export default function ValuationPage() {
         </div>
       )}
 
-      {hasUW && activeTab === 'decay' && (
+      {hasUW && activeTab === 'decay' && (() => {
+        const awaitingData = Array.isArray(decay.awaiting_data) ? decay.awaiting_data : []
+        const fitCount = Object.keys(decay.per_song || {}).length
+        const hasSpine = decay.has_revenue_spine !== false && (
+          (decay.has_revenue_spine === true) || fitCount > 0 || awaitingData.length > 0
+        )
+        const minPoints = decay.min_data_points || 3
+        const reasonLabel = (r) => {
+          if (r === 'insufficient_data') return 'Not enough periods yet'
+          if (r === 'no_post_peak_data') return 'No post-peak periods yet'
+          if (r === 'fit_failed') return 'Curve fit failed'
+          return r || '—'
+        }
+
+        if (!hasSpine && fitCount === 0 && awaitingData.length === 0) {
+          return (
+            <div className="space-y-6 mb-6">
+              <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-10 text-center">
+                <ArrowTrendingDownIcon className="h-10 w-10 text-[#B5C0B8] mx-auto mb-3" />
+                <h3 className="text-base font-semibold text-[#3D4A44] mb-1">No revenue data yet</h3>
+                <p className="text-sm text-[#7A8580] max-w-md mx-auto">
+                  Upload more royalty statements to enable decay analytics. We need at least {minPoints} periods of post-peak revenue per song before a curve can be fit.
+                </p>
+              </div>
+            </div>
+          )
+        }
+
+        return (
         <div className="space-y-6 mb-6">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5">
               <div className="text-xs text-[#7A8580] mb-1">Portfolio Decay Rate (k)</div>
-              <div className="text-2xl font-bold text-[#3D4A44]">{decay.portfolio_k?.toFixed(4) || 'N/A'}</div>
+              {decay.portfolio_k != null ? (
+                <div className="text-2xl font-bold text-[#3D4A44]">{decay.portfolio_k.toFixed(4)}</div>
+              ) : (
+                <div>
+                  <div className="text-2xl font-bold text-[#B5C0B8]">—</div>
+                  <span className="inline-block mt-1 text-[10px] font-medium text-[#C4956B] bg-[#FAF1E6] px-2 py-0.5 rounded-full uppercase tracking-wide">Insufficient data</span>
+                </div>
+              )}
             </div>
             <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5">
               <div className="text-xs text-[#7A8580] mb-1">Portfolio Half-Life</div>
-              <div className="text-2xl font-bold text-[#3D4A44]">{decay.portfolio_half_life ? `${decay.portfolio_half_life} periods` : 'N/A'}</div>
+              {decay.portfolio_half_life != null ? (
+                <div className="text-2xl font-bold text-[#3D4A44]">{decay.portfolio_half_life} periods</div>
+              ) : (
+                <div>
+                  <div className="text-2xl font-bold text-[#B5C0B8]">—</div>
+                  <span className="inline-block mt-1 text-[10px] font-medium text-[#C4956B] bg-[#FAF1E6] px-2 py-0.5 rounded-full uppercase tracking-wide">Insufficient data</span>
+                </div>
+              )}
             </div>
             <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] p-5">
               <div className="text-xs text-[#7A8580] mb-1">Songs with Decay Fit</div>
-              <div className="text-2xl font-bold text-[#3D4A44]">{Object.keys(decay.per_song || {}).length}</div>
+              <div className="text-2xl font-bold text-[#3D4A44]">{fitCount}</div>
+              {awaitingData.length > 0 && (
+                <p className="text-[11px] text-[#7A8580] mt-1">{awaitingData.length} awaiting more data</p>
+              )}
             </div>
           </div>
 
@@ -647,8 +692,49 @@ export default function ValuationPage() {
               </div>
             </div>
           )}
+
+          {awaitingData.length > 0 && (
+            <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)]">
+              <div className="p-5 border-b border-[rgba(59,77,67,0.08)]">
+                <h3 className="text-sm font-bold text-[#3D4A44]">Songs Awaiting More Data ({awaitingData.length})</h3>
+                <p className="text-xs text-[#7A8580] mt-1">
+                  These songs have revenue but not yet enough post-peak periods (need {minPoints}) to fit a decay curve. Sorted by closest to fitting.
+                </p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-[#EEF1EC]">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-[#7A8580] uppercase text-[10px]">Song</th>
+                      <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">Periods on file</th>
+                      <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px]">Periods needed</th>
+                      <th className="px-3 py-2 text-left font-medium text-[#7A8580] uppercase text-[10px]">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                    {awaitingData.slice(0, 100).map((row) => (
+                      <tr key={row.spine_key} className="hover:bg-[#EEF1EC]">
+                        <td className="px-3 py-2 font-medium text-[#3D4A44]">{row.title}</td>
+                        <td className="px-3 py-2 text-right text-[#3D4A44]">{row.periods_present}</td>
+                        <td className="px-3 py-2 text-right text-[#3D4A44]">
+                          {row.periods_needed > 0 ? `${row.periods_needed} more` : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-[#7A8580]">{reasonLabel(row.reason)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {awaitingData.length > 100 && (
+                  <div className="px-5 py-3 text-[11px] text-[#7A8580] border-t border-[rgba(59,77,67,0.06)]">
+                    Showing first 100 of {awaitingData.length}.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      )}
+        )
+      })()}
 
       {hasUW && activeTab === 'concentration' && (
         <div className="space-y-6 mb-6">
