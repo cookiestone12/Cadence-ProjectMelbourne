@@ -82,6 +82,31 @@ To keep the GitHub repo clean and small, the following are excluded automaticall
 
 If you ever need one of these files later, you'll find it in the original Replit checkpoint history.
 
+## Automated checks on GitHub (the green/red checkmark)
+
+Every time a push lands on GitHub, GitHub automatically runs a short series of safety checks for free. You'll see a small icon next to each commit on github.com:
+
+- **Yellow dot** — checks are still running (usually 1–3 minutes).
+- **Green check** — everything passed. Nothing to do.
+- **Red X** — something failed. The latest push has a problem.
+
+The checks that run today are:
+
+1. **Backend compile check** — confirms every Python file in `backend/` still parses (catches typos, syntax errors, and accidentally-deleted code). It does not run the app, so it won't catch every kind of bug, but it reliably catches the "I broke a file" class of mistakes.
+2. **Frontend build** — runs `npm ci && npm run build` in `frontend/` to confirm the app still compiles into something deployable.
+3. **Secret scan** — scans the push for things that look like API keys, passwords, or private keys. If one is found, the check goes red so you know to rotate the leaked credential immediately.
+
+### What to do when a check goes red
+
+1. Click the red X on github.com — it opens the run log.
+2. Scroll to the bottom of the failing step. The actual error is almost always in the last 20–30 lines (look for the word `Error`, `Failed`, or a red line).
+3. Copy that error and paste it to the agent in Replit with a short note like *"the GitHub check failed with this error, please fix"*. The agent can read the log excerpt and patch the workspace.
+4. Once the agent has fixed it, push again. The new commit will get its own checkmark.
+
+If the **secret scan** went red, treat it as urgent:
+- Do not push more commits trying to "remove" the secret — it's already in the history.
+- Tell the agent which secret leaked. The agent will help you rotate it (generate a new key) and clean the file. The old key should be considered compromised.
+
 ## Branches and pull requests (for later)
 
 Right now the workflow is "everyone works on `main`." That's the right call while it's just you and the agent. If a real second contributor joins the project, switch to:
