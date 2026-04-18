@@ -1181,6 +1181,7 @@ class RoyaltyStatement(Base):
         Index('ix_royalty_statements_org_id', 'organization_id'),
         Index('ix_royalty_statements_status', 'status'),
         Index('ix_royalty_statements_period', 'period_start', 'period_end'),
+        Index('ix_royalty_statements_creator_id', 'creator_id'),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -1465,6 +1466,8 @@ class Placement(Base):
         Index('ix_placements_status', 'status'),
         Index('ix_placements_song_id', 'song_id'),
         Index('ix_placements_release_id', 'release_id'),
+        Index('ix_placements_work_id', 'work_id'),
+        Index('ix_placements_updated_at', 'updated_at'),
     )
 
     id = Column(Integer, primary_key=True, index=True)

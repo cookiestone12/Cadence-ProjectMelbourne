@@ -238,6 +238,43 @@ Production startup runs `alembic upgrade heads` automatically
 under a Postgres advisory lock (`pg_advisory_lock`), so multiple
 instances starting simultaneously cannot race the migration.
 
+### Schema parity check
+
+A merge that lands a migration which diverges from
+`backend/models/models.py` is the exact regression that Task #83
+exposed (missing PK indexes, spurious DB defaults). To prevent the
+next one slipping past code review:
+
+```bash
+DATABASE_URL=postgresql://… python scripts/check_schema_parity.py
+```
+
+The script:
+
+1. Spins up two random Postgres schemas in the configured database
+   (`parity_alembic_<rand>`, `parity_models_<rand>`); both are
+   dropped on exit (success or failure), so it's safe to point at
+   any environment, including production.
+2. Bootstraps the first schema with `Base.metadata.create_all` and
+   then applies every Alembic revision over the top, tolerating
+   "already exists" overlaps from the bootstrap but treating any
+   other failure (including divergent `ALTER COLUMN` errors) as
+   drift.
+3. Builds the second schema with `Base.metadata.create_all` alone.
+4. Diffs the two via `sqlalchemy.inspect()` (table set, column
+   names, nullability, types, primary keys, indexes) and exits 0
+   on parity, 1 on drift, 2 on setup error.
+
+It is wired into `scripts/post-merge.sh` (the post-merge hook that
+runs after every task merge), so a divergent migration fails the
+hook before reaching production. The same logic also runs as a
+pytest case (`backend/tests/test_schema_parity.py`) for local dev,
+where it auto-skips if `DATABASE_URL` isn't Postgres.
+
+When the check fails, the report names every offending object —
+reconcile by editing either the migration in `alembic/versions/`
+or the model in `backend/models/models.py` and re-run.
+
 ### View logs
 - **In-app:** `/internal/logs` shows the last 10k records from
   the in-process ring buffer (filter by level / since). Good for
