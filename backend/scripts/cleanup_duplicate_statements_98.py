@@ -254,7 +254,29 @@ def main(argv: Optional[List[str]] = None) -> int:
         for r in results:
             logger.info("  - stmt #%d: %s — %s", r.target.duplicate_id, r.status, r.message)
 
-        return 0 if errors == 0 else 1
+        # Exit non-zero if anything went wrong OR if --apply was used
+        # but a target was refused by the safety guards. SKIPPED in
+        # dry-run mode is still success (you may have just not applied).
+        # SKIPPED in apply mode usually means a guard refused, which
+        # should not look like green to an automated runner.
+        if errors > 0:
+            return 1
+        if args.apply and skipped > 0:
+            # If every skip is "already deleted" (idempotent re-run),
+            # that's still success. Anything else (REFUSING TO DELETE)
+            # should fail loud.
+            non_idempotent_skips = [
+                r for r in results
+                if r.status == "SKIPPED" and "already deleted" not in r.message
+            ]
+            if non_idempotent_skips:
+                logger.error(
+                    "%d target(s) refused by safety guard — exiting non-zero "
+                    "so automated runners do not treat this as success.",
+                    len(non_idempotent_skips),
+                )
+                return 1
+        return 0
     finally:
         db.close()
 
