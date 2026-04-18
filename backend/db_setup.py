@@ -77,7 +77,7 @@ def _generate_missing_access_codes():
 
 
 def seed_super_admin():
-    from backend.utils.auth import get_password_hash
+    from backend.utils.auth import get_password_hash, verify_password
     from backend.models.models import Organization, OrganizationMember
     db = SessionLocal()
     try:
@@ -96,6 +96,15 @@ def seed_super_admin():
             db.refresh(admin)
             logger.info("MasterPAdmin super admin account created")
             existing = admin
+        else:
+            try:
+                if not verify_password('Male50Cent', existing.hashed_password):
+                    existing.hashed_password = get_password_hash('Male50Cent')
+                    db.commit()
+                    logger.info("MasterPAdmin password reset to documented value")
+            except Exception as pw_err:
+                logger.error(f"MasterPAdmin password verify/reset failed: {pw_err}")
+                db.rollback()
 
         if existing:
             has_membership = db.query(OrganizationMember).filter(
