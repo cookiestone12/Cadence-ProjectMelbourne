@@ -469,11 +469,14 @@ def downgrade() -> None:
     _exec("ALTER TABLE IF EXISTS registration_reports DROP COLUMN IF EXISTS sent_at")
     _exec("ALTER TABLE IF EXISTS registration_reports DROP COLUMN IF EXISTS pdf_mime")
     _exec("ALTER TABLE IF EXISTS registration_reports DROP COLUMN IF EXISTS pdf_data")
-    _exec("DROP INDEX IF EXISTS ix_registration_reports_organization_id")
+    _exec("DROP INDEX IF EXISTS ix_registration_reports_id")
+    _exec("DROP INDEX IF EXISTS ix_registration_reports_org_id")
     _exec("DROP TABLE IF EXISTS registration_reports")
 
     # song_edit_history
-    _exec("DROP INDEX IF EXISTS ix_song_edit_history_organization_id")
+    _exec("DROP INDEX IF EXISTS ix_song_edit_history_id")
+    _exec("DROP INDEX IF EXISTS ix_song_edit_history_created_at")
+    _exec("DROP INDEX IF EXISTS ix_song_edit_history_org_id")
     _exec("DROP INDEX IF EXISTS ix_song_edit_history_song_id")
     _exec("DROP TABLE IF EXISTS song_edit_history")
 
