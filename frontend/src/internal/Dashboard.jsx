@@ -13,6 +13,7 @@ function Stat({ label, value }) {
 export default function Dashboard() {
   const [data, setData] = useState(null)
   const [health, setHealth] = useState('checking')
+  const [deploy, setDeploy] = useState(null)
   const [err, setErr] = useState('')
 
   const load = async () => {
@@ -22,6 +23,10 @@ export default function Dashboard() {
     } catch (e) {
       setErr(e?.response?.data?.detail || 'Failed to load dashboard')
     }
+    try {
+      const { data: d } = await internal.get('/api/internal/portal/deploy/status')
+      setDeploy(d)
+    } catch { /* ignore */ }
   }
 
   const pingHealth = async () => {
@@ -61,6 +66,58 @@ export default function Dashboard() {
         <Stat label="/health" value={health} />
         <Stat label="Backend health" value={data.health_status} />
       </div>
+
+      {deploy?.current && (
+        <section>
+          <h2 className="font-semibold text-slate-900 mb-2">Deploy status</h2>
+          <div className="border border-slate-200 rounded-md p-4 bg-slate-50 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <div>
+              <div className="text-xs text-slate-500">Git</div>
+              <div className="font-mono">{deploy.current.git_short || '—'}</div>
+              {deploy.current.git_message && (
+                <div className="text-xs text-slate-500 truncate">{deploy.current.git_message}</div>
+              )}
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Environment</div>
+              <div className="font-mono">{deploy.current.app_env || '—'}</div>
+              <div className="text-xs text-slate-500">build {deploy.current.build_version || '—'}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Booted</div>
+              <div className="text-xs">{deploy.current.booted_at || '—'}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500">Runtime</div>
+              <div className="text-xs">Python {deploy.current.python_version}</div>
+              <div className="text-xs">Node {deploy.current.node_version || 'n/a'}</div>
+            </div>
+          </div>
+          {deploy.history?.length > 1 && (
+            <details className="mt-2">
+              <summary className="text-xs text-slate-500 cursor-pointer">Boot history</summary>
+              <table className="w-full text-xs mt-1 border border-slate-200 rounded">
+                <thead className="bg-slate-100"><tr>
+                  <th className="px-2 py-1 text-left">Booted</th>
+                  <th className="px-2 py-1 text-left">SHA</th>
+                  <th className="px-2 py-1 text-left">Env</th>
+                  <th className="px-2 py-1 text-left">Build</th>
+                </tr></thead>
+                <tbody>
+                  {deploy.history.map((h) => (
+                    <tr key={h.id} className="border-t border-slate-200">
+                      <td className="px-2 py-1">{h.booted_at}</td>
+                      <td className="px-2 py-1 font-mono">{h.git_short || '—'}</td>
+                      <td className="px-2 py-1">{h.app_env}</td>
+                      <td className="px-2 py-1">{h.build_version || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </details>
+          )}
+        </section>
+      )}
 
       <section>
         <h2 className="font-semibold text-slate-900 mb-2">Scheduled jobs</h2>

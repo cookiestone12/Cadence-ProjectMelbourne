@@ -14,7 +14,7 @@ from .routes import (
     tenant_admin, creative_directory, registration_reports, audit_log, expenses,
     client_sharing, integrations, audio, brief_builder, royalty_processing,
     push, storage_scan, client_portal, account_merge, streaming_credits,
-    document_sharing, support, assistant, schedule_a_imports
+    document_sharing, support, assistant, schedule_a_imports, internal_dev
 )
 from .utils.logging_config import logger
 from .utils.settings import (
@@ -106,6 +106,35 @@ def _deferred_startup_tasks():
         seed_super_admin()
     except Exception as e:
         log.warning(f"seed_super_admin failed at startup: {e}")
+
+    # Internal developer tools (Task #89): create new tables, capture
+    # deploy fingerprint, persist a deploy_event row, and warm the
+    # runtime config cache.
+    try:
+        from .models.database import engine
+        from .models.models import (
+            RuntimeConfig, DeployEvent, SavedQuery, QueryHistoryEntry,
+        )
+        from sqlalchemy import inspect as _inspect
+        _insp = _inspect(engine)
+        _existing = set(_insp.get_table_names())
+        for tbl in [
+            RuntimeConfig.__table__, DeployEvent.__table__,
+            SavedQuery.__table__, QueryHistoryEntry.__table__,
+        ]:
+            if tbl.name not in _existing:
+                tbl.create(engine, checkfirst=True)
+                log.info(f"Created table {tbl.name}")
+    except Exception as e:
+        log.warning(f"Internal-dev table creation failed: {e}")
+
+    try:
+        from .services import deploy_info, runtime_config
+        deploy_info.capture()
+        deploy_info.record_boot()
+        runtime_config.warmup()
+    except Exception as e:
+        log.warning(f"Deploy/config startup failed: {e}")
 
     try:
         from .services.email_scheduler import start_scheduler
@@ -530,6 +559,7 @@ from .routes import internal as internal_routes
 app.include_router(internal_routes.router)
 from .routes import internal_portal
 app.include_router(internal_portal.router)
+app.include_router(internal_dev.router)
 app.include_router(notifications.router)
 app.include_router(actions.router)
 app.include_router(csv_upload.router)

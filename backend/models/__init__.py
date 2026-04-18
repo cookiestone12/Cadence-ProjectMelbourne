@@ -35,6 +35,7 @@ from .models import (
     TicketCategory, TicketStatus, SupportTicket, SupportTicketAttachment,
     LeadType, Lead,
     SongEditHistory,
+    RuntimeConfig, DeployEvent, SavedQuery, QueryHistoryEntry,
 )
 
 __all__ = [

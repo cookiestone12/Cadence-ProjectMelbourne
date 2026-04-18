@@ -8,6 +8,8 @@ const NAV = [
   { to: '/internal/users', label: 'Users' },
   { to: '/internal/database', label: 'Database' },
   { to: '/internal/logs', label: 'Logs' },
+  { to: '/internal/source', label: 'Source viewer' },
+  { to: '/internal/config', label: 'Feature flags' },
   { to: '/internal/onboarding', label: 'Onboarding' },
 ]
 

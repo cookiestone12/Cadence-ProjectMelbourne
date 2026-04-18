@@ -2537,3 +2537,78 @@ class ScheduleAImport(Base):
     organization = relationship("Organization")
     user = relationship("User")
     creator = relationship("Creator")
+
+
+# --- Internal developer tools (Task #89) ------------------------------
+
+class RuntimeConfig(Base):
+    """Global runtime config keys editable from /internal/config.
+
+    Read-through cache lives in services/runtime_config.py. Every
+    write goes through the audit log."""
+    __tablename__ = "runtime_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, nullable=False, unique=True, index=True)
+    category = Column(String, nullable=False, default="general")
+    value_type = Column(String, nullable=False, default="string")  # string|bool|int|float|json
+    value = Column(JSON, nullable=True)
+    description = Column(Text, nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class DeployEvent(Base):
+    """Rolling history of process boots / deploys captured at startup."""
+    __tablename__ = "deploy_event"
+    __table_args__ = (
+        Index("ix_deploy_event_booted_at", "booted_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    booted_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    git_sha = Column(String(40), nullable=True)
+    git_short = Column(String(12), nullable=True)
+    git_message = Column(Text, nullable=True)
+    git_author = Column(String, nullable=True)
+    git_committed_at = Column(DateTime, nullable=True)
+    app_env = Column(String, nullable=True)
+    build_version = Column(String, nullable=True)
+    python_version = Column(String, nullable=True)
+    node_version = Column(String, nullable=True)
+    hostname = Column(String, nullable=True)
+
+
+class SavedQuery(Base):
+    """Read-only SELECT queries saved by staff users in /internal/database."""
+    __tablename__ = "saved_query"
+    __table_args__ = (
+        Index("ix_saved_query_owner", "owner_id"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    sql = Column(Text, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    owner = relationship("User")
+
+
+class QueryHistoryEntry(Base):
+    """Every staff query (saved-or-not) captured for audit + replay."""
+    __tablename__ = "query_history"
+    __table_args__ = (
+        Index("ix_query_history_owner_ran", "owner_id", "ran_at"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    sql = Column(Text, nullable=False)
+    ran_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    row_count = Column(Integer, nullable=True)
+    success = Column(Boolean, default=True)
+    error = Column(Text, nullable=True)
+
+    owner = relationship("User")

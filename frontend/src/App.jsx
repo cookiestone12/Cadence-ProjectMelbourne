@@ -79,6 +79,8 @@ import InternalOrganizations from './internal/Organizations'
 import InternalUsers from './internal/Users'
 import InternalDatabase from './internal/Database'
 import InternalLogs from './internal/Logs'
+import InternalSourceViewer from './internal/SourceViewer'
+import InternalConfig from './internal/Config'
 import InternalOnboarding from './internal/Onboarding'
 import Sidebar from './components/Sidebar'
 import PullToRefresh from './components/PullToRefresh'
@@ -177,6 +179,8 @@ function App() {
             <Route path="users" element={<InternalUsers />} />
             <Route path="database" element={<InternalDatabase />} />
             <Route path="logs" element={<InternalLogs />} />
+            <Route path="source" element={<InternalSourceViewer />} />
+            <Route path="config" element={<InternalConfig />} />
             <Route path="onboarding" element={<InternalOnboarding />} />
           </Route>
         </Routes>
