@@ -385,6 +385,215 @@ def _parse_vanguard_text(full_text: str) -> Optional[dict]:
     }
 
 
+BMI_FIRST_ROW_RE = re.compile(
+    r"^(?P<title>.+?)\s+(?P<work_no>W-\d+)\s+(?P<category>.+?)\s+"
+    r"(?P<performances>[\d,]+)\s+(?P<writer_pct>\d+\.\d+%)\s+"
+    r"\$(?P<amount>-?[\d,]+\.\d{2})$"
+)
+BMI_CONT_ROW_RE = re.compile(
+    r"^(?P<category>.+?)\s+(?P<performances>[\d,]+)\s+"
+    r"(?P<writer_pct>\d+\.\d+%)\s+\$(?P<amount>-?[\d,]+\.\d{2})$"
+)
+BMI_SUBTOTAL_RE = re.compile(r"^Subtotal:\s*\$([\d,]+\.\d{2})$", re.IGNORECASE)
+BMI_GRAND_TOTAL_RE = re.compile(
+    r"(?i)TOTAL\s+CURRENT\s+PERIOD.*?\$([\d,]+\.\d{2})"
+)
+BMI_WRITER_NAME_RE = re.compile(
+    r"(?im)^Writer\s*Name:\s*(.+?)(?:\s+Address:|\s{2,}|$)"
+)
+BMI_PERIOD_RE = re.compile(r"(?im)Performance\s+Period:\s*(.+?)$")
+
+# Truncated category names → full names (the BMI PDF column width truncates
+# anything beyond ~25 characters in the per-work detail tables, e.g.
+# "Digital - Audio Visual St" is the truncated form of
+# "Digital - Audio Visual Streaming").
+BMI_CATEGORY_FULL_NAMES = {
+    "Radio": "Radio",
+    "Television - Network": "Television - Network",
+    "Television - Cable": "Television - Cable",
+    "Television - Local": "Television - Local",
+    "Digital - Audio Streaming": "Digital - Audio Streaming",
+    "Digital - Audio Visual St": "Digital - Audio Visual Streaming",
+    "Digital - Audio Visual Streaming": "Digital - Audio Visual Streaming",
+    "Digital - Download": "Digital - Download",
+    "Live Performance": "Live Performance",
+    "General Licensing": "General Licensing",
+    "International": "International",
+}
+
+
+def is_bmi_writer_statement(content: bytes) -> bool:
+    """Detect the BMI Writer Distribution Statement PDF format.
+
+    These statements have a unique header ("WRITER DISTRIBUTION STATEMENT" +
+    "BROADCAST MUSIC, INC.") and a per-work detail layout that the generic
+    publishing parser cannot read because the text has no detectable table
+    grid lines.
+    """
+    try:
+        import pdfplumber
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            for page in pdf.pages[:2]:
+                text = (page.extract_text() or "").upper()
+                if (
+                    "WRITER DISTRIBUTION STATEMENT" in text
+                    and "BROADCAST MUSIC" in text
+                ):
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def parse_bmi_writer_statement(content: bytes) -> Optional[dict]:
+    """Parse a BMI Writer Distribution Statement PDF.
+
+    The detail section repeats per work::
+
+        WORK TITLE WORK # PERF. CATEGORY PERFORMANCES WRITER % ROYALTY AMT
+        Deja Vu W-10806201 Digital - Audio Streaming 155,437 50.0% $517.77
+            Radio 36,795 50.0% $158.25
+            Digital - Audio Visual St 50,943 50.0% $211.61
+            ...
+            Subtotal: $1,495.89
+        Montero W-10513037 Digital - Audio Streaming 59,595 33.3% $659.87
+            ...
+
+    The first row of each work carries the title + work number; subsequent
+    rows omit them. Categories may be truncated by the PDF column width
+    (e.g. "Digital - Audio Visual St" → "Digital - Audio Visual Streaming").
+    """
+    import pdfplumber
+
+    try:
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
+            full_text = ""
+            for page in pdf.pages:
+                t = page.extract_text()
+                if t:
+                    full_text += t + "\n"
+    except Exception as e:
+        logger.error(f"BMI parser: failed to open PDF: {e}")
+        return None
+
+    return _parse_bmi_writer_text(full_text)
+
+
+def _parse_bmi_writer_text(full_text: str) -> Optional[dict]:
+    """Pure-text BMI parser. Split out from parse_bmi_writer_statement so
+    it can be unit-tested without a real PDF on disk."""
+    metadata = {
+        "client_name": None,
+        "period": None,
+        "grand_total_net": None,
+    }
+    rows = []
+
+    if not full_text:
+        return None
+
+    gt = BMI_GRAND_TOTAL_RE.search(full_text)
+    if gt:
+        try:
+            metadata["grand_total_net"] = float(gt.group(1).replace(",", ""))
+        except ValueError:
+            pass
+
+    wn = BMI_WRITER_NAME_RE.search(full_text)
+    if wn:
+        metadata["client_name"] = wn.group(1).strip()
+
+    pm = BMI_PERIOD_RE.search(full_text)
+    if pm:
+        metadata["period"] = pm.group(1).strip()
+
+    current_title = ""
+    current_work_no = ""
+
+    for raw_line in full_text.split("\n"):
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        # Skip headers, page banners, summary rows and subtotals.
+        upper = line.upper()
+        if upper.startswith("WORK TITLE") and "WORK #" in upper:
+            continue
+        if "WRITER DISTRIBUTION STATEMENT" in upper:
+            continue
+        if "BROADCAST MUSIC, INC. - CONFIDENTIAL" in upper:
+            continue
+        if BMI_SUBTOTAL_RE.match(line):
+            continue
+
+        m_first = BMI_FIRST_ROW_RE.match(line)
+        if m_first:
+            current_title = m_first.group("title").strip()
+            current_work_no = m_first.group("work_no").strip()
+            category = m_first.group("category").strip()
+            performances = m_first.group("performances").replace(",", "")
+            writer_pct = m_first.group("writer_pct")
+            amount = m_first.group("amount").replace(",", "")
+        else:
+            m_cont = BMI_CONT_ROW_RE.match(line)
+            if not m_cont:
+                continue
+            # Continuation rows only valid once we've seen a work header.
+            if not current_title:
+                continue
+            category_raw = m_cont.group("category").strip()
+            # Reject lines that look like category-row but are actually
+            # the STATEMENT SUMMARY rows (which have an extra adjustments
+            # column producing a different shape — those rarely match
+            # the strict end-with-$amount pattern, but guard anyway by
+            # requiring the category text to be a recognized BMI bucket).
+            if category_raw not in BMI_CATEGORY_FULL_NAMES:
+                continue
+            category = category_raw
+            performances = m_cont.group("performances").replace(",", "")
+            writer_pct = m_cont.group("writer_pct")
+            amount = m_cont.group("amount").replace(",", "")
+
+        full_category = BMI_CATEGORY_FULL_NAMES.get(category, category)
+
+        rows.append({
+            "Track Title": current_title,
+            "Writer/Artist": metadata.get("client_name") or "",
+            "Work Number": current_work_no,
+            "Source/Collector": "BMI",
+            "Source Detail": full_category,
+            "Income Type": full_category,
+            "Territory": "International" if full_category == "International" else "US",
+            "Units": performances,
+            "Writer Share": writer_pct,
+            "Rate": "",
+            "Gross Amount": amount,
+            "Net Amount": amount,
+        })
+
+    if not rows:
+        logger.warning("BMI parser produced 0 rows")
+        return None
+
+    headers = [
+        "Track Title", "Writer/Artist", "Work Number", "Source/Collector",
+        "Source Detail", "Income Type", "Territory", "Units",
+        "Writer Share", "Rate", "Gross Amount", "Net Amount",
+    ]
+
+    parsed_sum = sum(float(r["Net Amount"]) for r in rows if r["Net Amount"])
+    logger.info(
+        f"BMI parser extracted {len(rows)} rows, parsed_sum=${parsed_sum:.2f}, "
+        f"grand_total=${metadata.get('grand_total_net') or 0:.2f}"
+    )
+
+    return {
+        "headers": headers,
+        "rows": rows,
+        "metadata": metadata,
+    }
+
+
 def is_publishing_statement(content: bytes) -> bool:
     try:
         import pdfplumber

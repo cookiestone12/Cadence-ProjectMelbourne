@@ -503,7 +503,25 @@ def parse_uploaded_file(content: bytes, filename: str, org_id: int = None) -> tu
             from ..utils.pdf_statement_parser import (
                 is_publishing_statement, parse_publishing_statement,
                 is_vanguard_statement, parse_vanguard_statement,
+                is_bmi_writer_statement, parse_bmi_writer_statement,
             )
+            if is_bmi_writer_statement(content):
+                bresult = parse_bmi_writer_statement(content)
+                if bresult and bresult.get("rows"):
+                    logger.info(f"BMI parser: {len(bresult['rows'])} rows extracted")
+                    bmeta = bresult.get("metadata", {})
+                    bmeta["suggested_mapping"] = {
+                        "track_title": "Track Title",
+                        "artist": "Writer/Artist",
+                        "revenue": "Net Amount",
+                        "quantity": "Units",
+                        "territory": "Territory",
+                        "platform": "Source/Collector",
+                        "revenue_type": "Income Type",
+                        "gross_amount": "Gross Amount",
+                        "release_title": "Source Detail",
+                    }
+                    return bresult["headers"], bresult["rows"], bmeta
             if is_vanguard_statement(content):
                 vresult = parse_vanguard_statement(content)
                 if vresult and vresult.get("rows"):
