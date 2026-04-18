@@ -113,12 +113,12 @@ export default function ValuationPage() {
       else setUwData(null)
       if (runsRes.status === 'fulfilled') setRuns(runsRes.value.data)
 
-      // If the user just switched to a scope that has never been valued
-      // (per-creator view with no prior run), auto-fire one underwriting
-      // run so the panels populate without requiring a manual click.
-      // Org-wide loads do NOT auto-fire (the "Run" button stays the
-      // explicit gesture there to avoid surprise cost on first page load).
-      if (creatorId && latestData && !latestData.has_data && !running) {
+      // Switching scope to a creator must re-fire underwriting for that
+      // creator (per-creator scope is meaningless if it just shows a stale
+      // prior run). Org-wide loads do NOT auto-fire — the explicit "Run"
+      // button stays the gesture there to avoid surprise cost on first
+      // page mount.
+      if (creatorId && !running) {
         try {
           setRunning(true)
           await axios.post('/api/valuation/underwriting/run', {
