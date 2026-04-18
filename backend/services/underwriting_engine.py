@@ -461,16 +461,70 @@ def run_underwriting(
 
         decay_results = {}
         exceptions = []
+        awaiting_data: list[dict] = []
         min_points = kb["analytics"]["decay"]["min_data_points"]
+
+        # Resolve titles up front so the awaiting-data panel has something
+        # human-readable to render. Spine entries already carry titles, so
+        # build the lookup from there to avoid an extra DB roundtrip.
+        title_by_song_id: dict = {}
+        for entry in spine:
+            sid_e = entry.get("song_id")
+            if sid_e and sid_e not in title_by_song_id:
+                title_by_song_id[sid_e] = entry.get("song_title")
+
+        def _build_awaiting_entry(sid_, periods_present_, post_peak_positive_, reason_):
+            """Construct an awaiting_data row. periods_needed describes how
+            many *additional* positive post-peak periods the song needs to
+            cross the decay-fit minimum."""
+            needed = max(0, min_points - post_peak_positive_)
+            title_ = None
+            song_id_int = None
+            if isinstance(sid_, int):
+                song_id_int = sid_
+                title_ = title_by_song_id.get(sid_)
+            else:
+                # Work-only spine entries are keyed as "work_{id}".
+                title_ = str(sid_)
+            return {
+                "song_id": song_id_int,
+                "spine_key": str(sid_),
+                "title": title_ or (f"Song #{song_id_int}" if song_id_int else str(sid_)),
+                "periods_present": periods_present_,
+                "periods_needed": needed,
+                "reason": reason_,
+            }
 
         for sid, period_data in song_series.items():
             series_values = [period_data.get(p, 0) for p in periods]
-            if sum(1 for v in series_values if v > 0) < min_points:
+            positive_count = sum(1 for v in series_values if v > 0)
+
+            # Compute post-peak positive count even when below minimum so
+            # the user can see "1 more period needed" rather than just
+            # "insufficient_data".
+            post_peak_positive = 0
+            reason = "insufficient_data"
+            if positive_count > 0:
+                peak_idx_ = series_values.index(max(series_values))
+                post_peak_slice = series_values[peak_idx_:]
+                post_peak_positive = sum(1 for v in post_peak_slice if v > 0)
+                if positive_count >= min_points and post_peak_positive < min_points:
+                    reason = "no_post_peak_data"
+
+            if positive_count < min_points or post_peak_positive < min_points:
                 exceptions.append({
                     "song_id": sid,
-                    "reason": "insufficient_data",
-                    "data_points": sum(1 for v in series_values if v > 0),
+                    "reason": reason,
+                    "data_points": positive_count,
+                    "post_peak_data_points": post_peak_positive,
                 })
+                # Only surface songs that have at least one period of revenue
+                # in the awaiting-data panel — songs with literally zero
+                # data don't belong in a "needs more periods" list.
+                if positive_count > 0:
+                    awaiting_data.append(
+                        _build_awaiting_entry(sid, positive_count, post_peak_positive, reason)
+                    )
                 continue
 
             decay = compute_decay_params(series_values)
@@ -480,6 +534,19 @@ def run_underwriting(
                 decay["volatility"] = vol
                 decay["series"] = series_values
                 decay_results[str(sid)] = decay
+            else:
+                # compute_decay_params returned None even though we passed
+                # the count check (e.g. growing series, sum_t2==0). Surface
+                # it so the user knows why no curve appeared.
+                awaiting_data.append(
+                    _build_awaiting_entry(sid, positive_count, post_peak_positive, "fit_failed")
+                )
+
+        # Sort awaiting list by closest-to-fitting first so the user sees the
+        # songs that are about to qualify at the top of the panel.
+        awaiting_data.sort(
+            key=lambda x: (-(x["periods_present"]), x["periods_needed"], (x["title"] or "").lower())
+        )
 
         concentration_by_period = {}
         for period in periods:
