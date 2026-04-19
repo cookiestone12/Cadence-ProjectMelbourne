@@ -138,16 +138,16 @@ def seed_super_admin():
 
 
 CHECKLIST_ITEMS_SEED = [
-    {"code": "AD-02", "category": "ADMIN", "description": "Contract executed/signed", "weight": 15},
+    {"code": "AD-02", "category": "ADMIN", "description": "Contract executed/signed", "weight": 10},
     {"code": "AD-03", "category": "ADMIN", "description": "Invoice submitted", "weight": 10},
     {"code": "LG-02", "category": "LEGAL", "description": "Publishing splits confirmed", "weight": 10},
-    {"code": "MD-01", "category": "METADATA", "description": "ISRC assigned", "weight": 5},
-    {"code": "MD-02", "category": "METADATA", "description": "ISWC assigned", "weight": 5},
-    {"code": "MD-03", "category": "METADATA", "description": "Credits finalized", "weight": 5},
-    {"code": "DSP-03", "category": "DSP", "description": "Spotify link verified", "weight": 5},
+    {"code": "MD-01", "category": "METADATA", "description": "ISRC assigned", "weight": 10},
+    {"code": "MD-02", "category": "METADATA", "description": "ISWC assigned", "weight": 10},
+    {"code": "MD-03", "category": "METADATA", "description": "Credits finalized", "weight": 10},
+    {"code": "DSP-03", "category": "DSP", "description": "Spotify link verified", "weight": 10},
     {"code": "SY-01", "category": "SYNC", "description": "Registered with PRO", "weight": 10},
-    {"code": "SY-03", "category": "SYNC", "description": "MLC registered", "weight": 5},
-    {"code": "PY-01", "category": "PAYMENT", "description": "Payment received", "weight": 20},
+    {"code": "SY-03", "category": "SYNC", "description": "MLC registered", "weight": 10},
+    {"code": "PY-01", "category": "PAYMENT", "description": "Payment received", "weight": 10},
 ]
 
 REMOVED_CHECKLIST_CODES = ["AD-01", "LG-01", "DSP-01", "DSP-02", "SY-02"]
@@ -169,14 +169,22 @@ def seed_checklist_items():
             db.commit()
             logger.info(f"Removed {len(removed_items)} deprecated checklist items and their statuses")
 
-        existing_codes = {item.code for item in db.query(ChecklistItem).all()}
+        existing_items = {item.code: item for item in db.query(ChecklistItem).all()}
         added = 0
+        reweighted = 0
         for item_data in CHECKLIST_ITEMS_SEED:
-            if item_data["code"] not in existing_codes:
+            existing = existing_items.get(item_data["code"])
+            if not existing:
                 db.add(ChecklistItem(**item_data))
                 added += 1
-        if added:
+            else:
+                if existing.weight != item_data["weight"]:
+                    existing.weight = item_data["weight"]
+                    reweighted += 1
+        if added or reweighted:
             db.commit()
+            if reweighted:
+                logger.info(f"Re-weighted {reweighted} existing checklist items to seed values")
             logger.info(f"Seeded {added} checklist items")
     except Exception as e:
         db.rollback()
