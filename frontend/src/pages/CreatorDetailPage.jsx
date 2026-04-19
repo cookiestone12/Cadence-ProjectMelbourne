@@ -382,10 +382,10 @@ export default function CreatorDetailPage() {
   }, [activeTab, id])
 
   useEffect(() => {
-    if (activeTab === 'accounting' && organizationId) {
+    if (organizationId) {
       loadAccounting()
     }
-  }, [activeTab, organizationId])
+  }, [organizationId, id])
 
   useEffect(() => {
     if (activeTab === 'schedule-a') {
@@ -937,7 +937,16 @@ export default function CreatorDetailPage() {
     const v = s.is_registered_with_dsp
     return v === 'Yes' || v === true || (v && v !== 'N/A' && v !== 'No' && !isNaN(parseFloat(v)))
   }).length
-  const totalAdvance = songs.reduce((sum, s) => sum + (s.advance_amount || 0), 0) / 100
+  const songAdvanceCents = songs.reduce((sum, s) => sum + (s.advance_amount || 0), 0)
+  const creatorAdvanceCents = accountingData?.summary?.total_advances_cents || 0
+  const contractAdvanceCents = (accountingData?.summary?.contract_incoming_pending_cents || 0)
+    + (accountingData?.summary?.contract_incoming_confirmed_cents || 0)
+  const totalAdvance = (songAdvanceCents + creatorAdvanceCents + contractAdvanceCents) / 100
+  const advanceBreakdown = {
+    songs: songAdvanceCents / 100,
+    creator: creatorAdvanceCents / 100,
+    contracts: contractAdvanceCents / 100,
+  }
   
   const toggleSongSelection = (songId) => {
     setSelectedSongs(prev => {
@@ -1343,6 +1352,11 @@ export default function CreatorDetailPage() {
                   <div>
                     <p className="text-sm text-[#7A8580] mb-1">Total Advances</p>
                     <p className="text-2xl font-semibold text-[#5B9A6E]">${totalAdvance.toLocaleString()}</p>
+                    {(advanceBreakdown.songs > 0 || advanceBreakdown.creator > 0 || advanceBreakdown.contracts > 0) && (
+                      <p className="text-xs text-[#7A8580] mt-1">
+                        Songs ${advanceBreakdown.songs.toLocaleString()} · Creator ${advanceBreakdown.creator.toLocaleString()} · Contracts ${advanceBreakdown.contracts.toLocaleString()}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <p className="text-sm text-[#7A8580] mb-1">Avg Publishing %</p>
@@ -1722,11 +1736,18 @@ export default function CreatorDetailPage() {
                             <div className="text-[10px] text-[#9AA4A0] mt-0.5">Edit in Rights & Splits</div>
                           </td>
                           <td className="px-4 py-2">
-                            <DollarOrNAInput
-                              value={editForm.is_invoiced}
-                              onChange={(val) => setEditForm({...editForm, is_invoiced: val})}
-                              placeholder="0"
-                            />
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-[#7A8580]">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={editForm.advance_amount ?? ''}
+                                onChange={(e) => setEditForm({...editForm, advance_amount: e.target.value === '' ? '' : parseFloat(e.target.value)})}
+                                className="w-full pl-5 pr-2 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[rgba(160,32,240,0.1)]"
+                                placeholder="0"
+                              />
+                            </div>
                           </td>
                           <td className="px-4 py-2 text-center">
                             <input 
@@ -1738,8 +1759,8 @@ export default function CreatorDetailPage() {
                           </td>
                           <td className="px-4 py-2">
                             <DollarOrNAInput
-                              value={editForm.is_registered_with_dsp}
-                              onChange={(val) => setEditForm({...editForm, is_registered_with_dsp: val})}
+                              value={editForm.is_invoiced}
+                              onChange={(val) => setEditForm({...editForm, is_invoiced: val})}
                               placeholder="0"
                             />
                           </td>
@@ -1859,13 +1880,22 @@ export default function CreatorDetailPage() {
                             {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <StatusBadge value={song.is_invoiced} />
+                            {song.advance_amount ? (
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                                style={{ background: 'rgba(91, 154, 110, 0.15)', color: '#5B9A6E' }}
+                              >
+                                ${(song.advance_amount / 100).toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="text-[#9AA4A0]">-</span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <StatusBadge value={song.is_registered_with_pro} />
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <StatusBadge value={song.is_registered_with_dsp} />
+                            <StatusBadge value={song.is_invoiced} />
                           </td>
                           <td className="px-4 py-3 text-center">
                             <StatusBadge value={song.soundexchange_registered} />
