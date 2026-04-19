@@ -91,6 +91,32 @@ def _redoc_docs(_: None = Depends(require_docs_auth)):
     )
 
 
+# --------------------------------------------------------------------------
+# MODULE-LEVEL one-shot maintenance.
+#
+# This runs ONCE per process at import time, before any worker forks and
+# before any request is served. It exists because we have repeatedly been
+# burned by `@app.on_event("startup")` + `preload_app=True` in gunicorn:
+# the startup event fires inside the master, the deferred-thread approach
+# gets cut off when workers fork, and silent failures left every song's
+# `status_health_score` stuck at 0 in production for hours. Module-level
+# code is the only place that's GUARANTEED to execute on every gunicorn /
+# uvicorn boot regardless of worker model. Wrapped in a broad try/except
+# so a maintenance failure can't take down request serving.
+# --------------------------------------------------------------------------
+def _module_level_health_recompute():
+    try:
+        from .db_setup import seed_checklist_items, sync_stale_health_scores
+        seed_checklist_items()
+        sync_stale_health_scores()
+        logger.info("module-level health recompute completed")
+    except Exception as e:
+        logger.error(f"module-level health recompute failed: {e}", exc_info=True)
+
+
+_module_level_health_recompute()
+
+
 @app.on_event("startup")
 def startup_event():
     import threading
