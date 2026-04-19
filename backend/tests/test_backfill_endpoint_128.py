@@ -58,12 +58,18 @@ def env():
 
     # Repoint the script's own SessionLocal at the test DB so the
     # endpoint's in-process call hits the same in-memory schema.
+    # Restore on teardown to avoid cross-test leakage if any future
+    # test imports the script directly.
     import backend.scripts.backfill_schedule_a_splits_120 as backfill_mod
+    _orig_session_local = backfill_mod.SessionLocal
     backfill_mod.SessionLocal = TestingSessionLocal
 
-    yield db, TestClient(app)
-    app.dependency_overrides.clear()
-    db.close()
+    try:
+        yield db, TestClient(app)
+    finally:
+        backfill_mod.SessionLocal = _orig_session_local
+        app.dependency_overrides.clear()
+        db.close()
 
 
 def _seed_org_with_legacy_song(db):
