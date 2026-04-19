@@ -142,10 +142,12 @@ def _deferred_startup_tasks():
     except Exception as e:
         log.warning(f"Email scheduler failed to start: {e}")
 
-    checklist_changed = _seed_checklist(log, traceback)
-
-    if checklist_changed:
-        _resync_all_health_scores(log, traceback)
+    try:
+        from .db_setup import seed_checklist_items, sync_stale_health_scores
+        seed_checklist_items()
+        sync_stale_health_scores()
+    except Exception:
+        log.error(f"Checklist seed / health resync failed: {traceback.format_exc()}")
 
     _backfill_publishing_percentages(log, traceback)
 
