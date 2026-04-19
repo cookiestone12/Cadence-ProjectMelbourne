@@ -206,12 +206,18 @@ def seed_checklist_items():
 def sync_stale_health_scores():
     """Re-derive every song's checklist statuses + cached health score on boot.
 
-    Previously this only touched songs whose stored score was NULL or 0, which
-    meant any change to weights / derivation logic left already-scored songs
-    permanently stale (e.g. a song stored at 20% would stay at 20% even after
-    the rules said it should now be 30%). Walking all songs on startup is cheap
-    and guarantees the cached number always matches the current ruleset.
+    Robustness notes (post-incident, Apr 2026):
+      * Per-song commit + per-song try/except so one bad row can't poison the
+        whole batch (previous version wrapped the entire 1500-song loop in one
+        try/except, so any single exception rolled back ALL score updates and
+        left every song stuck at 0).
+      * Always finishes with a single bulk SQL recompute of
+        `status_health_score` from existing checklist statuses, regardless of
+        whether the Python per-song path succeeded. That guarantees the cached
+        number always matches the current weights even if the Python sync
+        skipped some songs (e.g. the daemon thread got killed mid-flight).
     """
+    from sqlalchemy import text as sa_text
     db = SessionLocal()
     try:
         all_songs = db.query(Song).all()
@@ -221,31 +227,78 @@ def sync_stale_health_scores():
         checklist_items = db.query(ChecklistItem).all()
         synced = 0
         changed = 0
+        failed = 0
         for song in all_songs:
-            has_statuses = db.query(SongChecklistStatus).filter(
-                SongChecklistStatus.song_id == song.id
-            ).first()
-            if not has_statuses:
-                for item in checklist_items:
-                    db.add(SongChecklistStatus(
-                        song_id=song.id,
-                        checklist_item_id=item.id,
-                        status="NOT_STARTED"
-                    ))
-                db.flush()
-            before = float(song.status_health_score or 0.0)
-            sync_song_to_checklist(db, song)
-            after = float(song.status_health_score or 0.0)
-            synced += 1
-            if abs(before - after) > 0.01:
-                changed += 1
-        db.commit()
-        logger.info(f"Re-derived health scores for {synced} songs ({changed} score changes)")
+            try:
+                has_statuses = db.query(SongChecklistStatus).filter(
+                    SongChecklistStatus.song_id == song.id
+                ).first()
+                if not has_statuses:
+                    for item in checklist_items:
+                        db.add(SongChecklistStatus(
+                            song_id=song.id,
+                            checklist_item_id=item.id,
+                            status="NOT_STARTED"
+                        ))
+                    db.flush()
+                before = float(song.status_health_score or 0.0)
+                sync_song_to_checklist(db, song)
+                after = float(song.status_health_score or 0.0)
+                db.commit()
+                synced += 1
+                if abs(before - after) > 0.01:
+                    changed += 1
+            except Exception as song_err:
+                db.rollback()
+                failed += 1
+                logger.warning(
+                    f"Health resync failed for song id={song.id}: {song_err}"
+                )
+        logger.info(
+            f"Re-derived health scores: synced={synced} changed={changed} failed={failed}"
+        )
     except Exception as e:
         db.rollback()
         logger.warning(f"Health score sync error: {e}")
     finally:
         db.close()
+
+    # Bulk SQL fallback — always runs in its own session so it can't be
+    # rolled back by anything above. Recomputes every song's cached score
+    # from whatever status rows currently exist, divided by the live total
+    # checklist weight. Idempotent and ~50ms even on large catalogs.
+    db2 = SessionLocal()
+    try:
+        result = db2.execute(sa_text("""
+            WITH per_song AS (
+              SELECT scs.song_id,
+                     SUM(ci.weight) FILTER (
+                       WHERE scs.status IN ('COMPLETED','NOT_APPLICABLE')
+                     ) AS done_weight
+              FROM song_checklist_status scs
+              JOIN checklist_items ci ON ci.id = scs.checklist_item_id
+              GROUP BY scs.song_id
+            ),
+            total AS (SELECT COALESCE(NULLIF(SUM(weight), 0), 1) AS tot FROM checklist_items)
+            UPDATE songs s
+            SET status_health_score = ROUND(
+              LEAST(100.0, COALESCE(per_song.done_weight, 0) * 100.0 / total.tot)::numeric, 2
+            )
+            FROM per_song, total
+            WHERE per_song.song_id = s.id
+              AND s.status_health_score IS DISTINCT FROM ROUND(
+                LEAST(100.0, COALESCE(per_song.done_weight, 0) * 100.0 / total.tot)::numeric, 2
+              )
+        """))
+        db2.commit()
+        logger.info(
+            f"Bulk SQL health-score recompute touched {result.rowcount or 0} songs"
+        )
+    except Exception as e:
+        db2.rollback()
+        logger.warning(f"Bulk SQL health-score recompute failed: {e}")
+    finally:
+        db2.close()
 
 
 def sync_release_status():
