@@ -512,12 +512,34 @@ async def import_csv(
         song.status_health_score = round(min((completed_weight / total_weight) * 100, 100.0), 2)
         
         if creator:
-            db.add(SongCredit(
+            credit = SongCredit(
                 song_id=song.id,
                 creator_id=creator.id,
-                role="ARTIST",
-                share_percentage=song.publishing_percentage or 100
-            ))
+                role="Producer",
+                share_percentage=song.publishing_percentage or 100,
+                pub_share=song.publishing_percentage,
+                master_share=song.master_percentage,
+            )
+            db.add(credit)
+            if song.publishing_percentage is not None or song.master_percentage is not None:
+                try:
+                    from .contracts_mgmt import sync_credit_to_splits
+                    db.flush()
+                    sync_credit_to_splits(
+                        db,
+                        song,
+                        creator.id,
+                        song.publishing_percentage,
+                        song.master_percentage,
+                        "Producer",
+                        current_user.id,
+                    )
+                except Exception as split_err:
+                    logger.warning(
+                        f"CSV import: created credit for song {song.id} but failed "
+                        f"to materialize splits: {split_err}",
+                        exc_info=True,
+                    )
     
     for invalid in validation["invalid_rows"]:
         errors.append(f"Row {invalid['row_index'] + 1}: {', '.join(invalid['errors'])}")
