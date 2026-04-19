@@ -32,7 +32,7 @@ The frontend adopts an Apple Music-style aesthetic, featuring a collapsible side
 - **Cloud Storage Integration**: Multi-provider integration (Dropbox, Google Drive) for linking audio files, with AI audio analysis (BPM, key, loudness, tags) and an organization-wide audio linking pipeline. Per-creator storage linking is also supported.
 - **Client Portal**: Org-managed client login system for creators with full catalog management capabilities, including adding/editing songs, contract creation with AI parsing, document uploads, and royalty statement ingestion.
 - **Streaming Credits & Intelligence**: Muso.ai-inspired streaming intelligence system with chart data ingestion, ISRC-based track matching, and cross-platform stream estimation.
-- **Progressive Web App (PWA)**: Includes a web manifest and service worker for offline caching and push notifications.
+- **Progressive Web App (PWA)**: Includes a web manifest and service worker for offline caching and push notifications. Pull-to-refresh has been removed (Task #132) because tall rows on Roster → Records and Catalog made it fire accidentally while scrolling back to the top; users now refresh via a dedicated circular-arrow button on the right side of the mobile sticky header (next to the hamburger).
 - **Universal Document & Item Sharing**: Allows sharing various items via email or directly to other Cadence accounts.
 - **Catalog Refactor — Released/Unreleased Model**: Introduces "Unreleased" catalog section and related statuses.
 - **Comprehensive Audit Logging**: Organization-scoped audit trail for critical actions, including song edit history.

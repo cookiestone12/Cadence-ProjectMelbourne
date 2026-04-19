@@ -83,7 +83,6 @@ import InternalSourceViewer from './internal/SourceViewer'
 import InternalConfig from './internal/Config'
 import InternalOnboarding from './internal/Onboarding'
 import Sidebar from './components/Sidebar'
-import PullToRefresh from './components/PullToRefresh'
 import AssistantChat from './components/AssistantChat'
 
 function App() {
@@ -91,6 +90,7 @@ function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -222,14 +222,32 @@ function App() {
           onClose={() => setSidebarOpen(false)}
         />
         <main className="flex-1 min-w-0 bg-[#F5F7F4]">
-          <PullToRefresh>
-          <div className="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3">
+          <div className="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
             <button
               onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
               className="text-gray-600 hover:text-gray-900"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <button
+              onClick={() => { setIsRefreshing(true); window.location.reload() }}
+              aria-label="Refresh page"
+              className="text-gray-600 hover:text-gray-900"
+            >
+              <svg
+                className={`w-6 h-6 ${isRefreshing ? 'animate-spin' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                viewBox="0 0 24 24"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M1 4v6h6" />
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
               </svg>
             </button>
           </div>
@@ -285,7 +303,6 @@ function App() {
             <img src="/cadence-logo.png" alt="Powered by Cadence" className="h-6 w-auto object-contain" />
             <span className="text-[9px] font-semibold tracking-wide uppercase text-[#5B8A72] bg-[#5B8A72]/10 px-1.5 py-0.5 rounded-md">Beta</span>
           </div>
-          </PullToRefresh>
         </main>
         <AssistantChat user={user} />
       </div>
