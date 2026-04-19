@@ -1378,7 +1378,11 @@ export default function CreatorDetailPage() {
                   </div>
                   <div>
                     <p className="text-sm text-[#7A8580] mb-1">Avg Health Score</p>
-                    <p className="text-2xl font-semibold text-[#3D4A44]">{creator.avg_health_score?.toFixed(0) || 0}%</p>
+                    <p className="text-2xl font-semibold text-[#3D4A44]">
+                      {songs.length > 0
+                        ? (songs.reduce((sum, s) => sum + (s.status_health_score || 0), 0) / songs.length).toFixed(0)
+                        : 0}%
+                    </p>
                   </div>
                 </div>
               </div>
