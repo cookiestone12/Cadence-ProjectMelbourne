@@ -714,16 +714,25 @@ export default function CreatorDetailPage() {
       } : s))
       setEditingSong(null)
       setEditForm({})
-      
-      await axios.patch(`/api/songs/${songId}`, payload)
-      
+
+      const patchResponse = await axios.patch(`/api/songs/${songId}`, payload)
+      console.log('Song save succeeded:', { songId, advance_amount_cents: payload.advance_amount, server: patchResponse?.data?.advance_amount })
+
       const orgResponse = await axios.get('/api/organizations/current')
       await loadSongs(orgResponse.data.id)
+      loadAccounting()
     } catch (error) {
-      console.error('Failed to update song:', error)
-      alert('Failed to save changes')
+      console.error('Failed to update song:', error, error?.response?.data)
       const orgResponse = await axios.get('/api/organizations/current')
       await loadSongs(orgResponse.data.id)
+      const detail = error?.response?.data?.detail
+      const status = error?.response?.status
+      const msg = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map(d => d?.msg || JSON.stringify(d)).join('\n')
+          : (error?.message || 'Unknown error')
+      alert(`Failed to save changes${status ? ` (HTTP ${status})` : ''}:\n${msg}\n\nYour changes were NOT saved. Please try again.`)
     } finally {
       setSaving(false)
     }
