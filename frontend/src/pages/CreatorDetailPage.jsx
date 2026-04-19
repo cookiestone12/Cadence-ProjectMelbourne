@@ -1161,6 +1161,7 @@ export default function CreatorDetailPage() {
       setCreateContractParties([])
       setCreateContractError('')
       await loadContracts()
+      loadAccounting()
     } catch (error) {
       const detail = error.response?.data?.detail
       setCreateContractError(typeof detail === 'string' ? detail : 'Failed to create contract. Please try again.')
