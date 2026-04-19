@@ -185,6 +185,16 @@ def seed_checklist_items():
             db.commit()
             if reweighted:
                 logger.info(f"Re-weighted {reweighted} existing checklist items to seed values")
+                # Weights changed — invalidate every cached song score so the
+                # startup re-sync (`sync_stale_health_scores`) recomputes them
+                # under the new weighting. Without this, songs that already had
+                # a non-zero score keep their stale number forever.
+                cleared = db.query(Song).update(
+                    {Song.status_health_score: 0.0},
+                    synchronize_session=False,
+                )
+                db.commit()
+                logger.info(f"Cleared {cleared} stored health scores for re-derivation under new weights")
             logger.info(f"Seeded {added} checklist items")
     except Exception as e:
         db.rollback()
@@ -194,20 +204,28 @@ def seed_checklist_items():
 
 
 def sync_stale_health_scores():
+    """Re-derive every song's checklist statuses + cached health score on boot.
+
+    Previously this only touched songs whose stored score was NULL or 0, which
+    meant any change to weights / derivation logic left already-scored songs
+    permanently stale (e.g. a song stored at 20% would stay at 20% even after
+    the rules said it should now be 30%). Walking all songs on startup is cheap
+    and guarantees the cached number always matches the current ruleset.
+    """
     db = SessionLocal()
     try:
-        stale_songs = db.query(Song).filter(
-            (Song.status_health_score == None) | (Song.status_health_score == 0.0)
-        ).all()
-        if not stale_songs:
+        all_songs = db.query(Song).all()
+        if not all_songs:
             return
         from backend.utils.health_sync import sync_song_to_checklist
-        for song in stale_songs:
+        checklist_items = db.query(ChecklistItem).all()
+        synced = 0
+        changed = 0
+        for song in all_songs:
             has_statuses = db.query(SongChecklistStatus).filter(
                 SongChecklistStatus.song_id == song.id
             ).first()
             if not has_statuses:
-                checklist_items = db.query(ChecklistItem).all()
                 for item in checklist_items:
                     db.add(SongChecklistStatus(
                         song_id=song.id,
@@ -215,9 +233,14 @@ def sync_stale_health_scores():
                         status="NOT_STARTED"
                     ))
                 db.flush()
+            before = float(song.status_health_score or 0.0)
             sync_song_to_checklist(db, song)
+            after = float(song.status_health_score or 0.0)
+            synced += 1
+            if abs(before - after) > 0.01:
+                changed += 1
         db.commit()
-        logger.info(f"Synced health scores for {len(stale_songs)} stale songs")
+        logger.info(f"Re-derived health scores for {synced} songs ({changed} score changes)")
     except Exception as e:
         db.rollback()
         logger.warning(f"Health score sync error: {e}")
