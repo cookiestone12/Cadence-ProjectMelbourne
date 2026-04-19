@@ -61,10 +61,17 @@ const HEALTH_FIELDS = [
   { key: 'is_paid', label: 'Paid', type: 'yesna' },
   { key: 'mlc_registered', label: 'MLC registered', type: 'yesna' },
   { key: 'spotify_link', label: 'Spotify link', type: 'value' },
+  // Task #140 — derived from credit-level data on the backend (LG-02 / MD-03).
+  // Surfaced here so the per-song breakdown chips match the actual score.
+  { key: 'has_full_pub_splits', label: 'Publishing splits confirmed', type: 'flag' },
+  { key: 'has_credits', label: 'Credits finalized', type: 'flag' },
 ]
 
 const isFieldComplete = (song, field) => {
   const v = song[field.key]
+  if (field.type === 'flag') {
+    return v === true
+  }
   if (field.type === 'value') {
     if (v === null || v === undefined) return false
     const s = String(v).trim()

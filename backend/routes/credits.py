@@ -136,6 +136,13 @@ def create_credit(
 
     if request.pub_share is not None or request.master_share is not None:
         sync_credit_to_splits(db, song, creator.id, request.pub_share, request.master_share, request.role, current_user.id)
+    else:
+        # Even when no shares were provided, the new credit still flips
+        # MD-03 ("Credits finalized") to COMPLETED. Recompute health here
+        # so the score doesn't sit stale. (sync_credit_to_splits already
+        # calls sync_song_to_checklist on the share path.)
+        from ..utils.health_sync import sync_song_to_checklist
+        sync_song_to_checklist(db, song)
 
     from ..utils.edit_history import record_contributor_add
     record_contributor_add(db, song_id, song.organization_id, current_user.id, creator.display_name, request.role, notes=request.edit_notes)
@@ -206,6 +213,12 @@ def update_credit(
 
     if "pub_share" in update_data or "master_share" in update_data:
         sync_credit_to_splits(db, song, credit.creator_id, credit.pub_share, credit.master_share, credit.role, current_user.id)
+    elif update_data:
+        # Role / share_percentage / notes-only edits don't move splits, but
+        # we still recompute health so MD-03 stays correct (e.g. role
+        # rename on a previously detached credit).
+        from ..utils.health_sync import sync_song_to_checklist
+        sync_song_to_checklist(db, song)
 
     db.commit()
     db.refresh(credit)
@@ -276,6 +289,11 @@ def delete_credit(
     if had_splits:
         from .contracts_mgmt import _sync_song_pub_percentage
         _sync_song_pub_percentage(db, song_id)
+
+    # Task #140 — credit deletion can flip MD-03 (no credits left) and
+    # LG-02 (pub splits no longer sum to 100%) back to NOT_STARTED.
+    from ..utils.health_sync import sync_song_to_checklist
+    sync_song_to_checklist(db, song)
 
     if was_unmatched:
         from ..models import ActionItem
@@ -362,6 +380,13 @@ def resolve_credit(
 
     credit.needs_review = False
     credit.unmatched_artist_name = None
+    db.flush()
+
+    # Task #140 — resolving an unmatched credit attaches a creator_id, which
+    # is exactly what MD-03 ("Credits finalized") tracks. Recompute health
+    # so the score reflects the resolution immediately.
+    from ..utils.health_sync import sync_song_to_checklist
+    sync_song_to_checklist(db, song)
 
     remaining_unmatched = db.query(SongCredit).filter(
         SongCredit.song_id == song_id,

@@ -1573,3 +1573,41 @@ def backfill_statement_periods(
     stats["dry_run"] = dry_run
     logger.info("statement_periods backfill done: %s", stats)
     return stats
+
+
+@internal_router.post(
+    "/backfill/health-scores",
+    summary="Recompute song status_health_score across the catalog",
+    description=(
+        "One-shot operational backfill (Task #140). Re-runs "
+        "`sync_song_to_checklist` over every song so the new LG-02 / MD-03 "
+        "derivations (publishing splits sum to 100%, credits finalized) "
+        "take effect immediately on existing data. Without this, songs "
+        "imported before Task #140 keep their stale 11% / 83% scores until "
+        "an unrelated edit re-triggers the sync.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n"
+        "**Query:**\n"
+        "  - `dry_run` (bool, default true) — when true, reports counts "
+        "without committing.\n"
+        "  - `org_id` (int, optional) — restrict the run to a single "
+        "organization.\n\n"
+        "**Response:** `{ orgs_scanned, songs_scanned, songs_updated, "
+        "scores_unchanged, avg_score_before, avg_score_after, dry_run }`."
+    ),
+)
+def backfill_health_scores(
+    dry_run: bool = True,
+    org_id: Optional[int] = None,
+    current_user: User = Depends(get_current_super_admin),
+):
+    """Run the Task #140 health-score backfill in-process."""
+    from ..scripts.backfill_health_scores_140 import backfill
+
+    logger.info(
+        "health_scores backfill triggered: dry_run=%s org_id=%s by user_id=%s",
+        dry_run, org_id, current_user.id,
+    )
+    stats = backfill(dry_run=dry_run, only_org_id=org_id)
+    stats["dry_run"] = dry_run
+    logger.info("health_scores backfill done: %s", stats)
+    return stats

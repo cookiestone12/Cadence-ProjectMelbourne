@@ -137,6 +137,12 @@ def sync_credit_to_splits(db: Session, song: Song, creator_id: int, pub_share, m
 
     db.flush()
     _sync_song_pub_percentage(db, song.id)
+    # Task #140 — credit/split mutations now drive the LG-02 / MD-03
+    # checklist items, so we must recompute health here too. Without this,
+    # adding splits via the Rights & Splits tab leaves the score stale until
+    # the next song-field edit.
+    from ..utils.health_sync import sync_song_to_checklist
+    sync_song_to_checklist(db, song)
 
 
 def verify_org_access(user: User, org_id: int, db: Session, creator_id: int = None):
@@ -730,6 +736,11 @@ def add_song_split(
     if data.rights_holder_id and data.rights_type in ("PUBLISHING", "MASTER"):
         _sync_splits_to_credits(db, song_id, data.rights_holder_id)
 
+    # Task #140 — adding a split through the standalone Rights & Splits tab
+    # can flip LG-02 to COMPLETED once pub shares total 100%.
+    from ..utils.health_sync import sync_song_to_checklist
+    sync_song_to_checklist(db, song)
+
     db.commit()
     db.refresh(split)
 
@@ -798,6 +809,12 @@ def delete_song_split(
         _sync_song_pub_percentage(db, song_id)
         if creator_id and rights_type in ("PUBLISHING", "MASTER"):
             _sync_splits_to_credits(db, song_id, creator_id)
+        # Task #140 — deleting a split can drop pub totals back below
+        # 100%, which must flip LG-02 back to NOT_STARTED.
+        song_for_health = db.query(Song).filter(Song.id == song_id).first()
+        if song_for_health:
+            from ..utils.health_sync import sync_song_to_checklist
+            sync_song_to_checklist(db, song_for_health)
 
     db.commit()
     return {"message": "Split deleted successfully"}

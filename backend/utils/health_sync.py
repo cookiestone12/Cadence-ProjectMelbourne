@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from ..models.models import Song, SongChecklistStatus, ChecklistItem, SongDSPLink
+from ..models.models import Song, SongChecklistStatus, ChecklistItem, SongDSPLink, SongCredit
 
 FIELD_TO_CHECKLIST_MAP = {
     "isrc": "MD-01",
@@ -20,6 +20,33 @@ NA_CAPABLE_FIELDS = {"is_paid", "is_invoiced",
 DSP_PLATFORM_TO_CHECKLIST_MAP = {
     "spotify": "DSP-03",
 }
+
+# Tolerance for treating credit-level pub_share totals as "100%". Schedule A
+# imports and manual edits round to one or two decimals, so insisting on
+# exact equality leaves songs stuck at 99.9% / 100.01% and never trips LG-02.
+PUB_SHARE_FULL_TOLERANCE = 0.5
+
+
+def song_has_finalized_credits(db: Session, song_id: int) -> bool:
+    """MD-03: at least one SongCredit on the song has a creator attached."""
+    return db.query(SongCredit.id).filter(
+        SongCredit.song_id == song_id,
+        SongCredit.creator_id.isnot(None),
+    ).first() is not None
+
+
+def song_has_full_pub_splits(db: Session, song_id: int) -> bool:
+    """LG-02: credit-level publishing shares for the song sum to ~100%.
+
+    Mirrors the credit-driven rollup used by the Rights & Splits tab —
+    once contributors collectively account for 100% of the publishing pie,
+    the splits are considered confirmed.
+    """
+    total = db.query(func.coalesce(func.sum(SongCredit.pub_share), 0.0)).filter(
+        SongCredit.song_id == song_id,
+        SongCredit.pub_share.isnot(None),
+    ).scalar() or 0.0
+    return abs(float(total) - 100.0) <= PUB_SHARE_FULL_TOLERANCE
 
 def get_checklist_item_by_code(db: Session, code: str) -> ChecklistItem:
     return db.query(ChecklistItem).filter(ChecklistItem.code == code).first()
@@ -101,7 +128,26 @@ def sync_song_to_checklist(db: Session, song: Song):
         checklist_item = checklist_items[code]
         completed = platform in platforms_linked
         set_checklist_status(db, song.id, checklist_item.id, "COMPLETED" if completed else "NOT_STARTED")
-    
+
+    # Task #140 — derive the two checklist items that have no UI checkbox
+    # from the data the app already owns:
+    #   LG-02 "Publishing splits confirmed" — credit-level pub_share == 100%
+    #   MD-03 "Credits finalized"           — at least one SongCredit w/ creator
+    # Without these, every song in every org is permanently capped at
+    # 75/90 = 83.3% health, even when fully filled out.
+    if "LG-02" in checklist_items:
+        completed = song_has_full_pub_splits(db, song.id)
+        set_checklist_status(
+            db, song.id, checklist_items["LG-02"].id,
+            "COMPLETED" if completed else "NOT_STARTED",
+        )
+    if "MD-03" in checklist_items:
+        completed = song_has_finalized_credits(db, song.id)
+        set_checklist_status(
+            db, song.id, checklist_items["MD-03"].id,
+            "COMPLETED" if completed else "NOT_STARTED",
+        )
+
     recalculate_health_score(db, song)
 
 def ensure_song_health(db: Session, song: Song):

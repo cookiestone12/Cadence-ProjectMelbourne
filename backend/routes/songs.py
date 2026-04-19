@@ -87,15 +87,23 @@ class SongResponse(BaseModel):
     credit_id: Optional[int] = None
     client_name: Optional[str] = None
     client_id: Optional[int] = None
-    
+    has_credits: bool = False
+    has_full_pub_splits: bool = False
+
     class Config:
         from_attributes = True
 
 
-def _song_to_response(song) -> dict:
+def _song_to_response(song, db=None) -> dict:
     parent_title = None
     if song.parent_song_id and song.parent_song:
         parent_title = song.parent_song.title
+    has_credits = False
+    has_full_pub_splits = False
+    if db is not None:
+        from ..utils.health_sync import song_has_finalized_credits, song_has_full_pub_splits as _full
+        has_credits = song_has_finalized_credits(db, song.id)
+        has_full_pub_splits = _full(db, song.id)
     return {
         "id": song.id,
         "title": song.title,
@@ -136,7 +144,37 @@ def _song_to_response(song) -> dict:
         "credit_id": None,
         "client_name": None,
         "client_id": None,
+        "has_credits": has_credits,
+        "has_full_pub_splits": has_full_pub_splits,
     }
+
+
+def _compute_credit_flags_for_songs(db, song_ids):
+    """Bulk-compute (has_credits, has_full_pub_splits) for many songs.
+
+    `has_credits` (MD-03 mirror): the song has at least one SongCredit
+    with a creator attached.
+    `has_full_pub_splits` (LG-02 mirror): credit-level pub_share values
+    on the song sum to ~100% (matching the LG-02 derivation in
+    backend/utils/health_sync.py).
+    """
+    if not song_ids:
+        return {}, {}
+    from ..utils.health_sync import PUB_SHARE_FULL_TOLERANCE
+    has_credits_map = {sid: False for sid in song_ids}
+    has_full_pub_map = {sid: False for sid in song_ids}
+
+    credit_rows = db.query(
+        SongCredit.song_id,
+        func.count(SongCredit.id).filter(SongCredit.creator_id.isnot(None)),
+        func.coalesce(func.sum(SongCredit.pub_share), 0.0),
+    ).filter(SongCredit.song_id.in_(song_ids)).group_by(SongCredit.song_id).all()
+
+    for sid, credit_count, pub_total in credit_rows:
+        has_credits_map[sid] = (credit_count or 0) > 0
+        has_full_pub_map[sid] = abs(float(pub_total or 0.0) - 100.0) <= PUB_SHARE_FULL_TOLERANCE
+
+    return has_credits_map, has_full_pub_map
 
 
 class CreditResponse(BaseModel):
@@ -425,6 +463,8 @@ def get_organization_songs(
         for c in credits_for_creator:
             creator_credit_map[c.song_id] = c
 
+    has_credits_map, has_full_pub_map = _compute_credit_flags_for_songs(db, song_ids)
+
     result = []
     for song in songs:
         client_name = None
@@ -454,6 +494,8 @@ def get_organization_songs(
         song_data["client_id"] = client_id
         song_data["credit_role"] = credit_role
         song_data["credit_id"] = credit_id
+        song_data["has_credits"] = has_credits_map.get(song.id, False)
+        song_data["has_full_pub_splits"] = has_full_pub_map.get(song.id, False)
         result.append(song_data)
     return result
 
@@ -1117,7 +1159,7 @@ def create_song(
         db.commit()
         db.refresh(song)
         
-        return _song_to_response(song)
+        return _song_to_response(song, db)
     except HTTPException:
         raise
     except Exception as e:
@@ -1253,7 +1295,7 @@ async def update_song(
     db.commit()
     db.refresh(song)
     
-    return _song_to_response(song)
+    return _song_to_response(song, db)
 
 
 class MergeSongsRequest(BaseModel):
@@ -1507,7 +1549,7 @@ def duplicate_song(
     db.commit()
     db.refresh(new_song)
 
-    return _song_to_response(new_song)
+    return _song_to_response(new_song, db)
 
 
 @router.delete(
@@ -1570,4 +1612,4 @@ def mark_song_released(
     db.commit()
     db.refresh(song)
 
-    return _song_to_response(song)
+    return _song_to_response(song, db)
