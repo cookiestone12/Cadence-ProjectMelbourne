@@ -233,9 +233,14 @@ function App() {
               </svg>
             </button>
             <button
-              onClick={() => { setIsRefreshing(true); window.location.reload() }}
+              onClick={() => {
+                if (isRefreshing) return
+                setIsRefreshing(true)
+                setTimeout(() => window.location.reload(), 200)
+              }}
+              disabled={isRefreshing}
               aria-label="Refresh page"
-              className="text-gray-600 hover:text-gray-900"
+              className="text-gray-600 hover:text-gray-900 disabled:opacity-60"
             >
               <svg
                 className={`w-6 h-6 ${isRefreshing ? 'animate-spin' : ''}`}
