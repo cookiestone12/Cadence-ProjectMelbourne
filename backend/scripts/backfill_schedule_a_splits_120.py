@@ -16,8 +16,8 @@ By default, runs against all organizations.
 import argparse
 import sys
 
+from backend.models.database import SessionLocal
 from backend.models import (
-    SessionLocal,
     Song,
     SongCredit,
     Contract,
