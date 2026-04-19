@@ -1555,10 +1555,14 @@ def add_split(
 
     if ca.asset_type == "SONG":
         from ..utils.edit_history import record_split_change
+        from ..utils.health_sync import sync_song_to_checklist
         record_split_change(db, ca.asset_id, contract.organization_id, current_user.id, holder_name, data.rights_type, None, data.share_percentage, notes=data.notes)
         _sync_song_pub_percentage(db, ca.asset_id)
         if data.rights_holder_id and data.rights_type in ("PUBLISHING", "MASTER"):
             _sync_splits_to_credits(db, ca.asset_id, data.rights_holder_id)
+        song_obj = db.query(Song).filter(Song.id == ca.asset_id).first()
+        if song_obj:
+            sync_song_to_checklist(db, song_obj)
 
     db.commit()
     db.refresh(split)
@@ -1648,6 +1652,10 @@ def update_split(
         _sync_song_pub_percentage(db, ca.asset_id)
         if split.rights_holder_id:
             _sync_splits_to_credits(db, ca.asset_id, split.rights_holder_id)
+        from ..utils.health_sync import sync_song_to_checklist
+        song_obj = db.query(Song).filter(Song.id == ca.asset_id).first()
+        if song_obj:
+            sync_song_to_checklist(db, song_obj)
 
     db.commit()
     db.refresh(split)
@@ -1707,6 +1715,10 @@ def delete_split(
         _sync_song_pub_percentage(db, asset_id)
         if holder_id:
             _sync_splits_to_credits(db, asset_id, holder_id)
+        from ..utils.health_sync import sync_song_to_checklist
+        song_obj = db.query(Song).filter(Song.id == asset_id).first()
+        if song_obj:
+            sync_song_to_checklist(db, song_obj)
     db.commit()
     return {"message": "Split removed successfully"}
 
