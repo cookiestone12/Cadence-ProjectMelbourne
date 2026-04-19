@@ -114,7 +114,12 @@ def backfill(org_id=None, dry_run=False):
         if dry_run:
             print("(dry-run — no changes committed)")
 
-        return 0 if recovered or not statements else (0 if skipped == len(statements) else 1)
+        return {
+            "statements_scanned": len(statements),
+            "statements_recovered": recovered,
+            "statements_unrecoverable": skipped,
+            "line_periods_updated": line_updates,
+        }
     finally:
         db.close()
 
@@ -124,7 +129,12 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--org-id", type=int, default=None)
     args = ap.parse_args()
-    sys.exit(backfill(org_id=args.org_id, dry_run=args.dry_run))
+    stats = backfill(org_id=args.org_id, dry_run=args.dry_run)
+    # Exit 0 unless we found statements but recovered nothing — that's the
+    # signal ops watches for to know the run is worth investigating.
+    scanned = stats["statements_scanned"]
+    recovered = stats["statements_recovered"]
+    sys.exit(0 if (scanned == 0 or recovered > 0 or stats["statements_unrecoverable"] == scanned) else 1)
 
 
 if __name__ == "__main__":

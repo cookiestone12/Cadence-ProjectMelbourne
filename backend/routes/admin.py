@@ -1526,3 +1526,50 @@ def backfill_schedule_a_splits(
     stats["dry_run"] = dry_run
     logger.info("schedule_a_splits backfill done: %s", stats)
     return stats
+
+
+@internal_router.post(
+    "/backfill/statement-periods",
+    summary="Recover NULL period_start/period_end on legacy royalty statements",
+    description=(
+        "One-shot operational backfill (Task #121 / #129). For royalty "
+        "statements where `period_start` or `period_end` is NULL, this "
+        "re-derives the reporting period from the original PDF (if still "
+        "on disk) or from filename heuristics, then propagates that period "
+        "to any `RoyaltyStatementLine` rows that were imported with NULL "
+        "`activity_period_start`. Without this, the underwriting/decay "
+        "engines collapse legacy uploads into a single `date.today()` "
+        "bucket and refuse to fit a decay curve.\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n"
+        "**Query:**\n"
+        "  - `dry_run` (bool, default true) — when true, reports counts "
+        "without committing.\n"
+        "  - `org_id` (int, optional) — restrict the run to a single "
+        "organization.\n\n"
+        "**Response:** `{ statements_scanned, statements_recovered, "
+        "statements_unrecoverable, line_periods_updated, dry_run }`."
+    ),
+)
+def backfill_statement_periods(
+    dry_run: bool = True,
+    org_id: Optional[int] = None,
+    current_user: User = Depends(get_current_super_admin),
+):
+    """Run the Task #121 statement-period backfill in-process.
+
+    The standalone CLI script (`backend.scripts.backfill_statement_periods_121`)
+    is the source of truth — this endpoint just imports its `backfill`
+    function so behavior cannot drift between the two entry points.
+    Production deployments don't expose a shell, so the HTTP path is the
+    only way to execute the migration against the live database.
+    """
+    from ..scripts.backfill_statement_periods_121 import backfill
+
+    logger.info(
+        "statement_periods backfill triggered: dry_run=%s org_id=%s by user_id=%s",
+        dry_run, org_id, current_user.id,
+    )
+    stats = backfill(org_id=org_id, dry_run=dry_run)
+    stats["dry_run"] = dry_run
+    logger.info("statement_periods backfill done: %s", stats)
+    return stats

@@ -146,8 +146,10 @@ def test_backfill_recovers_three_distinct_period_buckets(db):
     # bucket and decay analytics would refuse to fit a curve.
     assert all(s.period_start is None for s in (s1, s2, s3))
 
-    rc = backfill(org_id=org.id, dry_run=False)
-    assert rc == 0
+    stats = backfill(org_id=org.id, dry_run=False)
+    assert stats["statements_scanned"] == 3
+    assert stats["statements_recovered"] == 3
+    assert stats["statements_unrecoverable"] == 0
 
     db.expire_all()
     s1, s2, s3 = (db.query(RoyaltyStatement).get(sid) for sid in (s1.id, s2.id, s3.id))
