@@ -693,8 +693,6 @@ export default function CreatorDetailPage() {
       const payload = {
         title: editForm.title || undefined,
         primary_artist: editForm.primary_artist || undefined,
-        publishing_percentage: editForm.publishing_percentage === '' ? null : Math.min(parseFloat(editForm.publishing_percentage), 100),
-        master_percentage: editForm.master_percentage === '' ? null : Math.min(parseFloat(editForm.master_percentage), 100),
         advance_amount: editForm.advance_amount === '' ? null : Math.round(parseFloat(editForm.advance_amount) * 100),
         label: editForm.label || null,
         is_registered_with_pro: editForm.is_registered_with_pro,
@@ -1717,16 +1715,11 @@ export default function CreatorDetailPage() {
                               placeholder="Label"
                             />
                           </td>
-                          <td className="px-4 py-2">
-                            <input 
-                              type="number" 
-                              value={editForm.publishing_percentage}
-                              onChange={(e) => setEditForm({...editForm, publishing_percentage: e.target.value})}
-                              className="w-16 px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-xl text-sm text-center bg-white focus:outline-none focus:border-[#5B8A72] focus:ring-2 focus:ring-[rgba(160,32,240,0.1)]"
-                              placeholder="%"
-                              step="0.01"
-                              max="100"
-                            />
+                          <td className="px-4 py-2 text-center">
+                            <div className="text-sm text-[#7A8580]">
+                              {song.publishing_percentage ? `${Math.min(song.publishing_percentage, 100).toFixed(1)}%` : '-'}
+                            </div>
+                            <div className="text-[10px] text-[#9AA4A0] mt-0.5">Edit in Rights & Splits</div>
                           </td>
                           <td className="px-4 py-2">
                             <DollarOrNAInput
