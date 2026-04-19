@@ -76,6 +76,7 @@ class SongResponse(BaseModel):
     recording_code: Optional[str]
     master_paid: Optional[str]
     soundexchange_registered: Optional[str]
+    mlc_registered: Optional[str] = None
     payment_status: Optional[str]
     contract_location: Optional[str]
     notes: Optional[str]
@@ -124,6 +125,7 @@ def _song_to_response(song) -> dict:
         "recording_code": song.recording_code,
         "master_paid": song.master_paid,
         "soundexchange_registered": song.soundexchange_registered,
+        "mlc_registered": song.mlc_registered,
         "payment_status": song.payment_status,
         "contract_location": song.contract_location,
         "notes": song.notes,

@@ -52,6 +52,110 @@ const DollarOrNAInput = ({ value, onChange, placeholder = "Amount" }) => {
   )
 }
 
+const HEALTH_FIELDS = [
+  { key: 'isrc', label: 'ISRC', type: 'value' },
+  { key: 'iswc', label: 'ISWC', type: 'value' },
+  { key: 'has_contract_executed', label: 'Contract executed', type: 'bool' },
+  { key: 'is_invoiced', label: 'Invoiced', type: 'yesna' },
+  { key: 'is_registered_with_pro', label: 'PRO registered', type: 'bool' },
+  { key: 'is_paid', label: 'Paid', type: 'yesna' },
+  { key: 'mlc_registered', label: 'MLC registered', type: 'yesna' },
+  { key: 'spotify_link', label: 'Spotify link', type: 'value' },
+]
+
+const isFieldComplete = (song, field) => {
+  const v = song[field.key]
+  if (field.type === 'value') {
+    if (v === null || v === undefined) return false
+    const s = String(v).trim()
+    if (!s) return false
+    const u = s.toUpperCase()
+    if (u === 'N/A' || u === 'NA' || u === 'NOT_APPLICABLE') return true
+    return true
+  }
+  if (field.type === 'bool') {
+    return v === true
+  }
+  if (field.type === 'yesna') {
+    if (v === null || v === undefined) return false
+    const u = String(v).trim().toUpperCase()
+    if (!u) return false
+    if (u === 'NO' || u === 'FALSE' || u === '0') return false
+    if (u === 'N/A' || u === 'NA' || u === 'NOT_APPLICABLE') return true
+    if (u === 'YES' || u === 'TRUE' || u === '1') return true
+    const n = parseFloat(u)
+    if (!isNaN(n) && n > 0) return true
+    return false
+  }
+  return true
+}
+
+const getMissingFields = (song) => HEALTH_FIELDS.filter((f) => !isFieldComplete(song, f))
+
+const HealthScoreBreakdown = ({ songs, onSelectSong }) => {
+  if (!songs || songs.length === 0) return null
+
+  const songsWithMissing = songs
+    .map((s) => ({ song: s, score: s.status_health_score || 0, missing: getMissingFields(s) }))
+    .filter((x) => x.missing.length > 0)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 5)
+
+  if (songsWithMissing.length === 0) {
+    return (
+      <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+        <h2 className="text-xl font-semibold text-[#3D4A44] mb-2">Health Score Breakdown</h2>
+        <p className="text-sm text-[#7A8580]">All songs have full checklists — nothing dragging the score down.</p>
+      </div>
+    )
+  }
+
+  const scoreColor = (s) => (s >= 70 ? '#5B9A6E' : s >= 40 ? '#C99A4A' : '#C56A6A')
+
+  return (
+    <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
+      <div className="flex items-baseline justify-between mb-2">
+        <h2 className="text-xl font-semibold text-[#3D4A44]">Health Score Breakdown</h2>
+        <span className="text-xs text-[#7A8580]">Lowest-scoring songs</span>
+      </div>
+      <p className="text-xs text-[#7A8580] mb-4">Click a song to fix its missing fields inline.</p>
+      <div className="space-y-2">
+        {songsWithMissing.map(({ song, score, missing }) => (
+          <button
+            key={song.id}
+            type="button"
+            onClick={() => onSelectSong && onSelectSong(song)}
+            className="w-full text-left p-3 bg-[#F8F8FB] hover:bg-[#EEF1EC] rounded-xl transition-colors"
+          >
+            <div className="flex items-center justify-between gap-3 mb-1.5">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-[#3D4A44] truncate">{song.title}</p>
+                <p className="text-xs text-[#7A8580] truncate">{song.primary_artist}</p>
+              </div>
+              <span
+                className="text-sm font-semibold px-2 py-0.5 rounded-md whitespace-nowrap"
+                style={{ color: scoreColor(score), backgroundColor: `${scoreColor(score)}1A` }}
+              >
+                {Math.round(score)}%
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {missing.map((f) => (
+                <span
+                  key={f.key}
+                  className="inline-flex items-center text-[11px] px-2 py-0.5 rounded-full bg-white text-[#7A8580] border border-[rgba(0,0,0,0.08)]"
+                >
+                  {f.label}
+                </span>
+              ))}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 const PlacementStatusBadge = ({ status }) => {
   const colors = {
     'Paid': { bg: 'rgba(52, 199, 89, 0.15)', color: '#5B9A6E' },
@@ -1386,7 +1490,9 @@ export default function CreatorDetailPage() {
                   </div>
                 </div>
               </div>
-              
+
+              <HealthScoreBreakdown songs={songs} onSelectSong={(s) => setSelectedSongForDetail(s)} />
+
               <div className="bg-white rounded-[18px] p-7" style={{ boxShadow: '0px 4px 12px rgba(0,0,0,0.08)' }}>
                 <h2 className="text-xl font-semibold text-[#3D4A44] mb-5">Recent Songs</h2>
                 <div className="space-y-3">
