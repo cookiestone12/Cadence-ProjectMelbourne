@@ -1477,3 +1477,52 @@ def migration_status(
         "last_run_host": lock_state["host"],
         "last_run_revision": lock_state["revision"],
     }
+
+
+@internal_router.post(
+    "/backfill/schedule-a-splits",
+    summary="Materialize Schedule-A song-level Pub/Master % into SPLIT_SHEET splits",
+    description=(
+        "One-shot operational backfill (Task #120 / #128). For songs that "
+        "have `publishing_percentage` or `master_percentage` set on the song "
+        "row but no SPLIT_SHEET / RightsSplit rows materialized, this "
+        "creates the implicit Song Splits contract + ContractAsset + "
+        "RightsSplit through `sync_credit_to_splits`, mirroring what live "
+        "Schedule-A imports now do. Songs that already participate in any "
+        "non-SPLIT_SHEET contract (publishing deal, admin deal, etc.) are "
+        "skipped, as are songs with multiple distinct credit creators "
+        "(unsafe to auto-allocate).\n\n"
+        "**Auth:** Bearer JWT — platform super-admin only.\n"
+        "**Query:**\n"
+        "  - `dry_run` (bool, default true) — when true, reports counts "
+        "without committing.\n"
+        "  - `org_id` (int, optional) — restrict the run to a single "
+        "organization.\n\n"
+        "**Response:** `{ orgs_scanned, songs_scanned, songs_backfilled, "
+        "credits_synced, skipped_no_user, skipped_other_contract, "
+        "skipped_multi_credit, skipped_no_credit, dry_run }`."
+    ),
+)
+def backfill_schedule_a_splits(
+    dry_run: bool = True,
+    org_id: Optional[int] = None,
+    current_user: User = Depends(get_current_super_admin),
+):
+    """Run the Task #120 Schedule-A splits backfill in-process.
+
+    The standalone CLI script (`backend.scripts.backfill_schedule_a_splits_120`)
+    is the source of truth — this endpoint just imports its `backfill`
+    function so behavior cannot drift between the two entry points.
+    Production deployments don't expose a shell, so the HTTP path is the
+    only way to execute the migration against the live database.
+    """
+    from ..scripts.backfill_schedule_a_splits_120 import backfill
+
+    logger.info(
+        "schedule_a_splits backfill triggered: dry_run=%s org_id=%s by user_id=%s",
+        dry_run, org_id, current_user.id,
+    )
+    stats = backfill(dry_run=dry_run, only_org_id=org_id)
+    stats["dry_run"] = dry_run
+    logger.info("schedule_a_splits backfill done: %s", stats)
+    return stats
