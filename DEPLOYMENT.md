@@ -313,10 +313,13 @@ flows still hit the old account.
    `_get_client_credentials_token()` for unauthenticated
    catalog/search calls (chart ingester, AI track matcher).
 
-Replit Secrets are global, so updating these two secrets
-covers both `development` and the Reserved VM `production`
-deploy on its next restart — no separate prod-side secret
-write is required.
+Replit Secrets are project-scoped (not per-environment), so
+updating these two secrets in the project's Secrets pane
+applies to both the `development` workspace and the Reserved
+VM `production` deploy. **You still have to republish from
+the Deployments tab** for the running prod container to pick
+up the new values — the existing prod process holds the old
+secrets in memory until it restarts.
 
 **Procedure**
 
