@@ -301,6 +301,55 @@ def sync_stale_health_scores():
         db2.close()
 
 
+def bulk_recompute_health_scores():
+    """Fast (~50ms) bulk SQL recompute of every song's `status_health_score`
+    from existing `song_checklist_status` rows divided by the live total
+    checklist weight.
+
+    This is the *only* health-related call that should run on the boot
+    critical path (i.e. at module import time in `backend/main.py`). The
+    deeper per-song sync (`sync_stale_health_scores`) iterates ~1500 rows
+    with per-song commits and at production scale takes 60+ seconds —
+    which exceeds Replit VM's 60-second port-bind timeout and prevents
+    gunicorn from ever opening port 5000. See Task #144.
+
+    Idempotent. Opens its own short-lived session. Never raises.
+    """
+    from sqlalchemy import text as sa_text
+    db = SessionLocal()
+    try:
+        result = db.execute(sa_text("""
+            WITH per_song AS (
+              SELECT scs.song_id,
+                     SUM(ci.weight) FILTER (
+                       WHERE scs.status IN ('COMPLETED','NOT_APPLICABLE')
+                     ) AS done_weight
+              FROM song_checklist_status scs
+              JOIN checklist_items ci ON ci.id = scs.checklist_item_id
+              GROUP BY scs.song_id
+            ),
+            total AS (SELECT COALESCE(NULLIF(SUM(weight), 0), 1) AS tot FROM checklist_items)
+            UPDATE songs s
+            SET status_health_score = ROUND(
+              LEAST(100.0, COALESCE(per_song.done_weight, 0) * 100.0 / total.tot)::numeric, 2
+            )
+            FROM per_song, total
+            WHERE per_song.song_id = s.id
+              AND s.status_health_score IS DISTINCT FROM ROUND(
+                LEAST(100.0, COALESCE(per_song.done_weight, 0) * 100.0 / total.tot)::numeric, 2
+              )
+        """))
+        db.commit()
+        logger.info(
+            f"Boot-time bulk health-score recompute touched {result.rowcount or 0} songs"
+        )
+    except Exception as e:
+        db.rollback()
+        logger.warning(f"Boot-time bulk health-score recompute failed: {e}")
+    finally:
+        db.close()
+
+
 def sync_release_status():
     from sqlalchemy import text as sa_text
     db = SessionLocal()

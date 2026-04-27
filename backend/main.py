@@ -105,11 +105,28 @@ def _redoc_docs(_: None = Depends(require_docs_auth)):
 # so a maintenance failure can't take down request serving.
 # --------------------------------------------------------------------------
 def _module_level_health_recompute():
+    """Boot-time critical-path work. MUST stay fast (<5s total) so gunicorn
+    can bind to port 5000 within Replit VM's 60-second timeout.
+
+    Two operations only:
+      1. `seed_checklist_items()` — idempotent INSERT-or-UPDATE of the
+         10 checklist item rows + their canonical weights. Cheap.
+      2. `bulk_recompute_health_scores()` — single UPDATE statement that
+         re-derives every song's `status_health_score` from existing
+         `song_checklist_status` rows. ~50ms even on a 1500-song catalog.
+
+    The deeper per-song sync (`sync_stale_health_scores`, which iterates
+    every song with per-song commits and runs `sync_song_to_checklist`)
+    is intentionally NOT called here — it took 60+ seconds in production
+    and blocked port 5000 from ever opening, killing the VM publish. It
+    runs in `_deferred_startup_tasks()` after the worker is already
+    serving traffic. See Task #144.
+    """
     try:
-        from .db_setup import seed_checklist_items, sync_stale_health_scores
+        from .db_setup import seed_checklist_items, bulk_recompute_health_scores
         seed_checklist_items()
-        sync_stale_health_scores()
-        logger.info("module-level health recompute completed")
+        bulk_recompute_health_scores()
+        logger.info("module-level health recompute completed (fast path)")
     except Exception as e:
         logger.error(f"module-level health recompute failed: {e}", exc_info=True)
 
