@@ -59,7 +59,7 @@ packages = ["cargo", "freetype", "glibcLocales", "imagemagick", "libiconv", "lib
 [deployment]
 build = ["bash", "-c", "cd frontend && npm run build"]
 run = ["bash", "-c", "gunicorn backend.main:app -c backend/gunicorn_config.py --bind 0.0.0.0:5000"]
-deploymentTarget = "autoscale"
+deploymentTarget = "vm"
 
 [userenv]
 
