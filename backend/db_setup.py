@@ -217,7 +217,6 @@ def sync_stale_health_scores():
         number always matches the current weights even if the Python sync
         skipped some songs (e.g. the daemon thread got killed mid-flight).
     """
-    from sqlalchemy import text as sa_text
     db = SessionLocal()
     try:
         all_songs = db.query(Song).all()
@@ -263,42 +262,12 @@ def sync_stale_health_scores():
     finally:
         db.close()
 
-    # Bulk SQL fallback — always runs in its own session so it can't be
-    # rolled back by anything above. Recomputes every song's cached score
-    # from whatever status rows currently exist, divided by the live total
-    # checklist weight. Idempotent and ~50ms even on large catalogs.
-    db2 = SessionLocal()
-    try:
-        result = db2.execute(sa_text("""
-            WITH per_song AS (
-              SELECT scs.song_id,
-                     SUM(ci.weight) FILTER (
-                       WHERE scs.status IN ('COMPLETED','NOT_APPLICABLE')
-                     ) AS done_weight
-              FROM song_checklist_status scs
-              JOIN checklist_items ci ON ci.id = scs.checklist_item_id
-              GROUP BY scs.song_id
-            ),
-            total AS (SELECT COALESCE(NULLIF(SUM(weight), 0), 1) AS tot FROM checklist_items)
-            UPDATE songs s
-            SET status_health_score = ROUND(
-              LEAST(100.0, COALESCE(per_song.done_weight, 0) * 100.0 / total.tot)::numeric, 2
-            )
-            FROM per_song, total
-            WHERE per_song.song_id = s.id
-              AND s.status_health_score IS DISTINCT FROM ROUND(
-                LEAST(100.0, COALESCE(per_song.done_weight, 0) * 100.0 / total.tot)::numeric, 2
-              )
-        """))
-        db2.commit()
-        logger.info(
-            f"Bulk SQL health-score recompute touched {result.rowcount or 0} songs"
-        )
-    except Exception as e:
-        db2.rollback()
-        logger.warning(f"Bulk SQL health-score recompute failed: {e}")
-    finally:
-        db2.close()
+    # Bulk SQL fallback — always runs in its own session via
+    # `bulk_recompute_health_scores()` so it can't be rolled back by anything
+    # above. Single source of truth for the recompute SQL lives in that
+    # function (Task #144 review feedback) so the boot path and the fallback
+    # can never drift apart.
+    bulk_recompute_health_scores()
 
 
 def bulk_recompute_health_scores():
