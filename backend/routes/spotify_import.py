@@ -138,11 +138,19 @@ def preview_playlist_import(
         else:
             track["potential_duplicate"] = False
 
+    # The service layer attaches `embed_truncated=True` when it had to
+    # fall back to scraping Spotify's public embed page (which caps the
+    # pre-rendered trackList at 50 entries). Forward the flag so the
+    # frontend can show a friendly "first 50 tracks" banner instead of
+    # silently dropping the rest.
+    embed_truncated = bool(getattr(tracks, "embed_truncated", False))
+
     return {
         "tracks": tracks,
         "total": len(tracks),
         "new_tracks": sum(1 for t in tracks if not t.get("already_exists")),
         "existing_tracks": sum(1 for t in tracks if t.get("already_exists")),
+        "embed_truncated": embed_truncated,
     }
 
 

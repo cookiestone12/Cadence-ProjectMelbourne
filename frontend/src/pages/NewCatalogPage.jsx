@@ -49,6 +49,7 @@ export default function NewCatalogPage() {
   const [spotifyPlaylistUrl, setSpotifyPlaylistUrl] = useState('')
   const [spotifyCreatorId, setSpotifyCreatorId] = useState('')
   const [spotifyPreviewTracks, setSpotifyPreviewTracks] = useState(null)
+  const [spotifyEmbedTruncated, setSpotifyEmbedTruncated] = useState(false)
   const [spotifySelectedTracks, setSpotifySelectedTracks] = useState(new Set())
   const [spotifyPreviewLoading, setSpotifyPreviewLoading] = useState(false)
   const [spotifyImportLoading, setSpotifyImportLoading] = useState(false)
@@ -678,6 +679,7 @@ export default function NewCatalogPage() {
         playlist_url: spotifyPlaylistUrl
       })
       setSpotifyPreviewTracks(res.data.tracks)
+      setSpotifyEmbedTruncated(Boolean(res.data.embed_truncated))
       setSpotifySelectedTracks(new Set(res.data.tracks.map((t, i) => (!t.already_exists && !t.potential_duplicate) ? i : null).filter(i => i !== null)))
     } catch (error) {
       console.error('Spotify preview failed:', error)
@@ -1972,6 +1974,23 @@ export default function NewCatalogPage() {
 
                 {spotifyPreviewTracks && (
                   <div className="flex-1 overflow-hidden flex flex-col">
+                    {spotifyEmbedTruncated && (
+                      <div className="mb-3 px-4 py-3 bg-[#FFF8E5] border border-[#F5E0A3] rounded-lg">
+                        <div className="flex items-start space-x-2">
+                          <svg className="w-5 h-5 text-[#B58900] flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                          </svg>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-[#7A5C00]">
+                              Showing the first {spotifyPreviewTracks.length} tracks from this playlist
+                            </p>
+                            <p className="text-xs text-[#856404] mt-1">
+                              Spotify caps the public playlist preview at {spotifyPreviewTracks.length} tracks. To import the full catalog, paste an album URL or split the playlist into smaller ones.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div className="text-sm text-[#7A8580] mb-2">
                       {spotifyPreviewTracks.length} tracks found — {spotifySelectedTracks.size} selected for import
                     </div>

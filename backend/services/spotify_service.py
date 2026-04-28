@@ -1,7 +1,37 @@
 import json
 import os
+import re
 import requests
 from typing import Dict, Any, List, Optional
+
+
+# Spotify caps the public embed page's pre-rendered trackList at exactly
+# 50 entries. Larger playlists need the embed's lazy-load endpoint, which
+# is intentionally out of scope for this fallback (see Task #153).
+_EMBED_TRACK_CAP = 50
+
+# A real-browser User-Agent is required — Spotify's edge serves a tiny
+# JS bootstrap to most non-browser UAs, which omits the __NEXT_DATA__
+# blob we need to scrape.
+_EMBED_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)
+
+
+class _PlaylistTracksResult(list):
+    """A plain list with a single sidecar flag for embed-truncation.
+
+    Subclassing ``list`` keeps the existing contract intact for
+    ``_fetch_with_retries``, dedupe, JSON serialization and the
+    frontend mapper — everything that just iterates or indexes the
+    result keeps working — while letting the route layer detect
+    "this came from the public-embed fallback and may be truncated"
+    via ``getattr(tracks, "embed_truncated", False)``.
+    """
+
+    embed_truncated: bool = False
 
 def _get_spotify_client_id():
     return os.getenv("SPOTIFY_CLIENT_ID")
@@ -407,47 +437,310 @@ def lookup_release_metadata(spotify_url: str) -> Dict[str, Any]:
         raise ValueError("Please paste a Spotify album or track URL to populate release data.")
 
 
+def _scrape_playlist_embed(playlist_id: str, logger) -> List[Dict[str, Any]]:
+    """Fetch the public Spotify embed page and parse its trackList.
+
+    Spotify's Web API blocks ``/playlists/{id}/tracks`` for any app in
+    Development Mode that doesn't own the playlist (Extended Quota Mode
+    lifts this but is unreachable for B2B catalog tools). The public
+    embed page at ``open.spotify.com/embed/playlist/{id}``, however,
+    ships the full track list inside a ``__NEXT_DATA__`` JSON blob with
+    no auth required — same technique Soundiiz, TuneMyMusic and
+    Exportify have used for years.
+
+    Returns the raw embed track records (Spotify track ID, title,
+    artist subtitle, duration, explicit flag, cover art). ISRC is *not*
+    in the embed payload — call :func:`_enrich_tracks_via_api` on the
+    track IDs to fill it in via ``/v1/tracks?ids=…``, which works on
+    any of our token sources.
+
+    Raises :class:`SpotifyForbiddenError` if the embed HTML can't be
+    fetched, parsed, or contains no tracks (e.g. format change,
+    private playlist, network error). Surfacing a forbidden-shape
+    error keeps the route's error handling path consistent.
+    """
+    embed_url = f"https://open.spotify.com/embed/playlist/{playlist_id}"
+    logger.info(f"Spotify: scraping public embed page for playlist {playlist_id}")
+    try:
+        resp = requests.get(
+            embed_url,
+            headers={
+                "User-Agent": _EMBED_USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            timeout=15,
+        )
+    except requests.RequestException as e:
+        logger.error(f"Spotify embed scrape: HTTP error for {playlist_id}: {e}")
+        raise SpotifyForbiddenError(
+            "Couldn't reach Spotify to load this playlist. Please check your network "
+            "and try again in a moment."
+        )
+
+    if resp.status_code == 404:
+        raise SpotifyNotFoundError(
+            "That Spotify playlist couldn't be found. Please double-check the URL."
+        )
+    if resp.status_code != 200:
+        logger.error(
+            f"Spotify embed scrape: unexpected {resp.status_code} for {playlist_id}: "
+            f"{resp.text[:300]}"
+        )
+        raise SpotifyForbiddenError(
+            "Spotify wouldn't return this playlist's track list. The playlist may be "
+            "private or temporarily unavailable. Try pasting an album or single-track URL instead."
+        )
+
+    html = resp.text
+
+    # The embed page renders Next.js with the standard
+    # <script id="__NEXT_DATA__" type="application/json">…</script>
+    # blob. Extract it with a non-greedy match.
+    match = re.search(
+        r'<script\s+id="__NEXT_DATA__"\s+type="application/json"[^>]*>(.*?)</script>',
+        html,
+        flags=re.DOTALL,
+    )
+    if not match:
+        logger.error(
+            f"Spotify embed scrape: __NEXT_DATA__ blob missing from HTML for {playlist_id} "
+            f"(len={len(html)}); Spotify may have changed the embed page format."
+        )
+        raise SpotifyForbiddenError(
+            "Spotify changed the format of their playlist preview page. Cadence can't "
+            "read this playlist right now. Please paste an album or single-track URL, "
+            "or contact support."
+        )
+
+    try:
+        payload = json.loads(match.group(1))
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error(f"Spotify embed scrape: __NEXT_DATA__ JSON parse failed for {playlist_id}: {e}")
+        raise SpotifyForbiddenError(
+            "Spotify returned a playlist preview that Cadence couldn't read. "
+            "Please try again, or paste an album or single-track URL."
+        )
+
+    try:
+        entity = (
+            payload.get("props", {})
+            .get("pageProps", {})
+            .get("state", {})
+            .get("data", {})
+            .get("entity", {})
+        )
+        track_list = entity.get("trackList") or []
+    except AttributeError:
+        track_list = []
+
+    if not track_list:
+        logger.warning(
+            f"Spotify embed scrape: empty trackList for {playlist_id} — "
+            "likely a private/empty playlist or an embed format change."
+        )
+        raise SpotifyForbiddenError(
+            "Spotify didn't return any tracks for this playlist. The playlist may be "
+            "empty, private, or region-locked. Try pasting an album or single-track URL instead."
+        )
+
+    raw_tracks = []
+    for entry in track_list:
+        if not isinstance(entry, dict):
+            continue
+
+        # uri looks like "spotify:track:6rqhFgbbKwnb9MLmUQDhG6". Split
+        # off the bare ID so we can batch-enrich via /v1/tracks?ids=.
+        uri = entry.get("uri") or ""
+        track_id = ""
+        if uri.startswith("spotify:track:"):
+            track_id = uri.split(":", 2)[2]
+        elif entry.get("id"):
+            track_id = str(entry.get("id"))
+
+        if not track_id:
+            continue
+
+        # The embed's "subtitle" is a comma-separated string of artist
+        # names — usually "Drake, Future" — sometimes joined with " · ".
+        # Both delimiters round-trip cleanly to the same all_artists list.
+        subtitle = (entry.get("subtitle") or "").strip()
+        if " · " in subtitle:
+            artists = [a.strip() for a in subtitle.split(" · ") if a.strip()]
+        else:
+            artists = [a.strip() for a in subtitle.split(",") if a.strip()]
+        primary_artist = artists[0] if artists else "Unknown"
+
+        cover_url = None
+        visual = entry.get("visualIdentity") or {}
+        images = visual.get("image") if isinstance(visual, dict) else None
+        if isinstance(images, list) and images:
+            cover_url = images[0].get("url")
+        if not cover_url and entry.get("imageUrl"):
+            cover_url = entry.get("imageUrl")
+
+        raw_tracks.append({
+            "spotify_id": track_id,
+            "title": entry.get("title") or "",
+            "primary_artist": primary_artist,
+            "all_artists": artists if artists else [primary_artist],
+            "duration_ms": entry.get("duration") or None,
+            "explicit": bool(entry.get("isExplicit")),
+            "spotify_url": f"https://open.spotify.com/track/{track_id}",
+            "album_art": cover_url,
+            # Filled in by _enrich_tracks_via_api:
+            "isrc": None,
+            "album_name": None,
+            "release_date": None,
+            "popularity": None,
+            "label": None,
+            "track_number": None,
+            "disc_number": None,
+        })
+
+    logger.info(
+        f"Spotify embed scrape: parsed {len(raw_tracks)} track(s) for playlist {playlist_id}"
+    )
+    return raw_tracks
+
+
+def _enrich_tracks_via_api(tracks: List[Dict[str, Any]], token: str, logger) -> None:
+    """Fill in ISRC, album, release date, label, popularity in place.
+
+    Uses ``/v1/tracks?ids=`` (batched, max 50 per call) which works on
+    every token type Cadence supports. If enrichment fails for any
+    reason we keep the embed-scraped basics rather than failing the
+    whole import — the user can still see and select tracks; they'll
+    just be missing ISRC and album metadata, which downstream code
+    already tolerates.
+    """
+    track_ids = [t.get("spotify_id") for t in tracks if t.get("spotify_id")]
+    if not track_ids or not token:
+        return
+
+    by_id: Dict[str, Dict[str, Any]] = {}
+    # Spotify's batch endpoint caps at 50 IDs per request.
+    for chunk_start in range(0, len(track_ids), 50):
+        chunk = track_ids[chunk_start:chunk_start + 50]
+        try:
+            data = _spotify_get("tracks", token, {"ids": ",".join(chunk)})
+        except (SpotifyForbiddenError, SpotifyAuthError, SpotifyNotFoundError) as e:
+            logger.warning(
+                f"Spotify embed enrichment: batch /tracks failed ({e}); "
+                "continuing with embed-only metadata."
+            )
+            continue
+        except Exception as e:
+            logger.warning(
+                f"Spotify embed enrichment: batch /tracks error ({e}); "
+                "continuing with embed-only metadata."
+            )
+            continue
+
+        for record in (data or {}).get("tracks", []) or []:
+            if not isinstance(record, dict) or not record.get("id"):
+                continue
+            by_id[record["id"]] = record
+
+    if not by_id:
+        logger.warning(
+            "Spotify embed enrichment: no enriched records returned; "
+            "tracks will be imported with embed-only metadata."
+        )
+        return
+
+    for t in tracks:
+        rec = by_id.get(t.get("spotify_id"))
+        if not rec:
+            continue
+        album = rec.get("album", {}) or {}
+        artists = [a.get("name") for a in rec.get("artists", []) if a.get("name")]
+        album_images = album.get("images") or []
+        cover = album_images[0].get("url") if album_images else None
+
+        if rec.get("name"):
+            t["title"] = rec.get("name")
+        if artists:
+            t["all_artists"] = artists
+            t["primary_artist"] = artists[0]
+        t["isrc"] = rec.get("external_ids", {}).get("isrc") or t.get("isrc")
+        t["album_name"] = album.get("name") or t.get("album_name")
+        t["release_date"] = album.get("release_date") or t.get("release_date")
+        t["popularity"] = rec.get("popularity") if rec.get("popularity") is not None else t.get("popularity")
+        t["track_number"] = rec.get("track_number") or t.get("track_number")
+        t["disc_number"] = rec.get("disc_number") or t.get("disc_number")
+        t["explicit"] = bool(rec.get("explicit")) if "explicit" in rec else t.get("explicit", False)
+        if rec.get("duration_ms"):
+            t["duration_ms"] = rec.get("duration_ms")
+        if cover:
+            t["album_art"] = cover
+        if rec.get("external_urls", {}).get("spotify"):
+            t["spotify_url"] = rec["external_urls"]["spotify"]
+
+
 def _fetch_playlist_with_token(playlist_id: str, token: str, logger) -> List[Dict[str, Any]]:
-    tracks = []
+    tracks = _PlaylistTracksResult()
     offset = 0
     limit = 100
 
-    while True:
-        data = _spotify_get(f"playlists/{playlist_id}/tracks", token, {"offset": offset, "limit": limit})
-        if not data or not data.get("items"):
-            break
+    try:
+        while True:
+            data = _spotify_get(f"playlists/{playlist_id}/tracks", token, {"offset": offset, "limit": limit})
+            if not data or not data.get("items"):
+                break
 
-        for item in data["items"]:
-            track = item.get("track")
-            if not track or track.get("is_local"):
-                continue
+            for item in data["items"]:
+                track = item.get("track")
+                if not track or track.get("is_local"):
+                    continue
 
-            artists = [a.get("name") for a in track.get("artists", [])]
-            album = track.get("album", {})
+                artists = [a.get("name") for a in track.get("artists", [])]
+                album = track.get("album", {})
 
-            tracks.append({
-                "title": track.get("name"),
-                "primary_artist": artists[0] if artists else "Unknown",
-                "all_artists": artists,
-                "isrc": track.get("external_ids", {}).get("isrc"),
-                "album_name": album.get("name"),
-                "release_date": album.get("release_date"),
-                "spotify_url": track.get("external_urls", {}).get("spotify"),
-                "spotify_id": track.get("id"),
-                "duration_ms": track.get("duration_ms"),
-                "popularity": track.get("popularity"),
-                "album_art": album.get("images", [{}])[0].get("url") if album.get("images") else None,
-                "label": album.get("label"),
-                "track_number": track.get("track_number"),
-                "disc_number": track.get("disc_number"),
-                "explicit": track.get("explicit"),
-            })
+                tracks.append({
+                    "title": track.get("name"),
+                    "primary_artist": artists[0] if artists else "Unknown",
+                    "all_artists": artists,
+                    "isrc": track.get("external_ids", {}).get("isrc"),
+                    "album_name": album.get("name"),
+                    "release_date": album.get("release_date"),
+                    "spotify_url": track.get("external_urls", {}).get("spotify"),
+                    "spotify_id": track.get("id"),
+                    "duration_ms": track.get("duration_ms"),
+                    "popularity": track.get("popularity"),
+                    "album_art": album.get("images", [{}])[0].get("url") if album.get("images") else None,
+                    "label": album.get("label"),
+                    "track_number": track.get("track_number"),
+                    "disc_number": track.get("disc_number"),
+                    "explicit": track.get("explicit"),
+                })
 
-        if not data.get("next"):
-            break
-        offset += limit
+            if not data.get("next"):
+                break
+            offset += limit
 
-    return tracks
+        if tracks:
+            logger.info(f"Spotify: playlist {playlist_id} loaded via Web API ({len(tracks)} tracks)")
+        return tracks
+    except SpotifyForbiddenError as web_api_err:
+        # The Web API blocks /playlists/{id}/tracks for any app in
+        # Development Mode that doesn't own the playlist. Fall back to
+        # scraping the public embed page (no auth needed) and enrich
+        # each track via /v1/tracks?ids=… which still works.
+        logger.warning(
+            f"Spotify Web API forbade playlist {playlist_id} ({web_api_err}); "
+            "falling back to public embed scrape."
+        )
+        embed_tracks = _scrape_playlist_embed(playlist_id, logger)
+        _enrich_tracks_via_api(embed_tracks, token, logger)
+
+        result = _PlaylistTracksResult(embed_tracks)
+        result.embed_truncated = len(embed_tracks) >= _EMBED_TRACK_CAP
+        logger.info(
+            f"Spotify: playlist {playlist_id} loaded via embed fallback "
+            f"({len(result)} tracks, truncated={result.embed_truncated})"
+        )
+        return result
 
 
 def _extract_spotify_url_type(url: str):
