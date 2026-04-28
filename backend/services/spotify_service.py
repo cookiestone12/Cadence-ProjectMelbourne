@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 import requests
 from typing import Dict, Any, List, Optional
 
@@ -232,6 +233,31 @@ def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dic
             params=params,
             timeout=15,
         )
+        if resp.status_code == 429:
+            # Spotify rate-limited us. The response includes a `Retry-After`
+            # header (seconds). Honor it — capped — and retry once. Without
+            # this the per-track fallback bursts ~100 requests in <1s for
+            # large credit catalogs (e.g. creator 98), trips the limiter on
+            # every call after the first ~10, and the fallback silently
+            # records popularity=0 for the remaining songs (Total Estimated
+            # Streams: 0 on the Credits tab).
+            retry_after_raw = resp.headers.get("Retry-After", "1")
+            try:
+                retry_after = float(retry_after_raw)
+            except (TypeError, ValueError):
+                retry_after = 1.0
+            wait = max(0.5, min(retry_after, 10.0))
+            logger.warning(
+                f"Spotify 429 on {endpoint} (Retry-After={retry_after_raw}); "
+                f"sleeping {wait:.1f}s and retrying once."
+            )
+            time.sleep(wait)
+            resp = requests.get(
+                url,
+                headers={"Authorization": f"Bearer {token}"},
+                params=params,
+                timeout=15,
+            )
         if resp.status_code == 403:
             logger.error(f"Spotify API 403 Forbidden on {endpoint}: {resp.text[:500]}")
             # Spotify's Web API blocks /playlists/{id}/tracks for any
@@ -705,7 +731,14 @@ def _batch_or_individual_track_lookup(
         logger.info(
             f"Spotify per-track fallback: looking up {len(remaining)} ID(s) individually."
         )
-        for tid in remaining:
+        for idx, tid in enumerate(remaining):
+            if idx > 0:
+                # Tiny breather between per-ID calls so a 100-song catalog
+                # doesn't fire all 100 lookups in <1s and trip Spotify's
+                # rate limiter. 50ms ≈ 20 req/s — well under any per-second
+                # cap, and the 429-with-Retry-After handler in _spotify_get
+                # rescues us if we still hit it.
+                time.sleep(0.05)
             try:
                 record = _spotify_get(f"tracks/{tid}", token)
             except SpotifyAuthError:

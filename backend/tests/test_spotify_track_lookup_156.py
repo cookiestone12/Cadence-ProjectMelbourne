@@ -221,6 +221,165 @@ def test_partial_silent_nulls_only_fall_back_for_unresolved(monkeypatch):
     assert sorted(per_id_calls) == ["tracks/b", "tracks/c"]
 
 
+def test_spotify_get_honors_retry_after_on_429(monkeypatch):
+    """Spotify's per-track endpoint rate-limits us when the per-ID
+    fallback fires for a 100-credit creator. Without 429 handling
+    every retry returns None and popularity stays at 0 across the
+    Credits tab. The 429-with-Retry-After path must wait the requested
+    seconds (capped) and retry once.
+
+    This is the regression that tripped creator 98 ('100 credits') on
+    the production Credits tab right after Task #157 deployed: bulk
+    silent-null detection worked correctly, but the per-ID fallback
+    burst-fired ~200 calls in <1s and Spotify throttled all but the
+    first ~10.
+    """
+    from backend.services import spotify_service as svc
+
+    sleeps = []
+    monkeypatch.setattr(svc.time, "sleep", lambda s: sleeps.append(s))
+
+    class _Resp:
+        def __init__(self, status, json_body=None, headers=None):
+            self.status_code = status
+            self._json = json_body or {}
+            self.headers = headers or {}
+            self.text = ""
+        def json(self):
+            return self._json
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                from requests import HTTPError
+                raise HTTPError(f"HTTP {self.status_code}")
+
+    call_log = []
+
+    def fake_requests_get(url, headers=None, params=None, timeout=None):
+        call_log.append(url)
+        if len(call_log) == 1:
+            return _Resp(429, headers={"Retry-After": "2"})
+        return _Resp(200, json_body={"id": "abc", "popularity": 88})
+
+    monkeypatch.setattr(svc.requests, "get", fake_requests_get)
+
+    result = svc._spotify_get("tracks/abc", token="t")
+
+    # Retried exactly once.
+    assert len(call_log) == 2
+    # Honored the Retry-After header (capped at 10s).
+    assert sleeps == [2.0]
+    # Returned the recovered payload.
+    assert result == {"id": "abc", "popularity": 88}
+
+
+def test_spotify_get_429_retry_caps_wait_at_10_seconds(monkeypatch):
+    """If Spotify returns a huge Retry-After value (or a malformed one),
+    the helper must cap the sleep so a single bad response can't stall
+    the whole request worker."""
+    from backend.services import spotify_service as svc
+
+    sleeps = []
+    monkeypatch.setattr(svc.time, "sleep", lambda s: sleeps.append(s))
+
+    class _Resp:
+        def __init__(self, status, json_body=None, headers=None):
+            self.status_code = status
+            self._json = json_body or {}
+            self.headers = headers or {}
+            self.text = ""
+        def json(self): return self._json
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                from requests import HTTPError
+                raise HTTPError(f"HTTP {self.status_code}")
+
+    calls = [0]
+    def fake_requests_get(url, headers=None, params=None, timeout=None):
+        calls[0] += 1
+        if calls[0] == 1:
+            # Spotify hands us "9999" — a malicious or buggy upstream value.
+            return _Resp(429, headers={"Retry-After": "9999"})
+        return _Resp(200, json_body={"id": "x", "popularity": 50})
+
+    monkeypatch.setattr(svc.requests, "get", fake_requests_get)
+    svc._spotify_get("tracks/x", token="t")
+
+    # Capped at 10 seconds.
+    assert sleeps == [10.0]
+
+
+def test_spotify_get_429_handles_malformed_or_missing_retry_after(monkeypatch):
+    """`Retry-After` is sometimes missing entirely or non-numeric.
+    The helper must default to 1s wait (clamped to the 0.5s floor)
+    rather than crashing or sleeping forever."""
+    from backend.services import spotify_service as svc
+
+    sleeps = []
+    monkeypatch.setattr(svc.time, "sleep", lambda s: sleeps.append(s))
+
+    class _Resp:
+        def __init__(self, status, json_body=None, headers=None):
+            self.status_code = status
+            self._json = json_body or {}
+            self.headers = headers or {}
+            self.text = ""
+        def json(self): return self._json
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                from requests import HTTPError
+                raise HTTPError(f"HTTP {self.status_code}")
+
+    # --- Case 1: header missing entirely.
+    calls = [0]
+    def missing_header_get(url, headers=None, params=None, timeout=None):
+        calls[0] += 1
+        if calls[0] == 1:
+            return _Resp(429, headers={})  # no Retry-After at all
+        return _Resp(200, json_body={"id": "x"})
+    monkeypatch.setattr(svc.requests, "get", missing_header_get)
+    sleeps.clear()
+    svc._spotify_get("tracks/x", token="t")
+    assert sleeps == [1.0]  # default 1s, above the 0.5s floor
+
+    # --- Case 2: header present but garbage.
+    calls[0] = 0
+    def garbage_header_get(url, headers=None, params=None, timeout=None):
+        calls[0] += 1
+        if calls[0] == 1:
+            return _Resp(429, headers={"Retry-After": "not-a-number"})
+        return _Resp(200, json_body={"id": "x"})
+    monkeypatch.setattr(svc.requests, "get", garbage_header_get)
+    sleeps.clear()
+    svc._spotify_get("tracks/x", token="t")
+    assert sleeps == [1.0]
+
+
+def test_per_id_loop_paces_calls_with_50ms_breather(monkeypatch):
+    """The per-ID fallback must insert a 50ms breather between calls
+    (skipping the first), so a 100-credit catalog issues ~20 req/s
+    instead of 200/s and stops tripping Spotify's rate limiter."""
+    pace_sleeps = []
+
+    def fake_sleep(s):
+        pace_sleeps.append(s)
+
+    monkeypatch.setattr(spotify_service.time, "sleep", fake_sleep)
+
+    def fake_get(endpoint, token, params=None):
+        if endpoint == "tracks":
+            # Force the silent-null path so per-ID fallback runs for all 5 IDs.
+            return {"tracks": [None, None, None, None, None]}
+        tid = endpoint.split("/", 1)[1]
+        return _track_record(tid)
+
+    monkeypatch.setattr(spotify_service, "_spotify_get", fake_get)
+
+    _batch_or_individual_track_lookup(["a", "b", "c", "d", "e"], "token", _LOG)
+
+    # 5 IDs in the per-ID loop → 4 breathers (skip the first).
+    assert pace_sleeps == [0.05, 0.05, 0.05, 0.05]
+
+
 def test_empty_inputs_short_circuit(monkeypatch):
     """Defensive: empty ID list or empty token returns {} without any HTTP."""
 
