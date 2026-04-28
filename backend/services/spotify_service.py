@@ -20,17 +20,42 @@ def _get_replit_connector_header() -> Optional[str]:
     return None
 
 
+def _get_project_oauth_token() -> Optional[str]:
+    """Project-owned Authorization-Code OAuth token (preferred path).
+
+    Backed by ``spotify_oauth_tokens`` and the operator's own Spotify
+    Developer app. Returns ``None`` quietly when no listener has been
+    connected yet so the caller can fall back to other token sources.
+    """
+    import logging
+    logger = logging.getLogger("cadence")
+    try:
+        from . import spotify_oauth as _oauth
+        return _oauth.get_valid_access_token()
+    except Exception as e:
+        logger.error(f"Spotify project-OAuth lookup failed: {e}")
+        return None
+
+
 def _get_replit_access_token() -> Optional[str]:
+    """Legacy: Replit Spotify connector token (kept for backward compat).
+
+    Hard-bound to a Spotify dev app Replit owns whose Users-and-Access
+    list we cannot edit, so it cannot satisfy the Development-Mode
+    allowlist for our own dev app. Kept as a last-resort fallback in
+    case the project-owned OAuth path is not yet connected and the
+    connector still happens to work for some calls.
+    """
     import logging
     logger = logging.getLogger("cadence")
     hostname = os.getenv("REPLIT_CONNECTORS_HOSTNAME")
     x_replit_token = _get_replit_connector_header()
 
     if not hostname:
-        logger.info("Spotify connector: REPLIT_CONNECTORS_HOSTNAME not set")
+        logger.debug("Spotify connector: REPLIT_CONNECTORS_HOSTNAME not set")
         return None
     if not x_replit_token:
-        logger.info("Spotify connector: no REPL_IDENTITY or WEB_REPL_RENEWAL token available")
+        logger.debug("Spotify connector: no REPL_IDENTITY or WEB_REPL_RENEWAL token available")
         return None
 
     try:
@@ -46,7 +71,7 @@ def _get_replit_access_token() -> Optional[str]:
         data = resp.json()
         item = data.get("items", [None])[0] if data.get("items") else None
         if not item:
-            logger.warning("Spotify connector: no connection items found in connector response")
+            logger.debug("Spotify connector: no connection items found")
             return None
 
         settings = item.get("settings", {})
@@ -57,27 +82,34 @@ def _get_replit_access_token() -> Optional[str]:
         refresh_token = creds.get("refresh_token")
         client_id = creds.get("client_id")
 
-
-        if refresh_token and client_id:
-            logger.info("Spotify connector: attempting token refresh to get a fresh access token")
+        # The connector's stored refresh_token is an opaque Replit
+        # placeholder ("REFRESH_...") that always fails directly against
+        # Spotify. We try it but log the failure quietly since the
+        # cached access_token is the real fallback.
+        if refresh_token and client_id and not refresh_token.startswith("REFRESH_"):
             refreshed = _refresh_spotify_token(refresh_token, client_id)
             if refreshed:
-                logger.info("Spotify connector: using freshly refreshed token")
                 return refreshed
-            logger.warning("Spotify connector: token refresh failed, falling back to existing token")
 
         if access_token:
-            logger.info("Spotify connector: using existing access token from connector")
             return access_token
 
-        logger.warning("Spotify connector: no access token available and refresh failed or not possible")
+        logger.debug("Spotify connector: no access token available")
         return None
     except Exception as e:
-        logger.error(f"Spotify connector error: {e}")
+        logger.debug(f"Spotify connector error: {e}")
         return None
 
 
 def _refresh_spotify_token(refresh_token: str, client_id: str) -> Optional[str]:
+    """Legacy connector-token refresh. Quietly logs failures.
+
+    The Replit connector stores an opaque placeholder where a real
+    Spotify refresh_token would go, so direct refresh almost always
+    returns ``invalid_grant``. We keep this path as a defensive try
+    but log at DEBUG to avoid filling logs with alarming errors that
+    aren't actionable.
+    """
     import logging
     logger = logging.getLogger("cadence")
     try:
@@ -92,13 +124,11 @@ def _refresh_spotify_token(refresh_token: str, client_id: str) -> Optional[str]:
         )
         if resp.status_code == 200:
             new_token = resp.json().get("access_token")
-            logger.info("Spotify token refreshed successfully")
             return new_token
-        else:
-            logger.error(f"Spotify token refresh failed: {resp.status_code} {resp.text[:200]}")
-            return None
+        logger.debug(f"Spotify connector refresh failed: {resp.status_code}")
+        return None
     except Exception as e:
-        logger.error(f"Spotify token refresh exception: {e}")
+        logger.debug(f"Spotify connector refresh exception: {e}")
         return None
 
 
@@ -125,16 +155,33 @@ def _get_client_credentials_token() -> Optional[str]:
 
 
 def _get_access_token() -> Optional[str]:
+    """Resolve a Spotify bearer token in priority order.
+
+    1. Project-owned Authorization-Code OAuth (preferred — uses the
+       operator's own dev app, satisfies allowlist requirements and
+       sidesteps the dev-app-owner-must-have-Premium gate).
+    2. Replit Spotify connector token (legacy fallback).
+    3. Client-credentials grant (last resort; fails 403 if the dev
+       app's owner Spotify account doesn't have Premium).
+    """
     import logging
     logger = logging.getLogger("cadence")
+
+    project_token = _get_project_oauth_token()
+    if project_token:
+        logger.info("Spotify: Using project-owned OAuth token")
+        return project_token
+
     connector_token = _get_replit_access_token()
     if connector_token:
-        logger.info("Spotify: Using Replit connector token")
+        logger.info("Spotify: Using Replit connector token (legacy fallback)")
         return connector_token
+
     cc_token = _get_client_credentials_token()
     if cc_token:
         logger.info("Spotify: Using client credentials token")
         return cc_token
+
     logger.warning("Spotify: No access token available from any source")
     return None
 

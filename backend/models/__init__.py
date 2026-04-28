@@ -28,6 +28,7 @@ from .models import (
     PushSubscription,
     RegistrationReport,
     SharedContactLink,
+    SpotifyOAuthToken,
     ClientSharedContact,
     AccountMergeRequest,
     SharedItem, SharedItemType, SharedItemStatus,

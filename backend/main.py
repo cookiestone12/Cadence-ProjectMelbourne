@@ -10,7 +10,7 @@ from .routes import (
     organizations, creators, songs, credits,
     checklist, exports, valuations, valuation_reports, schedule_a,
     contracts, contracts_mgmt, contract_docs, account_links, admin, notifications, actions, csv_upload,
-    works, releases, bulk, spotify_import, royalties, placements, analytics,
+    works, releases, bulk, spotify_import, spotify_oauth, royalties, placements, analytics,
     tenant_admin, creative_directory, registration_reports, audit_log, expenses,
     client_sharing, integrations, audio, brief_builder, royalty_processing,
     push, storage_scan, client_portal, account_merge, streaming_credits,
@@ -612,6 +612,7 @@ app.include_router(works.router)
 app.include_router(releases.router)
 app.include_router(bulk.router)
 app.include_router(spotify_import.router)
+app.include_router(spotify_oauth.router)
 app.include_router(royalties.router)
 app.include_router(placements.router)
 app.include_router(analytics.router)

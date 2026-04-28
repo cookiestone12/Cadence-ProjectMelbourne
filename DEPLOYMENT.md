@@ -111,8 +111,9 @@
 | `AI_INTEGRATIONS_OPENAI_API_KEY`  | `secret`         | All OpenAI-backed routes (CSV mapping, contract parser, audio analysis, brief builder, assistant chat, Schedule A extractor). Auto-set by the Replit OpenAI integration. |
 | `AI_INTEGRATIONS_OPENAI_BASE_URL` | `secret`         | Same — OpenAI API base URL.                  |
 | `RESEND_API_KEY`                  | `secret`         | Transactional email via Resend (auto-set by the Replit Resend integration). |
-| `SPOTIFY_CLIENT_ID`               | `secret`         | Spotify integration — playlist import, search, release lookup. Rotated 2026-04-27 (Task #145) — see "Spotify rotation runbook" below for the always-do-both-halves procedure. |
-| `SPOTIFY_CLIENT_SECRET`           | `secret`         | Spotify integration.                         |
+| `SPOTIFY_CLIENT_ID`               | `secret`         | Spotify Developer app client ID. Used by both the project-owned OAuth flow (listener auth) and the client-credentials fallback (catalog/search). Rotated 2026-04-28 — see "Spotify rotation runbook" below. |
+| `SPOTIFY_CLIENT_SECRET`           | `secret`         | Spotify Developer app client secret. Same dev app as above; used by both halves. |
+| `SPOTIFY_REDIRECT_URI`            | optional URL     | Override for the OAuth callback URL. Defaults to `https://{REPLIT_DEV_DOMAIN}/api/spotify/oauth/callback` in dev and `https://rythm-app.replit.app/api/spotify/oauth/callback` in prod. Set this only if you front Cadence with a custom domain. Whatever value resolves at runtime must be present **verbatim** in the Spotify Dev app's Redirect URIs list. |
 | `DROPBOX_APP_KEY`                 | `secret`         | Cloud-storage linking (Dropbox audio scan).  |
 | `DROPBOX_APP_SECRET`              | `secret`         | Cloud-storage linking.                       |
 | `GOOGLE_CLIENT_ID`                | `secret`         | Cloud-storage linking (Google Drive audio scan). |
@@ -296,72 +297,88 @@ or the model in `backend/models/models.py` and re-run.
 
 ### Spotify rotation runbook
 
-Whenever you change the Spotify account Cadence is using, you
-must rotate **both halves** in the same session. Skipping
-either half leaves Cadence in a half-broken state where some
-flows still hit the old account.
+Cadence reaches Spotify through **one** Spotify Developer app
+that the operator owns end-to-end. There are two call modes
+behind the scenes — listener-authenticated (OAuth) and
+unauthenticated (client-credentials) — but both modes share
+the same `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET`, so a
+rotation is now a single linear procedure rather than two
+half-procedures that have to be kept in sync.
 
-**The two halves**
+**Where the tokens live**
 
-1. **Replit Spotify connection (OAuth)** — used by
-   `_get_replit_access_token()` in
-   `backend/services/spotify_service.py` for any flow tied to
-   a logged-in listener (playlist import, release lookup,
-   track auto-fill from a pasted Spotify URL).
-2. **Developer-app fallback (`SPOTIFY_CLIENT_ID` /
-   `SPOTIFY_CLIENT_SECRET` secrets)** — used by
-   `_get_client_credentials_token()` for unauthenticated
-   catalog/search calls (chart ingester, AI track matcher).
+- `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` — Replit
+  Secrets (project-scoped, applies to both dev and the
+  Reserved VM after a republish).
+- `spotify_oauth_tokens` table — singleton row holding the
+  listener's access + refresh tokens. Populated by the
+  in-app OAuth flow (Admin → API Configuration → Spotify →
+  *Connect Spotify Account*); refreshed automatically by
+  `backend/services/spotify_oauth.get_valid_access_token()`.
+  Cleared by clicking *Disconnect* in the same modal or by
+  POSTing `/api/spotify/oauth/disconnect` as super-admin.
 
-Replit Secrets are project-scoped (not per-environment), so
-updating these two secrets in the project's Secrets pane
-applies to both the `development` workspace and the Reserved
-VM `production` deploy. **You still have to republish from
-the Deployments tab** for the running prod container to pick
-up the new values — the existing prod process holds the old
-secrets in memory until it restarts.
+The legacy Replit Spotify connector path is still present in
+`spotify_service._get_replit_access_token()` as a fallback
+but is no longer the primary auth source — it stays only so
+existing workspaces that haven't run the new OAuth flow yet
+keep limping along.
 
 **Procedure**
 
-1. Create the new Spotify Developer app on
+1. **Create / pick the Spotify Developer app** on
    [developer.spotify.com](https://developer.spotify.com).
-   On the form: Redirect URI can be any well-formed URL
-   (Cadence's client-credentials flow doesn't use it); check
-   **Web API** only.
-2. Update `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`
-   secrets with the new dev app's values.
-3. Re-trigger OAuth on the project's Spotify connection so
-   the user signs in with the new listener account. The
-   connector replaces its stored refresh token in place.
-4. Restart the `backend` workflow in dev. Run an in-process
-   smoke test calling
+   The owning Spotify account must have an active Premium
+   subscription (gate for the client-credentials half).
+2. **Add the Cadence redirect URI** to the dev app's
+   *Redirect URIs* list. The exact value to paste is shown
+   in Admin → API Configuration → Spotify → *Listener Account
+   (OAuth)*; it will be one of:
+   - dev: `https://{REPLIT_DEV_DOMAIN}/api/spotify/oauth/callback`
+   - prod: `https://rythm-app.replit.app/api/spotify/oauth/callback`
+   - custom: whatever you set `SPOTIFY_REDIRECT_URI` to.
+   Mismatch here surfaces as `INVALID_CLIENT: Invalid redirect URI`
+   on the Spotify authorize page.
+3. **Add the listener account** that will sign in to the dev
+   app's *Users and Access* list (only required while the dev
+   app is in Development Mode, which is the default). The
+   listener does **not** need to be the dev-app owner and does
+   **not** need Premium.
+4. **Update secrets.** Set `SPOTIFY_CLIENT_ID` and
+   `SPOTIFY_CLIENT_SECRET` in the project's Secrets pane.
+5. **Restart the `backend` workflow** in dev so it reloads the
+   new credentials.
+6. **Connect the listener.** As super-admin in dev, open
+   Admin → API Configuration → Spotify and click *Connect
+   Spotify Account*. The popup will return to the admin page
+   with the connection state flipped to *Connected as &lt;name&gt;*.
+   The OAuth half is now live.
+7. **Smoke test in dev.** Call
    `spotify_service.lookup_release_metadata()` against any
-   known Spotify track URL — expect real metadata back, not a
-   `SpotifyForbiddenError`.
-5. Republish from the **Deployments** tab so the Reserved VM
-   picks up the new secrets, then repeat the smoke test
-   against the live URL.
+   public Spotify track URL — expect real metadata back, not
+   a `SpotifyForbiddenError`.
+8. **Republish from the Deployments tab** so the Reserved VM
+   picks up the new secrets.
+9. **Repeat steps 6–7 against the live URL.** The
+   `spotify_oauth_tokens` row is shared between dev and prod
+   (same Postgres) so you usually don't need to re-OAuth in
+   prod, but the *Connect* button is there if you want to
+   verify.
 
-**Spotify-side gates that block step 4** (both observed
-verbatim during the 2026-04-27 rotation; if you hit either,
-fix it on developer.spotify.com — no Cadence code change
-needed):
+**Spotify-side gates that can still bite step 7**:
 
 - 403 *"Active premium subscription required for the owner of
-  the app. When the subscription status changes, it can take
-  a few hours before requests are allowed again."* — the
-  Spotify account that **owns** the dev app must have an
-  active Premium subscription. This blocks the
-  client-credentials half.
+  the app."* — fix on developer.spotify.com: the dev-app
+  owner needs Premium. After upgrading, propagation can take
+  a few hours.
 - 403 *"Check settings on developer.spotify.com/dashboard,
-  the user may not be registered."* — while the dev app is in
-  Development Mode (the default for new apps), the listener
-  account that signed in via OAuth must be added to the dev
-  app's **Users and Access** list. This blocks the OAuth half.
+  the user may not be registered."* — fix on
+  developer.spotify.com: add the OAuth listener account to
+  the dev app's *Users and Access* list (step 3 above).
 
 The long-term fix for both is to apply for Spotify's
 **Extended Quota Mode** review for the dev app, which removes
-the Premium and allowlist requirements.
+the Premium-on-owner and allowlist-on-listener requirements.
 
 ---
 

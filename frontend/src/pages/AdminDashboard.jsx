@@ -1431,6 +1431,8 @@ function DeleteOrgModal({ org, onClose, onConfirm }) {
 function IntegrationModal({ integration, onClose, onSave }) {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState(null)
+  const [oauthBusy, setOauthBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const handleTest = async () => {
     setTesting(true)
@@ -1442,6 +1444,73 @@ function IntegrationModal({ integration, onClose, onSave }) {
       setTestResult({ success: false, message: err.response?.data?.detail || 'Test failed' })
     } finally {
       setTesting(false)
+    }
+  }
+
+  const handleSpotifyConnect = async () => {
+    setOauthBusy(true)
+    setTestResult(null)
+    let popup = null
+    try {
+      // Open the popup synchronously inside the click handler so popup
+      // blockers don't kill it; navigate it to the OAuth start URL only
+      // after we have a freshly-minted nonce in hand.
+      popup = window.open('about:blank', 'spotify_oauth', 'width=560,height=720')
+      const res = await axios.post('/api/spotify/oauth/start-nonce')
+      const nonce = res.data?.nonce
+      if (!nonce) throw new Error('No nonce returned')
+      const url = `/api/spotify/oauth/start?nonce=${encodeURIComponent(nonce)}`
+      if (popup && !popup.closed) {
+        popup.location.replace(url)
+      } else {
+        window.open(url, 'spotify_oauth', 'width=560,height=720')
+      }
+    } catch (err) {
+      if (popup && !popup.closed) popup.close()
+      setTestResult({ success: false, message: err.response?.data?.detail || err.message || 'Could not start Spotify OAuth' })
+    } finally {
+      setOauthBusy(false)
+    }
+  }
+
+  // Listen for the popup's completion postMessage and trigger a refresh.
+  useEffect(() => {
+    const handler = (ev) => {
+      const msg = ev.data
+      if (!msg || msg.type !== 'spotify_oauth_result') return
+      if (msg.success) {
+        setTestResult({ success: true, message: 'Spotify account connected.' })
+        onSave && onSave()
+      } else {
+        setTestResult({ success: false, message: `Spotify connection failed: ${msg.reason || 'unknown'}` })
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [onSave])
+
+  const handleSpotifyDisconnect = async () => {
+    if (!window.confirm('Disconnect the Spotify account from Cadence? Authenticated Spotify calls will fall back to client-credentials only.')) return
+    setOauthBusy(true)
+    try {
+      await axios.post('/api/spotify/oauth/disconnect')
+      setTestResult({ success: true, message: 'Spotify disconnected.' })
+      onSave && onSave()
+    } catch (err) {
+      setTestResult({ success: false, message: err.response?.data?.detail || 'Disconnect failed' })
+    } finally {
+      setOauthBusy(false)
+    }
+  }
+
+  const copyRedirectUri = async () => {
+    if (!integration.oauth?.redirect_uri) return
+    try {
+      await navigator.clipboard.writeText(integration.oauth.redirect_uri)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      setCopied(false)
     }
   }
 
@@ -1486,6 +1555,87 @@ function IntegrationModal({ integration, onClose, onSave }) {
               ))}
             </div>
           </div>
+
+          {integration.id === 'spotify' && integration.oauth && (
+            <div className="bg-[#1DB954]/10 rounded-lg p-4 border border-[#1DB954]/20">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-medium text-[#3D4A44]">Listener Account (OAuth)</h3>
+                {integration.oauth.connected ? (
+                  <span className="flex items-center gap-1 text-xs font-medium text-[#5B9A6E]">
+                    <CheckCircleIcon className="w-4 h-4" />
+                    Connected
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-xs font-medium text-[#C47068]">
+                    <ExclamationCircleIcon className="w-4 h-4" />
+                    Not connected
+                  </span>
+                )}
+              </div>
+              {integration.oauth.connected ? (
+                <div className="text-sm text-[#7A8580] space-y-1 mb-3">
+                  <div>Connected as <span className="font-medium text-[#3D4A44]">{integration.oauth.connected_as || integration.oauth.connected_email || 'listener'}</span></div>
+                  {integration.oauth.token_expires_at && (
+                    <div className="text-xs">Access token refreshes automatically (current expiry: {new Date(integration.oauth.token_expires_at).toLocaleString()})</div>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-[#7A8580] mb-3">
+                  Sign a Spotify listener account in to enable playlist import, release lookup, and pasted-URL track auto-fill.
+                </p>
+              )}
+              {integration.oauth.redirect_uri && (
+                <div className="bg-white rounded-lg p-3 border border-[rgba(59,77,67,0.12)] mb-3">
+                  <div className="text-xs text-[#7A8580] mb-1">Add this Redirect URI to your Spotify Developer app first:</div>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs font-mono text-[#3D4A44] flex-1 break-all">{integration.oauth.redirect_uri}</code>
+                    <button
+                      type="button"
+                      onClick={copyRedirectUri}
+                      className="px-2 py-1 text-xs border border-[rgba(59,77,67,0.12)] rounded hover:bg-[#EEF1EC]"
+                    >
+                      {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2">
+                {integration.oauth.connected ? (
+                  <button
+                    type="button"
+                    onClick={handleSpotifyDisconnect}
+                    disabled={oauthBusy}
+                    className="px-3 py-1.5 text-sm border border-[#C47068] text-[#C47068] rounded-lg hover:bg-[#C47068]/10 disabled:opacity-50"
+                  >
+                    {oauthBusy ? 'Disconnecting...' : 'Disconnect'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleSpotifyConnect}
+                    disabled={!integration.oauth.configured}
+                    className="px-3 py-1.5 text-sm bg-[#1DB954] text-white rounded-lg hover:bg-[#1aa84a] disabled:opacity-50"
+                  >
+                    Connect Spotify Account
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSpotifyConnect}
+                  disabled={!integration.oauth.configured || !integration.oauth.connected}
+                  className="px-3 py-1.5 text-sm border border-[rgba(59,77,67,0.12)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] disabled:opacity-50"
+                  title="Re-authorize with a different Spotify account"
+                >
+                  Reconnect
+                </button>
+              </div>
+              {!integration.oauth.configured && (
+                <p className="text-xs text-[#C47068] mt-2">
+                  Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET secrets first.
+                </p>
+              )}
+            </div>
+          )}
 
           {testResult && (
             <div className={`p-3 rounded-lg ${testResult.success ? 'bg-[#5B9A6E]/10 text-[#5B9A6E]' : 'bg-[#C47068]/10 text-[#C47068]'}`}>

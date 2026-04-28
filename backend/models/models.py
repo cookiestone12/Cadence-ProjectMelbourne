@@ -2612,3 +2612,18 @@ class QueryHistoryEntry(Base):
     error = Column(Text, nullable=True)
 
     owner = relationship("User")
+
+
+class SpotifyOAuthToken(Base):
+    __tablename__ = "spotify_oauth_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    access_token = Column(Text, nullable=False)
+    refresh_token = Column(Text, nullable=False)
+    scope = Column(String, nullable=True)
+    token_expires_at = Column(DateTime, nullable=False)
+    connected_user_display_name = Column(String, nullable=True)
+    connected_user_email = Column(String, nullable=True)
+    connected_user_spotify_id = Column(String, nullable=True)
+    connected_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

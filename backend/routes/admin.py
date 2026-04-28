@@ -896,19 +896,39 @@ def get_integration_status(
     
     spotify_client_id = os.environ.get("SPOTIFY_CLIENT_ID", "")
     spotify_client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "")
+    from ..services import spotify_oauth as _spotify_oauth
+    spotify_oauth_status = _spotify_oauth.get_status()
+    spotify_creds_present = bool(spotify_client_id and spotify_client_secret)
+    spotify_oauth_connected = bool(spotify_oauth_status.get("connected"))
+    if spotify_oauth_connected:
+        spotify_status = "connected"
+    elif spotify_creds_present:
+        spotify_status = "needs_auth"
+    else:
+        spotify_status = "not_configured"
     integrations.append({
         "id": "spotify",
         "name": "Spotify API",
         "description": "Access streaming data, playlist info, and artist metrics from Spotify",
-        "status": "connected" if (spotify_client_id and spotify_client_secret) else "not_configured",
-        "managed_by": "replit_secrets",
+        "status": spotify_status,
+        "managed_by": "project_oauth",
         "configurable": True,
         "features": ["Streaming Data", "Playlist Analytics", "Artist Metrics"],
         "secret_keys": ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"],
         "fields": [
             {"key": "SPOTIFY_CLIENT_ID", "label": "Client ID", "type": "text", "has_value": bool(spotify_client_id)},
             {"key": "SPOTIFY_CLIENT_SECRET", "label": "Client Secret", "type": "password", "has_value": bool(spotify_client_secret)}
-        ]
+        ],
+        "oauth": {
+            "configured": spotify_oauth_status.get("configured", False),
+            "connected": spotify_oauth_connected,
+            "redirect_uri": spotify_oauth_status.get("redirect_uri"),
+            "connected_as": spotify_oauth_status.get("connected_as"),
+            "connected_email": spotify_oauth_status.get("connected_email"),
+            "connected_at": spotify_oauth_status.get("connected_at"),
+            "token_expires_at": spotify_oauth_status.get("token_expires_at"),
+            "scope": spotify_oauth_status.get("scope"),
+        },
     })
     
     chartmetric_api_key = os.environ.get("CHARTMETRIC_API_KEY", "")
