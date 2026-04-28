@@ -113,7 +113,7 @@
 | `RESEND_API_KEY`                  | `secret`         | Transactional email via Resend (auto-set by the Replit Resend integration). |
 | `SPOTIFY_CLIENT_ID`               | `secret`         | Spotify Developer app client ID. Used by both the project-owned OAuth flow (listener auth) and the client-credentials fallback (catalog/search). Rotated 2026-04-28 — see "Spotify rotation runbook" below. |
 | `SPOTIFY_CLIENT_SECRET`           | `secret`         | Spotify Developer app client secret. Same dev app as above; used by both halves. |
-| `SPOTIFY_REDIRECT_URI`            | optional URL     | Override for the OAuth callback URL. Defaults to `https://{REPLIT_DEV_DOMAIN}/api/spotify/oauth/callback` in dev and `https://cadence-ci.com/api/spotify/oauth/callback` in prod. Set this only if you front Cadence with a different custom domain. Whatever value resolves at runtime must be present **verbatim** in the Spotify Dev app's Redirect URIs list. |
+| `SPOTIFY_REDIRECT_URI`            | optional URL     | Override for the OAuth callback URL. Defaults to `https://cadence-ci.com/api/spotify/oauth/callback` in **all** environments (dev workspace included — the dev preview can't terminate the OAuth callback because Vite doesn't proxy `/api/*`, so we always send Spotify back to production and rely on the popup `postMessage` to notify the opener). Set this only if you front Cadence with a different custom domain. Whatever value resolves at runtime must be present **verbatim** in the Spotify Dev app's Redirect URIs list. |
 | `DROPBOX_APP_KEY`                 | `secret`         | Cloud-storage linking (Dropbox audio scan).  |
 | `DROPBOX_APP_SECRET`              | `secret`         | Cloud-storage linking.                       |
 | `GOOGLE_CLIENT_ID`                | `secret`         | Cloud-storage linking (Google Drive audio scan). |
@@ -334,9 +334,16 @@ keep limping along.
    *Redirect URIs* list. The exact value to paste is shown
    in Admin → API Configuration → Spotify → *Listener Account
    (OAuth)*; it will be one of:
-   - dev: `https://{REPLIT_DEV_DOMAIN}/api/spotify/oauth/callback`
-   - prod: `https://cadence-ci.com/api/spotify/oauth/callback`
+   - **default (all envs):** `https://cadence-ci.com/api/spotify/oauth/callback`
    - custom: whatever you set `SPOTIFY_REDIRECT_URI` to.
+
+   The dev workspace deliberately uses the production callback URL —
+   the Vite dev server doesn't proxy `/api/*` to FastAPI, so a callback
+   landing on `*.picard.replit.dev` would just hit Replit's "Run this
+   app" splash page. Sending Spotify back to the production backend
+   (which DOES handle `/api/spotify/oauth/callback`) means the popup
+   completes regardless of which URL the operator started Connect from;
+   the popup's `postMessage` notifies the opener cross-origin.
    Mismatch here surfaces as `INVALID_CLIENT: Invalid redirect URI`
    on the Spotify authorize page.
 3. **Add the listener account** that will sign in to the dev

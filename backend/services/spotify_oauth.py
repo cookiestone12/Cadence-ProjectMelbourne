@@ -61,10 +61,20 @@ def get_redirect_uri() -> str:
     """Resolve the OAuth callback URL.
 
     Priority:
-    1. ``SPOTIFY_REDIRECT_URI`` env var (operator override).
-    2. ``{REPLIT_DEV_DOMAIN}/api/spotify/oauth/callback`` when running in
-       a Replit workspace dev environment.
-    3. Production fallback ``https://cadence-ci.com/api/spotify/oauth/callback``.
+    1. ``SPOTIFY_REDIRECT_URI`` env var (operator override — useful if a
+       different operator wants to point Cadence at a non-prod URL).
+    2. The canonical production URL
+       ``https://cadence-ci.com/api/spotify/oauth/callback``.
+
+    The ``REPLIT_DEV_DOMAIN`` auto-resolution that used to live here is
+    gone on purpose. The dev preview (``*.picard.replit.dev``) doesn't
+    proxy ``/api/*`` to the FastAPI backend, so an OAuth callback that
+    landed on the dev preview URL would just return Replit's "Run this
+    app" splash page instead of completing the flow. Always sending
+    Spotify back to ``cadence-ci.com`` means the popup completes against
+    the production backend even when the operator clicks Connect from
+    the workspace preview — the popup then ``postMessage``s the result
+    cross-origin back to whichever opener window started the flow.
 
     Whichever value this returns must be added verbatim to the dev
     app's Redirect URIs list on developer.spotify.com.
@@ -72,9 +82,6 @@ def get_redirect_uri() -> str:
     explicit = os.getenv("SPOTIFY_REDIRECT_URI")
     if explicit:
         return explicit
-    dev_domain = os.getenv("REPLIT_DEV_DOMAIN")
-    if dev_domain:
-        return f"https://{dev_domain}/api/spotify/oauth/callback"
     return "https://cadence-ci.com/api/spotify/oauth/callback"
 
 
