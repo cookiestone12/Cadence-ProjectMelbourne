@@ -166,3 +166,43 @@ def test_empty_inputs_short_circuit(monkeypatch):
 
     assert _batch_or_individual_track_lookup([], "token", _LOG) == {}
     assert _batch_or_individual_track_lookup(["x"], "", _LOG) == {}
+
+
+# ---------------------------------------------------------------------------
+# Codifies the credits-service degrade contract on SpotifyAuthError.
+# Per the architect review: the helper re-raises auth errors, but the
+# Credits-tab caller intentionally catches them and degrades to an empty
+# popularity map so the page still renders. This test locks in that UX —
+# if we ever want to bubble auth errors up to the user instead, this test
+# is the place to flip it (and a corresponding "reconnect required" UX
+# would land in the same change).
+# ---------------------------------------------------------------------------
+class _StubSong:
+    def __init__(self, spotify_link):
+        self.spotify_link = spotify_link
+        self.title = "T"
+        self.primary_artist = "A"
+
+
+def test_credits_batch_fetch_degrades_on_spotify_auth_error(monkeypatch):
+    from backend.services import credits_service
+
+    monkeypatch.setattr(spotify_service, "_get_access_token", lambda: "token")
+
+    def boom(track_ids, token, logger):
+        raise SpotifyAuthError("token expired mid-run")
+
+    monkeypatch.setattr(spotify_service, "_batch_or_individual_track_lookup", boom)
+    # Block the search-fallback branch from doing any real HTTP either.
+    monkeypatch.setattr(spotify_service, "_spotify_get", lambda *a, **kw: None)
+
+    songs = {1: _StubSong("https://open.spotify.com/track/abc123XYZ")}
+
+    # The function holds a Session reference but only uses it for the
+    # DSP-link fallback; with spotify_link set we never reach it.
+    result = credits_service._batch_fetch_spotify_popularity(songs, db=None)
+
+    # Degrade contract: empty result, no crash. If we ever decide to
+    # surface "reconnect required" to the UI, this assertion (and the
+    # corresponding except-block in credits_service) flip together.
+    assert result == {}
