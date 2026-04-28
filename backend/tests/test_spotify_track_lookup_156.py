@@ -206,3 +206,59 @@ def test_credits_batch_fetch_degrades_on_spotify_auth_error(monkeypatch):
     # surface "reconnect required" to the UI, this assertion (and the
     # corresponding except-block in credits_service) flip together.
     assert result == {}
+
+
+class _StubQuery:
+    def query(self, *a, **kw): return self
+    def filter(self, *a, **kw): return self
+    def first(self): return None
+
+
+def test_credits_search_branch_confirms_zero_popularity_via_tracks_endpoint(monkeypatch):
+    """Search returns popularity=0 in Spotify Development Mode for every
+    hit, but `tracks/{id}` returns the real value. The credits search
+    branch must rescue the popularity by issuing one confirmation call
+    per zero-pop hit. Without this rescue the Credits tab silently
+    showed 0 streams for every song without a direct Spotify link.
+    """
+    from backend.services import credits_service
+
+    # Song with no Spotify link → falls into the search branch (after
+    # the SongDSPLink fallback also returns None).
+    song = _StubSong(spotify_link=None)
+    songs = {42: song}
+    db = _StubQuery()
+
+    monkeypatch.setattr(spotify_service, "_get_access_token", lambda: "token")
+
+    calls = []
+
+    def fake_spotify_get(endpoint, token, params=None):
+        calls.append((endpoint, params))
+        if endpoint == "search":
+            # Spotify dev-mode degraded search: real metadata but pop=0.
+            return {
+                "tracks": {
+                    "items": [
+                        {
+                            "id": "rescue_me_id",
+                            "name": "Rescue Me",
+                            "popularity": 0,  # the lie we need to confirm
+                            "album": {"images": [{"url": "https://img/x.jpg"}]},
+                        }
+                    ]
+                }
+            }
+        if endpoint == "tracks/rescue_me_id":
+            # The single-track endpoint returns the truth.
+            return {"id": "rescue_me_id", "popularity": 73}
+        raise AssertionError(f"unexpected endpoint {endpoint}")
+
+    monkeypatch.setattr(spotify_service, "_spotify_get", fake_spotify_get)
+
+    result = credits_service._batch_fetch_spotify_popularity(songs, db=db)
+
+    # Rescue worked: real popularity adopted.
+    assert result == {42: {"popularity": 73, "album_art": "https://img/x.jpg"}}
+    # We did exactly one search and one confirmation lookup.
+    assert [c[0] for c in calls] == ["search", "tracks/rescue_me_id"]
