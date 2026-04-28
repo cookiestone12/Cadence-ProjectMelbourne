@@ -75,7 +75,10 @@ def preview_playlist_import(
         raise HTTPException(status_code=404, detail=str(e))
     except SpotifyForbiddenError as e:
         logger.error(f"Spotify 403 for org {org_id}: {e}")
-        raise HTTPException(status_code=400, detail="Spotify API access is restricted. The connected Spotify app may require a Premium subscription or may be in development mode. Please check your Spotify Developer Dashboard settings.")
+        # Forward the service-layer message verbatim — it now contains
+        # the actionable Extended-Quota-Mode guidance for playlist 403s
+        # instead of misleading Premium-required copy.
+        raise HTTPException(status_code=400, detail=str(e))
     except SpotifyAuthError as e:
         logger.error(f"Spotify auth error for org {org_id}: {e}")
         err_msg = str(e)

@@ -203,8 +203,27 @@ def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dic
             timeout=15,
         )
         if resp.status_code == 403:
-            logger.error(f"Spotify API 403 Forbidden: {resp.text[:500]}")
-            raise SpotifyForbiddenError("Spotify API access is restricted. The connected Spotify app may be in development mode. Please try disconnecting and reconnecting the Spotify integration, or set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET environment variables from your own Spotify Developer app.")
+            logger.error(f"Spotify API 403 Forbidden on {endpoint}: {resp.text[:500]}")
+            # Spotify's Web API blocks /playlists/{id}/tracks for any
+            # app in Development Mode that doesn't own the playlist —
+            # OAuth scopes don't matter. Only Extended Quota Mode lifts
+            # this. Surface a clear, actionable message instead of the
+            # generic "Premium required" copy that misleads users into
+            # disconnecting their working OAuth.
+            if "playlists/" in endpoint and "/tracks" in endpoint:
+                raise SpotifyForbiddenError(
+                    "Spotify is blocking playlist track imports. This is a Spotify policy "
+                    "for apps in Development Mode and does NOT mean your Cadence connection is broken. "
+                    "Workarounds: paste an album, artist, or single track URL instead — those all work. "
+                    "To enable playlist imports, request Extended Quota Mode for your Spotify Developer "
+                    "app at developer.spotify.com (review takes a few weeks)."
+                )
+            raise SpotifyForbiddenError(
+                "Spotify API access is restricted for this request. "
+                "If you've connected Spotify under Admin → API Configuration, this usually means "
+                "Spotify is rate-limiting or policy-blocking the specific endpoint. "
+                "Try again in a moment, or paste an album/track URL instead."
+            )
         if resp.status_code == 401:
             logger.error(f"Spotify API 401 Unauthorized: token may be expired")
             raise SpotifyAuthError("Spotify token has expired. Please reconnect the Spotify integration.")
