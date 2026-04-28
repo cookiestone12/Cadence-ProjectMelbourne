@@ -93,6 +93,27 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                         if search_data and search_data.get("tracks", {}).get("items"):
                             track = search_data["tracks"]["items"][0]
                             pop = track.get("popularity", 0)
+                            track_id = track.get("id")
+                            # Spotify Development Mode degrades the
+                            # popularity field on /v1/search results
+                            # (always 0). The single-track endpoint is
+                            # not affected, so confirm with one lookup
+                            # before discarding the signal.
+                            if pop == 0 and track_id:
+                                try:
+                                    confirm = _spotify_get(f"tracks/{track_id}", token)
+                                    confirmed_pop = (confirm or {}).get("popularity", 0) or 0
+                                    if confirmed_pop > 0:
+                                        logger.info(
+                                            f"Spotify search→track confirm rescued popularity for song {song_id}: "
+                                            f"'{track.get('name')}' search-pop=0 -> confirmed-pop={confirmed_pop}"
+                                        )
+                                        pop = confirmed_pop
+                                except Exception as ce:
+                                    logger.debug(
+                                        f"Spotify search→track confirm failed for song {song_id} "
+                                        f"({track_id}): {ce}"
+                                    )
                             if pop > 0:
                                 popularity_score = pop
                                 spotify_streams = _estimate_from_popularity(popularity_score)
@@ -103,7 +124,7 @@ def estimate_streams_for_song(song_id: int, org_id: int, db: Session) -> Dict[st
                                         song.media_url = album_images[0].get("url")
                                         db.flush()
                             else:
-                                logger.info(f"Spotify search hit but popularity=0 for song {song_id}: '{track.get('name')}'")
+                                logger.info(f"Spotify search hit but popularity=0 for song {song_id}: '{track.get('name')}' (after confirm)")
                         else:
                             logger.info(f"Spotify search returned no results for song {song_id}: '{search_query}'")
                     else:

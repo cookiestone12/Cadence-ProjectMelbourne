@@ -607,11 +607,107 @@ def _scrape_playlist_embed(playlist_id: str, logger) -> List[Dict[str, Any]]:
     return raw_tracks
 
 
+def _batch_or_individual_track_lookup(
+    track_ids: List[str], token: str, logger
+) -> Dict[str, Dict[str, Any]]:
+    """Look up a list of Spotify track IDs, with per-ID fallback on 403.
+
+    Tries the bulk ``GET /v1/tracks?ids=`` endpoint first (50 IDs per
+    call). When Spotify Development Mode policy 403s the bulk call,
+    falls back to looping ``GET /v1/tracks/{id}`` one ID at a time —
+    the single-track endpoint is not subject to the same policy block
+    that affects bulk reads, so it still returns real popularity,
+    ISRC, album metadata, etc. for accounts whose dev app hasn't been
+    granted Extended Quota Mode.
+
+    Returns a dict keyed by Spotify track ID with the same record
+    shape the bulk endpoint returns
+    (``{id, popularity, external_ids, album, artists, ...}``). Tracks
+    we couldn't resolve at all are simply omitted from the dict; the
+    caller can detect those by ``set(track_ids) - by_id.keys()``.
+
+    Hard auth/policy errors (``SpotifyAuthError``) are intentionally
+    re-raised so the caller can surface a useful message instead of
+    silently degrading to empty results.
+    """
+    by_id: Dict[str, Dict[str, Any]] = {}
+    if not track_ids or not token:
+        return by_id
+
+    bulk_blocked = False
+    for chunk_start in range(0, len(track_ids), 50):
+        chunk = track_ids[chunk_start:chunk_start + 50]
+        if bulk_blocked:
+            break
+        logger.info(f"Spotify track lookup: bulk /v1/tracks for {len(chunk)} IDs")
+        try:
+            data = _spotify_get("tracks", token, {"ids": ",".join(chunk)})
+        except SpotifyForbiddenError as e:
+            logger.info(
+                f"Spotify bulk /v1/tracks blocked by Development Mode policy ({e}); "
+                f"falling back to per-track lookup for the remaining {len(track_ids) - chunk_start} ID(s)."
+            )
+            bulk_blocked = True
+            break
+        except SpotifyAuthError:
+            raise
+        except SpotifyNotFoundError as e:
+            logger.warning(f"Spotify bulk /v1/tracks 404 ({e}); skipping chunk.")
+            continue
+        except Exception as e:
+            logger.warning(
+                f"Spotify bulk /v1/tracks error ({e}); will retry IDs individually."
+            )
+            bulk_blocked = True
+            break
+
+        for record in (data or {}).get("tracks", []) or []:
+            if not isinstance(record, dict) or not record.get("id"):
+                continue
+            by_id[record["id"]] = record
+
+    if bulk_blocked:
+        # Per-ID fallback. Sequential by design — the per-track endpoint
+        # has its own per-second quota and we'd rather be slow than
+        # rate-limited. Skip IDs already resolved by an earlier bulk
+        # chunk that succeeded before the block kicked in.
+        remaining = [tid for tid in track_ids if tid not in by_id]
+        logger.info(
+            f"Spotify per-track fallback: looking up {len(remaining)} ID(s) individually."
+        )
+        for tid in remaining:
+            try:
+                record = _spotify_get(f"tracks/{tid}", token)
+            except SpotifyAuthError:
+                raise
+            except SpotifyNotFoundError:
+                continue
+            except SpotifyForbiddenError as e:
+                # If even the single-track endpoint 403s, stop hammering
+                # Spotify. Caller will see a partial result.
+                logger.warning(
+                    f"Spotify per-track lookup also blocked for {tid} ({e}); "
+                    "aborting fallback loop to avoid rate-limit penalties."
+                )
+                break
+            except Exception as e:
+                logger.warning(f"Spotify per-track lookup failed for {tid}: {e}")
+                continue
+            if isinstance(record, dict) and record.get("id"):
+                by_id[record["id"]] = record
+
+    return by_id
+
+
 def _enrich_tracks_via_api(tracks: List[Dict[str, Any]], token: str, logger) -> None:
     """Fill in ISRC, album, release date, label, popularity in place.
 
-    Uses ``/v1/tracks?ids=`` (batched, max 50 per call) which works on
-    every token type Cadence supports. If enrichment fails for any
+    Uses :func:`_batch_or_individual_track_lookup` which tries the
+    bulk ``/v1/tracks?ids=`` endpoint first and falls back to per-ID
+    ``/v1/tracks/{id}`` calls when Spotify's Development Mode policy
+    blocks the bulk read. This keeps embed-scraped playlists fully
+    enriched (ISRC, album, release date, popularity) even on dev-app
+    accounts without Extended Quota Mode. If enrichment fails for any
     reason we keep the embed-scraped basics rather than failing the
     whole import — the user can still see and select tracks; they'll
     just be missing ISRC and album metadata, which downstream code
@@ -621,29 +717,20 @@ def _enrich_tracks_via_api(tracks: List[Dict[str, Any]], token: str, logger) -> 
     if not track_ids or not token:
         return
 
-    by_id: Dict[str, Dict[str, Any]] = {}
-    # Spotify's batch endpoint caps at 50 IDs per request.
-    for chunk_start in range(0, len(track_ids), 50):
-        chunk = track_ids[chunk_start:chunk_start + 50]
-        try:
-            data = _spotify_get("tracks", token, {"ids": ",".join(chunk)})
-        except (SpotifyForbiddenError, SpotifyAuthError, SpotifyNotFoundError) as e:
-            logger.warning(
-                f"Spotify embed enrichment: batch /tracks failed ({e}); "
-                "continuing with embed-only metadata."
-            )
-            continue
-        except Exception as e:
-            logger.warning(
-                f"Spotify embed enrichment: batch /tracks error ({e}); "
-                "continuing with embed-only metadata."
-            )
-            continue
-
-        for record in (data or {}).get("tracks", []) or []:
-            if not isinstance(record, dict) or not record.get("id"):
-                continue
-            by_id[record["id"]] = record
+    try:
+        by_id = _batch_or_individual_track_lookup(track_ids, token, logger)
+    except SpotifyAuthError as e:
+        logger.warning(
+            f"Spotify embed enrichment: auth failed ({e}); "
+            "continuing with embed-only metadata."
+        )
+        return
+    except Exception as e:
+        logger.warning(
+            f"Spotify embed enrichment: lookup error ({e}); "
+            "continuing with embed-only metadata."
+        )
+        return
 
     if not by_id:
         logger.warning(

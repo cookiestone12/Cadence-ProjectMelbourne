@@ -37,30 +37,29 @@ def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> 
 
     if track_id_to_song_ids:
         try:
-            from .spotify_service import _get_access_token, _spotify_get
+            from .spotify_service import _get_access_token, _batch_or_individual_track_lookup
             token = _get_access_token()
             if token:
                 unique_track_ids = list(track_id_to_song_ids.keys())
-                for batch_start in range(0, len(unique_track_ids), 50):
-                    batch_tids = unique_track_ids[batch_start:batch_start + 50]
-                    ids_param = ",".join(batch_tids)
-                    logger.info(f"Spotify batch lookup: {len(batch_tids)} tracks")
-                    data = _spotify_get("tracks", token, {"ids": ids_param})
-                    if data and data.get("tracks"):
-                        for i, track in enumerate(data["tracks"]):
-                            if not track or track.get("popularity") is None:
-                                continue
-                            tid = batch_tids[i]
-                            album_art = None
-                            album_images = track.get("album", {}).get("images", [])
-                            if album_images:
-                                album_art = album_images[0].get("url")
-                            pop_data = {
-                                "popularity": track["popularity"],
-                                "album_art": album_art,
-                            }
-                            for sid in track_id_to_song_ids[tid]:
-                                results[sid] = pop_data
+                logger.info(f"Spotify credits lookup: {len(unique_track_ids)} unique track IDs")
+                # Helper transparently falls back to per-ID lookup when
+                # Spotify Development Mode 403s the bulk endpoint, so we
+                # get real popularity for our own dev-app accounts that
+                # don't have Extended Quota Mode.
+                by_id = _batch_or_individual_track_lookup(unique_track_ids, token, logger)
+                for tid, track in by_id.items():
+                    if not track or track.get("popularity") is None:
+                        continue
+                    album_art = None
+                    album_images = track.get("album", {}).get("images", [])
+                    if album_images:
+                        album_art = album_images[0].get("url")
+                    pop_data = {
+                        "popularity": track["popularity"],
+                        "album_art": album_art,
+                    }
+                    for sid in track_id_to_song_ids.get(tid, []):
+                        results[sid] = pop_data
         except Exception as e:
             logger.error(f"Spotify batch lookup failed: {e}", exc_info=True)
 
@@ -89,6 +88,27 @@ def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> 
                         if search_data and search_data.get("tracks", {}).get("items"):
                             track = search_data["tracks"]["items"][0]
                             pop = track.get("popularity", 0)
+                            track_id = track.get("id")
+                            # Spotify Development Mode degrades the
+                            # popularity field on /v1/search results
+                            # (always 0). The single-track endpoint is
+                            # not affected, so confirm with one lookup
+                            # before discarding the signal.
+                            if pop == 0 and track_id:
+                                try:
+                                    confirm = _spotify_get(f"tracks/{track_id}", token)
+                                    confirmed_pop = (confirm or {}).get("popularity", 0) or 0
+                                    if confirmed_pop > 0:
+                                        logger.info(
+                                            f"Spotify search→track confirm rescued popularity for song {song_id}: "
+                                            f"'{track.get('name')}' search-pop=0 -> confirmed-pop={confirmed_pop}"
+                                        )
+                                        pop = confirmed_pop
+                                except Exception as ce:
+                                    logger.debug(
+                                        f"Spotify search→track confirm failed for song {song_id} "
+                                        f"({track_id}): {ce}"
+                                    )
                             if pop > 0:
                                 album_art = None
                                 album_images = track.get("album", {}).get("images", [])
@@ -100,7 +120,7 @@ def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> 
                                 }
                                 logger.info(f"Spotify search hit for song {song_id}: '{track.get('name')}' pop={pop}")
                             else:
-                                logger.info(f"Spotify search found '{track.get('name')}' for song {song_id} but popularity=0")
+                                logger.info(f"Spotify search found '{track.get('name')}' for song {song_id} but popularity=0 (after confirm)")
                         else:
                             logger.info(f"Spotify search returned no results for song {song_id}: '{search_query}'")
                     except Exception as e:
