@@ -64,7 +64,7 @@ def get_redirect_uri() -> str:
     1. ``SPOTIFY_REDIRECT_URI`` env var (operator override).
     2. ``{REPLIT_DEV_DOMAIN}/api/spotify/oauth/callback`` when running in
        a Replit workspace dev environment.
-    3. Production fallback ``https://rythm-app.replit.app/api/spotify/oauth/callback``.
+    3. Production fallback ``https://cadence-ci.com/api/spotify/oauth/callback``.
 
     Whichever value this returns must be added verbatim to the dev
     app's Redirect URIs list on developer.spotify.com.
@@ -75,7 +75,7 @@ def get_redirect_uri() -> str:
     dev_domain = os.getenv("REPLIT_DEV_DOMAIN")
     if dev_domain:
         return f"https://{dev_domain}/api/spotify/oauth/callback"
-    return "https://rythm-app.replit.app/api/spotify/oauth/callback"
+    return "https://cadence-ci.com/api/spotify/oauth/callback"
 
 
 def is_configured() -> bool:
