@@ -496,9 +496,12 @@ def _scrape_playlist_embed(playlist_id: str, logger) -> List[Dict[str, Any]]:
 
     # The embed page renders Next.js with the standard
     # <script id="__NEXT_DATA__" type="application/json">…</script>
-    # blob. Extract it with a non-greedy match.
+    # blob. The opening-tag regex tolerates arbitrary attribute order
+    # (id and type can swap) and any extra attrs Spotify might add
+    # (nonce, crossorigin, etc.) so a minor markup tweak doesn't
+    # silently break the scraper.
     match = re.search(
-        r'<script\s+id="__NEXT_DATA__"\s+type="application/json"[^>]*>(.*?)</script>',
+        r'<script\b[^>]*\bid="__NEXT_DATA__"[^>]*>(.*?)</script>',
         html,
         flags=re.DOTALL,
     )
@@ -735,7 +738,12 @@ def _fetch_playlist_with_token(playlist_id: str, token: str, logger) -> List[Dic
         _enrich_tracks_via_api(embed_tracks, token, logger)
 
         result = _PlaylistTracksResult(embed_tracks)
-        result.embed_truncated = len(embed_tracks) >= _EMBED_TRACK_CAP
+        # Spotify's pre-rendered embed page caps the trackList at exactly
+        # _EMBED_TRACK_CAP entries. A shorter list means the playlist
+        # really is that small and there is nothing more to load; a list
+        # exactly at the cap is the only signal we have that the playlist
+        # may continue past what the embed surfaced.
+        result.embed_truncated = len(embed_tracks) == _EMBED_TRACK_CAP
         logger.info(
             f"Spotify: playlist {playlist_id} loaded via embed fallback "
             f"({len(result)} tracks, truncated={result.embed_truncated})"
