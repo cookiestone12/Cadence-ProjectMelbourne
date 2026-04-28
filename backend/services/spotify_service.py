@@ -221,9 +221,46 @@ class SpotifyNotFoundError(Exception):
     pass
 
 
+_THROTTLE_SHORT_RETRY_CAP_SECONDS = 30.0
+_THROTTLE_BREAKER_MAX_SECONDS = 7200.0
+_spotify_throttled_until: float = 0.0
+
+
+def is_spotify_throttled() -> bool:
+    """True when Spotify is in a known long-throttle window.
+
+    Set by :func:`_spotify_get` whenever Spotify returns HTTP 429 with a
+    ``Retry-After`` header longer than :data:`_THROTTLE_SHORT_RETRY_CAP_SECONDS`
+    (typical for daily-quota exhaustion on Development-Mode dev apps,
+    where ``Retry-After`` comes back in the tens of thousands of
+    seconds). Callers can inspect this to decide whether to fall back to
+    cached data instead of making a doomed network call.
+    """
+    return time.time() < _spotify_throttled_until
+
+
+def spotify_throttled_until() -> float:
+    """Unix timestamp at which the circuit breaker will reset (0 if not tripped)."""
+    return _spotify_throttled_until
+
+
 def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dict]:
+    global _spotify_throttled_until
     import logging
     logger = logging.getLogger("cadence")
+
+    # Circuit breaker: if Spotify recently told us to come back in N hours
+    # (typical of daily-quota exhaustion in Development Mode), don't burn
+    # any more quota or worker time on guaranteed-429 calls. Just bail.
+    now = time.time()
+    if now < _spotify_throttled_until:
+        seconds_left = _spotify_throttled_until - now
+        logger.debug(
+            f"Spotify circuit breaker active ({seconds_left:.0f}s remaining); "
+            f"skipping {endpoint}"
+        )
+        return None
+
     try:
         url = f"https://api.spotify.com/v1/{endpoint}"
         logger.info(f"Spotify API GET: {url} params={params}")
@@ -234,19 +271,44 @@ def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dic
             timeout=15,
         )
         if resp.status_code == 429:
-            # Spotify rate-limited us. The response includes a `Retry-After`
-            # header (seconds). Honor it — capped — and retry once. Without
-            # this the per-track fallback bursts ~100 requests in <1s for
-            # large credit catalogs (e.g. creator 98), trips the limiter on
-            # every call after the first ~10, and the fallback silently
-            # records popularity=0 for the remaining songs (Total Estimated
-            # Streams: 0 on the Credits tab).
+            # Spotify rate-limited us. Two regimes:
+            #
+            #   * Short ``Retry-After`` (<= 30s): a per-second burst limit.
+            #     Sleep the requested duration and retry once.
+            #
+            #   * Long ``Retry-After`` (> 30s): daily-quota exhaustion
+            #     (Development Mode dev apps cap at ~1k Web API calls per
+            #     rolling 24h window; a 100-credit creator's Credits tab
+            #     burns this in one refresh). Spotify returns
+            #     ``Retry-After`` in the tens of thousands of seconds — we
+            #     cannot sleep that long inside a request handler, and
+            #     retrying within the window only burns more of our
+            #     remaining quota. Trip the circuit breaker and bail.
             retry_after_raw = resp.headers.get("Retry-After", "1")
             try:
                 retry_after = float(retry_after_raw)
             except (TypeError, ValueError):
                 retry_after = 1.0
-            wait = max(0.5, min(retry_after, 10.0))
+
+            if retry_after > _THROTTLE_SHORT_RETRY_CAP_SECONDS:
+                breaker_seconds = min(retry_after, _THROTTLE_BREAKER_MAX_SECONDS)
+                # Monotonic update: never shorten an existing breaker window.
+                # Prevents a concurrent call observing a smaller Retry-After
+                # (because more wall-clock time has passed) from racing in
+                # and reducing the deadline a sibling call already set.
+                _spotify_throttled_until = max(
+                    _spotify_throttled_until,
+                    time.time() + breaker_seconds,
+                )
+                logger.warning(
+                    f"Spotify 429 on {endpoint} with long Retry-After={retry_after_raw}s "
+                    f"(daily quota likely exhausted); tripping circuit breaker for "
+                    f"{breaker_seconds:.0f}s. Subsequent Spotify calls will short-circuit "
+                    f"to cached values until reset."
+                )
+                return None
+
+            wait = max(0.5, retry_after)
             logger.warning(
                 f"Spotify 429 on {endpoint} (Retry-After={retry_after_raw}); "
                 f"sleeping {wait:.1f}s and retrying once."
@@ -258,6 +320,25 @@ def _spotify_get(endpoint: str, token: str, params: dict = None) -> Optional[dic
                 params=params,
                 timeout=15,
             )
+            if resp.status_code == 429:
+                # Second 429 in a row — treat as the long regime regardless
+                # of header so we stop hammering for this request cycle.
+                second_retry_raw = resp.headers.get("Retry-After", "60")
+                try:
+                    second_retry = float(second_retry_raw)
+                except (TypeError, ValueError):
+                    second_retry = 60.0
+                breaker_seconds = min(max(second_retry, 60.0), _THROTTLE_BREAKER_MAX_SECONDS)
+                _spotify_throttled_until = max(
+                    _spotify_throttled_until,
+                    time.time() + breaker_seconds,
+                )
+                logger.warning(
+                    f"Spotify 429 on {endpoint} after retry "
+                    f"(Retry-After={second_retry_raw}); tripping circuit breaker for "
+                    f"{breaker_seconds:.0f}s."
+                )
+                return None
         if resp.status_code == 403:
             logger.error(f"Spotify API 403 Forbidden on {endpoint}: {resp.text[:500]}")
             # Spotify's Web API blocks /playlists/{id}/tracks for any

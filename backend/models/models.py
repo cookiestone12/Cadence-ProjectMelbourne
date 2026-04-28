@@ -364,7 +364,10 @@ class Song(Base):
     media_url = Column(String, nullable=True)
     audio_file_url = Column(String, nullable=True)
     lyrics = Column(Text, nullable=True)
-    
+
+    spotify_popularity = Column(Integer, nullable=True)
+    spotify_popularity_fetched_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

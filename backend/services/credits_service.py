@@ -8,14 +8,95 @@ from sqlalchemy import func
 logger = logging.getLogger("cadence")
 
 
+# Per-song popularity is cached on ``songs.spotify_popularity`` /
+# ``spotify_popularity_fetched_at`` so the Credits-tab compute path
+# doesn't re-hit Spotify on every refresh. The dev-app daily Web API
+# quota (~1k calls / 24h rolling for Development Mode) is otherwise
+# exhausted by a single 100-credit creator and the page falls back to
+# zeros across the board.
+_POPULARITY_CACHE_FRESH_DAYS = 7
+
+
+def _persist_popularity(song, popularity: int, db: Session) -> None:
+    """Write ``popularity`` to the song's cache columns. Caller commits."""
+    if popularity is None:
+        return
+    try:
+        song.spotify_popularity = int(popularity)
+        song.spotify_popularity_fetched_at = datetime.utcnow()
+        db.flush()
+    except Exception as e:
+        logger.debug(f"Failed to persist spotify_popularity for song {song.id}: {e}")
+
+
+def _cached_popularity_age_days(song) -> Optional[float]:
+    fetched_at = getattr(song, "spotify_popularity_fetched_at", None)
+    if not fetched_at:
+        return None
+    return (datetime.utcnow() - fetched_at).total_seconds() / 86400.0
+
+
 def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> Dict[int, dict]:
     from ..models.models import SongDSPLink
     from .stream_estimator import _extract_spotify_id
+    from .spotify_service import is_spotify_throttled
     results = {}
     track_id_to_song_ids: Dict[str, list] = {}
     songs_for_search = {}
+    cache_hits = 0
 
+    # Pass 1 — serve fresh cached popularity directly. No API call needed.
+    # Songs that fall through to pass 2/3 may still benefit from a STALE
+    # cached value if Spotify ends up unavailable; we defer that decision
+    # until we know whether the API path got real data.
+    songs_to_lookup: Dict[int, Any] = {}
     for song_id, song in songs_needing_lookup.items():
+        cached_pop = getattr(song, "spotify_popularity", None)
+        age_days = _cached_popularity_age_days(song)
+        if cached_pop is not None and age_days is not None and age_days < _POPULARITY_CACHE_FRESH_DAYS:
+            results[song_id] = {
+                "popularity": int(cached_pop),
+                "album_art": None,  # song.media_url already populated on the
+                                    # original fetch; don't disturb it here.
+                "from_cache": True,
+            }
+            cache_hits += 1
+        else:
+            songs_to_lookup[song_id] = song
+
+    if cache_hits:
+        logger.info(
+            f"Spotify popularity cache: {cache_hits}/{len(songs_needing_lookup)} "
+            f"songs served from cached popularity (fresh < {_POPULARITY_CACHE_FRESH_DAYS}d); "
+            f"{len(songs_to_lookup)} require lookup"
+        )
+
+    # If the circuit breaker is already tripped from a prior call this
+    # window, don't bother going to Spotify at all — go straight to the
+    # stale-cache fallback at the bottom.
+    if is_spotify_throttled():
+        logger.warning(
+            f"Spotify circuit breaker tripped; skipping API lookup for "
+            f"{len(songs_to_lookup)} songs and falling back to stale cache where available"
+        )
+        for song_id, song in songs_to_lookup.items():
+            cached_pop = getattr(song, "spotify_popularity", None)
+            if cached_pop is not None:
+                age_days = _cached_popularity_age_days(song)
+                age_str = f"{age_days:.1f}d" if age_days is not None else "unknown age"
+                logger.info(
+                    f"Stale-cache fallback for song {song_id}: "
+                    f"popularity={cached_pop} ({age_str})"
+                )
+                results[song_id] = {
+                    "popularity": int(cached_pop),
+                    "album_art": None,
+                    "from_cache": True,
+                    "stale": True,
+                }
+        return results
+
+    for song_id, song in songs_to_lookup.items():
         spotify_url = song.spotify_link
         if not spotify_url:
             dsp = db.query(SongDSPLink).filter(
@@ -60,6 +141,11 @@ def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> 
                     }
                     for sid in track_id_to_song_ids.get(tid, []):
                         results[sid] = pop_data
+                        # Persist to song-level cache so future Credits-tab
+                        # refreshes don't re-burn the dev-app daily quota.
+                        song_obj = songs_to_lookup.get(sid)
+                        if song_obj is not None:
+                            _persist_popularity(song_obj, track["popularity"], db)
         except Exception as e:
             logger.error(f"Spotify batch lookup failed: {e}", exc_info=True)
 
@@ -118,6 +204,7 @@ def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> 
                                     "popularity": pop,
                                     "album_art": album_art,
                                 }
+                                _persist_popularity(song, pop, db)
                                 logger.info(f"Spotify search hit for song {song_id}: '{track.get('name')}' pop={pop}")
                             else:
                                 logger.info(f"Spotify search found '{track.get('name')}' for song {song_id} but popularity=0 (after confirm)")
@@ -129,6 +216,33 @@ def _batch_fetch_spotify_popularity(songs_needing_lookup: dict, db: Session) -> 
                 logger.warning(f"No Spotify token available for search lookup of {len(songs_for_search)} songs")
         except Exception as e:
             logger.error(f"Spotify search batch failed: {e}", exc_info=True)
+
+    # Pass 3 — stale-cache fallback. Any song that needed a lookup but
+    # didn't get a fresh result from Spotify (throttled mid-batch, null
+    # response, network error) falls back to its previous cached
+    # popularity if any exists. A days-old real number is far more
+    # useful than a confident zero.
+    stale_fallbacks = 0
+    for song_id, song in songs_to_lookup.items():
+        if song_id in results:
+            continue
+        cached_pop = getattr(song, "spotify_popularity", None)
+        if cached_pop is not None:
+            age_days = _cached_popularity_age_days(song)
+            results[song_id] = {
+                "popularity": int(cached_pop),
+                "album_art": None,
+                "from_cache": True,
+                "stale": True,
+            }
+            stale_fallbacks += 1
+            logger.info(
+                f"Stale-cache fallback for song {song_id}: popularity={cached_pop} "
+                f"({age_days:.1f}d old)" if age_days is not None else
+                f"Stale-cache fallback for song {song_id}: popularity={cached_pop}"
+            )
+    if stale_fallbacks:
+        logger.info(f"Used stale popularity cache for {stale_fallbacks} songs")
 
     return results
 

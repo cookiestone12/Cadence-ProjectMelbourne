@@ -27,6 +27,22 @@ from backend.services.spotify_service import (
 _LOG = logging.getLogger("test_156")
 
 
+@pytest.fixture(autouse=True)
+def _reset_spotify_throttle():
+    """Reset the module-level Spotify circuit breaker before each test.
+
+    `_spotify_get` sets `spotify_service._spotify_throttled_until` whenever
+    Spotify returns a 429 with a long Retry-After (daily-quota path), and
+    that timestamp persists for the rest of the process. Without this
+    fixture, the first test that trips the breaker causes every later
+    test in the file to short-circuit the API path and observe empty
+    results.
+    """
+    spotify_service._spotify_throttled_until = 0.0
+    yield
+    spotify_service._spotify_throttled_until = 0.0
+
+
 def _track_record(track_id: str, popularity: int = 80) -> dict:
     return {
         "id": track_id,
@@ -272,10 +288,17 @@ def test_spotify_get_honors_retry_after_on_429(monkeypatch):
     assert result == {"id": "abc", "popularity": 88}
 
 
-def test_spotify_get_429_retry_caps_wait_at_10_seconds(monkeypatch):
-    """If Spotify returns a huge Retry-After value (or a malformed one),
-    the helper must cap the sleep so a single bad response can't stall
-    the whole request worker."""
+def test_spotify_get_429_long_retry_after_trips_circuit_breaker(monkeypatch):
+    """A long Retry-After (daily-quota exhaustion) must NOT sleep-and-retry.
+
+    Spotify's Development-Mode dev apps cap at ~1k Web API calls per
+    rolling 24h, and when exhausted return 429 with Retry-After in the
+    tens of thousands of seconds. Sleeping and retrying inside a request
+    handler is futile — the second call gets the same 429 and we've
+    burned another quota slot for nothing. Instead the helper trips a
+    process-wide circuit breaker and bails immediately, so the rest of
+    the request can fall back to cached values.
+    """
     from backend.services import spotify_service as svc
 
     sleeps = []
@@ -296,16 +319,22 @@ def test_spotify_get_429_retry_caps_wait_at_10_seconds(monkeypatch):
     calls = [0]
     def fake_requests_get(url, headers=None, params=None, timeout=None):
         calls[0] += 1
-        if calls[0] == 1:
-            # Spotify hands us "9999" — a malicious or buggy upstream value.
-            return _Resp(429, headers={"Retry-After": "9999"})
-        return _Resp(200, json_body={"id": "x", "popularity": 50})
+        # Long Retry-After indicates daily-quota exhaustion. Should NOT retry.
+        return _Resp(429, headers={"Retry-After": "27267"})
 
     monkeypatch.setattr(svc.requests, "get", fake_requests_get)
-    svc._spotify_get("tracks/x", token="t")
+    result = svc._spotify_get("tracks/x", token="t")
 
-    # Capped at 10 seconds.
-    assert sleeps == [10.0]
+    # No sleep, no retry — bailed immediately.
+    assert sleeps == []
+    assert calls[0] == 1
+    assert result is None
+    # Circuit breaker is now tripped — subsequent calls short-circuit.
+    assert svc.is_spotify_throttled() is True
+    # And next call doesn't hit the network at all.
+    result2 = svc._spotify_get("tracks/y", token="t")
+    assert result2 is None
+    assert calls[0] == 1  # still 1, no second HTTP call made
 
 
 def test_spotify_get_429_handles_malformed_or_missing_retry_after(monkeypatch):
