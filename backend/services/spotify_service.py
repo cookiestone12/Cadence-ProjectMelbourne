@@ -620,9 +620,19 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
     if url_type == "track":
         logger.info(f"Spotify: Detected single track URL with ID '{resource_id}' from: {playlist_url}")
 
+        # Try project-owned OAuth first — it's the only path that
+        # works against the operator's own dev app without the
+        # Premium-required gate that blocks client_credentials.
+        project_token = _get_project_oauth_token()
         cc_token = _get_client_credentials_token()
         connector_token = _get_replit_access_token()
-        tokens = [(n, t) for n, t in [("client_credentials", cc_token), ("connector", connector_token)] if t]
+        tokens = [
+            (n, t) for n, t in [
+                ("project_oauth", project_token),
+                ("client_credentials", cc_token),
+                ("connector", connector_token),
+            ] if t
+        ]
 
         if not tokens:
             raise SpotifyAuthError("Spotify is not connected. Please check your Spotify credentials.")
@@ -684,10 +694,18 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
 
     logger.info(f"Spotify: Detected URL type '{url_type}' with ID '{resource_id}' from: {playlist_url}")
 
+    # Project-owned OAuth first; the other two are kept as backstops.
+    project_token = _get_project_oauth_token()
     cc_token = _get_client_credentials_token()
     connector_token = _get_replit_access_token()
 
-    tokens = [(n, t) for n, t in [("client_credentials", cc_token), ("connector", connector_token)] if t]
+    tokens = [
+        (n, t) for n, t in [
+            ("project_oauth", project_token),
+            ("client_credentials", cc_token),
+            ("connector", connector_token),
+        ] if t
+    ]
 
     if not tokens:
         raise SpotifyAuthError("Spotify is not connected. Please check your Spotify credentials.")
