@@ -127,6 +127,7 @@ def run_chart_ingestion():
     from ..models.database import SessionLocal
     from ..models.models import ChartSource
     from .track_matcher import match_chart_entries
+    from . import spotify_oauth
 
     db = SessionLocal()
     try:
@@ -135,9 +136,42 @@ def run_chart_ingestion():
         sources = db.query(ChartSource).filter(ChartSource.is_active == True).all()
         results = []
 
+        # Resolve once per run whether a listener Spotify OAuth token is
+        # available. If not, every Spotify chart source is skipped with a
+        # single warning so we don't spam the production log with 403s
+        # every 4 hours (the dev-app owner doesn't have Premium, which
+        # is what client-credentials needs).
+        spotify_token_checked = False
+        spotify_token_available = False
+        spotify_skip_warned = False
+
         for source in sources:
             if not _is_fetch_due(source):
                 continue
+
+            if source.platform == "SPOTIFY":
+                if not spotify_token_checked:
+                    try:
+                        spotify_token_available = bool(
+                            spotify_oauth.get_valid_access_token()
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Spotify OAuth token lookup failed: {e}"
+                        )
+                        spotify_token_available = False
+                    spotify_token_checked = True
+
+                if not spotify_token_available:
+                    if not spotify_skip_warned:
+                        logger.warning(
+                            "Skipping Spotify chart sources: no listener "
+                            "OAuth token connected. Connect a Spotify "
+                            "account in the Integrations panel to enable "
+                            "chart ingestion."
+                        )
+                        spotify_skip_warned = True
+                    continue
 
             result = fetch_source(source, db)
             results.append(result)

@@ -45,11 +45,21 @@ def _request_with_backoff(url: str, headers: dict = None, params: dict = None, m
 
 
 def fetch_spotify_charts(playlist_id: str = None) -> List[Dict[str, Any]]:
-    from .spotify_service import _get_access_token, _spotify_get
+    # The chart job intentionally uses ONLY the listener OAuth token,
+    # never the client-credentials fallback. Client-credentials is gated
+    # by Spotify on the dev-app owner having an active Premium account,
+    # which our operator may not have. When no listener is connected,
+    # we skip cleanly so the scheduler doesn't fill logs with 403s every
+    # 4 hours. See chart_scheduler.run_chart_ingestion for the per-run
+    # warning.
+    from . import spotify_oauth
+    from .spotify_service import _spotify_get
 
-    token = _get_access_token()
+    token = spotify_oauth.get_valid_access_token()
     if not token:
-        logger.error("Spotify chart fetch: no access token available")
+        logger.warning(
+            "Spotify chart fetch: no listener OAuth token connected; skipping"
+        )
         return []
 
     playlists_to_fetch = {}
