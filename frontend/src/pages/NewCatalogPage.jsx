@@ -685,6 +685,7 @@ export default function NewCatalogPage() {
       console.error('Spotify preview failed:', error)
       const message = error?.response?.data?.detail || error?.message || 'Failed to load playlist. Please check the URL and try again.'
       setSpotifyImportResult({ error: true, message })
+      setSpotifyEmbedTruncated(false)
     } finally {
       setSpotifyPreviewLoading(false)
     }
@@ -728,6 +729,7 @@ export default function NewCatalogPage() {
       })
       setSpotifyImportResult(res.data)
       setSpotifyPreviewTracks(null)
+      setSpotifyEmbedTruncated(false)
       setLoading(true)
       await loadData()
     } catch (error) {
@@ -744,6 +746,7 @@ export default function NewCatalogPage() {
     setSpotifyPlaylistUrl('')
     setSpotifyCreatorId('')
     setSpotifyPreviewTracks(null)
+    setSpotifyEmbedTruncated(false)
     setSpotifySelectedTracks(new Set())
     setSpotifyImportResult(null)
     setShowQuickCreator(false)
