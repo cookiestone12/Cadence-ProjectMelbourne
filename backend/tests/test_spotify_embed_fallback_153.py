@@ -165,6 +165,100 @@ def test_embed_truncated_flag_is_strict_equal_to_cap():
     assert len(full_result) == _EMBED_TRACK_CAP
 
 
+def test_dispatcher_falls_back_from_403_to_embed_with_enrichment():
+    """End-to-end dispatcher contract: when the Web API
+    /playlists/{id}/tracks returns 403 (the everyday Development Mode
+    blocker), _fetch_playlist_with_token must (a) catch
+    SpotifyForbiddenError, (b) scrape the embed, (c) enrich each track
+    via /v1/tracks?ids=... so ISRC/album/release_date/popularity/label
+    land in the response, and (d) flip embed_truncated correctly. This
+    is the regression guard for the whole import flow shipping in
+    Task #153.
+    """
+    from backend.services import spotify_service
+
+    # Embed page returns exactly the cap so embed_truncated must be True.
+    embed_payload = [_track(i) for i in range(1, _EMBED_TRACK_CAP + 1)]
+    embed_html = _make_embed_html(embed_payload)
+
+    # Build a fake /v1/tracks?ids=... enrichment response keyed by id.
+    def _enriched(idx):
+        tid = f"track{idx:03d}"
+        return {
+            "id": tid,
+            "external_ids": {"isrc": f"USRC1700{idx:04d}"},
+            "album": {
+                "name": f"Album {idx}",
+                "release_date": "2024-01-15",
+                "label": "Test Label",
+                "images": [{"url": f"https://i.scdn.co/album{idx}.jpg"}],
+            },
+            "popularity": 50 + idx % 10,
+        }
+
+    def _spotify_get_stub(endpoint, token, params=None):
+        # Playlist endpoint: simulate Development Mode 403.
+        if endpoint.startswith("playlists/"):
+            raise SpotifyForbiddenError(
+                "Spotify denied access to this playlist's tracks. (test stub)"
+            )
+        # Enrichment endpoint: return matching track records.
+        if endpoint == "tracks":
+            ids = (params or {}).get("ids", "").split(",")
+            tracks = []
+            for tid in ids:
+                if tid.startswith("track"):
+                    idx = int(tid.replace("track", ""))
+                    tracks.append(_enriched(idx))
+            return {"tracks": tracks}
+        return None
+
+    with patch("backend.services.spotify_service.requests.get", return_value=_mock_response(embed_html)), \
+         patch("backend.services.spotify_service._spotify_get", side_effect=_spotify_get_stub):
+        result = spotify_service._fetch_playlist_with_token(
+            "p_dev_mode_403", "fake_token", MagicMock()
+        )
+
+    # Returned the list-subclass with the truncation flag.
+    assert isinstance(result, _PlaylistTracksResult)
+    assert result.embed_truncated is True
+    assert len(result) == _EMBED_TRACK_CAP
+
+    # Embed-derived fields preserved.
+    first = result[0]
+    assert first["spotify_id"] == "track001"
+    assert first["title"] == "Song 1"
+    assert first["primary_artist"] == "Test Artist"
+
+    # Enrichment-derived fields filled in via /v1/tracks?ids=...
+    # (label is on /v1/albums only, not /v1/tracks, so we don't assert it.)
+    assert first["isrc"] == "USRC17000001"
+    assert first["album_name"] == "Album 1"
+    assert first["release_date"] == "2024-01-15"
+    assert first["popularity"] is not None
+
+
+def test_dispatcher_does_not_swallow_auth_errors():
+    """A SpotifyAuthError from /playlists/{id}/tracks (token expired
+    / revoked) must NOT trigger the embed fallback — it must propagate
+    so the higher-level token-rotation logic in _fetch_with_retries
+    can swap tokens and the user sees a reconnect prompt instead of
+    silently downgraded data.
+    """
+    from backend.services import spotify_service
+    from backend.services.spotify_service import SpotifyAuthError
+
+    def _raise_auth(endpoint, token, params=None):
+        raise SpotifyAuthError("token expired (test stub)")
+
+    with patch("backend.services.spotify_service._spotify_get", side_effect=_raise_auth), \
+         patch("backend.services.spotify_service.requests.get") as scrape_get:
+        with pytest.raises(SpotifyAuthError):
+            spotify_service._fetch_playlist_with_token("p_auth_fail", "stale_token", MagicMock())
+        # Embed fallback path must not have been touched.
+        scrape_get.assert_not_called()
+
+
 def test_playlist_tracks_result_serializes_as_plain_list():
     """The list-subclass carries the embed_truncated sidecar without
     breaking downstream consumers that expect a vanilla list (json
