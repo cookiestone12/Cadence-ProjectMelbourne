@@ -156,6 +156,71 @@ def test_mid_batch_403_preserves_already_resolved(monkeypatch):
     assert sorted(per_id_calls) == sorted(track_ids[50:])
 
 
+def test_per_id_fallback_used_when_bulk_returns_silent_nulls(monkeypatch):
+    """Task #157: Spotify Dev Mode does NOT 403 the bulk endpoint for
+    blocked tracks — it returns HTTP 200 with `{"tracks": [null, …]}`.
+    The helper must detect that and fall back to per-ID lookup, just
+    like it does for an explicit 403.
+
+    This is the production symptom that bit creator 38 ("Killah B")
+    even after Task #156 shipped: every popularity came back null,
+    `by_id` stayed empty, fallback never fired, Credits tab showed
+    Total Estimated Streams: 0 for all 21 fully-linked songs.
+    """
+    calls = []
+
+    def fake_get(endpoint, token, params=None):
+        calls.append(endpoint)
+        if endpoint == "tracks":
+            # Bulk responds 200 with all-null tracks (Dev Mode policy).
+            return {"tracks": [None, None, None]}
+        # endpoint is "tracks/{id}" — single-track endpoint works fine.
+        tid = endpoint.split("/", 1)[1]
+        return _track_record(tid, popularity=66)
+
+    monkeypatch.setattr(spotify_service, "_spotify_get", fake_get)
+
+    result = _batch_or_individual_track_lookup(["x", "y", "z"], "token", _LOG)
+
+    # All three resolved via per-ID fallback.
+    assert set(result.keys()) == {"x", "y", "z"}
+    assert all(r["popularity"] == 66 for r in result.values())
+    # Bulk attempted once, then three per-ID lookups for the unresolved IDs.
+    assert calls[0] == "tracks"
+    assert sorted(calls[1:]) == ["tracks/x", "tracks/y", "tracks/z"]
+
+
+def test_partial_silent_nulls_only_fall_back_for_unresolved(monkeypatch):
+    """Task #157: when the bulk endpoint returns a mix of real records
+    and nulls (e.g. one track the listener owns + two they don't), the
+    per-ID fallback must only re-fetch the IDs Spotify nulled — not
+    the ones already resolved by bulk."""
+    calls = []
+
+    def fake_get(endpoint, token, params=None):
+        calls.append(endpoint)
+        if endpoint == "tracks":
+            ids = params["ids"].split(",")
+            assert ids == ["a", "b", "c"]
+            # Spotify resolves "a" but nulls "b" and "c".
+            return {"tracks": [_track_record("a", popularity=42), None, None]}
+        tid = endpoint.split("/", 1)[1]
+        return _track_record(tid, popularity=77)
+
+    monkeypatch.setattr(spotify_service, "_spotify_get", fake_get)
+
+    result = _batch_or_individual_track_lookup(["a", "b", "c"], "token", _LOG)
+
+    # All three resolved — "a" via bulk, "b" and "c" via per-ID.
+    assert set(result.keys()) == {"a", "b", "c"}
+    assert result["a"]["popularity"] == 42  # preserved from bulk
+    assert result["b"]["popularity"] == 77  # rescued by per-ID
+    assert result["c"]["popularity"] == 77  # rescued by per-ID
+    # Crucially: per-ID loop did NOT re-fetch "a".
+    per_id_calls = [c for c in calls if c.startswith("tracks/")]
+    assert sorted(per_id_calls) == ["tracks/b", "tracks/c"]
+
+
 def test_empty_inputs_short_circuit(monkeypatch):
     """Defensive: empty ID list or empty token returns {} without any HTTP."""
 

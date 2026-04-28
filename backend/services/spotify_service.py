@@ -610,15 +610,26 @@ def _scrape_playlist_embed(playlist_id: str, logger) -> List[Dict[str, Any]]:
 def _batch_or_individual_track_lookup(
     track_ids: List[str], token: str, logger
 ) -> Dict[str, Dict[str, Any]]:
-    """Look up a list of Spotify track IDs, with per-ID fallback on 403.
+    """Look up a list of Spotify track IDs, with per-ID fallback.
 
     Tries the bulk ``GET /v1/tracks?ids=`` endpoint first (50 IDs per
-    call). When Spotify Development Mode policy 403s the bulk call,
-    falls back to looping ``GET /v1/tracks/{id}`` one ID at a time —
-    the single-track endpoint is not subject to the same policy block
-    that affects bulk reads, so it still returns real popularity,
-    ISRC, album metadata, etc. for accounts whose dev app hasn't been
-    granted Extended Quota Mode.
+    call). Falls back to looping ``GET /v1/tracks/{id}`` one ID at a
+    time when **either** of the two Development-Mode failure modes
+    fires:
+
+    1. **HTTP 403** on the bulk call — explicit policy block.
+    2. **HTTP 200 with ``{"tracks": [null, null, …]}``** — Spotify's
+       silent-null policy, where the bulk endpoint returns one ``null``
+       per track the listener can't read instead of erroring. This is
+       the path that bit production creator 38 ("Killah B") even after
+       Task #156's fix shipped: OAuth was healthy, songs all had
+       Spotify links, but every popularity came back ``null``, leaving
+       ``Total Estimated Streams: 0`` on the Credits tab.
+
+    The single-track ``/v1/tracks/{id}`` endpoint is not subject to
+    either failure mode and still returns real popularity, ISRC, album
+    metadata, etc. for accounts whose dev app hasn't been granted
+    Extended Quota Mode.
 
     Returns a dict keyed by Spotify track ID with the same record
     shape the bulk endpoint returns
@@ -644,7 +655,7 @@ def _batch_or_individual_track_lookup(
             data = _spotify_get("tracks", token, {"ids": ",".join(chunk)})
         except SpotifyForbiddenError as e:
             logger.info(
-                f"Spotify bulk /v1/tracks blocked by Development Mode policy ({e}); "
+                f"Spotify bulk /v1/tracks 403 by Development Mode policy ({e}); "
                 f"falling back to per-track lookup for the remaining {len(track_ids) - chunk_start} ID(s)."
             )
             bulk_blocked = True
@@ -661,10 +672,29 @@ def _batch_or_individual_track_lookup(
             bulk_blocked = True
             break
 
-        for record in (data or {}).get("tracks", []) or []:
+        raw_records = (data or {}).get("tracks", []) or []
+        real_in_chunk = 0
+        for record in raw_records:
             if not isinstance(record, dict) or not record.get("id"):
                 continue
             by_id[record["id"]] = record
+            real_in_chunk += 1
+
+        if real_in_chunk < len(chunk):
+            # Spotify Dev Mode silent-null policy: bulk endpoint
+            # returned 200 OK but with `null` for tracks the listener
+            # can't read. The exception-based 403 trigger above never
+            # fires in this case, so detect it by counting real records
+            # against requested IDs and fall through to per-ID lookup
+            # for the unresolved ones. The existing
+            # `remaining = [tid for tid in track_ids if tid not in by_id]`
+            # handles partial preservation across chunks.
+            logger.info(
+                f"Spotify bulk /v1/tracks returned {real_in_chunk}/{len(chunk)} real records "
+                f"on a 200 response (Dev Mode silent-null policy); falling back to per-track "
+                f"lookup for unresolved ID(s)."
+            )
+            bulk_blocked = True
 
     if bulk_blocked:
         # Per-ID fallback. Sequential by design — the per-track endpoint
