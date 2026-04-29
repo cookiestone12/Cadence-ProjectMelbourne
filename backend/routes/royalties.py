@@ -86,8 +86,17 @@ class ManualMatchRequest(BaseModel):
 from ..config.statement_formats import (
     BASE_COLUMN_HINTS as COLUMN_HINTS,
     SOURCE_FORMAT_REGISTRY as PRO_SOURCE_TYPES,
+    StatementSourceType,
     canonical_source_type,
 )
+
+
+# Full list of canonical source-type tokens accepted by
+# canonical_source_type(). Includes generic OTHER / OTHER_PRO buckets
+# in addition to the per-source registry entries — keep this aligned
+# with StatementSourceType so error responses stop telling callers
+# that valid values like "OTHER" are unaccepted.
+_ACCEPTED_SOURCE_TYPES: List[str] = sorted(t.value for t in StatementSourceType)
 
 
 KNOWN_SOURCE_NAMES = {
@@ -871,10 +880,10 @@ def update_statement_meta(
                     "error": "invalid_source_type",
                     "message": (
                         f"Unknown source_type {body.source_type!r}. "
-                        f"Accepted values: {sorted(PRO_SOURCE_TYPES.keys())}"
+                        f"Accepted values: {_ACCEPTED_SOURCE_TYPES}"
                     ),
                     "value": body.source_type,
-                    "accepted": sorted(PRO_SOURCE_TYPES.keys()),
+                    "accepted": _ACCEPTED_SOURCE_TYPES,
                 },
             )
         if canonical_st != stmt.source_type:
@@ -1015,10 +1024,10 @@ async def upload_statement(
                     "error": "invalid_source_type",
                     "message": (
                         f"Unknown source_type {source_type!r}. "
-                        f"Accepted values: {sorted(PRO_SOURCE_TYPES.keys())}"
+                        f"Accepted values: {_ACCEPTED_SOURCE_TYPES}"
                     ),
                     "value": source_type,
-                    "accepted": sorted(PRO_SOURCE_TYPES.keys()),
+                    "accepted": _ACCEPTED_SOURCE_TYPES,
                 },
             )
         source_type = canonical
