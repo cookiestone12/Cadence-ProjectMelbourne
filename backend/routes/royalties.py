@@ -85,6 +85,7 @@ class ManualMatchRequest(BaseModel):
 # call sites (test suite, royalty_processing.py) working unchanged.
 from ..config.statement_formats import (
     BASE_COLUMN_HINTS as COLUMN_HINTS,
+    DROPDOWN_ORDER,
     SOURCE_FORMAT_REGISTRY as PRO_SOURCE_TYPES,
     SOURCE_TYPE_LABELS,
     StatementSourceType,
@@ -583,8 +584,8 @@ def match_transaction_to_song(tx: RoyaltyTransaction, songs: List[Song]) -> tupl
 def list_source_types(current_user: User = Depends(get_current_user)):
     return {
         "source_types": [
-            {"value": t.value, "label": SOURCE_TYPE_LABELS.get(t.value, t.value)}
-            for t in StatementSourceType
+            {"value": v, "label": SOURCE_TYPE_LABELS.get(v, v)}
+            for v in DROPDOWN_ORDER
         ]
     }
 
