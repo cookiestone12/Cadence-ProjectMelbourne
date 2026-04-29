@@ -81,16 +81,23 @@ const TARGET_FIELDS = [
   { value: 'share_percentage', label: 'Share %' },
 ]
 
+// Aligned with backend/config/statement_formats.py StatementSourceType
+// + DROPDOWN_ORDER. Add new source types in the backend registry first,
+// then mirror them here.
 const SOURCE_TYPE_OPTIONS = [
   { value: '', label: 'Auto-detect' },
   { value: 'DSP', label: 'DSP / Distributor (Spotify, Apple Music, DistroKid, etc.)' },
   { value: 'BMI', label: 'BMI' },
   { value: 'ASCAP', label: 'ASCAP' },
   { value: 'SESAC', label: 'SESAC' },
+  { value: 'MLC', label: 'MLC (Mechanical Licensing Collective)' },
+  { value: 'HARRY_FOX', label: 'Harry Fox Agency' },
+  { value: 'LABEL', label: 'Label / Publisher Statement' },
   { value: 'SoundExchange', label: 'SoundExchange' },
   { value: 'SOCAN', label: 'SOCAN' },
   { value: 'PRS', label: 'PRS for Music' },
   { value: 'OTHER_PRO', label: 'Other PRO' },
+  { value: 'OTHER', label: 'Other' },
 ]
 
 const CHART_COLORS = ['#5B8A72', '#7BA594', '#9BBFAA', '#A8C4B8', '#C4D9CE', '#5A8A9A', '#8BB0BE']

@@ -79,124 +79,17 @@ class ManualMatchRequest(BaseModel):
     song_id: int
 
 
-COLUMN_HINTS = {
-    "isrc": ["isrc"],
-    "upc": ["upc", "barcode"],
-    "track_title": [
-        "title", "track", "song", "track_title", "song_title", "track name", "song name",
-        "work title", "composition", "composition title", "work", "musical work",
-    ],
-    "artist": [
-        "artist", "performer", "band", "artist name", "primary artist",
-        "writer", "writer name", "composer", "author", "songwriter",
-        "interested party", "ip name", "affiliate name", "member name",
-    ],
-    "revenue": [
-        "revenue", "amount", "earnings", "net", "royalty", "payment", "gross", "total", "payout",
-        "royalty amount", "net amount", "gross amount", "total earned", "net royalty",
-        "domestic amount", "foreign amount", "total amount", "license fee",
-        "accrued amount", "accrual amount",
-    ],
-    "quantity": [
-        "quantity", "streams", "plays", "downloads", "units", "count",
-        "performances", "performance count", "feature performances", "total performances",
-        "credits", "detections", "spins",
-    ],
-    "territory": ["territory", "country", "region", "market"],
-    "platform": [
-        "platform", "store", "service", "dsp", "source",
-        "licensee", "music user", "station", "network", "broadcaster",
-        "survey type", "medium", "use type",
-    ],
-    "revenue_type": [
-        "type", "revenue_type", "sale type", "transaction type", "usage type",
-        "right type", "rights type", "royalty type", "income type", "license type",
-        "performance type", "category",
-    ],
-    "publisher": [
-        "publisher", "publisher name", "original publisher", "sub-publisher",
-        "admin publisher", "pub name",
-    ],
-    "iswc": ["iswc", "work code", "work id"],
-    "work_id": [
-        "work id", "work #", "work number", "song code", "song number", "internal id",
-        "bmi work#", "ascap work id", "sesac work id", "bmi work id",
-    ],
-    "share_percentage": [
-        "share", "share %", "ownership", "ownership %", "percentage",
-        "writer share", "publisher share", "split", "pro rata",
-    ],
-}
-
-PRO_SOURCE_TYPES = {
-    "BMI": {
-        "keywords": ["bmi", "broadcast music"],
-        "extra_hints": {
-            "track_title": ["work title", "song title"],
-            "artist": ["writer", "writer name", "affiliated writer"],
-            "revenue": ["current activity royalty", "royalty amount", "total earned", "accrued amount"],
-            "quantity": ["performances", "performance count", "credits", "total performances"],
-            "work_id": ["bmi work#", "work #", "bmi work id", "song number"],
-            "platform": ["source", "survey type", "medium"],
-        }
-    },
-    "ASCAP": {
-        "keywords": ["ascap", "american society"],
-        "extra_hints": {
-            "track_title": ["title", "work title"],
-            "artist": ["writer/publisher", "interested party", "writer name"],
-            "revenue": ["dollars", "amount", "domestic amount", "foreign amount", "total earned"],
-            "quantity": ["credits", "performances"],
-            "work_id": ["ascap work id", "work id"],
-        }
-    },
-    "SESAC": {
-        "keywords": ["sesac"],
-        "extra_hints": {
-            "track_title": ["composition", "title"],
-            "artist": ["affiliate", "writer"],
-            "revenue": ["royalty", "amount", "net amount"],
-            "quantity": ["performances", "detections"],
-            "work_id": ["sesac work id", "song code"],
-        }
-    },
-    "SoundExchange": {
-        "keywords": ["soundexchange", "sound exchange"],
-        "extra_hints": {
-            "track_title": ["featured title", "track title", "sound recording"],
-            "artist": ["featured artist", "artist"],
-            "revenue": ["royalty", "amount"],
-            "quantity": ["performances", "plays"],
-        }
-    },
-    "SOCAN": {
-        "keywords": ["socan"],
-        "extra_hints": {
-            "track_title": ["work title", "title"],
-            "artist": ["member", "writer"],
-            "revenue": ["distribution amount", "amount"],
-        }
-    },
-    "PRS": {
-        "keywords": ["prs", "prs for music"],
-        "extra_hints": {
-            "track_title": ["work title", "title"],
-            "artist": ["writer", "member"],
-            "revenue": ["royalty", "amount", "net"],
-        }
-    },
-    "MLC": {
-        "keywords": ["mlc", "mechanical licensing collective", "the mlc"],
-        "extra_hints": {
-            "track_title": ["song title", "track title", "title", "work title"],
-            "artist": ["performer", "artist", "writer"],
-            "revenue": ["royalty", "amount", "net amount", "total earned", "payment amount"],
-            "isrc": ["isrc"],
-            "iswc": ["iswc", "hfa song code"],
-            "quantity": ["streams", "plays", "uses"],
-            "platform": ["service", "dsp", "licensee"],
-        }
-    },
+# Per-source column-mapping config now lives in
+# ``backend/config/statement_formats.py`` so a single registry feeds
+# both auto-detection and the parser orchestrator. These aliases keep
+# call sites (test suite, royalty_processing.py) working unchanged.
+from ..config.statement_formats import (
+    BASE_COLUMN_HINTS as COLUMN_HINTS,
+    SOURCE_FORMAT_REGISTRY as PRO_SOURCE_TYPES,
+)
+_PRO_SOURCE_TYPES_LEGACY_PADDING = {
+    # Closing brace below preserves the diff structure of the
+    # previous inline dict; nothing else uses these placeholders.
 }
 
 

@@ -1625,6 +1625,28 @@ async def upload_and_parse_statement(
 ):
     verify_org_access(current_user, org_id, db)
     from .royalties import normalize_source_name
+    from ..config.statement_formats import (
+        canonical_source_type,
+        StatementSourceType,
+    )
+
+    # Validate source_type at the API boundary against the canonical
+    # StatementSourceType enum. Empty / omitted is allowed (we'll
+    # auto-detect). A non-empty string that doesn't match any
+    # registered alias is a 400 — surfaces typos early instead of
+    # silently writing garbage into ``RoyaltyStatement.source_type``.
+    if source_type:
+        canonical = canonical_source_type(source_type)
+        if not canonical:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Unknown source_type '{source_type}'. Allowed values: "
+                    + ", ".join(v.value for v in StatementSourceType)
+                ),
+            )
+        source_type = canonical
+
     source_name = normalize_source_name(source_name)
     content = await file.read()
 
@@ -1651,28 +1673,42 @@ async def upload_and_parse_statement(
                 },
             )
 
+    # Single-call orchestrator: parse file → detect source-type →
+    # suggest column mapping (registry-aware, biased by the canonical
+    # source-type the user explicitly selected so per-source
+    # extra_hints win over the generic baseline).
     try:
-        headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)
+        from ..services.statement_parser import parse_statement_file
+        parsed = parse_statement_file(
+            content,
+            file.filename or "data.csv",
+            source_name=source_name or "",
+            source_type=source_type,
+            org_id=org_id,
+        )
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"File parsing crashed: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to parse file: {str(e)}")
 
-    detected_source = detect_pro_source(headers, source_name or "", file.filename or "")
-    if detected_source and not source_type:
-        source_type = detected_source
+    headers = parsed.headers
+    rows = parsed.rows
+    pdf_metadata = parsed.pdf_metadata
+    if parsed.resolved_source_type and not source_type:
+        source_type = parsed.resolved_source_type
 
-    suggested = pdf_metadata.get("suggested_mapping") if pdf_metadata else None
-    if suggested:
-        mapping = suggested
-    elif column_mapping:
+    # Caller-supplied column_mapping JSON overrides the orchestrator's
+    # suggestion; PDF parser hints (already folded into
+    # parsed.suggested_mapping) otherwise win; baseline registry
+    # suggestion is the fallback.
+    if column_mapping:
         try:
             mapping = json.loads(column_mapping)
         except Exception:
-            mapping = suggest_column_mapping(headers, source_name or "")
+            mapping = parsed.suggested_mapping
     else:
-        mapping = suggest_column_mapping(headers, source_name or "")
+        mapping = parsed.suggested_mapping
 
     p_start = None
     p_end = None

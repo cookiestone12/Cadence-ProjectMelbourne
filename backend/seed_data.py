@@ -223,6 +223,12 @@ def seed_demo_catalog(db: Session):
     
     db.commit()
     print(f"✓ Seeded catalog '{catalog.name}' with {len(demo_data.get('songs', []))} songs")
+    print(
+        "  ℹ Sample royalty statements (BMI / MLC / ASCAP) ship under "
+        "mock_data/statements/. Load them into a tenant with: "
+        "python -m backend.scripts.load_sample_statements "
+        "--org-id <ORG_ID> --user-id <USER_ID>"
+    )
 
 def init_seed_data():
     """Initialize seed data on application startup"""

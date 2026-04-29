@@ -1,0 +1,12 @@
+ISRC,HFA Song Code,Song Title,Performer,Service,Streams,Royalty Amount
+USDEM2400001,T1234567,Midnight Dreams,Demo Artist,Spotify,184201,124.55
+USDEM2400001,T1234567,Midnight Dreams,Demo Artist,Apple Music,92044,168.32
+USDEM2400001,T1234567,Midnight Dreams,Demo Artist,Amazon Music,38771,42.18
+USDEM2400002,T1234568,Electric Pulse,Demo Artist,Spotify,310411,201.04
+USDEM2400002,T1234568,Electric Pulse,Demo Artist,Apple Music,148820,272.55
+USDEM2400003,T1234569,Golden Hour,Demo Artist,Spotify,220812,142.71
+USDEM2400003,T1234569,Golden Hour,Demo Artist,Tidal,8201,21.40
+USDEM2400004,T1234570,City Lights,Demo Artist,Spotify,145533,94.02
+USDEM2400005,T1234571,Waves of Tomorrow,Demo Artist,Spotify,80344,52.18
+USDEM2400005,T1234571,Waves of Tomorrow,Demo Artist,YouTube Music,42155,18.07
+USDEM2400999,,Unknown Mechanical,Mystery Artist,Spotify,1242,0.78
