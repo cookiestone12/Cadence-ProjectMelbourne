@@ -93,7 +93,7 @@ const SOURCE_TYPE_OPTIONS = [
   { value: 'MLC', label: 'MLC (Mechanical Licensing Collective)' },
   { value: 'HARRY_FOX', label: 'Harry Fox Agency' },
   { value: 'LABEL', label: 'Label / Publisher Statement' },
-  { value: 'SoundExchange', label: 'SoundExchange' },
+  { value: 'SOUNDEXCHANGE', label: 'SoundExchange' },
   { value: 'SOCAN', label: 'SOCAN' },
   { value: 'PRS', label: 'PRS for Music' },
   { value: 'OTHER_PRO', label: 'Other PRO' },

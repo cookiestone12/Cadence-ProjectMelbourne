@@ -699,7 +699,7 @@ def assign_unassigned_statements(
     return {"assigned": updated, "creator_id": creator_id, "creator_name": creator.display_name}
 
 
-@router.get("/statements/{org_id}", summary="List royalty statements", description='Returns every royalty statement ingested for the organization with paging and status filters.\n\n**Path parameter:** `org_id`.\n**Query:** `status`, `source_type` (canonical token from `StatementSourceType` — e.g. `BMI`, `ASCAP`, `MLC`, `HARRY_FOX`, `LABEL`, `DSP`, `SoundExchange`, `OTHER`), `period_start`, `period_end`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, statements: [{id, source_name, source_type, period_start, period_end, total_amount_cents, currency, status, uploaded_at}] }`.')
+@router.get("/statements/{org_id}", summary="List royalty statements", description='Returns every royalty statement ingested for the organization with paging and status filters.\n\n**Path parameter:** `org_id`.\n**Query:** `status`, `source` (substring match on `source_name`), `creator_id`, `skip`, `limit`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, statements: [{id, source_name, source_type, period_start, period_end, total_amount_cents, currency, status, uploaded_at}] }`.')
 def list_statements(
     org_id: int,
     status: Optional[str] = None,
