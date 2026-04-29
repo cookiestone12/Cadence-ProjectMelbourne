@@ -272,15 +272,28 @@ def seed_sample_statements(db: Session):
         print(f"  ⚠ Sample statement load failed (non-fatal): {e}")
         return
 
-    loaded = [r for r in results if r.get("status") == "loaded"]
-    skipped = [r for r in results if r.get("status") == "skipped"]
-    failed = [r for r in results if r.get("status") not in ("loaded", "skipped")]
+    # ``load_sample_statements_for_org`` returns one of three shapes
+    # per fixture:
+    #   • newly loaded → ``{fixture, statement_id, status, line_count, match_stats}``
+    #     where ``status`` is the terminal RoyaltyStatement.status
+    #     (UPLOADED / FULLY_MATCHED / REVIEW_REQUIRED / PARTIALLY_MATCHED).
+    #   • already present → ``{fixture, skipped: "already_loaded", statement_id}``.
+    #   • missing fixture file on disk → ``{fixture, skipped: "missing_file"}``.
+    # Anything without a statement_id and without a ``skipped`` key is
+    # an unexpected failure path worth surfacing.
+    loaded = [r for r in results if r.get("statement_id") and not r.get("skipped")]
+    skipped = [r for r in results if r.get("skipped")]
+    failed = [r for r in results if not r.get("statement_id") and not r.get("skipped")]
 
     if loaded:
-        names = ", ".join(r["fixture"] for r in loaded)
+        names = ", ".join(
+            f"{r['fixture']} ({r.get('status', 'UPLOADED')}, {r.get('line_count', 0)} lines)"
+            for r in loaded
+        )
         print(f"✓ Loaded {len(loaded)} sample statement(s) into org '{org_label}': {names}")
     if skipped:
-        print(f"  ↩ Skipped {len(skipped)} already-loaded sample statement(s) in org '{org_label}'")
+        names = ", ".join(f"{r['fixture']} ({r['skipped']})" for r in skipped)
+        print(f"  ↩ Skipped {len(skipped)} sample statement(s) in org '{org_label}': {names}")
     if failed:
         print(f"  ⚠ {len(failed)} sample statement(s) failed to load: {failed}")
 
