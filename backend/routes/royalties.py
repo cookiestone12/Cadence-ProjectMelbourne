@@ -86,6 +86,7 @@ class ManualMatchRequest(BaseModel):
 from ..config.statement_formats import (
     BASE_COLUMN_HINTS as COLUMN_HINTS,
     SOURCE_FORMAT_REGISTRY as PRO_SOURCE_TYPES,
+    SOURCE_TYPE_LABELS,
     StatementSourceType,
     canonical_source_type,
 )
@@ -572,6 +573,20 @@ def match_transaction_to_song(tx: RoyaltyTransaction, songs: List[Song]) -> tupl
             return best_song_id, best_score, "MATCHED"
 
     return None, None, "UNMATCHED"
+
+
+@router.get(
+    "/source-types",
+    summary="List canonical statement source types",
+    description='Returns the canonical `source_type` vocabulary backing the upload + metadata endpoints. Frontend dropdowns should source their option list from here to stay in sync with the backend registry.\n\n**Auth:** Bearer JWT.\n**Response:** `{ source_types: [{value, label}] }` ordered to match the product dropdown.',
+)
+def list_source_types(current_user: User = Depends(get_current_user)):
+    return {
+        "source_types": [
+            {"value": t.value, "label": SOURCE_TYPE_LABELS.get(t.value, t.value)}
+            for t in StatementSourceType
+        ]
+    }
 
 
 @router.post(
