@@ -859,9 +859,27 @@ def update_statement_meta(
             changes["source_name"] = {"old": stmt.source_name, "new": new_name}
             stmt.source_name = new_name
 
-    if body.source_type is not None and body.source_type != stmt.source_type:
-        changes["source_type"] = {"old": stmt.source_type, "new": body.source_type}
-        stmt.source_type = body.source_type
+    if body.source_type is not None:
+        # Same canonical-registry gate as the upload routes — reject
+        # unknown types up front so the metadata PATCH can't sneak a
+        # garbage source_type past the API boundary.
+        canonical_st = canonical_source_type(body.source_type)
+        if not canonical_st:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "invalid_source_type",
+                    "message": (
+                        f"Unknown source_type {body.source_type!r}. "
+                        f"Accepted values: {sorted(PRO_SOURCE_TYPES.keys())}"
+                    ),
+                    "value": body.source_type,
+                    "accepted": sorted(PRO_SOURCE_TYPES.keys()),
+                },
+            )
+        if canonical_st != stmt.source_type:
+            changes["source_type"] = {"old": stmt.source_type, "new": canonical_st}
+            stmt.source_type = canonical_st
 
     if body.currency is not None:
         new_cur = body.currency.strip().upper()[:3]
