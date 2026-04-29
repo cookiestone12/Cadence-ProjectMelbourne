@@ -91,17 +91,12 @@ from ..config.statement_formats import (
 )
 
 
-# Full list of canonical source-type tokens accepted by
-# canonical_source_type(). Includes generic OTHER / OTHER_PRO buckets
-# in addition to the per-source registry entries — keep this aligned
-# with StatementSourceType so error responses stop telling callers
-# that valid values like "OTHER" are unaccepted.
 _ACCEPTED_SOURCE_TYPES: List[str] = sorted(t.value for t in StatementSourceType)
 
 
 KNOWN_SOURCE_NAMES = {
     "bmi": "BMI", "ascap": "ASCAP", "sesac": "SESAC",
-    "soundexchange": "SoundExchange", "sound exchange": "SoundExchange",
+    "soundexchange": "SOUNDEXCHANGE", "sound exchange": "SOUNDEXCHANGE",
     "socan": "SOCAN", "prs": "PRS", "prs for music": "PRS",
     "mlc": "MLC", "the mlc": "MLC", "mechanical licensing collective": "MLC",
     "distrokid": "DistroKid", "tunecore": "TuneCore",
@@ -130,16 +125,7 @@ def detect_pro_source(headers: List[str], source_name: str = "", filename: str =
 def suggest_column_mapping(headers: List[str], source_type: str = "") -> Dict[str, Optional[str]]:
     hints = {k: list(v) for k, v in COLUMN_HINTS.items()}
 
-    # If the caller passed an explicit canonical registry key (e.g.
-    # ``LABEL``, ``DSP``, ``MLC``), bypass keyword detection and load
-    # that source's hints directly. Without this short-circuit the
-    # canonical tokens silently miss their own hints because
-    # ``detect_pro_source`` keys off colloquial keywords (e.g.
-    # ``"label statement"``, ``"spotify"``) rather than the canonical
-    # tokens themselves — meaning the explicit source-type contract
-    # advertised at the API boundary wouldn't actually drive the
-    # column mapping. Auto-detection still runs as a fallback when
-    # the caller didn't supply a recognized token.
+    # Explicit canonical token short-circuits keyword detection.
     canonical_explicit = canonical_source_type(source_type) if source_type else None
     if canonical_explicit and canonical_explicit in PRO_SOURCE_TYPES:
         detected_pro = canonical_explicit
@@ -883,9 +869,6 @@ def update_statement_meta(
             stmt.source_name = new_name
 
     if body.source_type is not None:
-        # Same canonical-registry gate as the upload routes — reject
-        # unknown types up front so the metadata PATCH can't sneak a
-        # garbage source_type past the API boundary.
         canonical_st = canonical_source_type(body.source_type)
         if not canonical_st:
             raise HTTPException(

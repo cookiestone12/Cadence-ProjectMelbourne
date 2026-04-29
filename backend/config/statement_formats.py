@@ -26,42 +26,8 @@ from typing import Dict, List, Optional
 
 
 class StatementSourceType(str, Enum):
-    """Canonical enum of royalty-statement source types.
-
-    String-valued so it serializes naturally in JSON / FastAPI Forms
-    and round-trips into ``RoyaltyStatement.source_type`` (which stays
-    a nullable String column for forward compat with formats we
-    haven't classified yet).
-
-    **Canonical token policy (locked-in contract for downstream
-    valuation / reconciliation work)**
-
-    * Tokens are screaming-snake-case ASCII (``BMI``, ``ASCAP``,
-      ``MLC``, ``HARRY_FOX``, ``LABEL``, ``DSP``, ``SOCAN``, ``PRS``,
-      ``OTHER_PRO``, ``OTHER``) **with one deliberate exception**:
-      ``SOUNDEXCHANGE`` stores its enum *value* as ``"SoundExchange"``
-      (mixed case). This preserves backward compatibility with rows
-      already persisted under the legacy mixed-case form across
-      ``royalty_statements.source_type``, ``royalty_statement_lines``
-      provenance, and analytics rollups. Migrating that token to
-      ``"SOUNDEXCHANGE"`` would require a coordinated data backfill
-      (see DEPLOYMENT.md §Future Work) and is intentionally deferred.
-      Downstream code MUST compare against ``StatementSourceType``
-      members rather than string literals when ambiguity matters.
-
-    * The strict task spec named only BMI / ASCAP / SESAC / MLC /
-      HARRY_FOX / LABEL / SOUNDEXCHANGE / DSP / OTHER. The enum
-      additionally exposes ``SOCAN``, ``PRS``, and ``OTHER_PRO`` as a
-      forward-compatibility extension — international PROs and
-      generic-PRO buckets surface frequently in real statements
-      (UK / Canadian publishers, smaller societies licensing through
-      pass-throughs) and rejecting them at the API boundary would
-      force operators to lie about the source. Treat these as
-      **registry extensions**, not contract changes — they are safe
-      for consumers that switch on ``StatementSourceType`` (default
-      branch handles them) and ignored by source-specific format
-      hints in ``SOURCE_FORMAT_REGISTRY`` if a format isn't defined.
-    """
+    """Canonical royalty-statement source types. String-valued for
+    JSON / Form serialization. Display labels in SOURCE_TYPE_LABELS."""
 
     BMI = "BMI"
     ASCAP = "ASCAP"
@@ -69,11 +35,11 @@ class StatementSourceType(str, Enum):
     MLC = "MLC"
     HARRY_FOX = "HARRY_FOX"
     LABEL = "LABEL"
-    SOUNDEXCHANGE = "SoundExchange"  # see canonical token policy above
-    SOCAN = "SOCAN"  # registry extension (international PRO)
-    PRS = "PRS"  # registry extension (international PRO)
+    SOUNDEXCHANGE = "SOUNDEXCHANGE"
+    SOCAN = "SOCAN"
+    PRS = "PRS"
     DSP = "DSP"
-    OTHER_PRO = "OTHER_PRO"  # registry extension (generic PRO bucket)
+    OTHER_PRO = "OTHER_PRO"
     OTHER = "OTHER"
 
 

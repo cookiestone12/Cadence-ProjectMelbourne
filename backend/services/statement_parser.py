@@ -64,23 +64,9 @@ def parse_statement_file(
     source_type: Optional[str] = None,
     org_id: Optional[int] = None,
 ) -> ParsedStatement:
-    """Run the full parse pipeline on uploaded statement bytes.
-
-    Args:
-        content: Raw bytes of the uploaded file.
-        filename: Original filename (used for extension dispatch and
-            keyword-based source detection).
-        source_name: Caller-supplied source name (e.g. "BMI Q4 2024").
-            Used as a hint by the auto-detector.
-        source_type: Caller-supplied source-type override. Resolved
-            through :func:`canonical_source_type`. If recognized, it
-            takes precedence over auto-detection.
-        org_id: Org context for AI usage logging in the PDF fallback.
-
-    Returns:
-        :class:`ParsedStatement` with headers, rows, detected source
-        type, and a suggested column mapping the caller can persist.
-    """
+    """Parse uploaded statement bytes → ParsedStatement (headers, rows,
+    detected/resolved source type, suggested column mapping). Explicit
+    source_type takes precedence over auto-detection."""
     # Imported lazily to avoid the heavy import chain (FastAPI,
     # pdfplumber, openpyxl, openai) when this module is imported by
     # a CLI / test that doesn't actually parse a file.

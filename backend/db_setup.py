@@ -480,8 +480,36 @@ def main():
     sync_release_status()
     backfill_publishing_percentages()
     backfill_clean_statement_line_artists()
+    backfill_canonical_source_types()
     _seed_sample_statements_if_dev()
     logger.info("Database setup complete")
+
+
+def backfill_canonical_source_types():
+    """Normalize legacy mixed-case ``"SoundExchange"`` rows to the
+    canonical ``"SOUNDEXCHANGE"`` token. Idempotent."""
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        result = db.execute(
+            text(
+                "UPDATE royalty_statements "
+                "SET source_type = 'SOUNDEXCHANGE' "
+                "WHERE source_type = 'SoundExchange'"
+            )
+        )
+        if result.rowcount:
+            logger.info(
+                "Canonical-token backfill: normalized %d royalty_statements "
+                "rows from 'SoundExchange' → 'SOUNDEXCHANGE'",
+                result.rowcount,
+            )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.warning("Canonical-token backfill skipped: %s", e)
+    finally:
+        db.close()
 
 
 def backfill_clean_statement_line_artists():

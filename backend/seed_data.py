@@ -272,15 +272,8 @@ def seed_sample_statements(db: Session):
         print(f"  ⚠ Sample statement load failed (non-fatal): {e}")
         return
 
-    # ``load_sample_statements_for_org`` returns one of three shapes
-    # per fixture:
-    #   • newly loaded → ``{fixture, statement_id, status, line_count, match_stats}``
-    #     where ``status`` is the terminal RoyaltyStatement.status
-    #     (UPLOADED / FULLY_MATCHED / REVIEW_REQUIRED / PARTIALLY_MATCHED).
-    #   • already present → ``{fixture, skipped: "already_loaded", statement_id}``.
-    #   • missing fixture file on disk → ``{fixture, skipped: "missing_file"}``.
-    # Anything without a statement_id and without a ``skipped`` key is
-    # an unexpected failure path worth surfacing.
+    # Loader returns {statement_id, status, ...} on new load,
+    # {skipped: "already_loaded"|"missing_file"} on skip.
     loaded = [r for r in results if r.get("statement_id") and not r.get("skipped")]
     skipped = [r for r in results if r.get("skipped")]
     failed = [r for r in results if not r.get("statement_id") and not r.get("skipped")]
