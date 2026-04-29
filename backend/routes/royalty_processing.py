@@ -1640,10 +1640,14 @@ async def upload_and_parse_statement(
         if not canonical:
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"Unknown source_type '{source_type}'. Allowed values: "
-                    + ", ".join(v.value for v in StatementSourceType)
-                ),
+                detail={
+                    "error": "invalid_source_type",
+                    "message": (
+                        f"Unknown source_type {source_type!r}. "
+                        f"Accepted values: {sorted(v.value for v in StatementSourceType)}"
+                    ),
+                    "accepted_values": sorted(v.value for v in StatementSourceType),
+                },
             )
         source_type = canonical
 

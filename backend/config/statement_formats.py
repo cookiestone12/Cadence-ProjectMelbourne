@@ -27,7 +27,11 @@ from typing import Dict, List, Optional
 
 class StatementSourceType(str, Enum):
     """Canonical royalty-statement source types. String-valued for
-    JSON / Form serialization. Display labels in SOURCE_TYPE_LABELS."""
+    JSON / Form serialization. Display labels in SOURCE_TYPE_LABELS.
+
+    Intentionally a superset of the primary product dropdown — extra
+    values (SOCAN, PRS, OTHER_PRO) are accepted at the API boundary
+    for forward/back compatibility with imports from those sources."""
 
     BMI = "BMI"
     ASCAP = "ASCAP"
