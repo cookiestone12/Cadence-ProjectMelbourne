@@ -130,7 +130,21 @@ def detect_pro_source(headers: List[str], source_name: str = "", filename: str =
 def suggest_column_mapping(headers: List[str], source_type: str = "") -> Dict[str, Optional[str]]:
     hints = {k: list(v) for k, v in COLUMN_HINTS.items()}
 
-    detected_pro = detect_pro_source(headers, source_type)
+    # If the caller passed an explicit canonical registry key (e.g.
+    # ``LABEL``, ``DSP``, ``MLC``), bypass keyword detection and load
+    # that source's hints directly. Without this short-circuit the
+    # canonical tokens silently miss their own hints because
+    # ``detect_pro_source`` keys off colloquial keywords (e.g.
+    # ``"label statement"``, ``"spotify"``) rather than the canonical
+    # tokens themselves — meaning the explicit source-type contract
+    # advertised at the API boundary wouldn't actually drive the
+    # column mapping. Auto-detection still runs as a fallback when
+    # the caller didn't supply a recognized token.
+    canonical_explicit = canonical_source_type(source_type) if source_type else None
+    if canonical_explicit and canonical_explicit in PRO_SOURCE_TYPES:
+        detected_pro = canonical_explicit
+    else:
+        detected_pro = detect_pro_source(headers, source_type)
     if detected_pro and detected_pro in PRO_SOURCE_TYPES:
         for field, extra in PRO_SOURCE_TYPES[detected_pro].get("extra_hints", {}).items():
             if field in hints:
