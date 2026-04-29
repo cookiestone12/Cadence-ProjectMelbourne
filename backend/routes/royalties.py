@@ -86,11 +86,8 @@ class ManualMatchRequest(BaseModel):
 from ..config.statement_formats import (
     BASE_COLUMN_HINTS as COLUMN_HINTS,
     SOURCE_FORMAT_REGISTRY as PRO_SOURCE_TYPES,
+    canonical_source_type,
 )
-_PRO_SOURCE_TYPES_LEGACY_PADDING = {
-    # Closing brace below preserves the diff structure of the
-    # previous inline dict; nothing else uses these placeholders.
-}
 
 
 KNOWN_SOURCE_NAMES = {
@@ -985,6 +982,29 @@ async def upload_statement(
 ):
     verify_org_access(current_user, org_id, db)
     source_name = normalize_source_name(source_name)
+
+    # Canonicalize source_type at the API boundary against the
+    # central StatementSourceType registry. Unknown values are a
+    # client bug — fail fast with the list of accepted values rather
+    # than silently persisting a garbage type that breaks the
+    # downstream registry-aware mapping suggestions.
+    if source_type:
+        canonical = canonical_source_type(source_type)
+        if not canonical:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "invalid_source_type",
+                    "message": (
+                        f"Unknown source_type {source_type!r}. "
+                        f"Accepted values: {sorted(PRO_SOURCE_TYPES.keys())}"
+                    ),
+                    "value": source_type,
+                    "accepted": sorted(PRO_SOURCE_TYPES.keys()),
+                },
+            )
+        source_type = canonical
+
     content = await file.read()
 
     # Duplicate detection: same org + same file_name + same byte size = same upload.
@@ -1011,11 +1031,24 @@ async def upload_statement(
                 },
             )
 
-    headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)
-
-    detected_pro = detect_pro_source(headers, source_name or "", file.filename or "")
-    if detected_pro and not source_type:
-        source_type = detected_pro
+    # Single-call orchestrator: parse file → resolve source-type →
+    # registry-aware column-mapping suggestion (biased by the
+    # canonical source-type, so per-source extra_hints win over the
+    # generic baseline). Mirrors what /royalty-processing/.../upload
+    # does so both upload paths share one parser surface.
+    from ..services.statement_parser import parse_statement_file
+    parsed = parse_statement_file(
+        content,
+        file.filename or "data.csv",
+        source_name=source_name or "",
+        source_type=source_type,
+        org_id=org_id,
+    )
+    headers = parsed.headers
+    rows = parsed.rows
+    pdf_metadata = parsed.pdf_metadata
+    if parsed.resolved_source_type and not source_type:
+        source_type = parsed.resolved_source_type
 
     suggested = pdf_metadata.get("suggested_mapping") if pdf_metadata else None
     if suggested:
@@ -1025,9 +1058,9 @@ async def upload_statement(
         try:
             mapping = json.loads(column_mapping)
         except Exception:
-            mapping = suggest_column_mapping(headers, source_name or "")
+            mapping = parsed.suggested_mapping
     else:
-        mapping = suggest_column_mapping(headers, source_name or "")
+        mapping = parsed.suggested_mapping
 
     # Defensive: if the resolved mapping references headers that don't actually
     # appear in the parsed row dictionaries, the row.get(col) lookups silently

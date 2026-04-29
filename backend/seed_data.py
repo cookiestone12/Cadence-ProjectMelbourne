@@ -223,12 +223,67 @@ def seed_demo_catalog(db: Session):
     
     db.commit()
     print(f"✓ Seeded catalog '{catalog.name}' with {len(demo_data.get('songs', []))} songs")
-    print(
-        "  ℹ Sample royalty statements (BMI / MLC / ASCAP) ship under "
-        "mock_data/statements/. Load them into a tenant with: "
-        "python -m backend.scripts.load_sample_statements "
-        "--org-id <ORG_ID> --user-id <USER_ID>"
+
+
+def seed_sample_statements(db: Session):
+    """Load the BMI / MLC / ASCAP sample statement fixtures into the
+    seeded super-admin's organization so a freshly-migrated dev DB
+    has at least one parsed statement per source-type to exercise
+    the Statements UI + parser registry against.
+
+    Idempotent: ``load_sample_statements_for_org`` skips fixtures
+    already present (matched on file_name + org_id), and the org /
+    user lookup here is read-only — ``db_setup.seed_super_admin()``
+    runs earlier in startup and is the canonical creator of both.
+
+    Disabled in production (gated on APP_ENV) so we don't pollute a
+    real tenant's catalog with demo statements.
+    """
+    if os.getenv("APP_ENV", "development").lower() == "production":
+        return
+
+    from .models import User, Organization, OrganizationMember
+    from .scripts.load_sample_statements import load_sample_statements_for_org
+
+    admin = db.query(User).filter(User.is_super_admin.is_(True)).order_by(User.id).first()
+    if not admin:
+        print("  ↩ Sample statements: no super-admin user found — skipping (db_setup.seed_super_admin should run first).")
+        return
+
+    membership = (
+        db.query(OrganizationMember)
+        .filter(OrganizationMember.user_id == admin.id)
+        .order_by(OrganizationMember.id)
+        .first()
     )
+    if not membership:
+        print(f"  ↩ Sample statements: super-admin '{admin.username}' has no org membership — skipping.")
+        return
+
+    org_id = membership.organization_id
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    org_label = (org.name if org else f"id={org_id}")
+
+    try:
+        results = load_sample_statements_for_org(
+            db, org_id=org_id, user_id=admin.id
+        )
+    except Exception as e:
+        print(f"  ⚠ Sample statement load failed (non-fatal): {e}")
+        return
+
+    loaded = [r for r in results if r.get("status") == "loaded"]
+    skipped = [r for r in results if r.get("status") == "skipped"]
+    failed = [r for r in results if r.get("status") not in ("loaded", "skipped")]
+
+    if loaded:
+        names = ", ".join(r["fixture"] for r in loaded)
+        print(f"✓ Loaded {len(loaded)} sample statement(s) into org '{org_label}': {names}")
+    if skipped:
+        print(f"  ↩ Skipped {len(skipped)} already-loaded sample statement(s) in org '{org_label}'")
+    if failed:
+        print(f"  ⚠ {len(failed)} sample statement(s) failed to load: {failed}")
+
 
 def init_seed_data():
     """Initialize seed data on application startup"""
@@ -237,5 +292,9 @@ def init_seed_data():
         seed_demo_catalog(db)
     except Exception as e:
         print(f"Error seeding database: {e}")
+    try:
+        seed_sample_statements(db)
+    except Exception as e:
+        print(f"Error seeding sample statements: {e}")
     finally:
         db.close()

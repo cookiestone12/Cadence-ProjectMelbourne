@@ -453,6 +453,23 @@ def _run_ddl_backstop():
         logger.warning(f"Schema update check: {e}")
 
 
+def _seed_sample_statements_if_dev():
+    """Idempotently load the BMI / MLC / ASCAP fixture statements
+    into the seeded super-admin's org. Lives here (not in seed_data.py)
+    because db_setup.main() is the actual startup hook — seed_data.py's
+    init_seed_data() is only used by ad-hoc scripts. Gated to non-prod
+    inside seed_sample_statements() so prod tenants never see demo data.
+    """
+    db = SessionLocal()
+    try:
+        from .seed_data import seed_sample_statements
+        seed_sample_statements(db)
+    except Exception as e:
+        logger.warning(f"seed_sample_statements failed at startup (non-fatal): {e}")
+    finally:
+        db.close()
+
+
 def main():
     logger.info("Starting database setup...")
     _run_alembic_under_lock()
@@ -463,6 +480,7 @@ def main():
     sync_release_status()
     backfill_publishing_percentages()
     backfill_clean_statement_line_artists()
+    _seed_sample_statements_if_dev()
     logger.info("Database setup complete")
 
 
