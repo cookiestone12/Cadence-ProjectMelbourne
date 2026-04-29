@@ -699,7 +699,7 @@ def assign_unassigned_statements(
     return {"assigned": updated, "creator_id": creator_id, "creator_name": creator.display_name}
 
 
-@router.get("/statements/{org_id}", summary="List royalty statements", description='Returns every royalty statement ingested for the organization with paging and status filters.\n\n**Path parameter:** `org_id`.\n**Query:** `status`, `source_type` (`dsp|label|publisher|sync|other`), `period_start`, `period_end`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, statements: [{id, source_name, source_type, period_start, period_end, total_amount_cents, currency, status, uploaded_at}] }`.')
+@router.get("/statements/{org_id}", summary="List royalty statements", description='Returns every royalty statement ingested for the organization with paging and status filters.\n\n**Path parameter:** `org_id`.\n**Query:** `status`, `source_type` (canonical token from `StatementSourceType` — e.g. `BMI`, `ASCAP`, `MLC`, `HARRY_FOX`, `LABEL`, `DSP`, `SoundExchange`, `OTHER`), `period_start`, `period_end`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ total, statements: [{id, source_name, source_type, period_start, period_end, total_amount_cents, currency, status, uploaded_at}] }`.')
 def list_statements(
     org_id: int,
     status: Optional[str] = None,
@@ -992,7 +992,7 @@ def update_statement_meta(
     }
 
 
-@router.post("/statements/{org_id}/upload", summary="Upload royalty statement", description='Ingests a CSV / XLSX / PDF royalty statement, normalizes columns, and stages it for matching. Supports DSP, label, publisher, and sync statement formats.\n\n**Path parameter:** `org_id`.\n**Body (multipart/form-data):** `file`; `source_name`; `source_type` (`dsp|label|publisher|sync|other`); `period_start?`; `period_end?`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ statement_id, status, total_rows, total_amount_cents, currency }`.')
+@router.post("/statements/{org_id}/upload", summary="Upload royalty statement", description='Ingests a CSV / XLSX / PDF royalty statement, normalizes columns via the canonical source-type registry (`backend/config/statement_formats.py`), and stages it for matching. Supports BMI, ASCAP, SESAC, MLC, Harry Fox, SoundExchange, SOCAN, PRS, DSP, Label, and Other statement formats.\n\n**Path parameter:** `org_id`.\n**Body (multipart/form-data):** `file`; `source_name`; `source_type` (canonical token from `StatementSourceType` — e.g. `BMI`, `ASCAP`, `MLC`, `HARRY_FOX`, `LABEL`, `DSP`, `SoundExchange`, `OTHER`; aliases are auto-canonicalized, unknown values rejected with 400 `invalid_source_type`); `period_start?`; `period_end?`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `{ statement_id, status, total_rows, total_amount_cents, currency }`.')
 async def upload_statement(
     org_id: int,
     file: UploadFile = File(...),
