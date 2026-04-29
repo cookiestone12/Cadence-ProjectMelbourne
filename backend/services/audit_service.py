@@ -28,3 +28,22 @@ def log_action(
         db.add(entry)
     except Exception as e:
         logger.error(f"Failed to log audit action: {e}")
+
+
+def make_diff(before: dict, after: dict) -> dict:
+    """Return a `{field: {"old": x, "new": y}}` map of changed values.
+
+    Fields present only in one side are still emitted (the missing side is
+    serialized as ``None``). Used by Task #161 audit hooks so the audit-log
+    viewer can render exact split / share deltas instead of opaque snapshots.
+    """
+    before = before or {}
+    after = after or {}
+    keys = set(before.keys()) | set(after.keys())
+    diff: dict = {}
+    for key in keys:
+        old_val = before.get(key)
+        new_val = after.get(key)
+        if old_val != new_val:
+            diff[key] = {"old": old_val, "new": new_val}
+    return diff

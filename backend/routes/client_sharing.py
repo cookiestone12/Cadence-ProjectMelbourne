@@ -6,7 +6,25 @@ from datetime import datetime
 import logging
 from ..models import get_db, User, Organization, OrganizationMember, Creator, ClientShare, Song, SongCredit
 from ..utils.auth import get_current_user
+from ..services.audit_service import log_action, make_diff
 from .notifications import create_notification
+
+
+def _share_audit_label(share: 'ClientShare', creator_name: str = None) -> str:
+    name = creator_name or f"Creator #{share.creator_id}"
+    return f"{name} → {share.recipient_user_email or 'unknown'}"
+
+
+def _share_snapshot(share: 'ClientShare') -> dict:
+    return {
+        "creator_id": share.creator_id,
+        "primary_org_id": share.primary_org_id,
+        "recipient_org_id": share.recipient_org_id,
+        "recipient_user_email": share.recipient_user_email,
+        "role": share.role,
+        "status": share.status,
+        "shared_modules": getattr(share, 'shared_modules', None),
+    }
 
 logger = logging.getLogger("cadence")
 
@@ -152,6 +170,25 @@ def create_share(
         shared_modules=modules,
     )
     db.add(share)
+    db.flush()
+
+    log_action(
+        db,
+        organization_id=membership.organization_id,
+        user_id=current_user.id,
+        action="CREATE",
+        entity_type="ClientShare",
+        entity_id=share.id,
+        entity_name=_share_audit_label(share, creator.display_name),
+        details={
+            "creator_id": share.creator_id,
+            "recipient_email": share.recipient_user_email,
+            "role": share.role,
+            "shared_modules": modules,
+            "after": _share_snapshot(share),
+        },
+    )
+
     db.commit()
     db.refresh(share)
 
@@ -255,10 +292,28 @@ def accept_share(
 
     membership = get_user_org(db, current_user)
 
+    before = _share_snapshot(share)
     share.status = "ACCEPTED"
     share.recipient_org_id = membership.organization_id
     share.accepted_by_user_id = current_user.id
     share.accepted_at = datetime.utcnow()
+    after = _share_snapshot(share)
+
+    creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
+    log_action(
+        db,
+        organization_id=share.primary_org_id,
+        user_id=current_user.id,
+        action="ACCEPT",
+        entity_type="ClientShare",
+        entity_id=share.id,
+        entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
+        details={
+            "recipient_org_id": membership.organization_id,
+            "diff": make_diff(before, after),
+        },
+    )
+
     db.commit()
 
     try:
@@ -299,7 +354,22 @@ def reject_share(
     if not share:
         raise HTTPException(status_code=404, detail="Share invitation not found")
 
+    before = _share_snapshot(share)
     share.status = "REJECTED"
+    after = _share_snapshot(share)
+
+    creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
+    log_action(
+        db,
+        organization_id=share.primary_org_id,
+        user_id=current_user.id,
+        action="REJECT",
+        entity_type="ClientShare",
+        entity_id=share.id,
+        entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
+        details={"diff": make_diff(before, after)},
+    )
+
     db.commit()
 
     try:
@@ -341,8 +411,23 @@ def revoke_share(
         raise HTTPException(status_code=404, detail="Share not found or not authorized")
 
     was_pending = share.status == "PENDING"
+    before = _share_snapshot(share)
     share.status = "CANCELLED" if was_pending else "REVOKED"
     share.revoked_at = datetime.utcnow()
+    after = _share_snapshot(share)
+
+    creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
+    log_action(
+        db,
+        organization_id=share.primary_org_id,
+        user_id=current_user.id,
+        action="CANCEL" if was_pending else "REVOKE",
+        entity_type="ClientShare",
+        entity_id=share.id,
+        entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
+        details={"diff": make_diff(before, after)},
+    )
+
     db.commit()
 
     try:
@@ -418,7 +503,22 @@ def update_share_role(
         if not coprimary_check:
             raise HTTPException(status_code=403, detail="Only primary or co-primary users can update roles")
 
+    before = _share_snapshot(share)
     share.role = req.role.upper()
+    after = _share_snapshot(share)
+
+    creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
+    log_action(
+        db,
+        organization_id=share.primary_org_id,
+        user_id=current_user.id,
+        action="UPDATE_ROLE",
+        entity_type="ClientShare",
+        entity_id=share.id,
+        entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
+        details={"diff": make_diff(before, after)},
+    )
+
     db.commit()
 
     return {"message": "Role updated successfully"}
@@ -461,7 +561,22 @@ def update_share_modules(
         if not coprimary_check:
             raise HTTPException(status_code=403, detail="Only primary or co-primary users can update shared modules")
 
+    before = _share_snapshot(share)
     share.shared_modules = req.shared_modules
+    after = _share_snapshot(share)
+
+    creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
+    log_action(
+        db,
+        organization_id=share.primary_org_id,
+        user_id=current_user.id,
+        action="UPDATE_MODULES",
+        entity_type="ClientShare",
+        entity_id=share.id,
+        entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
+        details={"diff": make_diff(before, after)},
+    )
+
     db.commit()
 
     return {"message": "Shared modules updated successfully", "shared_modules": req.shared_modules}

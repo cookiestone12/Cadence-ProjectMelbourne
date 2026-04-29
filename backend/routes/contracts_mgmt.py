@@ -13,11 +13,56 @@ from ..models import (
 )
 from ..utils.auth import get_current_user
 from ..services.contract_parser import parse_contract_document
+from ..services.audit_service import log_action, make_diff
 import logging
 
 logger = logging.getLogger("cadence")
 
 router = APIRouter(prefix="/api/rights", tags=["Rights Management"])
+
+
+def _split_snapshot(split: RightsSplit) -> dict:
+    """Capture the audit-relevant fields from a RightsSplit row."""
+    return {
+        "rights_holder_id": split.rights_holder_id,
+        "rights_holder_name": split.rights_holder_name,
+        "rights_type": split.rights_type,
+        "share_percentage": split.share_percentage,
+        "role": split.role,
+        "notes": split.notes,
+        "contract_asset_id": split.contract_asset_id,
+    }
+
+
+def _split_audit_label(holder_name: str, rights_type: str, share_percentage) -> str:
+    """Render a human-readable label for the audit log viewer."""
+    name = holder_name or "Unknown"
+    pct = share_percentage if share_percentage is not None else 0
+    return f"{name} · {rights_type} {pct}%"
+
+
+def _audit_split(
+    db: Session,
+    organization_id: int,
+    user_id: int,
+    action: str,
+    split_id: int,
+    holder_name: str,
+    rights_type: str,
+    share_percentage,
+    details: dict,
+):
+    """Wrapper around log_action that pre-fills RightsSplit audit fields."""
+    log_action(
+        db,
+        organization_id=organization_id,
+        user_id=user_id,
+        action=action,
+        entity_type="RightsSplit",
+        entity_id=split_id,
+        entity_name=_split_audit_label(holder_name, rights_type, share_percentage),
+        details=details,
+    )
 
 
 def _sync_song_pub_percentage(db: Session, song_id: int):
@@ -120,8 +165,27 @@ def sync_credit_to_splits(db: Session, song: Song, creator_id: int, pub_share, m
 
         if share_val is not None and share_val > 0:
             if existing:
+                before = _split_snapshot(existing)
                 existing.share_percentage = float(share_val)
                 existing.role = role or existing.role
+                after = _split_snapshot(existing)
+                diff = make_diff(before, after)
+                if diff:
+                    _audit_split(
+                        db,
+                        organization_id=song.organization_id,
+                        user_id=user_id,
+                        action="UPDATE",
+                        split_id=existing.id,
+                        holder_name=holder_name,
+                        rights_type=rights_type,
+                        share_percentage=existing.share_percentage,
+                        details={
+                            "song_id": song.id,
+                            "source": "sync_credit_to_splits",
+                            "diff": diff,
+                        },
+                    )
             else:
                 new_split = RightsSplit(
                     contract_asset_id=ca.id,
@@ -132,8 +196,41 @@ def sync_credit_to_splits(db: Session, song: Song, creator_id: int, pub_share, m
                     role=role or "",
                 )
                 db.add(new_split)
+                db.flush()
+                _audit_split(
+                    db,
+                    organization_id=song.organization_id,
+                    user_id=user_id,
+                    action="CREATE",
+                    split_id=new_split.id,
+                    holder_name=holder_name,
+                    rights_type=rights_type,
+                    share_percentage=new_split.share_percentage,
+                    details={
+                        "song_id": song.id,
+                        "source": "sync_credit_to_splits",
+                        "after": _split_snapshot(new_split),
+                    },
+                )
         elif existing:
+            before = _split_snapshot(existing)
+            deleted_id = existing.id
             db.delete(existing)
+            _audit_split(
+                db,
+                organization_id=song.organization_id,
+                user_id=user_id,
+                action="DELETE",
+                split_id=deleted_id,
+                holder_name=holder_name,
+                rights_type=rights_type,
+                share_percentage=before["share_percentage"],
+                details={
+                    "song_id": song.id,
+                    "source": "sync_credit_to_splits",
+                    "before": before,
+                },
+            )
 
     db.flush()
     _sync_song_pub_percentage(db, song.id)
@@ -729,6 +826,22 @@ def add_song_split(
     db.add(split)
     db.flush()
 
+    _audit_split(
+        db,
+        organization_id=song.organization_id,
+        user_id=current_user.id,
+        action="CREATE",
+        split_id=split.id,
+        holder_name=holder_name,
+        rights_type=data.rights_type,
+        share_percentage=data.share_percentage,
+        details={
+            "song_id": song_id,
+            "source": "song_split_endpoint",
+            "after": _split_snapshot(split),
+        },
+    )
+
     from ..utils.edit_history import record_split_change
     record_split_change(db, song_id, song.organization_id, current_user.id, holder_name, data.rights_type, None, data.share_percentage, notes=data.notes)
 
@@ -796,11 +909,35 @@ def delete_song_split(
     old_pct = split.share_percentage
     holder_name = split.rights_holder_name or str(creator_id)
 
+    audit_org_id = contract.organization_id if contract else None
+    if song_id and audit_org_id is None:
+        song_for_org = db.query(Song).filter(Song.id == song_id).first()
+        if song_for_org:
+            audit_org_id = song_for_org.organization_id
+
     if song_id:
         song_for_hist = db.query(Song).filter(Song.id == song_id).first()
         if song_for_hist:
             from ..utils.edit_history import record_split_change
             record_split_change(db, song_id, song_for_hist.organization_id, current_user.id, holder_name, rights_type, old_pct, None, notes=notes)
+
+    if audit_org_id is not None:
+        _audit_split(
+            db,
+            organization_id=audit_org_id,
+            user_id=current_user.id,
+            action="DELETE",
+            split_id=split_id,
+            holder_name=holder_name,
+            rights_type=rights_type,
+            share_percentage=old_pct,
+            details={
+                "song_id": song_id,
+                "source": "song_split_endpoint",
+                "before": _split_snapshot(split),
+                "deletion_notes": notes,
+            },
+        )
 
     db.delete(split)
     db.flush()
@@ -1048,6 +1185,24 @@ def add_release_split(
         notes=data.notes,
     )
     db.add(split)
+    db.flush()
+
+    _audit_split(
+        db,
+        organization_id=release.organization_id,
+        user_id=current_user.id,
+        action="CREATE",
+        split_id=split.id,
+        holder_name=holder_name,
+        rights_type=data.rights_type,
+        share_percentage=data.share_percentage,
+        details={
+            "release_id": release_id,
+            "source": "release_split_endpoint",
+            "after": _split_snapshot(split),
+        },
+    )
+
     db.commit()
     db.refresh(split)
 
@@ -1295,6 +1450,26 @@ def delete_contract(
     verify_org_access(current_user, contract.organization_id, db)
 
     for ca in contract.assets:
+        cascading_splits = db.query(RightsSplit).filter(
+            RightsSplit.contract_asset_id == ca.id
+        ).all()
+        for s in cascading_splits:
+            _audit_split(
+                db,
+                organization_id=contract.organization_id,
+                user_id=current_user.id,
+                action="DELETE",
+                split_id=s.id,
+                holder_name=s.rights_holder_name,
+                rights_type=s.rights_type,
+                share_percentage=s.share_percentage,
+                details={
+                    "source": "contract_delete_cascade",
+                    "contract_id": contract.id,
+                    "contract_title": contract.title,
+                    "before": _split_snapshot(s),
+                },
+            )
         db.query(RightsSplit).filter(RightsSplit.contract_asset_id == ca.id).delete()
 
     db.delete(contract)
@@ -1473,6 +1648,27 @@ def unlink_asset(
     if not ca:
         raise HTTPException(status_code=404, detail="Contract asset not found")
 
+    cascading_splits = db.query(RightsSplit).filter(
+        RightsSplit.contract_asset_id == ca.id
+    ).all()
+    for s in cascading_splits:
+        _audit_split(
+            db,
+            organization_id=contract.organization_id,
+            user_id=current_user.id,
+            action="DELETE",
+            split_id=s.id,
+            holder_name=s.rights_holder_name,
+            rights_type=s.rights_type,
+            share_percentage=s.share_percentage,
+            details={
+                "source": "asset_unlink_cascade",
+                "contract_id": contract.id,
+                "asset_type": ca.asset_type,
+                "asset_id": ca.asset_id,
+                "before": _split_snapshot(s),
+            },
+        )
     db.query(RightsSplit).filter(RightsSplit.contract_asset_id == ca.id).delete()
     db.delete(ca)
     db.commit()
@@ -1553,6 +1749,24 @@ def add_split(
     db.add(split)
     db.flush()
 
+    _audit_split(
+        db,
+        organization_id=contract.organization_id,
+        user_id=current_user.id,
+        action="CREATE",
+        split_id=split.id,
+        holder_name=holder_name,
+        rights_type=data.rights_type,
+        share_percentage=data.share_percentage,
+        details={
+            "source": "contract_asset_split_endpoint",
+            "contract_id": contract.id,
+            "asset_type": ca.asset_type,
+            "asset_id": ca.asset_id,
+            "after": _split_snapshot(split),
+        },
+    )
+
     if ca.asset_type == "SONG":
         from ..utils.edit_history import record_split_change
         from ..utils.health_sync import sync_song_to_checklist
@@ -1632,6 +1846,7 @@ def update_split(
     old_pct = split.share_percentage
     old_rights_type = split.rights_type
     holder_name = split.rights_holder_name or str(split.rights_holder_id or "unknown")
+    before_snapshot = _split_snapshot(split)
 
     if data.rights_type is not None:
         split.rights_type = data.rights_type
@@ -1645,6 +1860,28 @@ def update_split(
         split.notes = data.notes
 
     db.flush()
+
+    after_snapshot = _split_snapshot(split)
+    diff = make_diff(before_snapshot, after_snapshot)
+    if diff:
+        _audit_split(
+            db,
+            organization_id=contract.organization_id,
+            user_id=current_user.id,
+            action="UPDATE",
+            split_id=split.id,
+            holder_name=split.rights_holder_name or holder_name,
+            rights_type=split.rights_type,
+            share_percentage=split.share_percentage,
+            details={
+                "source": "split_update_endpoint",
+                "contract_id": contract.id,
+                "asset_type": ca.asset_type,
+                "asset_id": ca.asset_id,
+                "diff": diff,
+            },
+        )
+
     if ca.asset_type == "SONG":
         if old_pct != split.share_percentage or old_rights_type != split.rights_type:
             from ..utils.edit_history import record_split_change
@@ -1704,10 +1941,30 @@ def delete_split(
     old_pct = split.share_percentage
     holder_name = split.rights_holder_name or str(holder_id or "unknown")
     rights_type = split.rights_type
+    deleted_split_id = split.id
+    before_snapshot = _split_snapshot(split)
 
     if asset_type == "SONG":
         from ..utils.edit_history import record_split_change
         record_split_change(db, asset_id, contract.organization_id, current_user.id, holder_name, rights_type, old_pct, None)
+
+    _audit_split(
+        db,
+        organization_id=contract.organization_id,
+        user_id=current_user.id,
+        action="DELETE",
+        split_id=deleted_split_id,
+        holder_name=holder_name,
+        rights_type=rights_type,
+        share_percentage=old_pct,
+        details={
+            "source": "split_delete_endpoint",
+            "contract_id": contract.id,
+            "asset_type": asset_type,
+            "asset_id": asset_id,
+            "before": before_snapshot,
+        },
+    )
 
     db.delete(split)
     db.flush()
