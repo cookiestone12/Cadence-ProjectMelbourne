@@ -2572,7 +2572,16 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Type</label>
-                <input type="text" value={uploadForm.source_type} onChange={e => setUploadForm(prev => ({ ...prev, source_type: e.target.value }))} placeholder="e.g., DSP, PRO" className={inputClass} />
+                <select
+                  value={uploadForm.source_type}
+                  onChange={e => setUploadForm(prev => ({ ...prev, source_type: e.target.value }))}
+                  className={inputClass}
+                >
+                  <option value="">Auto-detect from file</option>
+                  {SOURCE_TYPE_OPTIONS.filter(o => o.value).map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period Start</label>
