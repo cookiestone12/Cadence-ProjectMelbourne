@@ -1683,6 +1683,7 @@ def unlink_asset(
                 "contract_id": contract.id,
                 "asset_type": ca.asset_type,
                 "asset_id": ca.asset_id,
+                "song_id": ca.asset_id if ca.asset_type == "SONG" else None,
                 "before": _split_snapshot(s),
             },
         )
@@ -1780,6 +1781,7 @@ def add_split(
             "contract_id": contract.id,
             "asset_type": ca.asset_type,
             "asset_id": ca.asset_id,
+            "song_id": ca.asset_id if ca.asset_type == "SONG" else None,
             "after": _split_snapshot(split),
         },
     )
@@ -1895,6 +1897,7 @@ def update_split(
                 "contract_id": contract.id,
                 "asset_type": ca.asset_type,
                 "asset_id": ca.asset_id,
+                "song_id": ca.asset_id if ca.asset_type == "SONG" else None,
                 "before": before_snapshot,
                 "after": after_snapshot,
                 "diff": diff,
