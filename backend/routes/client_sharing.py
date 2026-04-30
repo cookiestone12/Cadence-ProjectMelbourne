@@ -566,18 +566,20 @@ def update_share_modules(
     before = _share_snapshot(share)
     share.shared_modules = req.shared_modules
     after = _share_snapshot(share)
+    diff = make_diff(before, after)
 
-    creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
-    log_action(
-        db,
-        organization_id=share.primary_org_id,
-        user_id=current_user.id,
-        action="UPDATE_MODULES",
-        entity_type="ClientShare",
-        entity_id=share.id,
-        entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
-        details={"diff": make_diff(before, after)},
-    )
+    if diff:
+        creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
+        log_action(
+            db,
+            organization_id=share.primary_org_id,
+            user_id=current_user.id,
+            action="UPDATE_MODULES",
+            entity_type="ClientShare",
+            entity_id=share.id,
+            entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
+            details={"diff": diff},
+        )
 
     db.commit()
 
