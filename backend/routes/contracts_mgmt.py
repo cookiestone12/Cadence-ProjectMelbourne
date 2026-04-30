@@ -198,6 +198,8 @@ def sync_credit_to_splits(db: Session, song: Song, creator_id: int, pub_share, m
                         details={
                             "song_id": song.id,
                             "source": "sync_credit_to_splits",
+                            "before": before,
+                            "after": after,
                             "diff": diff,
                         },
                     )
@@ -1893,6 +1895,8 @@ def update_split(
                 "contract_id": contract.id,
                 "asset_type": ca.asset_type,
                 "asset_id": ca.asset_id,
+                "before": before_snapshot,
+                "after": after_snapshot,
                 "diff": diff,
             },
         )
