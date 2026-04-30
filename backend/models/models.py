@@ -733,7 +733,29 @@ class ValuationCalculation(Base):
     risk_score = Column(Float, default=0.5)
     
     calc_metadata = Column(JSON, default=dict)
-    
+
+    # Source-typed valuation columns (Task #162). All nullable so legacy
+    # rows written by the prior engine remain valid without backfill.
+    revenue_performance_cents = Column(Integer, nullable=True)
+    revenue_mechanical_cents = Column(Integer, nullable=True)
+    revenue_sync_cents = Column(Integer, nullable=True)
+    revenue_streaming_cents = Column(Integer, nullable=True)
+    revenue_other_cents = Column(Integer, nullable=True)
+
+    multiplier_performance = Column(Float, nullable=True)
+    multiplier_mechanical = Column(Float, nullable=True)
+    multiplier_sync = Column(Float, nullable=True)
+    multiplier_streaming = Column(Float, nullable=True)
+
+    artist_share_pct = Column(Float, nullable=True)
+    publisher_share_pct = Column(Float, nullable=True)
+    artist_valuation_cents = Column(Integer, nullable=True)
+    publisher_valuation_cents = Column(Integer, nullable=True)
+
+    # Discriminator: 'SOURCE_TYPED' vs legacy 'HYBRID' (kept alongside the
+    # historical ``valuation_methodology`` text field for back-compat).
+    valuation_method = Column(String, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     
     song = relationship("Song", back_populates="valuation_calculations")

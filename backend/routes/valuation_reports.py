@@ -13,6 +13,7 @@ from ..models.models import (
 from ..utils.auth import get_current_user
 from ..services.underwriting_engine import run_underwriting
 from ..services.underwriting_controls import run_reconciliation_controls
+from ..services.valuation_engine import compute_source_typed_valuation
 import json
 
 router = APIRouter(prefix="/api/valuation", tags=["Valuations"])
@@ -706,3 +707,217 @@ def get_statement_reconciliation(
         raise HTTPException(status_code=404, detail=result["error"])
     db.commit()
     return result
+
+
+# ---------------------------------------------------------------------------
+# Source-typed valuation engine (Task #162)
+# ---------------------------------------------------------------------------
+
+class SourceTypedRunRequest(BaseModel):
+    scope_creator_id: Optional[int] = None
+    scope_song_ids: Optional[List[int]] = None
+
+
+def _scope_check_creator(db: Session, creator_id: int, org_id: int) -> None:
+    from ..models.models import Creator as _Creator
+    belongs = db.query(_Creator.id).filter(
+        _Creator.id == creator_id,
+        _Creator.organization_id == org_id,
+    ).first()
+    if not belongs:
+        raise HTTPException(status_code=404, detail="Creator not found in this org")
+
+
+def _serialize_source_typed_summary(
+    org_id: int,
+    db: Session,
+    scope_creator_id: Optional[int],
+    *,
+    summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """If ``summary`` is supplied (fresh run) return its aggregated
+    shape directly. Otherwise re-aggregate the most recent
+    source-typed ``ValuationCalculation`` row per song so the
+    ``/summary`` endpoint can serve the latest persisted result
+    without recomputing.
+    """
+    if summary is not None:
+        return {
+            "computed_at": summary["computed_at"],
+            "song_count": summary["song_count"],
+            "songs_with_revenue": summary["songs_with_revenue"],
+            "by_bucket": summary["by_bucket"],
+            "total_annual_revenue_cents": summary["total_annual_revenue_cents"],
+            "total_value_cents": summary["total_value_cents"],
+            "artist_total_value_cents": summary["artist_total_value_cents"],
+            "publisher_total_value_cents": summary["publisher_total_value_cents"],
+            "scope": summary["scope"],
+            "fresh": True,
+        }
+
+    # Re-aggregate from the latest source-typed row per song.
+    q = db.query(ValuationCalculation).filter(
+        ValuationCalculation.organization_id == org_id,
+        ValuationCalculation.valuation_method == "SOURCE_TYPED",
+    )
+
+    scoped_song_ids: Optional[set] = None
+    if scope_creator_id is not None:
+        from ..models.models import SongCredit as _SongCredit
+        scoped_song_ids = {
+            sid for (sid,) in db.query(_SongCredit.song_id)
+            .filter(_SongCredit.creator_id == scope_creator_id)
+            .distinct()
+            .all()
+        }
+        if scoped_song_ids:
+            q = q.filter(ValuationCalculation.song_id.in_(scoped_song_ids))
+        else:
+            q = q.filter(False)
+
+    rows = q.order_by(ValuationCalculation.calculation_date.desc()).all()
+    latest_per_song: Dict[int, ValuationCalculation] = {}
+    for r in rows:
+        if r.song_id not in latest_per_song:
+            latest_per_song[r.song_id] = r
+
+    if not latest_per_song:
+        return {
+            "computed_at": None,
+            "song_count": 0,
+            "songs_with_revenue": 0,
+            "by_bucket": {
+                b: {"revenue_cents": 0, "multiplier": None, "value_cents": 0}
+                for b in ("performance", "mechanical", "sync", "streaming", "other")
+            },
+            "total_annual_revenue_cents": 0,
+            "total_value_cents": 0,
+            "artist_total_value_cents": 0,
+            "publisher_total_value_cents": 0,
+            "scope": {"creator_id": scope_creator_id, "song_ids": None},
+            "fresh": False,
+        }
+
+    by_bucket: Dict[str, Dict[str, Any]] = {
+        b: {"revenue_cents": 0, "value_cents": 0, "multiplier": None}
+        for b in ("performance", "mechanical", "sync", "streaming", "other")
+    }
+    total_value = 0
+    total_revenue = 0
+    artist_total = 0
+    publisher_total = 0
+    songs_with_revenue = 0
+    latest_calc = None
+
+    for r in latest_per_song.values():
+        # Multiplier values are constants per bucket; pick from any row.
+        if by_bucket["performance"]["multiplier"] is None and r.multiplier_performance is not None:
+            by_bucket["performance"]["multiplier"] = r.multiplier_performance
+            by_bucket["mechanical"]["multiplier"] = r.multiplier_mechanical
+            by_bucket["sync"]["multiplier"] = r.multiplier_sync
+            by_bucket["streaming"]["multiplier"] = r.multiplier_streaming
+
+        for col, bucket in (
+            ("revenue_performance_cents", "performance"),
+            ("revenue_mechanical_cents", "mechanical"),
+            ("revenue_sync_cents", "sync"),
+            ("revenue_streaming_cents", "streaming"),
+            ("revenue_other_cents", "other"),
+        ):
+            v = getattr(r, col, 0) or 0
+            by_bucket[bucket]["revenue_cents"] += int(v)
+
+        for bucket in ("performance", "mechanical", "sync", "streaming"):
+            mult = by_bucket[bucket]["multiplier"] or 0
+            rev = getattr(
+                r, f"revenue_{bucket}_cents"
+            ) or 0
+            by_bucket[bucket]["value_cents"] += int(round(rev * mult))
+
+        total_value += int(r.final_valuation_cents or 0)
+        total_revenue += int(r.annual_revenue_cents or 0)
+        artist_total += int(r.artist_valuation_cents or 0)
+        publisher_total += int(r.publisher_valuation_cents or 0)
+        if (r.annual_revenue_cents or 0) > 0:
+            songs_with_revenue += 1
+        if latest_calc is None or (r.calculation_date and r.calculation_date > latest_calc):
+            latest_calc = r.calculation_date
+
+    return {
+        "computed_at": latest_calc.isoformat() if latest_calc else None,
+        "song_count": len(latest_per_song),
+        "songs_with_revenue": songs_with_revenue,
+        "by_bucket": by_bucket,
+        "total_annual_revenue_cents": total_revenue,
+        "total_value_cents": total_value,
+        "artist_total_value_cents": artist_total,
+        "publisher_total_value_cents": publisher_total,
+        "scope": {"creator_id": scope_creator_id, "song_ids": None},
+        "fresh": False,
+    }
+
+
+@router.post(
+    "/source-typed/run",
+    summary="Run the source-typed valuation engine for the org (or scoped to a creator/song list)",
+    description="Computes annualized revenue per right-category bucket from matched royalty statements, applies industry multipliers (performance 10x, mechanical 9x, sync 7x, streaming 12.5x), and splits each song's value into artist (MASTER) vs publisher (PUBLISHING) shares from RightsSplit rows. Persists one ValuationCalculation row per song with valuation_method='SOURCE_TYPED'.\n\n**Body:** `{ scope_creator_id?, scope_song_ids?: int[] }`.\n**Auth:** Bearer JWT — caller must be a member of the org.",
+)
+def run_source_typed_valuation(
+    request: SourceTypedRunRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    if request.scope_creator_id is not None:
+        _scope_check_creator(db, request.scope_creator_id, membership.organization_id)
+
+    try:
+        summary = compute_source_typed_valuation(
+            db,
+            org_id=membership.organization_id,
+            scope_creator_id=request.scope_creator_id,
+            scope_song_ids=request.scope_song_ids,
+            persist=True,
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Source-typed valuation failed: {e}")
+
+    return _serialize_source_typed_summary(
+        membership.organization_id,
+        db,
+        request.scope_creator_id,
+        summary=summary,
+    )
+
+
+@router.get(
+    "/source-typed/summary",
+    summary="Get the latest persisted source-typed valuation breakdown",
+    description="Aggregates the most recent source-typed ValuationCalculation row per song into a single org-wide (or per-creator) breakdown. Useful for dashboards that want the current numbers without re-running the engine.\n\n**Query:** `scope_creator_id?`.\n**Auth:** Bearer JWT — caller must be a member of the org.",
+)
+def get_source_typed_summary(
+    scope_creator_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    if scope_creator_id is not None:
+        _scope_check_creator(db, scope_creator_id, membership.organization_id)
+
+    return _serialize_source_typed_summary(
+        membership.organization_id,
+        db,
+        scope_creator_id,
+    )

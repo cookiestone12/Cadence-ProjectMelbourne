@@ -52,6 +52,10 @@ export default function ValuationPage() {
     } catch { return null }
   })
 
+  // Source-typed valuation (Task #162)
+  const [sourceTyped, setSourceTyped] = useState(null)
+  const [sourceTypedRunning, setSourceTypedRunning] = useState(false)
+
   // Load creator list once. Org id comes from /current.
   useEffect(() => {
     let alive = true
@@ -109,16 +113,20 @@ export default function ValuationPage() {
       const scopeQs = creatorId ? `?scope_creator_id=${creatorId}` : ''
       const latestUrl = `/api/valuation/underwriting/latest${scopeQs}`
       const catalogUrl = `/api/valuation/catalog/summary${scopeQs}`
-      const [catRes, uwRes, runsRes] = await Promise.allSettled([
+      const sourceTypedUrl = `/api/valuation/source-typed/summary${scopeQs}`
+      const [catRes, uwRes, runsRes, stRes] = await Promise.allSettled([
         axios.get(catalogUrl),
         axios.get(latestUrl),
         axios.get('/api/valuation/underwriting/runs'),
+        axios.get(sourceTypedUrl),
       ])
       if (catRes.status === 'fulfilled') setCatalogData(catRes.value.data)
       const latestData = uwRes.status === 'fulfilled' ? uwRes.value.data : null
       if (latestData?.has_data) setUwData(latestData)
       else setUwData(null)
       if (runsRes.status === 'fulfilled') setRuns(runsRes.value.data)
+      if (stRes.status === 'fulfilled') setSourceTyped(stRes.value.data)
+      else setSourceTyped(null)
 
       // Switching scope to a creator must re-fire underwriting for that
       // creator (per-creator scope is meaningless if it just shows a stale
@@ -151,6 +159,21 @@ export default function ValuationPage() {
       console.error('Error loading data:', e)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const triggerSourceTypedRun = async () => {
+    setSourceTypedRunning(true)
+    try {
+      const res = await axios.post('/api/valuation/source-typed/run', {
+        scope_creator_id: scopeCreatorId || null,
+      })
+      setSourceTyped(res.data)
+    } catch (e) {
+      console.error('Source-typed valuation run failed:', e)
+      alert('Source-typed valuation failed. Check that you have matched royalty statement lines for this scope.')
+    } finally {
+      setSourceTypedRunning(false)
     }
   }
 
@@ -305,6 +328,15 @@ export default function ValuationPage() {
               ))}
             </select>
           </div>
+          <button
+            onClick={triggerSourceTypedRun}
+            disabled={sourceTypedRunning}
+            className="flex items-center space-x-2 px-4 py-2.5 border border-[#5B8A72] text-[#5B8A72] rounded-lg hover:bg-[#5B8A72]/5 transition-all text-sm font-medium disabled:opacity-60"
+            title="Compute valuation by source type (performance / mechanical / sync / streaming) from matched royalty statements"
+          >
+            {sourceTypedRunning ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <ChartPieIcon className="w-4 h-4" />}
+            <span>{sourceTypedRunning ? 'Running…' : 'Source-Typed Valuation'}</span>
+          </button>
           <button onClick={() => setRunModalOpen(true)} className="flex items-center space-x-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-all text-sm font-medium shadow-sm">
             <SparklesIcon className="w-4 h-4" />
             <span>Run Underwriting</span>
@@ -480,6 +512,123 @@ export default function ValuationPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {sourceTyped && sourceTyped.song_count > 0 && (() => {
+            const buckets = sourceTyped.by_bucket || {}
+            const totalValue = sourceTyped.total_value_cents / 100
+            const totalRevenue = sourceTyped.total_annual_revenue_cents / 100
+            const artist = sourceTyped.artist_total_value_cents / 100
+            const publisher = sourceTyped.publisher_total_value_cents / 100
+            const artistPct = totalValue > 0 ? (artist / totalValue) * 100 : 50
+            const publisherPct = totalValue > 0 ? (publisher / totalValue) * 100 : 50
+            const bucketRows = [
+              { key: 'performance', label: 'Performance', sub: 'PROs · neighboring rights', tone: 'text-[#5B8A72]' },
+              { key: 'mechanical', label: 'Mechanical', sub: 'MLC · HFA', tone: 'text-[#5A8A9A]' },
+              { key: 'sync', label: 'Sync', sub: 'Sync licensing fees', tone: 'text-[#C4956B]' },
+              { key: 'streaming', label: 'Streaming', sub: 'DSP · digital interactive', tone: 'text-[#7BA594]' },
+              { key: 'other', label: 'Other', sub: 'Unclassified income (no multiplier)', tone: 'text-[#7A8580]' },
+            ]
+            return (
+              <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] mb-6">
+                <div className="p-5 border-b border-[rgba(59,77,67,0.08)] flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h2 className="text-base font-bold text-[#3D4A44]">Revenue by Source</h2>
+                      <span className="px-1.5 py-0.5 text-[9px] font-semibold tracking-wide uppercase bg-[#5B8A72]/10 text-[#5B8A72] rounded-md">Source-Typed</span>
+                      {sourceTyped.fresh && (
+                        <span className="px-1.5 py-0.5 text-[9px] font-semibold tracking-wide uppercase bg-[#5B9A6E]/10 text-[#5B9A6E] rounded-md">Just computed</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-[#7A8580] mt-1">
+                      Annualized from {sourceTyped.songs_with_revenue} of {sourceTyped.song_count} songs · {sourceTyped.computed_at ? `last run ${new Date(sourceTyped.computed_at).toLocaleString()}` : 'not yet computed'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] text-[#7A8580] uppercase">Catalog Value</div>
+                    <div className="text-2xl font-bold text-[#5B8A72]">{fmt(totalValue)}</div>
+                    <div className="text-[10px] text-[#7A8580] mt-0.5">on {fmt(totalRevenue)} annual revenue</div>
+                  </div>
+                </div>
+                <div className="p-5">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-[10px] font-medium text-[#7A8580] uppercase border-b border-[rgba(59,77,67,0.08)]">
+                        <th className="text-left pb-2">Source</th>
+                        <th className="text-right pb-2">Annual Revenue</th>
+                        <th className="text-right pb-2">Multiplier</th>
+                        <th className="text-right pb-2">Contribution to Value</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                      {bucketRows.map(row => {
+                        const b = buckets[row.key] || {}
+                        const rev = (b.revenue_cents || 0) / 100
+                        const val = (b.value_cents || 0) / 100
+                        const pct = totalValue > 0 ? (val / totalValue) * 100 : 0
+                        return (
+                          <tr key={row.key} className="text-sm">
+                            <td className="py-2.5">
+                              <div className={`font-medium ${row.tone}`}>{row.label}</div>
+                              <div className="text-[10px] text-[#7A8580]">{row.sub}</div>
+                            </td>
+                            <td className="py-2.5 text-right text-[#3D4A44]">{fmt(rev)}</td>
+                            <td className="py-2.5 text-right text-[#7A8580]">{b.multiplier ? `${b.multiplier}×` : '—'}</td>
+                            <td className="py-2.5 text-right">
+                              <div className="font-semibold text-[#3D4A44]">{fmt(val)}</div>
+                              <div className="text-[10px] text-[#7A8580]">{pct.toFixed(1)}% of total</div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+
+                  <div className="mt-6 pt-5 border-t border-[rgba(59,77,67,0.08)]">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xs font-bold text-[#3D4A44] uppercase tracking-wide">Artist vs Publisher Split</h3>
+                      <span className="text-[10px] text-[#7A8580]">Derived from RightsSplit (MASTER vs PUBLISHING)</span>
+                    </div>
+                    <div className="flex h-8 rounded-lg overflow-hidden border border-[rgba(59,77,67,0.08)]">
+                      <div
+                        className="bg-[#5B8A72] flex items-center justify-center text-[10px] font-semibold text-white"
+                        style={{ width: `${artistPct}%`, minWidth: artistPct > 0 ? '60px' : 0 }}
+                      >
+                        {artistPct.toFixed(0)}%
+                      </div>
+                      <div
+                        className="bg-[#5A8A9A] flex items-center justify-center text-[10px] font-semibold text-white"
+                        style={{ width: `${publisherPct}%`, minWidth: publisherPct > 0 ? '60px' : 0 }}
+                      >
+                        {publisherPct.toFixed(0)}%
+                      </div>
+                    </div>
+                    <div className="flex justify-between mt-2 text-xs">
+                      <div>
+                        <span className="inline-block w-2 h-2 rounded-full bg-[#5B8A72] mr-1.5"></span>
+                        <span className="text-[#7A8580]">Artist (Master):</span>
+                        <span className="ml-1.5 font-semibold text-[#3D4A44]">{fmt(artist)}</span>
+                      </div>
+                      <div>
+                        <span className="inline-block w-2 h-2 rounded-full bg-[#5A8A9A] mr-1.5"></span>
+                        <span className="text-[#7A8580]">Publisher:</span>
+                        <span className="ml-1.5 font-semibold text-[#3D4A44]">{fmt(publisher)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+
+          {sourceTyped && sourceTyped.song_count === 0 && !hasUW && (
+            <div className="bg-[#FAFBF9] rounded-xl border border-dashed border-[rgba(91,138,114,0.25)] p-6 mb-6 text-center">
+              <ChartPieIcon className="w-8 h-8 text-[#5B8A72] mx-auto mb-2" />
+              <h3 className="text-sm font-semibold text-[#3D4A44]">No source-typed valuation yet</h3>
+              <p className="text-xs text-[#7A8580] mt-1 max-w-md mx-auto">
+                Click <strong>Source-Typed Valuation</strong> above to bucket your matched royalty statements by source (performance / mechanical / sync / streaming) and apply industry multipliers.
+              </p>
             </div>
           )}
 
