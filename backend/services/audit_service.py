@@ -39,7 +39,7 @@ def make_diff(before: dict, after: dict) -> dict:
     """
     before = before or {}
     after = after or {}
-    keys = set(before.keys()) | set(after.keys())
+    keys = sorted(set(before.keys()) | set(after.keys()), key=str)
     diff: dict = {}
     for key in keys:
         old_val = before.get(key)

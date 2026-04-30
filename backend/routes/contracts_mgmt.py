@@ -52,7 +52,22 @@ def _audit_split(
     share_percentage,
     details: dict,
 ):
-    """Wrapper around log_action that pre-fills RightsSplit audit fields."""
+    """Wrapper around log_action that pre-fills RightsSplit audit fields.
+
+    Normalizes every audit row to the shape ``{before, after, diff, ...context}``
+    so downstream viewers / exports can render split history with one schema
+    regardless of which mutation path produced the entry.
+    """
+    raw = dict(details or {})
+    before = raw.pop("before", None)
+    after = raw.pop("after", None)
+    diff = raw.pop("diff", None)
+    if diff is None and (before is not None or after is not None):
+        diff = make_diff(before or {}, after or {})
+
+    standardized = {"before": before, "after": after, "diff": diff or {}}
+    standardized.update(raw)
+
     log_action(
         db,
         organization_id=organization_id,
@@ -61,7 +76,7 @@ def _audit_split(
         entity_type="RightsSplit",
         entity_id=split_id,
         entity_name=_split_audit_label(holder_name, rights_type, share_percentage),
-        details=details,
+        details=standardized,
     )
 
 
