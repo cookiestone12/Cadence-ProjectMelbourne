@@ -26,6 +26,39 @@ def _share_snapshot(share: 'ClientShare') -> dict:
         "shared_modules": getattr(share, 'shared_modules', None),
     }
 
+
+def _audit_share(
+    db: Session,
+    organization_id: int,
+    user_id: int,
+    action: str,
+    share: 'ClientShare',
+    creator_name: str = None,
+    before: dict = None,
+    after: dict = None,
+    extra: dict = None,
+):
+    """Wrapper around log_action that pre-fills ClientShare audit fields.
+
+    Normalizes every audit row to the shape ``{before, after, diff, ...context}``
+    so downstream viewers / exports can render share history with one schema
+    regardless of which lifecycle path produced the entry.
+    """
+    diff = make_diff(before or {}, after or {})
+    details = {"before": before, "after": after, "diff": diff}
+    if extra:
+        details.update(extra)
+    log_action(
+        db,
+        organization_id=organization_id,
+        user_id=user_id,
+        action=action,
+        entity_type="ClientShare",
+        entity_id=share.id,
+        entity_name=_share_audit_label(share, creator_name),
+        details=details,
+    )
+
 logger = logging.getLogger("cadence")
 
 router = APIRouter(prefix="/api/client-sharing", tags=["Client Sharing"])
@@ -172,20 +205,20 @@ def create_share(
     db.add(share)
     db.flush()
 
-    log_action(
+    _audit_share(
         db,
         organization_id=membership.organization_id,
         user_id=current_user.id,
         action="CREATE",
-        entity_type="ClientShare",
-        entity_id=share.id,
-        entity_name=_share_audit_label(share, creator.display_name),
-        details={
+        share=share,
+        creator_name=creator.display_name,
+        before=None,
+        after=_share_snapshot(share),
+        extra={
             "creator_id": share.creator_id,
             "recipient_email": share.recipient_user_email,
             "role": share.role,
             "shared_modules": modules,
-            "after": _share_snapshot(share),
         },
     )
 
@@ -300,18 +333,16 @@ def accept_share(
     after = _share_snapshot(share)
 
     creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
-    log_action(
+    _audit_share(
         db,
         organization_id=share.primary_org_id,
         user_id=current_user.id,
         action="ACCEPT",
-        entity_type="ClientShare",
-        entity_id=share.id,
-        entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
-        details={
-            "recipient_org_id": membership.organization_id,
-            "diff": make_diff(before, after),
-        },
+        share=share,
+        creator_name=creator_for_audit.display_name if creator_for_audit else None,
+        before=before,
+        after=after,
+        extra={"recipient_org_id": membership.organization_id},
     )
 
     db.commit()
@@ -359,15 +390,15 @@ def reject_share(
     after = _share_snapshot(share)
 
     creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
-    log_action(
+    _audit_share(
         db,
         organization_id=share.primary_org_id,
         user_id=current_user.id,
         action="REJECT",
-        entity_type="ClientShare",
-        entity_id=share.id,
-        entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
-        details={"diff": make_diff(before, after)},
+        share=share,
+        creator_name=creator_for_audit.display_name if creator_for_audit else None,
+        before=before,
+        after=after,
     )
 
     db.commit()
@@ -417,15 +448,15 @@ def revoke_share(
     after = _share_snapshot(share)
 
     creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
-    log_action(
+    _audit_share(
         db,
         organization_id=share.primary_org_id,
         user_id=current_user.id,
         action="CANCEL" if was_pending else "REVOKE",
-        entity_type="ClientShare",
-        entity_id=share.id,
-        entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
-        details={"diff": make_diff(before, after)},
+        share=share,
+        creator_name=creator_for_audit.display_name if creator_for_audit else None,
+        before=before,
+        after=after,
     )
 
     db.commit()
@@ -510,15 +541,15 @@ def update_share_role(
 
     if diff:
         creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
-        log_action(
+        _audit_share(
             db,
             organization_id=share.primary_org_id,
             user_id=current_user.id,
             action="UPDATE_ROLE",
-            entity_type="ClientShare",
-            entity_id=share.id,
-            entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
-            details={"diff": diff},
+            share=share,
+            creator_name=creator_for_audit.display_name if creator_for_audit else None,
+            before=before,
+            after=after,
         )
 
     db.commit()
@@ -570,15 +601,15 @@ def update_share_modules(
 
     if diff:
         creator_for_audit = db.query(Creator).filter(Creator.id == share.creator_id).first()
-        log_action(
+        _audit_share(
             db,
             organization_id=share.primary_org_id,
             user_id=current_user.id,
             action="UPDATE_MODULES",
-            entity_type="ClientShare",
-            entity_id=share.id,
-            entity_name=_share_audit_label(share, creator_for_audit.display_name if creator_for_audit else None),
-            details={"diff": diff},
+            share=share,
+            creator_name=creator_for_audit.display_name if creator_for_audit else None,
+            before=before,
+            after=after,
         )
 
     db.commit()
