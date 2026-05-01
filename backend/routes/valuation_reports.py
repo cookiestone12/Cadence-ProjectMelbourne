@@ -1667,6 +1667,64 @@ def _build_valuation_pdf(
         ]))
         elements.append(pct)
 
+    # ---- Section 5: Data Sources -----------------------------------------
+    # Aggregate the per-song `data_sources` arrays into a single coverage
+    # roll-up, plus the org-level data-quality counts already on `summary`.
+    elements.append(Spacer(1, 0.25 * inch))
+    elements.append(Paragraph("Data Sources", h2))
+    elements.append(Paragraph(
+        "Inputs feeding the valuation engines for this run, with coverage "
+        "across the catalog. Higher coverage materially improves confidence.",
+        body,
+    ))
+    src_label_map = {
+        "matched_royalty_statements": "Matched Royalty Statements (Income / DCF)",
+        "song_streaming_metrics": "Song Streaming Metrics (Market-Comparable)",
+        "rights_splits": "Rights Splits (Per-Creator Attribution)",
+        "song_credits": "Song Credits (Equal-Split Fallback)",
+    }
+    src_counts: Dict[str, int] = {}
+    for s in summary.get("top_songs", []):
+        for ds_key in (s.get("data_sources") or []):
+            src_counts[ds_key] = src_counts.get(ds_key, 0) + 1
+    # Always show the two canonical coverage numbers from data_quality so
+    # the table is meaningful even when top_songs is empty.
+    ds_rows = [["Data Source", "Songs Covered", "Catalog Coverage"]]
+    n_total = max(1, dq.get("song_count", 0) or 0)
+    ds_rows.append([
+        src_label_map["matched_royalty_statements"],
+        str(dq.get("songs_with_statements", 0)),
+        f"{dq.get('pct_with_statements', 0)}%",
+    ])
+    ds_rows.append([
+        src_label_map["song_streaming_metrics"],
+        str(dq.get("songs_with_streaming", 0)),
+        f"{dq.get('pct_with_streaming', 0)}%",
+    ])
+    # Surface any additional sources we observed in the per-song metadata
+    # (rights_splits / song_credits / etc.) that aren't on data_quality.
+    for key, label in src_label_map.items():
+        if key in ("matched_royalty_statements", "song_streaming_metrics"):
+            continue
+        n = src_counts.get(key, 0)
+        if n:
+            ds_rows.append([label, str(n), f"{round(n / n_total * 100, 1)}%"])
+    dst = Table(ds_rows, colWidths=[3.4*inch, 1.2*inch, 1.5*inch])
+    dst.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), sage),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, sage_light]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(dst)
+
     # ---- Disclaimer -------------------------------------------------------
     elements.append(Spacer(1, 0.3 * inch))
     elements.append(Paragraph("Methodology & Disclaimer", h2))

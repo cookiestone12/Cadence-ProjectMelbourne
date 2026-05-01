@@ -732,7 +732,13 @@ export default function ValuationPage() {
             </div>
           )}
 
-          {sourceTyped && sourceTyped.song_count > 0 && (() => {
+          {/* Source-typed Revenue-by-Source panel: gated to the Income
+              methodology view so the toggle drives every panel below the
+              hero. The data here (PROs / mechanical / sync / streaming
+              buckets at industry multipliers) IS the Income engine's
+              breakdown, so it would be misleading under Market-Comp / DCF /
+              Blended views. */}
+          {methodology === 'income' && sourceTyped && sourceTyped.song_count > 0 && (() => {
             const buckets = sourceTyped.by_bucket || {}
             const totalValue = sourceTyped.total_value_cents / 100
             const totalRevenue = sourceTyped.total_annual_revenue_cents / 100
@@ -839,7 +845,7 @@ export default function ValuationPage() {
             )
           })()}
 
-          {sourceTyped && sourceTyped.song_count === 0 && !hasUW && (
+          {methodology === 'income' && sourceTyped && sourceTyped.song_count === 0 && !hasUW && (
             <div className="bg-[#FAFBF9] rounded-xl border border-dashed border-[rgba(91,138,114,0.25)] p-6 mb-6 text-center">
               <ChartPieIcon className="w-8 h-8 text-[#5B8A72] mx-auto mb-2" />
               <h3 className="text-sm font-semibold text-[#3D4A44]">No source-typed valuation yet</h3>
