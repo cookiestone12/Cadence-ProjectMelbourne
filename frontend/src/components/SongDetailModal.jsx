@@ -1083,8 +1083,8 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
         <div className="flex-1 overflow-y-auto p-6 bg-[#F5F7F4]" style={{ overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
           {activeTab === 'overview' && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 space-y-4">
+              <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6">
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 space-y-4 min-w-0">
                   <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Basic Information</h3>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">Title</label>
@@ -1323,7 +1323,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                 className="flex items-center gap-1.5 text-[#5B8A72] hover:text-[#7BA594] min-w-0"
                               >
                                 <UserIcon className="w-4 h-4 flex-shrink-0" />
-                                <span className="font-medium text-sm truncate max-w-[120px] sm:max-w-none">{credit.creator_name}</span>
+                                <span className="font-medium text-sm truncate">{credit.creator_name}</span>
                               </Link>
                               <span className="text-xs text-[#7A8580] flex-shrink-0">({credit.role})</span>
                               <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 hidden sm:inline ${credit.pub_share != null ? 'text-[#5B8A72] bg-[rgba(91,138,114,0.1)]' : 'text-[#B0BDB4] bg-[rgba(59,77,67,0.04)]'}`}>Pub {credit.pub_share != null ? `${credit.pub_share}%` : '—'}</span>
@@ -1578,7 +1578,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   </div>
                 </div>
                 
-                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 space-y-4">
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5 space-y-4 min-w-0">
                   <h3 className="text-[17px] font-semibold text-[#3D4A44] mb-4">Metadata</h3>
                   <div>
                     <label className="text-[13px] font-medium text-[#7A8580]">ISRC</label>
