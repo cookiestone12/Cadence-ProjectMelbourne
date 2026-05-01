@@ -49,9 +49,9 @@ def _resolve_rights_holder_id(
 ):
     """Resolve a RightsSplit's rights_holder_id at write time.
 
-    Task #171 — Phase 4 enforces non-NULL creator linkage so per-creator
-    Schedule A views and the client-portal scope can never silently drop
-    rows. The rule is:
+    Task #171 — Phase 4 enforces strict non-NULL creator linkage at
+    write time so per-creator Schedule A views and client-portal scope
+    can never silently drop rows. The rule is:
 
       1. If `holder_id` is supplied, trust it (the calling endpoint has
          already validated it belongs to the org).
@@ -60,14 +60,25 @@ def _resolve_rights_holder_id(
       3. An ambiguous match (multiple Creators with the same display_name)
          raises 400 — the admin must disambiguate by passing the explicit
          holder_id.
-      4. No match returns None and the caller may proceed with a name-only
-         row, which the boot-time backfill will pick up later if a Creator
-         is added that matches.
+      4. No match also raises 400 — split rows are forbidden from being
+         persisted with NULL rights_holder_id. The admin must either pass
+         an explicit holder_id or first create the Creator. Historical
+         orphan rows are remediated by the boot-time backfill in main.py;
+         this helper guards the write path.
+      5. Missing both holder_id and holder_name raises 400 for the same
+         reason — every split must name a creator.
     """
     if holder_id:
         return holder_id
     if not holder_name:
-        return None
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "RightsSplit requires either rights_holder_id or "
+                "rights_holder_name — splits cannot be persisted "
+                "without a creator linkage."
+            ),
+        )
     matches = db.query(Creator).filter(
         Creator.organization_id == organization_id,
         func.lower(Creator.display_name) == holder_name.strip().lower(),
@@ -83,7 +94,14 @@ def _resolve_rights_holder_id(
                 "explicit rights_holder_id to disambiguate."
             ),
         )
-    return None
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            f"Unknown rights_holder_name '{holder_name}': no Creator with "
+            "that display_name exists in this org. Create the Creator first "
+            "or pass an explicit rights_holder_id."
+        ),
+    )
 
 
 # Task #171 — Phase 4: every split mutation produces a date-stamped AuditLog
@@ -237,9 +255,27 @@ def _get_or_create_split_sheet(db: Session, song: Song, user_id: int):
 
 
 def sync_credit_to_splits(db: Session, song: Song, creator_id: int, pub_share, master_share, role: str, user_id: int):
+    # Task #171 — Phase 4: enforce non-NULL creator linkage at the helper
+    # entry. SongCredit.creator_id is technically nullable in the schema, so
+    # any caller (e.g. credits.update_credit) reaching us with a NULL credit
+    # owner would silently mint orphan RightsSplit rows. Reject up front
+    # with a 400 so the admin fixes the credit before splits are persisted.
+    if not creator_id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot sync splits for a SongCredit without creator_id. "
+                "Assign the credit to a Creator first."
+            ),
+        )
     ca = _get_or_create_split_sheet(db, song, user_id)
     creator = db.query(Creator).filter(Creator.id == creator_id).first()
-    holder_name = creator.display_name if creator else "Unknown"
+    if not creator:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot sync splits: Creator id={creator_id} not found.",
+        )
+    holder_name = creator.display_name
 
     for rights_type, share_val in [("PUBLISHING", pub_share), ("MASTER", master_share)]:
         existing = db.query(RightsSplit).filter(
@@ -267,6 +303,7 @@ def sync_credit_to_splits(db: Session, song: Song, creator_id: int, pub_share, m
                         share_percentage=existing.share_percentage,
                         details={
                             "song_id": song.id,
+                            "creator_id": creator_id,
                             "source": "sync_credit_to_splits",
                             "before": before,
                             "after": after,
@@ -295,6 +332,7 @@ def sync_credit_to_splits(db: Session, song: Song, creator_id: int, pub_share, m
                     share_percentage=new_split.share_percentage,
                     details={
                         "song_id": song.id,
+                        "creator_id": creator_id,
                         "source": "sync_credit_to_splits",
                         "after": _split_snapshot(new_split),
                     },
@@ -314,6 +352,7 @@ def sync_credit_to_splits(db: Session, song: Song, creator_id: int, pub_share, m
                 share_percentage=before["share_percentage"],
                 details={
                     "song_id": song.id,
+                    "creator_id": creator_id,
                     "source": "sync_credit_to_splits",
                     "before": before,
                 },
@@ -976,6 +1015,7 @@ def add_song_split(
         share_percentage=data.share_percentage,
         details={
             "song_id": song_id,
+            "creator_id": split.rights_holder_id,
             "source": "song_split_endpoint",
             "after": _split_snapshot(split),
         },
@@ -1072,6 +1112,7 @@ def delete_song_split(
             share_percentage=old_pct,
             details={
                 "song_id": song_id,
+                "creator_id": creator_id,
                 "source": "song_split_endpoint",
                 "before": _split_snapshot(split),
                 "deletion_notes": notes,
@@ -1341,6 +1382,7 @@ def add_release_split(
         share_percentage=data.share_percentage,
         details={
             "release_id": release_id,
+            "creator_id": split.rights_holder_id,
             "source": "release_split_endpoint",
             "after": _split_snapshot(split),
         },
@@ -1597,6 +1639,10 @@ def delete_contract(
             RightsSplit.contract_asset_id == ca.id
         ).all()
         for s in cascading_splits:
+            # Task #171 — Phase 4: include canonical song_id + creator_id
+            # in cascade audit details so the SongDetailModal Split History
+            # timeline (which queries by song_id JSONB filter) catches this
+            # delete just like a direct user delete would.
             _audit_split(
                 db,
                 organization_id=contract.organization_id,
@@ -1610,6 +1656,10 @@ def delete_contract(
                     "source": "contract_delete_cascade",
                     "contract_id": contract.id,
                     "contract_title": contract.title,
+                    "asset_type": ca.asset_type,
+                    "asset_id": ca.asset_id,
+                    "song_id": ca.asset_id if ca.asset_type == "SONG" else None,
+                    "creator_id": s.rights_holder_id,
                     "before": _split_snapshot(s),
                 },
             )
@@ -1810,6 +1860,7 @@ def unlink_asset(
                 "asset_type": ca.asset_type,
                 "asset_id": ca.asset_id,
                 "song_id": ca.asset_id if ca.asset_type == "SONG" else None,
+                "creator_id": s.rights_holder_id,
                 "before": _split_snapshot(s),
             },
         )
@@ -1912,6 +1963,7 @@ def add_split(
             "asset_type": ca.asset_type,
             "asset_id": ca.asset_id,
             "song_id": ca.asset_id if ca.asset_type == "SONG" else None,
+            "creator_id": split.rights_holder_id,
             "after": _split_snapshot(split),
         },
     )
@@ -2028,6 +2080,7 @@ def update_split(
                 "asset_type": ca.asset_type,
                 "asset_id": ca.asset_id,
                 "song_id": ca.asset_id if ca.asset_type == "SONG" else None,
+                "creator_id": split.rights_holder_id,
                 "before": before_snapshot,
                 "after": after_snapshot,
                 "diff": diff,
@@ -2114,6 +2167,8 @@ def delete_split(
             "contract_id": contract.id,
             "asset_type": asset_type,
             "asset_id": asset_id,
+            "song_id": asset_id if asset_type == "SONG" else None,
+            "creator_id": holder_id,
             "before": before_snapshot,
         },
     )

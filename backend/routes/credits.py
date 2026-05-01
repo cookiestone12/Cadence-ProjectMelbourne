@@ -212,6 +212,18 @@ def update_credit(
         setattr(credit, key, value)
 
     if "pub_share" in update_data or "master_share" in update_data:
+        # Task #171 — Phase 4: a SongCredit with NULL creator_id cannot mint
+        # splits (would create orphan RightsSplit rows). Refuse the share
+        # update so the admin first attaches the credit to a Creator.
+        if not credit.creator_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Cannot update pub_share/master_share on a credit "
+                    "without a creator_id. Assign the credit to a Creator "
+                    "first, then update shares."
+                ),
+            )
         sync_credit_to_splits(db, song, credit.creator_id, credit.pub_share, credit.master_share, credit.role, current_user.id)
     elif update_data:
         # Role / share_percentage / notes-only edits don't move splits, but
