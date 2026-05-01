@@ -56,6 +56,13 @@ export default function ValuationPage() {
   const [sourceTyped, setSourceTyped] = useState(null)
   const [sourceTypedRunning, setSourceTypedRunning] = useState(false)
 
+  // Phase 5 — Blended valuation (Task #172)
+  const [fullVal, setFullVal] = useState(null)
+  const [fullValRunning, setFullValRunning] = useState(false)
+  const [methodology, setMethodology] = useState('blended') // income | market_comparable | dcf | blended
+  const [trend, setTrend] = useState([])
+  const [pdfDownloading, setPdfDownloading] = useState(false)
+
   // Load creator list once. Org id comes from /current.
   useEffect(() => {
     let alive = true
@@ -114,11 +121,15 @@ export default function ValuationPage() {
       const latestUrl = `/api/valuation/underwriting/latest${scopeQs}`
       const catalogUrl = `/api/valuation/catalog/summary${scopeQs}`
       const sourceTypedUrl = `/api/valuation/source-typed/summary${scopeQs}`
-      const [catRes, uwRes, runsRes, stRes] = await Promise.allSettled([
+      const fullSummaryUrl = `/api/valuation/full/summary${scopeQs}${scopeQs ? '&' : '?'}method=blended`
+      const trendUrl = `/api/valuation/full/trend${scopeQs}${scopeQs ? '&' : '?'}months=12`
+      const [catRes, uwRes, runsRes, stRes, fvRes, trRes] = await Promise.allSettled([
         axios.get(catalogUrl),
         axios.get(latestUrl),
         axios.get('/api/valuation/underwriting/runs'),
         axios.get(sourceTypedUrl),
+        axios.get(fullSummaryUrl),
+        axios.get(trendUrl),
       ])
       if (catRes.status === 'fulfilled') setCatalogData(catRes.value.data)
       const latestData = uwRes.status === 'fulfilled' ? uwRes.value.data : null
@@ -127,6 +138,10 @@ export default function ValuationPage() {
       if (runsRes.status === 'fulfilled') setRuns(runsRes.value.data)
       if (stRes.status === 'fulfilled') setSourceTyped(stRes.value.data)
       else setSourceTyped(null)
+      if (fvRes.status === 'fulfilled') setFullVal(fvRes.value.data)
+      else setFullVal(null)
+      if (trRes.status === 'fulfilled') setTrend(trRes.value.data?.trend || [])
+      else setTrend([])
 
       // Switching scope to a creator must re-fire underwriting for that
       // creator (per-creator scope is meaningless if it just shows a stale
@@ -174,6 +189,50 @@ export default function ValuationPage() {
       alert('Source-typed valuation failed. Check that you have matched royalty statement lines for this scope.')
     } finally {
       setSourceTypedRunning(false)
+    }
+  }
+
+  const triggerFullValRun = async () => {
+    setFullValRunning(true)
+    try {
+      const res = await axios.post('/api/valuation/full/run', {
+        scope_creator_id: scopeCreatorId || null,
+      })
+      setFullVal(res.data)
+      // Trend extends with this fresh row — refetch.
+      try {
+        const scopeQs = scopeCreatorId ? `?scope_creator_id=${scopeCreatorId}` : ''
+        const trRes = await axios.get(`/api/valuation/full/trend${scopeQs}${scopeQs ? '&' : '?'}months=12`)
+        setTrend(trRes.data?.trend || [])
+      } catch {}
+    } catch (e) {
+      console.error('Full valuation run failed:', e)
+      alert('Full valuation failed. Make sure you have at least some matched royalty statements or streaming metrics.')
+    } finally {
+      setFullValRunning(false)
+    }
+  }
+
+  const handleDownloadPdf = async () => {
+    setPdfDownloading(true)
+    try {
+      const scopeQs = scopeCreatorId ? `?scope_creator_id=${scopeCreatorId}` : ''
+      const res = await axios.get(`/api/valuation/report/pdf${scopeQs}`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      const today = new Date().toISOString().split('T')[0]
+      const scopeLabel = scopeCreatorName ? scopeCreatorName.replace(/\s+/g, '_').toLowerCase() : 'catalog'
+      link.setAttribute('download', `cadence_valuation_${scopeLabel}_${today}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e) {
+      console.error('PDF download failed:', e)
+      alert('Could not generate PDF. Run a Full Valuation first.')
+    } finally {
+      setPdfDownloading(false)
     }
   }
 
@@ -329,24 +388,182 @@ export default function ValuationPage() {
             </select>
           </div>
           <button
+            onClick={triggerFullValRun}
+            disabled={fullValRunning}
+            className="flex items-center space-x-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-all text-sm font-medium shadow-sm disabled:opacity-60"
+            title="Run the blended (Income + Market-Comparable + DCF) valuation engine"
+          >
+            {fullValRunning ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <SparklesIcon className="w-4 h-4" />}
+            <span>{fullValRunning ? 'Running…' : 'Run Full Valuation'}</span>
+          </button>
+          <button
             onClick={triggerSourceTypedRun}
             disabled={sourceTypedRunning}
             className="flex items-center space-x-2 px-4 py-2.5 border border-[#5B8A72] text-[#5B8A72] rounded-lg hover:bg-[#5B8A72]/5 transition-all text-sm font-medium disabled:opacity-60"
-            title="Compute valuation by source type (performance / mechanical / sync / streaming) from matched royalty statements"
+            title="Income engine only — bucket matched royalty statements by source type"
           >
             {sourceTypedRunning ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <ChartPieIcon className="w-4 h-4" />}
-            <span>{sourceTypedRunning ? 'Running…' : 'Source-Typed Valuation'}</span>
+            <span>{sourceTypedRunning ? 'Running…' : 'Income Only'}</span>
           </button>
-          <button onClick={() => setRunModalOpen(true)} className="flex items-center space-x-2 px-4 py-2.5 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-all text-sm font-medium shadow-sm">
+          <button onClick={() => setRunModalOpen(true)} className="flex items-center space-x-2 px-4 py-2.5 border border-[rgba(59,77,67,0.15)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] transition-all text-sm font-medium">
             <SparklesIcon className="w-4 h-4" />
-            <span>Run Underwriting</span>
+            <span>Underwriting</span>
+          </button>
+          <button
+            onClick={handleDownloadPdf}
+            disabled={pdfDownloading || !fullVal || (fullVal?.song_count || 0) === 0}
+            className="flex items-center space-x-2 px-4 py-2.5 border border-[rgba(59,77,67,0.15)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] transition-all text-sm disabled:opacity-50"
+            title={fullVal && (fullVal.song_count || 0) > 0 ? 'Download a PDF valuation report' : 'Run Full Valuation first to enable PDF export'}
+          >
+            {pdfDownloading ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <ArrowDownTrayIcon className="w-4 h-4" />}
+            <span>{pdfDownloading ? 'Generating…' : 'PDF Report'}</span>
           </button>
           <button onClick={handleDownloadReport} className="flex items-center space-x-2 px-4 py-2.5 border border-[rgba(59,77,67,0.15)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] transition-all text-sm">
             <ArrowDownTrayIcon className="w-4 h-4" />
-            <span>Export</span>
+            <span>Excel</span>
           </button>
         </div>
       </div>
+
+      {fullVal && (fullVal.song_count || 0) > 0 && (() => {
+        const methods = [
+          { key: 'income', label: 'Income' },
+          { key: 'market_comparable', label: 'Market Comparable' },
+          { key: 'dcf', label: 'DCF' },
+          { key: 'blended', label: 'Blended (40/30/30)' },
+        ]
+        const bm = fullVal.by_methodology || {}
+        const sel = bm[methodology] || bm.blended || { low: 0, base: 0, high: 0 }
+        const dq = fullVal.data_quality || {}
+        const confColor = dq.confidence_label === 'high' ? 'bg-[#5B9A6E]/15 text-[#3F7A52]' : dq.confidence_label === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+        const confDot = dq.confidence_label === 'high' ? 'bg-[#5B9A6E]' : dq.confidence_label === 'medium' ? 'bg-amber-500' : 'bg-rose-500'
+        const perCreator = fullVal.per_creator_share || []
+        const isOrgScope = !scopeCreatorId
+        return (
+          <>
+            {/* Methodology toggle */}
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-[#7A8580] uppercase tracking-wide mr-1">Methodology:</span>
+              {methods.map(m => (
+                <button
+                  key={m.key}
+                  onClick={() => setMethodology(m.key)}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${methodology === m.key ? 'bg-[#5B8A72] text-white shadow-sm' : 'bg-white border border-[rgba(59,77,67,0.15)] text-[#5C6660] hover:bg-[#EEF1EC]'}`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Blended hero card + methodology breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+              <div className="lg:col-span-2 bg-gradient-to-br from-[#5B8A72] to-[#4A7A62] rounded-2xl p-6 text-white shadow-md">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-xs font-medium uppercase tracking-wide text-white/80">{methods.find(m => m.key === methodology)?.label} Catalog Value</div>
+                    <div className="text-4xl font-bold mt-2">{fmt(sel.base)}</div>
+                    <div className="text-sm text-white/80 mt-1">Range: {fmt(sel.low)} – {fmt(sel.high)}</div>
+                  </div>
+                  <div className={`px-2 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide flex items-center gap-1.5 bg-white/15 text-white`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${confDot}`}></span>
+                    {dq.confidence_label || 'low'} confidence
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-5 pt-4 border-t border-white/15">
+                  <div>
+                    <div className="text-[10px] text-white/70 uppercase tracking-wide">Annual Revenue</div>
+                    <div className="text-base font-semibold mt-0.5">{fmt((fullVal.annual_revenue_cents || 0) / 100)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-white/70 uppercase tracking-wide">Songs (with data)</div>
+                    <div className="text-base font-semibold mt-0.5">{dq.songs_with_statements || 0} / {dq.song_count || 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-white/70 uppercase tracking-wide">Computed</div>
+                    <div className="text-base font-semibold mt-0.5">{fullVal.computed_at ? new Date(fullVal.computed_at).toLocaleDateString() : '—'}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white border border-[rgba(59,77,67,0.10)] rounded-2xl p-5">
+                <div className="text-xs font-semibold text-[#7A8580] uppercase tracking-wide mb-3">Methodology Breakdown</div>
+                <div className="space-y-2.5">
+                  {methods.map(m => {
+                    const v = bm[m.key] || { base: 0 }
+                    const isSel = m.key === methodology
+                    return (
+                      <div key={m.key} className={`flex items-center justify-between px-3 py-2 rounded-lg ${isSel ? 'bg-[#EEF1EC]' : ''}`}>
+                        <span className={`text-sm ${isSel ? 'font-semibold text-[#3D4A44]' : 'text-[#5C6660]'}`}>{m.label}</span>
+                        <span className={`text-sm tabular-nums ${isSel ? 'font-bold text-[#5B8A72]' : 'text-[#3D4A44]'}`}>{fmt(v.base)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="mt-3 pt-3 border-t border-[rgba(59,77,67,0.08)]">
+                  <div className="flex items-center justify-between text-[11px] text-[#7A8580]">
+                    <span>Data coverage</span>
+                    <span className="font-medium">{(dq.pct_with_statements || 0).toFixed(1)}% statements</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Trend + per-creator share */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+              <div className={`bg-white border border-[rgba(59,77,67,0.10)] rounded-2xl p-5 ${isOrgScope && perCreator.length ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-base font-bold text-[#3D4A44]">Historical Trend</h3>
+                    <p className="text-xs text-[#7A8580] mt-0.5">Last 12 months — {methods.find(m => m.key === methodology)?.label}</p>
+                  </div>
+                </div>
+                {trend.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={trend} margin={{ top: 5, right: 10, bottom: 0, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#EEF1EC" />
+                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#7A8580' }} tickFormatter={(d) => { try { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) } catch { return d } }} />
+                      <YAxis tick={{ fontSize: 10, fill: '#7A8580' }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip formatter={(v) => fmt(v)} labelFormatter={(d) => { try { return new Date(d).toLocaleDateString() } catch { return d } }} />
+                      <Line type="monotone" dataKey={methodology} stroke="#5B8A72" strokeWidth={2.5} dot={{ r: 3, fill: '#5B8A72' }} name={methods.find(m => m.key === methodology)?.label} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[220px] flex items-center justify-center text-sm text-[#7A8580]">Run Full Valuation a few times to build a trend.</div>
+                )}
+              </div>
+
+              {isOrgScope && perCreator.length > 0 && (
+                <div className="bg-white border border-[rgba(59,77,67,0.10)] rounded-2xl p-5">
+                  <h3 className="text-base font-bold text-[#3D4A44] mb-1">Per-Creator Share</h3>
+                  <p className="text-xs text-[#7A8580] mb-3">Top contributors by blended value</p>
+                  <div className="space-y-2 max-h-[180px] overflow-y-auto">
+                    {perCreator.slice(0, 8).map(c => (
+                      <div key={c.creator_id} className="flex items-center justify-between text-sm">
+                        <span className="text-[#3D4A44] truncate mr-2">{c.creator_name}</span>
+                        <div className="text-right shrink-0">
+                          <div className="font-semibold text-[#3D4A44] tabular-nums">{fmt(c.blended_base)}</div>
+                          <div className="text-[10px] text-[#7A8580]">{(c.share_pct || 0).toFixed(1)}%</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Data quality strip */}
+            <div className="mb-6 px-4 py-3 bg-[#EEF1EC]/60 border border-[rgba(91,138,114,0.15)] rounded-xl flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-[#5C6660]">
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded-full font-semibold uppercase ${confColor}`}>{dq.confidence_label || 'low'}</span>
+                <span className="text-[#7A8580]">data confidence</span>
+              </div>
+              <div><span className="font-semibold text-[#3D4A44]">{(dq.pct_with_statements || 0).toFixed(1)}%</span> of songs have matched royalty statements</div>
+              <div><span className="font-semibold text-[#3D4A44]">{(dq.pct_with_streaming || 0).toFixed(1)}%</span> of songs have streaming metrics</div>
+              <div className="text-[#7A8580]">Average per-song confidence: {((dq.average_confidence || 0) * 100).toFixed(1)}%</div>
+            </div>
+          </>
+        )
+      })()}
 
       {hasUW && (
         <div className="flex space-x-1 mb-6 bg-[#EEF1EC] rounded-lg p-1">

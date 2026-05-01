@@ -13,7 +13,11 @@ from ..models.models import (
 from ..utils.auth import get_current_user
 from ..services.underwriting_engine import run_underwriting
 from ..services.underwriting_controls import run_reconciliation_controls
-from ..services.valuation_engine import compute_source_typed_valuation
+from ..services.valuation_engine import (
+    compute_source_typed_valuation,
+    compute_full_catalog_valuation,
+)
+import io
 import json
 
 router = APIRouter(prefix="/api/valuation", tags=["Valuations"])
@@ -921,3 +925,767 @@ def get_source_typed_summary(
         db,
         scope_creator_id,
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — Full valuation: Income + Market-Comparable + DCF + Blended
+# ---------------------------------------------------------------------------
+
+class FullValuationRunRequest(BaseModel):
+    scope_creator_id: Optional[int] = None
+    scope_song_ids: Optional[List[int]] = None
+
+
+def _aggregate_persisted_blended(
+    org_id: int,
+    db: Session,
+    scope_creator_id: Optional[int],
+    method: str = "blended",
+) -> Dict[str, Any]:
+    """Re-aggregate the most recent BLENDED ValuationCalculation row per
+    song into the same shape as the in-memory orchestrator returns, so
+    GET /full/summary serves stored data without recomputing.
+
+    ``method`` selects the headline number:
+        * income            -> revenue_multiple_value_cents
+        * market_comparable -> streaming_multiple_value_cents
+                              (also stored as market_comp_value_cents)
+        * dcf               -> black_box_value_cents
+        * blended (default) -> final_valuation_cents
+    """
+    q = db.query(ValuationCalculation).filter(
+        ValuationCalculation.organization_id == org_id,
+        ValuationCalculation.valuation_method == "BLENDED",
+    )
+    if scope_creator_id is not None:
+        scoped_song_ids = {
+            sid for (sid,) in db.query(SongCredit.song_id)
+            .filter(SongCredit.creator_id == scope_creator_id)
+            .distinct()
+            .all()
+        }
+        if not scoped_song_ids:
+            return _empty_full_summary(org_id, scope_creator_id)
+        q = q.filter(ValuationCalculation.song_id.in_(scoped_song_ids))
+
+    rows = q.order_by(ValuationCalculation.calculation_date.desc()).all()
+    latest_per_song: Dict[int, ValuationCalculation] = {}
+    for r in rows:
+        if r.song_id not in latest_per_song:
+            latest_per_song[r.song_id] = r
+
+    if not latest_per_song:
+        return _empty_full_summary(org_id, scope_creator_id)
+
+    income_total = market_total = dcf_total = blended_total = 0
+    annual_revenue_total = 0
+    by_bucket_cents: Dict[str, int] = {b: 0 for b in ("performance", "mechanical", "sync", "streaming", "other")}
+    by_bucket_value_cents: Dict[str, int] = {b: 0 for b in ("performance", "mechanical", "sync", "streaming", "other")}
+    artist_total = publisher_total = 0
+    songs_with_statements = 0
+    songs_with_streaming = 0
+    confidence_sum = 0.0
+    latest_calc = None
+    songs_meta_ids = list(latest_per_song.keys())
+
+    for r in latest_per_song.values():
+        income_total += int(r.revenue_multiple_value_cents or 0)
+        market_total += int(r.streaming_multiple_value_cents or 0)
+        dcf_total += int(r.black_box_value_cents or 0)
+        blended_total += int(r.final_valuation_cents or 0)
+        annual_revenue_total += int(r.annual_revenue_cents or 0)
+        artist_total += int(r.artist_valuation_cents or 0)
+        publisher_total += int(r.publisher_valuation_cents or 0)
+        for col, b in (
+            ("revenue_performance_cents", "performance"),
+            ("revenue_mechanical_cents", "mechanical"),
+            ("revenue_sync_cents", "sync"),
+            ("revenue_streaming_cents", "streaming"),
+            ("revenue_other_cents", "other"),
+        ):
+            v = getattr(r, col, 0) or 0
+            by_bucket_cents[b] += int(v)
+        meta = r.calc_metadata or {}
+        ds = meta.get("data_sources") or []
+        if "matched_royalty_statements" in ds:
+            songs_with_statements += 1
+        if "song_streaming_metrics" in ds:
+            songs_with_streaming += 1
+        conf = meta.get("confidence") or {}
+        confidence_sum += float(conf.get("score") or 0.0)
+        if latest_calc is None or (r.calculation_date and r.calculation_date > latest_calc):
+            latest_calc = r.calculation_date
+
+    # Recompute per-bucket value at the same multipliers we stored on
+    # the row so the source-typed view stays internally consistent.
+    from ..services.valuation_engine import _BUCKET_MULTIPLIERS
+    for b, mult in _BUCKET_MULTIPLIERS.items():
+        by_bucket_value_cents[b] = int(round(by_bucket_cents[b] * mult))
+
+    song_count = len(latest_per_song)
+    avg_conf = confidence_sum / song_count if song_count else 0.0
+    if avg_conf >= 0.66:
+        conf_label = "high"
+    elif avg_conf >= 0.33:
+        conf_label = "medium"
+    else:
+        conf_label = "low"
+
+    # Top songs by selected method
+    method_to_col = {
+        "income": "revenue_multiple_value_cents",
+        "market_comparable": "streaming_multiple_value_cents",
+        "dcf": "black_box_value_cents",
+        "blended": "final_valuation_cents",
+    }
+    metric_col = method_to_col.get(method, "final_valuation_cents")
+    meta_rows = (
+        db.query(Song.id, Song.title, Song.primary_artist)
+        .filter(Song.id.in_(songs_meta_ids))
+        .all()
+    )
+    meta_by_id = {sid: (title, artist) for sid, title, artist in meta_rows}
+    songs_summary: List[Dict[str, Any]] = []
+    for sid, r in latest_per_song.items():
+        title, primary_artist = meta_by_id.get(sid, (None, None))
+        songs_summary.append({
+            "song_id": sid,
+            "title": title,
+            "primary_artist": primary_artist,
+            "income_base": int(r.revenue_multiple_value_cents or 0) / 100.0,
+            "market_base": int(r.streaming_multiple_value_cents or 0) / 100.0,
+            "dcf_base": int(r.black_box_value_cents or 0) / 100.0,
+            "blended_base": int(r.final_valuation_cents or 0) / 100.0,
+            "annual_revenue": int(r.annual_revenue_cents or 0) / 100.0,
+            "confidence_score": (r.calc_metadata or {}).get("confidence", {}).get("score") or 0.0,
+            "confidence_label": (r.calc_metadata or {}).get("confidence", {}).get("label") or "low",
+            "data_sources": (r.calc_metadata or {}).get("data_sources") or [],
+            "_metric_cents": int(getattr(r, metric_col, 0) or 0),
+        })
+    songs_summary.sort(key=lambda s: s["_metric_cents"], reverse=True)
+    top_songs = [{k: v for k, v in s.items() if k != "_metric_cents"} for s in songs_summary[:10]]
+
+    # Per-creator share (org-wide only)
+    per_creator_share: List[Dict[str, Any]] = []
+    if scope_creator_id is None and songs_meta_ids:
+        credit_rows = (
+            db.query(SongCredit.song_id, SongCredit.creator_id, Creator.display_name)
+            .join(Creator, Creator.id == SongCredit.creator_id)
+            .filter(SongCredit.song_id.in_(songs_meta_ids))
+            .all()
+        )
+        from collections import defaultdict
+        credits_per_song: Dict[int, List[Any]] = defaultdict(list)
+        for sid, cid, cname in credit_rows:
+            credits_per_song[sid].append((cid, cname))
+        creator_totals: Dict[int, Dict[str, Any]] = {}
+        blended_lookup = {s["song_id"]: s["blended_base"] for s in songs_summary}
+        for sid, creators in credits_per_song.items():
+            if not creators:
+                continue
+            per = blended_lookup.get(sid, 0.0) / len(creators)
+            for cid, cname in creators:
+                if cid not in creator_totals:
+                    creator_totals[cid] = {
+                        "creator_id": cid,
+                        "creator_name": cname or f"Creator #{cid}",
+                        "blended_value": 0.0,
+                        "song_count": 0,
+                    }
+                creator_totals[cid]["blended_value"] += per
+                creator_totals[cid]["song_count"] += 1
+        per_creator_share = sorted(
+            creator_totals.values(), key=lambda r: r["blended_value"], reverse=True
+        )[:25]
+        # Total used for share %: sum of blended for the persisted snapshot rows.
+        catalog_blended_total = sum(blended_lookup.values()) if blended_lookup else 0.0
+        for r in per_creator_share:
+            r["blended_value"] = round(r["blended_value"], 2)
+            r["blended_base"] = r["blended_value"]
+            r["share_pct"] = (
+                round(r["blended_value"] / catalog_blended_total * 100.0, 2)
+                if catalog_blended_total > 0
+                else 0.0
+            )
+
+    by_source = {
+        b: {
+            "revenue_cents": int(by_bucket_cents.get(b, 0)),
+            "value_cents": int(by_bucket_value_cents.get(b, 0)),
+            "multiplier": _BUCKET_MULTIPLIERS.get(b),
+        }
+        for b in ("performance", "mechanical", "sync", "streaming", "other")
+    }
+
+    from ..services.valuation_engine import _BLEND_WEIGHTS
+    return {
+        "org_id": org_id,
+        "scope": {"creator_id": scope_creator_id, "song_ids": None},
+        "computed_at": latest_calc.isoformat() if latest_calc else None,
+        "song_count": song_count,
+        "songs_with_statements": songs_with_statements,
+        "songs_with_streaming": songs_with_streaming,
+        "by_methodology": {
+            "income": {"low": round(income_total / 100 * 0.85, 2), "base": round(income_total / 100, 2), "high": round(income_total / 100 * 1.15, 2)},
+            "market_comparable": {"low": round(market_total / 100 * 0.85, 2), "base": round(market_total / 100, 2), "high": round(market_total / 100 * 1.15, 2)},
+            "dcf": {"low": round(dcf_total / 100 * 0.80, 2), "base": round(dcf_total / 100, 2), "high": round(dcf_total / 100 * 1.20, 2)},
+            "blended": {"low": round(blended_total / 100 * 0.85, 2), "base": round(blended_total / 100, 2), "high": round(blended_total / 100 * 1.15, 2)},
+        },
+        "by_source": by_source,
+        "annual_revenue_cents": annual_revenue_total,
+        "artist_total_value_cents": artist_total,
+        "publisher_total_value_cents": publisher_total,
+        "weights": dict(_BLEND_WEIGHTS),
+        "data_quality": {
+            "song_count": song_count,
+            "songs_with_statements": songs_with_statements,
+            "songs_with_streaming": songs_with_streaming,
+            "pct_with_statements": round(songs_with_statements / song_count * 100, 1) if song_count else 0.0,
+            "pct_with_streaming": round(songs_with_streaming / song_count * 100, 1) if song_count else 0.0,
+            "average_confidence": round(avg_conf, 4),
+            "confidence_label": conf_label,
+        },
+        "top_songs": top_songs,
+        "per_creator_share": per_creator_share,
+        "selected_method": method,
+        "fresh": False,
+    }
+
+
+def _empty_full_summary(org_id: int, scope_creator_id: Optional[int]) -> Dict[str, Any]:
+    from ..services.valuation_engine import _BLEND_WEIGHTS, _BUCKET_MULTIPLIERS
+    return {
+        "org_id": org_id,
+        "scope": {"creator_id": scope_creator_id, "song_ids": None},
+        "computed_at": None,
+        "song_count": 0,
+        "songs_with_statements": 0,
+        "songs_with_streaming": 0,
+        "by_methodology": {
+            k: {"low": 0.0, "base": 0.0, "high": 0.0}
+            for k in ("income", "market_comparable", "dcf", "blended")
+        },
+        "by_source": {
+            b: {"revenue_cents": 0, "value_cents": 0, "multiplier": _BUCKET_MULTIPLIERS.get(b)}
+            for b in ("performance", "mechanical", "sync", "streaming", "other")
+        },
+        "annual_revenue_cents": 0,
+        "artist_total_value_cents": 0,
+        "publisher_total_value_cents": 0,
+        "weights": dict(_BLEND_WEIGHTS),
+        "data_quality": {
+            "song_count": 0,
+            "songs_with_statements": 0,
+            "songs_with_streaming": 0,
+            "pct_with_statements": 0.0,
+            "pct_with_streaming": 0.0,
+            "average_confidence": 0.0,
+            "confidence_label": "low",
+        },
+        "top_songs": [],
+        "per_creator_share": [],
+        "selected_method": "blended",
+        "fresh": False,
+    }
+
+
+from ..services.valuation_engine import _BUCKET_MULTIPLIERS  # used by _aggregate_persisted_blended
+
+
+@router.post(
+    "/full/run",
+    summary="Run the blended (Income + Market + DCF) valuation engine",
+    description="Computes the per-song full valuation (Income source-typed + Market-Comparable streams × tier band × 10x + DCF over historical statements) and blends them 40/30/30. Persists one BLENDED ValuationCalculation row per scoped song. Returns aggregated by-methodology / by-source totals + top songs + per-creator share + data-quality summary.\n\n**Body:** `{ scope_creator_id?, scope_song_ids?: int[] }`. **Auth:** Bearer JWT.",
+)
+def run_full_valuation(
+    request: FullValuationRunRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    if request.scope_creator_id is not None:
+        _scope_check_creator(db, request.scope_creator_id, membership.organization_id)
+
+    try:
+        summary = compute_full_catalog_valuation(
+            db,
+            org_id=membership.organization_id,
+            scope_creator_id=request.scope_creator_id,
+            scope_song_ids=request.scope_song_ids,
+            persist=True,
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Full valuation failed: {e}")
+    summary["selected_method"] = "blended"
+    return summary
+
+
+@router.get(
+    "/full/summary",
+    summary="Get the most recent blended valuation breakdown for the org",
+    description="Re-aggregates the latest BLENDED ValuationCalculation row per song. Cheap (no recompute). Use `?method=` to switch the headline numbers between `income`, `market_comparable`, `dcf`, and `blended` (default).",
+)
+def get_full_valuation_summary(
+    scope_creator_id: Optional[int] = None,
+    method: str = "blended",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+    if scope_creator_id is not None:
+        _scope_check_creator(db, scope_creator_id, membership.organization_id)
+
+    valid_methods = ("income", "market_comparable", "dcf", "blended")
+    if method not in valid_methods:
+        raise HTTPException(
+            status_code=400,
+            detail=f"method must be one of {valid_methods}",
+        )
+
+    return _aggregate_persisted_blended(
+        membership.organization_id, db, scope_creator_id, method=method
+    )
+
+
+@router.get(
+    "/full/trend",
+    summary="Get historical blended valuation trend",
+    description="Returns the catalog's blended valuation per calculation_date (monthly buckets), going back ``months`` months. Used by the historical trend line on the Valuation page.",
+)
+def get_full_valuation_trend(
+    scope_creator_id: Optional[int] = None,
+    months: int = 12,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+    if scope_creator_id is not None:
+        _scope_check_creator(db, scope_creator_id, membership.organization_id)
+
+    months = max(1, min(months, 36))
+    cutoff = datetime.utcnow() - timedelta(days=months * 31)
+
+    q = db.query(ValuationCalculation).filter(
+        ValuationCalculation.organization_id == membership.organization_id,
+        ValuationCalculation.valuation_method == "BLENDED",
+        ValuationCalculation.calculation_date >= cutoff,
+    )
+    if scope_creator_id is not None:
+        scoped_song_ids = {
+            sid for (sid,) in db.query(SongCredit.song_id)
+            .filter(SongCredit.creator_id == scope_creator_id)
+            .distinct()
+            .all()
+        }
+        if not scoped_song_ids:
+            return {"trend": [], "scope": {"creator_id": scope_creator_id}, "months": months}
+        q = q.filter(ValuationCalculation.song_id.in_(scoped_song_ids))
+
+    # Trend is a sequence of *snapshots*, not a cumulative sum across runs.
+    # Each call to ``/full/run`` writes one row per song with a shared
+    # ``calculation_date`` timestamp — that exact timestamp identifies the
+    # snapshot. For each day-bucket we therefore:
+    #   1. Group rows by their exact ``calculation_date`` (the run id).
+    #   2. Sum per-leg cents within each snapshot.
+    #   3. Keep only the LATEST snapshot's totals per day, so re-running on
+    #      the same day overwrites instead of double-counting.
+    # Snapshots also carry a scope tag in ``calc_metadata.scope_mode`` /
+    # ``scope_creator_id`` — we discard rows that don't match the
+    # requested scope so a creator-scoped subset run cannot collapse an
+    # org-wide trend bucket to a partial total. Rows from older runs
+    # (pre-scope-tag) are treated as ``org`` for backwards compatibility.
+    # We keep this in Python so SQLite unit tests (which lack date_trunc)
+    # still pass.
+    rows = q.order_by(ValuationCalculation.calculation_date.asc()).all()
+    by_snapshot: Dict[Any, Dict[str, int]] = {}
+    snapshot_day: Dict[Any, str] = {}
+    for r in rows:
+        if not r.calculation_date:
+            continue
+        # Scope-match filter
+        meta = r.calc_metadata or {}
+        row_scope_creator = meta.get("scope_creator_id")
+        row_scope_mode = meta.get("scope_mode") or ("creator" if row_scope_creator else "org")
+        if scope_creator_id is None:
+            # Org-wide trend: only org-wide snapshots count.
+            if row_scope_mode != "org":
+                continue
+        else:
+            # Creator-scoped trend: only this creator's snapshots count.
+            # (The query already restricted song_ids; this prevents an
+            #  org-wide run from being mistaken for a scoped one.)
+            if row_scope_mode != "creator" or row_scope_creator != scope_creator_id:
+                continue
+        snap_key = r.calculation_date  # exact run timestamp
+        if snap_key not in by_snapshot:
+            by_snapshot[snap_key] = {
+                "blended_cents": 0,
+                "income_cents": 0,
+                "market_cents": 0,
+                "dcf_cents": 0,
+            }
+            snapshot_day[snap_key] = r.calculation_date.date().isoformat()
+        by_snapshot[snap_key]["blended_cents"] += int(r.final_valuation_cents or 0)
+        by_snapshot[snap_key]["income_cents"] += int(r.revenue_multiple_value_cents or 0)
+        by_snapshot[snap_key]["market_cents"] += int(r.streaming_multiple_value_cents or 0)
+        by_snapshot[snap_key]["dcf_cents"] += int(r.black_box_value_cents or 0)
+
+    # Pick the latest snapshot per day (snapshots are timestamped, so
+    # within a given day the largest timestamp wins).
+    by_day: Dict[str, Dict[str, int]] = {}
+    for snap_key in sorted(by_snapshot.keys()):
+        day = snapshot_day[snap_key]
+        by_day[day] = by_snapshot[snap_key]  # latest snapshot wins
+
+    trend = [
+        {
+            "date": d,
+            "blended": by_day[d]["blended_cents"] / 100.0,
+            "income": by_day[d]["income_cents"] / 100.0,
+            "market_comparable": by_day[d]["market_cents"] / 100.0,
+            "dcf": by_day[d]["dcf_cents"] / 100.0,
+        }
+        for d in sorted(by_day.keys())
+    ]
+    return {
+        "scope": {"creator_id": scope_creator_id},
+        "months": months,
+        "trend": trend,
+    }
+
+
+@router.get(
+    "/report/pdf",
+    summary="Download a styled blended valuation report as a PDF",
+    description="ReportLab-generated multi-page PDF: cover, executive summary (blended NPV band + confidence), methodology breakdown (Income / Market / DCF), revenue-by-source table, top-10 songs, data-sources & disclaimer. Honors `?scope_creator_id=` for per-client decks.",
+)
+def download_full_valuation_pdf(
+    scope_creator_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+    if scope_creator_id is not None:
+        _scope_check_creator(db, scope_creator_id, membership.organization_id)
+
+    org = db.query(Organization).filter(
+        Organization.id == membership.organization_id
+    ).first()
+    org_name = org.name if org else "Your Organization"
+    creator_name = None
+    if scope_creator_id is not None:
+        c = db.query(Creator).filter(Creator.id == scope_creator_id).first()
+        creator_name = c.display_name if c else f"Creator #{scope_creator_id}"
+
+    summary = _aggregate_persisted_blended(
+        membership.organization_id, db, scope_creator_id, method="blended"
+    )
+
+    pdf_bytes = _build_valuation_pdf(summary, org_name, creator_name)
+    filename = (
+        f"cadence_valuation_{(creator_name or 'catalog').lower().replace(' ', '_')}_"
+        f"{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _build_valuation_pdf(
+    summary: Dict[str, Any],
+    org_name: str,
+    creator_name: Optional[str] = None,
+) -> bytes:
+    """Render a multi-page blended-valuation PDF in the Cadence sage palette.
+
+    Sections (in order):
+      1. Cover page — title, scope, blended NPV band.
+      2. Executive summary — by-methodology table with bands + confidence pill.
+      3. Revenue-by-source — bucket table with multipliers.
+      4. Top-10 songs by blended value.
+      5. Data sources & disclaimer.
+    """
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import (
+        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    )
+
+    sage = colors.HexColor("#5B8A72")
+    sage_light = colors.HexColor("#E5EEDF")
+    dark_text = colors.HexColor("#3D4A44")
+    muted = colors.HexColor("#7A8580")
+    border = colors.HexColor("#E0E5E2")
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=letter,
+        topMargin=0.75 * inch, bottomMargin=0.75 * inch,
+        leftMargin=0.75 * inch, rightMargin=0.75 * inch,
+        title=f"Cadence Valuation — {org_name}",
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "Title", parent=styles["Title"], fontSize=24,
+        textColor=dark_text, leading=28, spaceAfter=10,
+    )
+    subtitle_style = ParagraphStyle(
+        "Subtitle", parent=styles["Normal"], fontSize=12,
+        textColor=muted, leading=15, spaceAfter=18,
+    )
+    h2 = ParagraphStyle(
+        "H2", parent=styles["Heading2"], fontSize=14,
+        textColor=sage, leading=18, spaceBefore=14, spaceAfter=8,
+    )
+    body = ParagraphStyle(
+        "Body", parent=styles["Normal"], fontSize=10,
+        textColor=dark_text, leading=14, spaceAfter=6,
+    )
+    small = ParagraphStyle(
+        "Small", parent=styles["Normal"], fontSize=8,
+        textColor=muted, leading=11, spaceAfter=4,
+    )
+
+    elements = []
+
+    # ---- Cover ------------------------------------------------------------
+    elements.append(Paragraph("Catalog Valuation Report", title_style))
+    scope_str = f"{org_name}"
+    if creator_name:
+        scope_str += f"  ·  Scoped to {creator_name}"
+    elements.append(Paragraph(scope_str, subtitle_style))
+    elements.append(Paragraph(
+        f"Generated {datetime.utcnow().strftime('%B %d, %Y')} by Cadence Catalog Intelligence",
+        small,
+    ))
+    elements.append(Spacer(1, 0.3 * inch))
+
+    bm = summary.get("by_methodology", {})
+    blended = bm.get("blended", {"low": 0, "base": 0, "high": 0})
+    fmt = lambda v: f"${(v or 0):,.0f}"
+    hero_data = [
+        [Paragraph("<b>Blended Catalog Value (NPV)</b>", body)],
+        [Paragraph(f"<font size=22 color='#5B8A72'><b>{fmt(blended.get('base'))}</b></font>", body)],
+        [Paragraph(
+            f"<font color='#7A8580' size=9>Range: {fmt(blended.get('low'))} – {fmt(blended.get('high'))}</font>",
+            body,
+        )],
+    ]
+    hero = Table(hero_data, colWidths=[6.5 * inch])
+    hero.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), sage_light),
+        ("BOX", (0, 0), (-1, -1), 0.5, border),
+        ("LEFTPADDING", (0, 0), (-1, -1), 18),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 18),
+        ("TOPPADDING", (0, 0), (-1, -1), 12),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+    ]))
+    elements.append(hero)
+
+    dq = summary.get("data_quality", {})
+    elements.append(Spacer(1, 0.15 * inch))
+    elements.append(Paragraph(
+        f"<b>Confidence:</b> {dq.get('confidence_label', 'low').upper()}  ·  "
+        f"<b>Songs:</b> {dq.get('song_count', 0)}  ·  "
+        f"<b>With statements:</b> {dq.get('pct_with_statements', 0)}%  ·  "
+        f"<b>With streaming data:</b> {dq.get('pct_with_streaming', 0)}%",
+        body,
+    ))
+
+    # ---- Section 1: Executive Methodology Breakdown -----------------------
+    elements.append(Paragraph("Methodology Breakdown", h2))
+    elements.append(Paragraph(
+        "Each methodology is computed independently from the same underlying data, then "
+        "blended at <b>40% Income / 30% Market-Comparable / 30% DCF</b>. "
+        "Bands reflect low / base / high scenarios.",
+        body,
+    ))
+    method_rows = [["Methodology", "Low", "Base", "High", "Weight"]]
+    weights = summary.get("weights", {"income": 0.4, "market_comparable": 0.3, "dcf": 0.3})
+    for key, label in (
+        ("income", "Income (source-typed)"),
+        ("market_comparable", "Market Comparable"),
+        ("dcf", "Discounted Cash Flow"),
+        ("blended", "Blended"),
+    ):
+        seg = bm.get(key, {})
+        wt = weights.get(key, "—") if key != "blended" else "100%"
+        if isinstance(wt, float):
+            wt = f"{int(wt * 100)}%"
+        method_rows.append([
+            label,
+            fmt(seg.get("low")),
+            fmt(seg.get("base")),
+            fmt(seg.get("high")),
+            str(wt),
+        ])
+    mt = Table(method_rows, colWidths=[2.4*inch, 1.0*inch, 1.0*inch, 1.0*inch, 0.7*inch])
+    mt.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), sage),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9),
+        ("FONTSIZE", (0, 1), (-1, -1), 9),
+        ("TEXTCOLOR", (0, 1), (-1, -1), dark_text),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, sage_light]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("LINEBELOW", (0, -2), (-1, -2), 0.5, border),
+        ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+    ]))
+    elements.append(mt)
+
+    # ---- Section 2: Revenue by Source -------------------------------------
+    elements.append(Paragraph("Revenue by Source", h2))
+    elements.append(Paragraph(
+        "Annualized revenue from matched royalty statements, bucketed by canonical right "
+        "category and valued at industry multiples.",
+        body,
+    ))
+    src_rows = [["Source", "Annual Revenue", "Multiplier", "Contribution to Value"]]
+    bs = summary.get("by_source", {})
+    for key, label in (
+        ("performance", "Performance (PROs)"),
+        ("mechanical", "Mechanical (MLC / HFA)"),
+        ("sync", "Sync"),
+        ("streaming", "Streaming (DSPs)"),
+        ("other", "Other / Unclassified"),
+    ):
+        seg = bs.get(key, {})
+        rev = (seg.get("revenue_cents") or 0) / 100.0
+        val = (seg.get("value_cents") or 0) / 100.0
+        mult = seg.get("multiplier")
+        src_rows.append([
+            label,
+            fmt(rev),
+            f"{mult}×" if mult else "—",
+            fmt(val),
+        ])
+    st = Table(src_rows, colWidths=[2.4*inch, 1.4*inch, 1.0*inch, 1.7*inch])
+    st.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), sage),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, sage_light]),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(st)
+
+    # ---- Section 3: Top Songs ---------------------------------------------
+    top_songs = summary.get("top_songs", [])[:10]
+    if top_songs:
+        elements.append(PageBreak())
+        elements.append(Paragraph("Top Songs by Blended Value", h2))
+        ts_rows = [["#", "Title", "Artist", "Income", "Market", "DCF", "Blended"]]
+        for i, s in enumerate(top_songs, start=1):
+            title = (s.get("title") or "—")[:35]
+            artist = (s.get("primary_artist") or "—")[:25]
+            ts_rows.append([
+                str(i),
+                title,
+                artist,
+                fmt(s.get("income_base")),
+                fmt(s.get("market_base")),
+                fmt(s.get("dcf_base")),
+                fmt(s.get("blended_base")),
+            ])
+        tt = Table(ts_rows, colWidths=[0.3*inch, 2.0*inch, 1.4*inch, 0.7*inch, 0.7*inch, 0.7*inch, 0.7*inch])
+        tt.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), sage),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ALIGN", (3, 0), (-1, -1), "RIGHT"),
+            ("ALIGN", (0, 0), (0, -1), "CENTER"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, sage_light]),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(tt)
+
+    # ---- Section 4: Per-creator share (org-wide only) ---------------------
+    pcs = summary.get("per_creator_share", [])[:10]
+    if pcs:
+        elements.append(Spacer(1, 0.2 * inch))
+        elements.append(Paragraph("Top Contributors by Blended Value", h2))
+        pc_rows = [["#", "Creator", "Songs", "Blended Value"]]
+        for i, c in enumerate(pcs, start=1):
+            pc_rows.append([
+                str(i),
+                (c.get("creator_name") or "—")[:40],
+                str(c.get("song_count", 0)),
+                fmt(c.get("blended_value")),
+            ])
+        pct = Table(pc_rows, colWidths=[0.3*inch, 3.6*inch, 0.8*inch, 1.8*inch])
+        pct.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), sage),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, sage_light]),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(pct)
+
+    # ---- Disclaimer -------------------------------------------------------
+    elements.append(Spacer(1, 0.3 * inch))
+    elements.append(Paragraph("Methodology & Disclaimer", h2))
+    elements.append(Paragraph(
+        "<b>Income</b> annualizes matched royalty-statement revenue by source type and "
+        "applies industry multiples (performance 10×, mechanical 9×, sync 7×, streaming 12.5×). "
+        "<b>Market-Comparable</b> annualizes streams from connected DSPs by song age, applies a "
+        "tier-band per-stream rate, and multiplies by 10× to mirror recent catalog transactions. "
+        "<b>DCF</b> projects historical annual revenue forward using the song's fitted growth/decay "
+        "rate, discounts at 10%, and adds a Gordon-growth terminal value (g=2%).",
+        small,
+    ))
+    elements.append(Paragraph(
+        "These valuations are model-derived estimates and should not be construed as a binding "
+        "bid, appraisal, or financial advice. Final transaction value depends on counterparty "
+        "due-diligence, contract structure, and market conditions.",
+        small,
+    ))
+
+    doc.build(elements)
+    return buf.getvalue()

@@ -24,6 +24,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
+import math
+
 from ..config.statement_formats import get_format_spec
 from ..models.models import (
     ContractAsset,
@@ -32,8 +34,19 @@ from ..models.models import (
     RoyaltyStatementLine,
     Song,
     SongCredit,
+    SongStreamingMetrics,
     ValuationCalculation,
 )
+
+# Decay-fit helper lives in the underwriting engine; re-export here so
+# the Phase 5 market & DCF engines can use it without forcing callers to
+# touch underwriting_engine directly. Falls back to a stub if the import
+# ever breaks (defensive — both modules ship together).
+try:
+    from .underwriting_engine import compute_decay_params  # noqa: F401
+except Exception:  # pragma: no cover
+    def compute_decay_params(_series):  # type: ignore[no-redef]
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -456,6 +469,721 @@ def compute_source_typed_valuation(
         "artist_total_value_cents": artist_total,
         "publisher_total_value_cents": publisher_total,
         "songs": per_song,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — Market-Comparable + DCF + Blended ("Valuation That Sells")
+# ---------------------------------------------------------------------------
+
+# Market-comparable per-stream rate bands (USD per stream, all-rights blended).
+# These are catalog-tier rates derived from the Citrin Cooperman / industry
+# transaction comp ranges:
+#   * indie / long-tail   : $0.020 – $0.050  (mid $0.035)
+#   * mid-tier            : $0.050 – $0.100  (mid $0.075)
+#   * premium / front-line: $0.100 – $0.200  (mid $0.150)
+_TIER_BANDS: Dict[str, Tuple[float, float, float]] = {
+    "indie": (0.020, 0.035, 0.050),
+    "mid": (0.050, 0.075, 0.100),
+    "premium": (0.100, 0.150, 0.200),
+}
+
+# Catalog multiplier applied to annualized streaming revenue when treating
+# the song as a comparable transaction asset. 10× is the consensus median
+# across recent ($25M–$300M) catalog deals.
+_MARKET_CATALOG_MULTIPLE: float = 10.0
+
+# DCF defaults
+_DCF_DISCOUNT_RATE: float = 0.10
+_DCF_PROJECTION_YEARS: int = 10
+_DCF_TERMINAL_GROWTH: float = 0.02
+
+# Blended weights per spec — Income (source-typed) 40%, Market 30%, DCF 30%.
+_BLEND_WEIGHTS: Dict[str, float] = {
+    "income": 0.40,
+    "market_comparable": 0.30,
+    "dcf": 0.30,
+}
+
+
+def _song_age_years(song: Optional[Song]) -> float:
+    """Compute the song's release-age in years. Returns 1.0 when the
+    song has no release date so callers don't divide by zero.
+    """
+    if not song or not song.release_date:
+        return 1.0
+    today = date.today()
+    days = max(1, (today - song.release_date).days)
+    return max(1.0, days / 365.25)
+
+
+def _latest_streaming_metric(
+    db: Session, song_id: int
+) -> Optional[SongStreamingMetrics]:
+    return (
+        db.query(SongStreamingMetrics)
+        .filter(SongStreamingMetrics.song_id == song_id)
+        .order_by(SongStreamingMetrics.period_date.desc().nullslast())
+        .first()
+    )
+
+
+def _pick_tier(annual_streams: float) -> str:
+    """Tier band selection rule:
+      * < 100k annual streams  -> indie
+      * 100k – 1M annual       -> mid
+      * > 1M annual            -> premium
+    """
+    if annual_streams < 100_000:
+        return "indie"
+    if annual_streams < 1_000_000:
+        return "mid"
+    return "premium"
+
+
+def _annual_history_from_statements(
+    db: Session, song_id: int
+) -> List[Tuple[int, float]]:
+    """Return ``[(year, annual_net_dollars), ...]`` ascending.
+
+    Aggregates matched ``RoyaltyStatementLine`` rows by the parent
+    statement's ``period_end`` year and applies the per-statement
+    annualization factor (so a Q1 line worth $100 contributes $400 to
+    that year's annualized run-rate). This mirrors the Income engine
+    so the DCF stays consistent with the source-typed view.
+    """
+    rows = (
+        db.query(
+            RoyaltyStatement.period_end,
+            RoyaltyStatement.id,
+            RoyaltyStatement.source_type,
+            RoyaltyStatementLine.net_amount_statement_currency,
+            RoyaltyStatementLine.net_amount,
+        )
+        .join(
+            RoyaltyStatementLine,
+            RoyaltyStatementLine.statement_id == RoyaltyStatement.id,
+        )
+        .filter(RoyaltyStatementLine.matched_song_id == song_id)
+        .all()
+    )
+
+    if not rows:
+        return []
+
+    by_year: Dict[int, float] = defaultdict(float)
+    factor_cache: Dict[int, float] = {}
+
+    for period_end, stmt_id, source_type, amt_local, amt_native in rows:
+        if not period_end:
+            continue
+        if stmt_id not in factor_cache:
+            class _Shim:
+                pass
+            shim = _Shim()
+            shim.source_type = source_type
+            factor_cache[stmt_id] = _annualization_factor(shim)
+        factor = factor_cache[stmt_id]
+        amt = amt_local
+        if amt is None:
+            amt = amt_native or 0.0
+        try:
+            amt = float(amt)
+        except (TypeError, ValueError):
+            amt = 0.0
+        by_year[period_end.year] += amt * factor
+
+    return sorted(by_year.items())
+
+
+def market_comparable_valuation(
+    db: Session, song_id: int
+) -> Dict[str, Any]:
+    """Per-song market-comparable valuation.
+
+    Steps:
+      1. Pull the latest ``SongStreamingMetrics`` row.
+      2. Annualize ``total_streams`` over the song's release age
+         (cap age at 1.0 yr to avoid divide-by-zero on brand-new
+         releases).
+      3. Pick a tier band (indie / mid / premium) from annual streams.
+      4. Compute annualized revenue = streams × per-stream rate ×
+         (ownership_percentage / 100).
+      5. Apply the 10× catalog multiplier.
+      6. Adjust ±10/15% based on the decay / growth signal:
+          * fitted decay (k > 0.05 with R² ≥ 0.5)  -> -15%
+          * net growth   (CAGR > 0.05)             -> +10%
+          * otherwise neutral
+
+    Returns ``{value_low, value_base, value_high, annual_streams,
+    tier, rate_band, ownership_pct, adjustment_factor, has_data,
+    reason?}`` with all monetary values in **dollars**.
+    """
+    metric = _latest_streaming_metric(db, song_id)
+    if not metric or not (metric.total_streams or 0):
+        return {
+            "value_low": 0.0,
+            "value_base": 0.0,
+            "value_high": 0.0,
+            "annual_streams": 0.0,
+            "tier": None,
+            "rate_band": None,
+            "ownership_pct": 0.0,
+            "adjustment_factor": 0.0,
+            "has_data": False,
+            "reason": "No SongStreamingMetrics rows for this song.",
+        }
+
+    song = db.query(Song).filter(Song.id == song_id).first()
+    age_yrs = _song_age_years(song)
+    total_streams = float(metric.total_streams or 0)
+    annual_streams = total_streams / age_yrs
+
+    tier = _pick_tier(annual_streams)
+    low_rate, mid_rate, high_rate = _TIER_BANDS[tier]
+
+    # Ownership handling: only fall back to 100% when the column is
+    # *missing* (None). An explicit 0 means the org owns nothing of this
+    # song and the market valuation must reflect that — defaulting it to
+    # 100% would materially overvalue assets the org doesn't control.
+    raw_ownership = metric.ownership_percentage
+    if raw_ownership is None:
+        ownership = 1.0
+    else:
+        try:
+            ownership = max(0.0, float(raw_ownership)) / 100.0
+        except (TypeError, ValueError):
+            ownership = 1.0
+
+    annual_revenue_low = annual_streams * low_rate * ownership
+    annual_revenue_mid = annual_streams * mid_rate * ownership
+    annual_revenue_high = annual_streams * high_rate * ownership
+
+    # Decay / growth adjustment from the historical annual series.
+    history = _annual_history_from_statements(db, song_id)
+    adjustment = 0.0
+    series_vals = [v for _, v in history if v > 0]
+    if len(series_vals) >= 3:
+        decay = compute_decay_params(series_vals)  # type: ignore[name-defined]
+        if decay and (decay.get("k") or 0.0) > 0.05 and (decay.get("r2") or 0.0) >= 0.5:
+            adjustment = -0.15
+    if adjustment == 0.0 and len(history) >= 2:
+        first_year_val = history[0][1]
+        last_year_val = history[-1][1]
+        n_years = max(1, history[-1][0] - history[0][0])
+        if first_year_val > 0:
+            cagr = (last_year_val / first_year_val) ** (1.0 / n_years) - 1.0
+            if cagr > 0.05:
+                adjustment = 0.10
+
+    factor = 1.0 + adjustment
+    base_value = annual_revenue_mid * _MARKET_CATALOG_MULTIPLE * factor
+    low_value = annual_revenue_low * _MARKET_CATALOG_MULTIPLE * factor
+    high_value = annual_revenue_high * _MARKET_CATALOG_MULTIPLE * factor
+
+    return {
+        "value_low": round(low_value, 2),
+        "value_base": round(base_value, 2),
+        "value_high": round(high_value, 2),
+        "annual_streams": round(annual_streams, 2),
+        "tier": tier,
+        "rate_band": {"low": low_rate, "mid": mid_rate, "high": high_rate},
+        "ownership_pct": round(ownership * 100.0, 4),
+        "adjustment_factor": adjustment,
+        "annual_revenue_base": round(annual_revenue_mid, 2),
+        "catalog_multiple": _MARKET_CATALOG_MULTIPLE,
+        "has_data": True,
+    }
+
+
+def dcf_valuation(
+    db: Session,
+    song_id: int,
+    discount_rate: float = _DCF_DISCOUNT_RATE,
+    projection_years: int = _DCF_PROJECTION_YEARS,
+    terminal_growth_rate: float = _DCF_TERMINAL_GROWTH,
+) -> Dict[str, Any]:
+    """Per-song discounted-cash-flow valuation.
+
+    Strategy:
+      * Build ``[(year, annual_net)...]`` from matched statement lines
+        (annualized to remove sub-period bias).
+      * Use the most recent year's annual_net as the projection
+        starting point (``year_0_revenue``).
+      * Estimate the per-year growth rate:
+          - If ≥ 3 yrs of history fits an exponential decay
+            (k > 0.05, R² ≥ 0.5) ⇒ growth = ``-k`` (i.e. contraction).
+          - Else if ≥ 2 yrs ⇒ growth = CAGR over the observed window,
+            clamped to ``[-0.20, +0.20]``.
+          - Otherwise default to ``terminal_growth_rate``.
+      * Project forward ``projection_years`` and discount each year at
+        ``discount_rate``.
+      * Add Gordon-growth terminal value
+        ``= terminal_year_revenue * (1 + g_term) / (r - g_term)``
+        discounted by ``(1+r)^projection_years``.
+
+    Returns ``{value_low, value_base, value_high, year_0_revenue,
+    growth_rate, projections: [...], pv_cash_flows, terminal_value,
+    pv_terminal, total_dcf, has_data, reason?}`` with monetary values
+    in **dollars** and three scenario bands (±20%).
+    """
+    history = _annual_history_from_statements(db, song_id)
+    if not history:
+        return {
+            "value_low": 0.0,
+            "value_base": 0.0,
+            "value_high": 0.0,
+            "year_0_revenue": 0.0,
+            "growth_rate": 0.0,
+            "discount_rate": discount_rate,
+            "projection_years": projection_years,
+            "terminal_growth_rate": terminal_growth_rate,
+            "projections": [],
+            "pv_cash_flows": 0.0,
+            "terminal_value": 0.0,
+            "pv_terminal": 0.0,
+            "total_dcf": 0.0,
+            "has_data": False,
+            "reason": "No matched royalty statement lines for DCF history.",
+        }
+
+    year_0 = history[-1][1]
+    series_vals = [v for _, v in history if v > 0]
+    growth = terminal_growth_rate
+
+    if len(series_vals) >= 3:
+        decay = compute_decay_params(series_vals)  # type: ignore[name-defined]
+        if decay and (decay.get("k") or 0.0) > 0.05 and (decay.get("r2") or 0.0) >= 0.5:
+            growth = -float(decay["k"])
+
+    if len(history) >= 2 and growth == terminal_growth_rate:
+        first_v = history[0][1]
+        last_v = history[-1][1]
+        n_years = max(1, history[-1][0] - history[0][0])
+        if first_v > 0:
+            cagr = (last_v / first_v) ** (1.0 / n_years) - 1.0
+            growth = max(-0.20, min(0.20, cagr))
+
+    # Project + discount
+    projections: List[Dict[str, Any]] = []
+    pv_sum = 0.0
+    current = year_0
+    for year in range(1, projection_years + 1):
+        current = current * (1.0 + growth)
+        # Floor at zero — no negative cashflow modeled.
+        current = max(0.0, current)
+        pv = current / ((1.0 + discount_rate) ** year)
+        pv_sum += pv
+        projections.append(
+            {"year": year, "projected_net": round(current, 2), "pv": round(pv, 2)}
+        )
+
+    terminal_year_rev = projections[-1]["projected_net"] if projections else year_0
+    if discount_rate > terminal_growth_rate:
+        terminal_value = (
+            terminal_year_rev
+            * (1.0 + terminal_growth_rate)
+            / (discount_rate - terminal_growth_rate)
+        )
+    else:
+        terminal_value = terminal_year_rev * 6.0  # conservative fallback
+    pv_terminal = terminal_value / ((1.0 + discount_rate) ** projection_years)
+
+    base = pv_sum + pv_terminal
+    low = base * 0.80
+    high = base * 1.20
+
+    return {
+        "value_low": round(low, 2),
+        "value_base": round(base, 2),
+        "value_high": round(high, 2),
+        "year_0_revenue": round(year_0, 2),
+        "growth_rate": round(growth, 4),
+        "discount_rate": discount_rate,
+        "projection_years": projection_years,
+        "terminal_growth_rate": terminal_growth_rate,
+        "projections": projections,
+        "pv_cash_flows": round(pv_sum, 2),
+        "terminal_value": round(terminal_value, 2),
+        "pv_terminal": round(pv_terminal, 2),
+        "total_dcf": round(base, 2),
+        "has_data": True,
+    }
+
+
+def _confidence_score(
+    has_statements: bool, has_streaming: bool, history_years: int
+) -> Dict[str, Any]:
+    """Three-signal confidence: matched-statements, streaming-metrics,
+    and ≥ 2 years of history. Returns ``{score (0..1), label,
+    has_statements, has_streaming, history_years}``.
+    """
+    has_history = history_years >= 2
+    raw = (1 if has_statements else 0) + (1 if has_streaming else 0) + (1 if has_history else 0)
+    score = raw / 3.0
+    if score >= 0.66:
+        label = "high"
+    elif score >= 0.33:
+        label = "medium"
+    else:
+        label = "low"
+    return {
+        "score": round(score, 4),
+        "label": label,
+        "has_statements": bool(has_statements),
+        "has_streaming": bool(has_streaming),
+        "history_years": history_years,
+    }
+
+
+def full_valuation(db: Session, song_id: int) -> Dict[str, Any]:
+    """Full per-song valuation orchestrator.
+
+    Returns ``{song_id, income, market_comparable, dcf, blended,
+    confidence, data_sources}`` where each engine returns its own
+    sub-dict with ``value_low / value_base / value_high`` (dollars)
+    and a ``has_data`` flag. ``blended`` follows the
+    ``income 40 / market 30 / dcf 30`` weighting from the spec.
+    """
+    income_breakdown = _compute_song_breakdown(db, song_id)
+    income_total_dollars = income_breakdown["total_value_cents"] / 100.0
+
+    income_section = {
+        "value_low": round(income_total_dollars * 0.85, 2),
+        "value_base": round(income_total_dollars, 2),
+        "value_high": round(income_total_dollars * 1.15, 2),
+        "annual_revenue": round(income_breakdown["total_annual_revenue_cents"] / 100.0, 2),
+        "by_bucket_cents": income_breakdown["bucket_revenue_cents"],
+        "by_bucket_value_cents": income_breakdown["bucket_value_cents"],
+        "artist_value": round(income_breakdown["artist_value_cents"] / 100.0, 2),
+        "publisher_value": round(income_breakdown["publisher_value_cents"] / 100.0, 2),
+        "line_count": income_breakdown["line_count"],
+        "statement_count": income_breakdown["statement_count"],
+        "has_data": income_breakdown["line_count"] > 0,
+    }
+
+    market_section = market_comparable_valuation(db, song_id)
+    dcf_section = dcf_valuation(db, song_id)
+
+    w = _BLEND_WEIGHTS
+    blended_low = (
+        income_section["value_low"] * w["income"]
+        + market_section["value_low"] * w["market_comparable"]
+        + dcf_section["value_low"] * w["dcf"]
+    )
+    blended_base = (
+        income_section["value_base"] * w["income"]
+        + market_section["value_base"] * w["market_comparable"]
+        + dcf_section["value_base"] * w["dcf"]
+    )
+    blended_high = (
+        income_section["value_high"] * w["income"]
+        + market_section["value_high"] * w["market_comparable"]
+        + dcf_section["value_high"] * w["dcf"]
+    )
+
+    history = _annual_history_from_statements(db, song_id)
+    history_years = len({yr for yr, _ in history})
+    streaming_present = _latest_streaming_metric(db, song_id) is not None
+    confidence = _confidence_score(
+        has_statements=income_section["has_data"],
+        has_streaming=streaming_present,
+        history_years=history_years,
+    )
+
+    data_sources: List[str] = []
+    if income_section["has_data"]:
+        data_sources.append("matched_royalty_statements")
+    if streaming_present:
+        data_sources.append("song_streaming_metrics")
+    if dcf_section.get("has_data"):
+        data_sources.append("statement_history_dcf")
+    if not data_sources:
+        data_sources.append("no_data")
+
+    return {
+        "song_id": song_id,
+        "income": income_section,
+        "market_comparable": market_section,
+        "dcf": dcf_section,
+        "blended": {
+            "value_low": round(blended_low, 2),
+            "value_base": round(blended_base, 2),
+            "value_high": round(blended_high, 2),
+            "weights": dict(w),
+        },
+        "confidence": confidence,
+        "data_sources": data_sources,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Catalog-level full valuation orchestrator (Task #172 Phase 5)
+# ---------------------------------------------------------------------------
+
+def compute_full_catalog_valuation(
+    db: Session,
+    org_id: int,
+    scope_creator_id: Optional[int] = None,
+    scope_song_ids: Optional[Iterable[int]] = None,
+    persist: bool = True,
+) -> Dict[str, Any]:
+    """Run ``full_valuation`` over every in-scope song and aggregate.
+
+    Persists one ``ValuationCalculation`` row per song with
+    ``valuation_method='BLENDED'`` and:
+      * ``streaming_multiple_value_cents`` ← market-comparable base
+      * ``revenue_multiple_value_cents``   ← income base
+      * ``black_box_value_cents``          ← DCF base
+      * ``final_valuation_cents``          ← blended base
+
+    Returns aggregated summary suitable for direct API serialization,
+    keyed by methodology so the frontend can flip between
+    ``income / market_comparable / dcf / blended`` without a second
+    request.
+    """
+    song_ids = _resolve_song_ids(
+        db,
+        org_id=org_id,
+        scope_creator_id=scope_creator_id,
+        scope_song_ids=scope_song_ids,
+    )
+
+    now = datetime.utcnow()
+
+    totals = {
+        "income": {"low": 0.0, "base": 0.0, "high": 0.0},
+        "market_comparable": {"low": 0.0, "base": 0.0, "high": 0.0},
+        "dcf": {"low": 0.0, "base": 0.0, "high": 0.0},
+        "blended": {"low": 0.0, "base": 0.0, "high": 0.0},
+    }
+    by_bucket_cents: Dict[str, int] = defaultdict(int)
+    by_bucket_value_cents: Dict[str, int] = defaultdict(int)
+
+    songs_with_statements = 0
+    songs_with_streaming = 0
+    confidence_scores: List[float] = []
+    songs_summary: List[Dict[str, Any]] = []
+    artist_total_cents = 0
+    publisher_total_cents = 0
+    annual_revenue_total_cents = 0
+
+    # Pre-fetch song metadata so the per-song summary rows can include
+    # title/primary_artist without one query per song.
+    meta_rows = (
+        db.query(Song.id, Song.title, Song.primary_artist)
+        .filter(Song.id.in_(song_ids))
+        .all()
+        if song_ids
+        else []
+    )
+    meta_by_id = {sid: (title, artist) for sid, title, artist in meta_rows}
+
+    for sid in song_ids:
+        fv = full_valuation(db, sid)
+
+        for k in ("income", "market_comparable", "dcf", "blended"):
+            seg = fv[k]
+            totals[k]["low"] += seg["value_low"]
+            totals[k]["base"] += seg["value_base"]
+            totals[k]["high"] += seg["value_high"]
+
+        income_seg = fv["income"]
+        for b, cents in income_seg.get("by_bucket_cents", {}).items():
+            by_bucket_cents[b] += int(cents or 0)
+        for b, cents in income_seg.get("by_bucket_value_cents", {}).items():
+            by_bucket_value_cents[b] += int(cents or 0)
+
+        artist_total_cents += int(round(income_seg.get("artist_value", 0.0) * 100))
+        publisher_total_cents += int(round(income_seg.get("publisher_value", 0.0) * 100))
+        annual_revenue_total_cents += int(round(income_seg.get("annual_revenue", 0.0) * 100))
+
+        if income_seg["has_data"]:
+            songs_with_statements += 1
+        if fv["market_comparable"].get("has_data"):
+            songs_with_streaming += 1
+        confidence_scores.append(fv["confidence"]["score"])
+
+        title, primary_artist = meta_by_id.get(sid, (None, None))
+        songs_summary.append({
+            "song_id": sid,
+            "title": title,
+            "primary_artist": primary_artist,
+            "income_base": income_seg["value_base"],
+            "market_base": fv["market_comparable"]["value_base"],
+            "dcf_base": fv["dcf"]["value_base"],
+            "blended_base": fv["blended"]["value_base"],
+            "annual_revenue": income_seg.get("annual_revenue", 0.0),
+            "confidence_score": fv["confidence"]["score"],
+            "confidence_label": fv["confidence"]["label"],
+            "data_sources": fv["data_sources"],
+        })
+
+        if persist:
+            row = ValuationCalculation(
+                song_id=sid,
+                organization_id=org_id,
+                calculation_date=now,
+                # Per-leg storage so the /summary endpoint can re-aggregate
+                # without recomputing.
+                streaming_multiple_value_cents=int(round(fv["market_comparable"]["value_base"] * 100)),
+                revenue_multiple_value_cents=int(round(income_seg["value_base"] * 100)),
+                market_comp_value_cents=int(round(fv["market_comparable"]["value_base"] * 100)),
+                black_box_value_cents=int(round(fv["dcf"]["value_base"] * 100)),
+                final_valuation_cents=int(round(fv["blended"]["value_base"] * 100)),
+                annual_revenue_cents=int(round(income_seg.get("annual_revenue", 0.0) * 100)),
+                ninety_day_revenue_cents=int(round(income_seg.get("annual_revenue", 0.0) * 25)),
+                thirty_day_revenue_cents=int(round(income_seg.get("annual_revenue", 0.0) * 100 / 12)),
+                growth_rate=float(fv["dcf"].get("growth_rate") or 0.0),
+                risk_score=1.0 - float(fv["confidence"]["score"]),
+                valuation_methodology="BLENDED",
+                valuation_method="BLENDED",
+                # Source-typed columns reused for income breakdown so the
+                # source-typed summary endpoint also surfaces data from
+                # blended runs.
+                revenue_performance_cents=int(income_seg.get("by_bucket_cents", {}).get("performance") or 0),
+                revenue_mechanical_cents=int(income_seg.get("by_bucket_cents", {}).get("mechanical") or 0),
+                revenue_sync_cents=int(income_seg.get("by_bucket_cents", {}).get("sync") or 0),
+                revenue_streaming_cents=int(income_seg.get("by_bucket_cents", {}).get("streaming") or 0),
+                revenue_other_cents=int(income_seg.get("by_bucket_cents", {}).get("other") or 0),
+                multiplier_performance=_BUCKET_MULTIPLIERS["performance"],
+                multiplier_mechanical=_BUCKET_MULTIPLIERS["mechanical"],
+                multiplier_sync=_BUCKET_MULTIPLIERS["sync"],
+                multiplier_streaming=_BUCKET_MULTIPLIERS["streaming"],
+                artist_valuation_cents=int(round(income_seg.get("artist_value", 0.0) * 100)),
+                publisher_valuation_cents=int(round(income_seg.get("publisher_value", 0.0) * 100)),
+                calc_metadata={
+                    "engine": "full_valuation_v1",
+                    "weights": _BLEND_WEIGHTS,
+                    "discount_rate": fv["dcf"].get("discount_rate"),
+                    "projection_years": fv["dcf"].get("projection_years"),
+                    "market_tier": fv["market_comparable"].get("tier"),
+                    "confidence": fv["confidence"],
+                    "data_sources": fv["data_sources"],
+                    # Scope tag — lets /full/trend tell apart org-wide
+                    # snapshots from creator-scoped subset snapshots so
+                    # picking "latest snapshot per day" doesn't swap a
+                    # full-catalog total for a partial scoped total.
+                    "scope_creator_id": scope_creator_id,
+                    "scope_mode": "creator" if scope_creator_id is not None else "org",
+                },
+            )
+            db.add(row)
+
+    # Top songs by blended value (cap at 10 for the API response).
+    songs_summary.sort(key=lambda s: s["blended_base"], reverse=True)
+    top_songs = songs_summary[:10]
+
+    # Per-creator share (only meaningful when scope is org-wide).
+    per_creator_share: List[Dict[str, Any]] = []
+    if scope_creator_id is None and song_ids:
+        from ..models.models import Creator as _Creator
+        credit_rows = (
+            db.query(SongCredit.song_id, SongCredit.creator_id, _Creator.display_name)
+            .join(_Creator, _Creator.id == SongCredit.creator_id)
+            .filter(SongCredit.song_id.in_(song_ids))
+            .all()
+        )
+        # Multi-credit songs split equally across credited creators
+        # (this mirrors how rights are typically displayed; per-credit
+        # share % math lives in the Income engine and isn't repeated here).
+        credits_per_song: Dict[int, List[Tuple[int, Optional[str]]]] = defaultdict(list)
+        for sid, cid, cname in credit_rows:
+            credits_per_song[sid].append((cid, cname))
+
+        creator_totals: Dict[int, Dict[str, Any]] = {}
+        song_blended_lookup = {s["song_id"]: s["blended_base"] for s in songs_summary}
+        for sid, creators in credits_per_song.items():
+            if not creators:
+                continue
+            per = song_blended_lookup.get(sid, 0.0) / len(creators)
+            for cid, cname in creators:
+                if cid not in creator_totals:
+                    creator_totals[cid] = {
+                        "creator_id": cid,
+                        "creator_name": cname or f"Creator #{cid}",
+                        "blended_value": 0.0,
+                        "song_count": 0,
+                    }
+                creator_totals[cid]["blended_value"] += per
+                creator_totals[cid]["song_count"] += 1
+        per_creator_share = sorted(
+            creator_totals.values(), key=lambda r: r["blended_value"], reverse=True
+        )[:25]
+        # Compute share % against the full catalog blended total so the UI can
+        # render a real proportional bar without having to do its own math.
+        catalog_blended_base = totals["blended"]["base"] or 0.0
+        for r in per_creator_share:
+            r["blended_value"] = round(r["blended_value"], 2)
+            # Alias matching the per-song summary key shape so frontend
+            # components can read either field name interchangeably.
+            r["blended_base"] = r["blended_value"]
+            r["share_pct"] = (
+                round(r["blended_value"] / catalog_blended_base * 100.0, 2)
+                if catalog_blended_base > 0
+                else 0.0
+            )
+
+    overall_confidence = (
+        sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
+    )
+    if overall_confidence >= 0.66:
+        conf_label = "high"
+    elif overall_confidence >= 0.33:
+        conf_label = "medium"
+    else:
+        conf_label = "low"
+
+    data_quality = {
+        "song_count": len(song_ids),
+        "songs_with_statements": songs_with_statements,
+        "songs_with_streaming": songs_with_streaming,
+        "pct_with_statements": (
+            round(songs_with_statements / len(song_ids) * 100, 1) if song_ids else 0.0
+        ),
+        "pct_with_streaming": (
+            round(songs_with_streaming / len(song_ids) * 100, 1) if song_ids else 0.0
+        ),
+        "average_confidence": round(overall_confidence, 4),
+        "confidence_label": conf_label,
+    }
+
+    by_source_revenue = {
+        b: {
+            "revenue_cents": int(by_bucket_cents.get(b, 0)),
+            "value_cents": int(by_bucket_value_cents.get(b, 0)),
+            "multiplier": _BUCKET_MULTIPLIERS.get(b),
+        }
+        for b in ("performance", "mechanical", "sync", "streaming", "other")
+    }
+
+    return {
+        "org_id": org_id,
+        "scope": {
+            "creator_id": scope_creator_id,
+            "song_ids": list(scope_song_ids) if scope_song_ids is not None else None,
+        },
+        "computed_at": now.isoformat(),
+        "song_count": len(song_ids),
+        "songs_with_statements": songs_with_statements,
+        "songs_with_streaming": songs_with_streaming,
+        "by_methodology": {
+            k: {
+                "low": round(totals[k]["low"], 2),
+                "base": round(totals[k]["base"], 2),
+                "high": round(totals[k]["high"], 2),
+            }
+            for k in totals
+        },
+        "by_source": by_source_revenue,
+        "annual_revenue_cents": annual_revenue_total_cents,
+        "artist_total_value_cents": artist_total_cents,
+        "publisher_total_value_cents": publisher_total_cents,
+        "weights": dict(_BLEND_WEIGHTS),
+        "data_quality": data_quality,
+        "top_songs": top_songs,
+        "per_creator_share": per_creator_share,
+        "fresh": True,
     }
 
 
