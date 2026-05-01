@@ -976,6 +976,26 @@ def _aggregate_persisted_blended(
     rows = q.order_by(ValuationCalculation.calculation_date.desc()).all()
     latest_per_song: Dict[int, ValuationCalculation] = {}
     for r in rows:
+        # Scope-pollution guard (mirrors the /full/trend endpoint).
+        # BLENDED snapshots are persisted into a single pool keyed by
+        # song, so creator-scoped runs (`/full/run?scope_creator_id=X`)
+        # would otherwise leak into a later org-wide read because their
+        # rows can be the "latest" for a given song. Reject rows whose
+        # `calc_metadata.scope_mode` does not match the requested scope:
+        #   * org-wide read  -> only accept org-scoped (or untagged) rows
+        #   * creator-scoped -> only accept org-scoped rows OR creator
+        #                       rows tagged for *this* creator.
+        meta = r.calc_metadata or {}
+        row_scope_creator = meta.get("scope_creator_id")
+        row_scope_mode = meta.get("scope_mode") or (
+            "creator" if row_scope_creator else "org"
+        )
+        if scope_creator_id is None:
+            if row_scope_mode != "org":
+                continue
+        else:
+            if row_scope_mode == "creator" and row_scope_creator != scope_creator_id:
+                continue
         if r.song_id not in latest_per_song:
             latest_per_song[r.song_id] = r
 
@@ -1801,22 +1821,44 @@ def get_org_catalog_valuation(
     # Default semantics: serve the latest persisted BLENDED snapshot when
     # one exists (low-latency reads). When no snapshot exists OR the caller
     # explicitly passes ?refresh=true, run the full per-method engine over
-    # the catalog and persist a fresh snapshot before aggregating. When
-    # creator_id is supplied, the recompute is scoped to that creator's
-    # songs so the snapshot reflects strictly the requested scope (rather
-    # than recomputing every song in the org on a per-creator request).
-    has_snapshot = db.query(ValuationCalculation.id).filter(
+    # the *entire org catalog* and persist a fresh snapshot before
+    # aggregating. The recompute is intentionally org-wide regardless of
+    # the optional ?creator_id= filter — the snapshot pool is shared and
+    # `_aggregate_persisted_blended()` does the per-creator scoping at
+    # read time. Persisting a creator-scoped snapshot here would pollute
+    # subsequent org-wide aggregations because every BLENDED row lands in
+    # the same `valuation_calculations` pool keyed by song.
+    #
+    # ``has_snapshot`` must be scope-aware: a pool that contains *only*
+    # creator-scoped BLENDED rows (e.g. from prior `/full/run?scope_creator_id`
+    # invocations) would not satisfy an org-wide catalog read because the
+    # aggregator filters those out by scope tag. Walk the row metadata
+    # so we trigger a recompute when the existing pool is unusable for
+    # the requested scope.
+    has_snapshot = False
+    for r in db.query(ValuationCalculation).filter(
         ValuationCalculation.organization_id == org_id,
         ValuationCalculation.valuation_method == "BLENDED",
-    ).first() is not None
+    ).all():
+        meta = r.calc_metadata or {}
+        row_scope_creator = meta.get("scope_creator_id")
+        row_scope_mode = meta.get("scope_mode") or (
+            "creator" if row_scope_creator else "org"
+        )
+        # Org-wide read needs at least one org-tagged (or untagged) row.
+        # Creator-scoped read accepts org-tagged rows (filtered by song
+        # at aggregation time) OR a row tagged for *this* creator.
+        if creator_id is None:
+            if row_scope_mode == "org":
+                has_snapshot = True
+                break
+        else:
+            if row_scope_mode == "org" or row_scope_creator == creator_id:
+                has_snapshot = True
+                break
     if refresh or not has_snapshot:
         try:
-            compute_full_catalog_valuation(
-                db,
-                org_id=org_id,
-                scope_creator_id=creator_id,
-                persist=True,
-            )
+            compute_full_catalog_valuation(db, org_id=org_id, persist=True)
             db.commit()
         except Exception:
             db.rollback()

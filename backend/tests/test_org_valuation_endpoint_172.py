@@ -263,3 +263,59 @@ def test_v1_mirror_route_is_registered():
         "v1 mirror missing from OpenAPI — main._mount_v1_routes regression"
     assert "/api/v1/organizations/{org_id}/valuation/report/pdf" in spec["paths"], \
         "v1 mirror for spec'd PDF endpoint missing from OpenAPI"
+
+
+def test_org_catalog_endpoint_is_not_polluted_by_prior_creator_scoped_run(db, client):
+    """Regression for code-review: a creator-scoped BLENDED run persisted
+    by `/full/run?scope_creator_id=X` (or compute_full_catalog_valuation
+    with scope_creator_id) must NOT make a subsequent org-wide
+    `/organizations/{org_id}/valuation/catalog` read return partial /
+    cross-scope data. The handler must detect that the persisted pool
+    holds only creator-tagged rows and trigger a fresh org-wide
+    recompute, AND the aggregator must filter creator-tagged rows out
+    of org-wide reads.
+    """
+    from backend.services import valuation_engine as ve
+
+    org, _, user, creator, song = _seed(db)
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        # Persist ONLY a creator-scoped BLENDED snapshot first (no
+        # org-wide rows yet).
+        ve.compute_full_catalog_valuation(
+            db, org_id=org.id, scope_creator_id=creator.id, persist=True,
+        )
+        db.commit()
+        n_creator_only = db.query(ValuationCalculation).filter(
+            ValuationCalculation.organization_id == org.id,
+            ValuationCalculation.valuation_method == "BLENDED",
+        ).count()
+        assert n_creator_only >= 1, "creator-scoped run must persist"
+
+        # Org-wide read WITHOUT ?refresh=true must still recompute
+        # because the pool only has creator-tagged rows.
+        r = client.get(f"{_BASE}/{org.id}/valuation/catalog")
+        assert r.status_code == 200, f"got {r.status_code}: {r.text[:200]}"
+        db.expire_all()
+        n_after = db.query(ValuationCalculation).filter(
+            ValuationCalculation.organization_id == org.id,
+            ValuationCalculation.valuation_method == "BLENDED",
+        ).count()
+        assert n_after > n_creator_only, (
+            "scope-aware has_snapshot must trigger fresh recompute when "
+            "the existing pool only contains creator-tagged rows"
+        )
+
+        # The org-wide aggregation must reflect the org-wide rows, not
+        # leak the creator-scoped snapshot. Validate by checking that
+        # at least one org-tagged row now exists.
+        org_tagged = [
+            r for r in db.query(ValuationCalculation).filter(
+                ValuationCalculation.organization_id == org.id,
+                ValuationCalculation.valuation_method == "BLENDED",
+            ).all()
+            if (r.calc_metadata or {}).get("scope_mode") == "org"
+        ]
+        assert len(org_tagged) >= 1, "org-wide recompute must persist org-tagged rows"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
