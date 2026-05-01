@@ -9,7 +9,8 @@ import logging
 from datetime import datetime, date
 from typing import Optional
 from ..models import (
-    get_db, Song, Creator, SongCredit, OrganizationMember, User, Organization
+    get_db, Song, Creator, SongCredit, OrganizationMember, User, Organization,
+    RightsSplit, ContractAsset, Contract,
 )
 from ..utils.auth import get_current_user
 from .client_sharing import has_shared_access
@@ -199,10 +200,17 @@ def get_schedule_a_data(
         OrganizationMember.organization_id == creator.organization_id
     ).first()
     
+    # Task #171 — Phase 4: a client-portal caller (a Cadence user with shared
+    # access to one creator but no org membership) must NEVER see another
+    # creator's RightsSplit rows. We track that boundary here and use it below
+    # to scope writer_splits per song to just this creator's rows. Org
+    # members see the full split set so they can verify totals add to 100%.
+    is_client_portal_caller = False
     if not membership:
         if not has_shared_access(db, current_user.id, creator_id, required_module="contracts"):
             raise HTTPException(status_code=403, detail="Not authorized")
-    
+        is_client_portal_caller = True
+
     org = db.query(Organization).filter(Organization.id == creator.organization_id).first()
     
     # Get all songs for this creator
@@ -226,6 +234,37 @@ def get_schedule_a_data(
                     "share": c.share_percentage
                 })
         
+        # Task #171 — Phase 4: gather RightsSplit rows attached to this song
+        # via any of its ContractAssets. Client-portal callers see only their
+        # own creator's splits; org members see every holder so they can audit
+        # 100% totals.
+        writer_splits = []
+        asset_ids = [
+            ca.id for ca in db.query(ContractAsset).filter(
+                ContractAsset.asset_type == "SONG",
+                ContractAsset.asset_id == song.id,
+            ).all()
+        ]
+        if asset_ids:
+            split_q = db.query(RightsSplit).filter(
+                RightsSplit.contract_asset_id.in_(asset_ids)
+            )
+            if is_client_portal_caller:
+                split_q = split_q.filter(RightsSplit.rights_holder_id == creator_id)
+            for s in split_q.all():
+                holder_name = s.rights_holder_name
+                if s.rights_holder_id and not holder_name:
+                    h = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
+                    holder_name = h.display_name if h else None
+                writer_splits.append({
+                    "id": s.id,
+                    "rights_holder_id": s.rights_holder_id,
+                    "rights_holder_name": holder_name or "Unknown",
+                    "rights_type": s.rights_type,
+                    "share_percentage": s.share_percentage,
+                    "role": s.role,
+                })
+
         song_data = {
             "id": song.id,
             "title": song.title,
@@ -247,7 +286,8 @@ def get_schedule_a_data(
             "is_paid": song.is_paid,
             "status": get_placement_status(song),
             "notes": song.notes or "",
-            "credits": credit_info
+            "credits": credit_info,
+            "writer_splits": writer_splits,
         }
         
         if song.is_released or song.release_date:

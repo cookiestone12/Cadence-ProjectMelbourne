@@ -4,6 +4,22 @@ from datetime import datetime
 from .database import Base
 
 class Work(Base):
+    """A **Composition** in Cadence.
+
+    Task #171 — Phase 4: a ``Work`` row models the underlying *songwriting
+    composition* — the lyrics + melody — identified by ISWC. This is the
+    publishing-side asset and is distinct from the master recording (the
+    audio file ready for distribution), which is modelled by
+    ``backend/models/catalog.Song``. One Work can be linked to many
+    recordings via ``WorkTrack`` (e.g. a song with multiple cover versions
+    is one Work with many Songs).
+
+    The Cadence UI labels these "Compositions" on the Catalog page and
+    "Unreleased Works" on the dedicated Works page; see
+    ``frontend/src/pages/NewCatalogPage.jsx`` and
+    ``frontend/src/pages/WorksPage.jsx``.
+    """
+
     __tablename__ = "works"
     __table_args__ = (
         Index('ix_works_organization_id', 'organization_id'),

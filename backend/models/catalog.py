@@ -28,6 +28,23 @@ class ChecklistCategory(str, enum.Enum):
 
 
 class Song(Base):
+    """A **Recording** in Cadence.
+
+    Task #171 — Phase 4: a ``Song`` row models a *recording* — the mastered,
+    distributable audio asset (an ISRC-bearing track). A song's underlying
+    songwriting work — the lyrics + melody, identified by ISWC — is modelled
+    by ``backend/models/works.Work``. The two are linked through
+    ``WorkTrack``. The Cadence UI labels these "Recordings" (released or
+    soon-to-be-released songs) and "Compositions" (the works behind them);
+    see ``frontend/src/pages/NewCatalogPage.jsx`` and
+    ``frontend/src/pages/WorksPage.jsx``.
+
+    The lazy auto-release lifecycle (``release_date <= today`` ⇒
+    ``is_released = True``) is implemented in
+    ``backend/services/song_lifecycle.auto_release_songs`` and runs at the
+    top of every catalog/song listing endpoint.
+    """
+
     __tablename__ = "songs"
     __table_args__ = (
         Index('ix_songs_organization_id', 'organization_id'),

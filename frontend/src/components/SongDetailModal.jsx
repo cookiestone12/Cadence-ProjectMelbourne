@@ -34,6 +34,8 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   const splitSearchRef = useRef(null)
   const fileInputRef = useRef(null)
   const [songSplits, setSongSplits] = useState([])
+  const [splitHistory, setSplitHistory] = useState([])
+  const [splitHistoryLoading, setSplitHistoryLoading] = useState(false)
   const [showSplitForm, setShowSplitForm] = useState(false)
   const [splitForm, setSplitForm] = useState({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '', edit_notes: '' })
   const [splitSaving, setSplitSaving] = useState(false)
@@ -83,6 +85,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     loadLinkedContracts()
     loadRightsData()
     loadSongSplits()
+    loadSplitHistory()
     loadSplitCreators()
     loadDirectoryContacts()
     loadHistory()
@@ -235,6 +238,33 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     }
   }
 
+  // Task #171 — Phase 4: pull every RightsSplit AuditLog row for this org and
+  // filter client-side by song_id. The audit-log endpoint accepts
+  // `entity_type` directly but does not accept a JSON-detail filter, so we
+  // do the song scope here. Returns SPLIT_CREATED/SPLIT_MODIFIED/SPLIT_DELETED
+  // entries written by the helper in `backend/routes/contracts_mgmt.py`.
+  async function loadSplitHistory() {
+    if (!song?.id || !song?.organization_id) return
+    setSplitHistoryLoading(true)
+    try {
+      const response = await axios.get(
+        `/api/audit-log/org/${song.organization_id}`,
+        { params: { entity_type: 'RightsSplit', limit: 200 } }
+      )
+      const all = response.data?.logs || []
+      const forThisSong = all.filter(entry => {
+        const sid = entry?.details?.song_id
+        return sid === song.id || sid === String(song.id)
+      })
+      setSplitHistory(forThisSong)
+    } catch (error) {
+      console.error('Failed to load split history:', error)
+      setSplitHistory([])
+    } finally {
+      setSplitHistoryLoading(false)
+    }
+  }
+
   async function loadSplitCreators() {
     try {
       const orgId = song?.organization_id
@@ -275,7 +305,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
       setSplitForm({ rights_holder_id: '', rights_holder_name: '', rights_type: 'PUBLISHING', share_percentage: '', role: '', contact_id: '', ipi: '', pro: '', edit_notes: '' })
       setSplitSearchQuery('')
       setShowSplitForm(false)
-      loadSongSplits()
+      loadSongSplits(); loadSplitHistory()
       loadRightsData()
       loadDirectoryContacts()
       await loadSongDetails()
@@ -317,7 +347,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     const reason = prompt('Reason for removal (optional):')
     try {
       await axios.delete(`/api/rights/song-splits/${splitId}`, { params: reason ? { notes: reason } : {} })
-      loadSongSplits()
+      loadSongSplits(); loadSplitHistory()
       loadRightsData()
       await loadSongDetails()
       if (onSongUpdated) onSongUpdated()
@@ -1166,7 +1196,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                       await axios.patch(`/api/songs/${song.id}/credits/${credit.id}`, payload)
                                       setEditingCreditId(null)
                                       await loadSongDetails()
-                                      loadSongSplits()
+                                      loadSongSplits(); loadSplitHistory()
                                       loadRightsData()
                                       if (onSongUpdated) onSongUpdated()
                                     } catch (err) {
@@ -1419,7 +1449,7 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                   setAddClientNotes('')
                                   setShowAddClient(false)
                                   await loadSongDetails()
-                                  loadSongSplits()
+                                  loadSongSplits(); loadSplitHistory()
                                   loadRightsData()
                                   if (onSongUpdated) onSongUpdated()
                                 } catch (err) {
@@ -2268,6 +2298,92 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                   </div>
                 ) : null}
               </div>
+
+              {/* Task #171 — Phase 4: Split History timeline. Renders the
+                  date-stamped audit trail of every SPLIT_CREATED /
+                  SPLIT_MODIFIED / SPLIT_DELETED entry written by the backend
+                  helper in `backend/routes/contracts_mgmt.py::_audit_split`.
+                  Most recent first. Empty-state hidden if no splits + no
+                  history (a brand-new song shouldn't see a noisy header). */}
+              {(splitHistory.length > 0 || splitHistoryLoading) && (
+                <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-[17px] font-semibold text-[#3D4A44]">Split History</h3>
+                      <p className="text-[12px] text-[#7A8580] mt-0.5">Date-stamped audit trail of every change to this song's splits.</p>
+                    </div>
+                    {splitHistoryLoading && (
+                      <span className="text-[12px] text-[#7A8580]">Loading…</span>
+                    )}
+                  </div>
+                  {splitHistory.length === 0 ? (
+                    <p className="text-[13px] text-[#7A8580] text-center py-4">No split changes recorded yet.</p>
+                  ) : (
+                    <div className="relative pl-5">
+                      <div className="absolute left-1.5 top-1 bottom-1 w-px bg-[#E2E8E1]"></div>
+                      <ol className="space-y-3">
+                        {splitHistory.map((entry) => {
+                          const action = entry.action || ''
+                          const isCreate = action === 'SPLIT_CREATED'
+                          const isDelete = action === 'SPLIT_DELETED'
+                          const dotColor = isCreate
+                            ? 'bg-[#5B8A72]'
+                            : isDelete
+                            ? 'bg-[#C47068]'
+                            : 'bg-[#A48B5C]'
+                          const verb = isCreate
+                            ? 'Created'
+                            : isDelete
+                            ? 'Removed'
+                            : 'Modified'
+                          const details = entry.details || {}
+                          const after = details.after || {}
+                          const before = details.before || {}
+                          const baseRow = isDelete ? before : after
+                          const holder = baseRow.rights_holder_name || baseRow.holder_name || entry.entity_name || 'Unknown holder'
+                          const rightsType = baseRow.rights_type || ''
+                          const sharePct = baseRow.share_percentage
+                          const dateStr = entry.created_at
+                            ? new Date(entry.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+                            : '—'
+                          const diff = details.diff || {}
+                          const diffKeys = Object.keys(diff || {})
+                          return (
+                            <li key={entry.id} className="relative">
+                              <span className={`absolute -left-[18px] top-1.5 w-2.5 h-2.5 rounded-full ${dotColor} ring-2 ring-white`}></span>
+                              <div className="text-[13px] text-[#3D4A44]">
+                                <span className="font-semibold">{verb}</span>
+                                {' '}
+                                <span className="text-[#5B8A72] font-medium">{rightsType ? `${rightsType.toLowerCase()} split` : 'split'}</span>
+                                {' for '}
+                                <span className="font-medium">{holder}</span>
+                                {sharePct !== undefined && sharePct !== null && (
+                                  <span className="text-[#7A8580]"> · {sharePct}%</span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-[#7A8580] mt-0.5">
+                                {dateStr} · {entry.user_name || 'System'}
+                              </div>
+                              {!isCreate && !isDelete && diffKeys.length > 0 && (
+                                <ul className="mt-1 space-y-0.5">
+                                  {diffKeys.slice(0, 4).map(k => (
+                                    <li key={k} className="text-[11px] text-[#7A8580]">
+                                      <span className="font-medium text-[#3D4A44]">{k}:</span>{' '}
+                                      <span className="line-through opacity-70">{String(diff[k]?.from ?? '—')}</span>
+                                      {' → '}
+                                      <span>{String(diff[k]?.to ?? '—')}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </li>
+                          )
+                        })}
+                      </ol>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {rightsData.length > 0 && (
                 <div>

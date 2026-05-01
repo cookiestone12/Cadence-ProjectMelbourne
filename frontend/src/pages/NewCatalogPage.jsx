@@ -829,8 +829,14 @@ export default function NewCatalogPage() {
         </div>
       </div>
       
+      {/* Task #171 — Phase 4: tab labels rebranded "All / Recordings /
+          Compositions". The activeTab values stay 'all' / 'released' /
+          'unreleased' so the underlying filter logic and downstream
+          consumers (entryTypeFilter, releasedCount, unreleasedCount,
+          analytics) continue to work unchanged. The UI text is the only
+          thing that changes; the tooltip below explains the framing. */}
       <div className="mb-6 border-b border-[rgba(59,77,67,0.08)] overflow-x-auto">
-        <div className="flex space-x-4 sm:space-x-8 min-w-max">
+        <div className="flex items-center space-x-4 sm:space-x-8 min-w-max">
           <button
             onClick={() => { setActiveTab('all'); setEntryTypeFilter('') }}
             className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
@@ -848,8 +854,9 @@ export default function NewCatalogPage() {
                 ? 'border-[#5B8A72] text-[#5B8A72]'
                 : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
+            title="Mastered tracks ready for release."
           >
-            Released ({releasedCount})
+            Recordings ({releasedCount})
           </button>
           <button
             onClick={() => setActiveTab('unreleased')}
@@ -858,9 +865,20 @@ export default function NewCatalogPage() {
                 ? 'border-[#5B8A72] text-[#5B8A72]'
                 : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
+            title="The underlying songwriting works behind a recording."
           >
-            Unreleased ({unreleasedCount})
+            Compositions ({unreleasedCount})
           </button>
+          <span
+            className="hidden sm:inline-flex items-center text-[12px] text-[#7A8580] cursor-help select-none pb-3"
+            title="A Recording is a mastered track ready for release. A Composition is the underlying songwriting work."
+          >
+            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 8v.01M11 12h1v4h1" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            What's the difference?
+          </span>
         </div>
       </div>
 

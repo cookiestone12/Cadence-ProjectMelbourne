@@ -208,6 +208,30 @@ def _deferred_startup_tasks():
     except Exception as e:
         log.warning(f"Staged Schedule A cleanup failed: {e}")
 
+    # Task #171 — Phase 4: surface any RightsSplit rows that lack a
+    # rights_holder_id. These rows can't be creator-scoped (e.g. for the
+    # client portal) so we warn at boot rather than silently dropping them
+    # from per-creator queries. We do NOT auto-backfill — the right writer
+    # is data-entry context an admin must supply.
+    try:
+        from .models import RightsSplit
+        from .models.database import SessionLocal
+        s = SessionLocal()
+        try:
+            null_count = s.query(RightsSplit).filter(
+                RightsSplit.rights_holder_id.is_(None)
+            ).count()
+            if null_count:
+                log.warning(
+                    "RightsSplit audit: %s row(s) have NULL rights_holder_id "
+                    "and will not appear in creator-scoped Schedule A views.",
+                    null_count,
+                )
+        finally:
+            s.close()
+    except Exception as e:
+        log.warning(f"RightsSplit creator-id audit failed: {e}")
+
     log.info("Deferred startup tasks completed")
 
 

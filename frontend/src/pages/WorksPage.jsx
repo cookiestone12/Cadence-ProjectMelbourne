@@ -427,7 +427,7 @@ export default function WorksPage() {
     <div className="p-4 sm:p-6 lg:p-8 max-w-full">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Unreleased</h1>
+          <h1 className="text-2xl sm:text-4xl font-bold text-[#3D4A44] mb-2">Unreleased Works</h1>
           <p className="text-[#7A8580]">{totalUnreleasedCount} total unreleased</p>
         </div>
         <div className="flex items-center space-x-3">

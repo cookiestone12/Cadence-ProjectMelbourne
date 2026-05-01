@@ -9,6 +9,7 @@ from ..models import get_db, Song, Songwriter, Analytics, User, Catalog, SongCre
 from ..utils.auth import get_current_user
 from ..services import chartmetric_service, spotify_service, luminate_service
 from ..services import valuation_engine, scoring_engine
+from ..services.song_lifecycle import auto_release_songs
 from ..config.streaming_rates import (
     TRACKED_PLATFORMS,
     MARKET_MULTIPLIER,
@@ -133,9 +134,18 @@ class CatalogSummaryResponse(BaseModel):
 
 @router.get("/summary", response_model=List[CatalogSummaryResponse], summary="Get summary for all catalogs", description="Returns one summary row per Catalog the user can see (song count, last upload, owner). Used to render the catalog list page.\n\n**Query:** `org_id` (defaults to the caller's current org).\n**Auth:** Bearer JWT.\n**Response:** `List[CatalogSummaryResponse]` — `[{id, name, song_count, owner, last_upload_at, status}]`.")
 def get_catalog_summary(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get summary for all catalogs"""
+    # Task #171 — Phase 4: lazy auto-release before computing rollups so the
+    # released/unreleased split shown on the catalog list reflects today's
+    # state. Auth dependency is required because this is a GET that now
+    # writes (commits) — without `current_user`, an unauthenticated caller
+    # could trigger persistent state changes. The flip itself is still
+    # global because this endpoint enumerates every Catalog regardless of
+    # org membership; restricting that semantic is out of scope for #171.
+    auto_release_songs(db)
     catalogs = db.query(Catalog).all()
     result = []
     
@@ -361,8 +371,14 @@ def get_catalog_summary(
     description="Returns the org's songs with optional filtering by catalog, status, or text. Lower-level than `/api/songs`.\n\n**Query:** `org_id`, `catalog_id`, `status`, `q`, `limit`, `offset`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** `List[SongResponse]`.",
 )
 def get_songs(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    # Task #171 — Phase 4: lazy auto-release. This legacy endpoint walks every
+    # song so we run the flip with no org filter; it's a no-op once the
+    # steady-state has been reached. `current_user` is required because
+    # this is a GET that now writes (commits).
+    auto_release_songs(db)
     songs = db.query(Song).all()
     result = []
     
@@ -436,12 +452,20 @@ def get_songs(
 )
 def get_song(
     song_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     song = db.query(Song).filter(Song.id == song_id).first()
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
-    
+
+    # Task #171 — Phase 4: lazy auto-release for the legacy single-song path.
+    # `current_user` is required because this is a GET that now writes
+    # (commits) — without it, an unauthenticated caller could trigger
+    # persistent state changes.
+    if auto_release_songs(db, organization_id=song.organization_id) > 0:
+        db.refresh(song)
+
     analytics_data = None
     spotify_streams = 0
     premium_streams = 0

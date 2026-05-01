@@ -41,6 +41,23 @@ def _split_audit_label(holder_name: str, rights_type: str, share_percentage) -> 
     return f"{name} · {rights_type} {pct}%"
 
 
+# Task #171 — Phase 4: every split mutation produces a date-stamped AuditLog
+# row. The action vocabulary is intentionally split-specific (rather than the
+# generic CREATE/UPDATE/DELETE) so a UI consumer filtering on
+# `action.startswith("SPLIT_")` can build a "Split History" timeline without
+# having to also key on entity_type. The mapping below is the single source of
+# truth used by every code path that touches RightsSplit.
+_SPLIT_ACTION_MAP = {
+    "CREATE": "SPLIT_CREATED",
+    "UPDATE": "SPLIT_MODIFIED",
+    "DELETE": "SPLIT_DELETED",
+    # Pass-through for callers that already use the canonical names.
+    "SPLIT_CREATED": "SPLIT_CREATED",
+    "SPLIT_MODIFIED": "SPLIT_MODIFIED",
+    "SPLIT_DELETED": "SPLIT_DELETED",
+}
+
+
 def _audit_split(
     db: Session,
     organization_id: int,
@@ -57,6 +74,12 @@ def _audit_split(
     Normalizes every audit row to the shape ``{before, after, diff, ...context}``
     so downstream viewers / exports can render split history with one schema
     regardless of which mutation path produced the entry.
+
+    The ``action`` argument may be passed as either a generic verb
+    (``CREATE``/``UPDATE``/``DELETE``) or its split-scoped equivalent
+    (``SPLIT_CREATED``/``SPLIT_MODIFIED``/``SPLIT_DELETED``). The wrapper
+    canonicalises to the split-scoped form before persisting so the audit
+    timeline is always queryable by the same vocabulary.
     """
     raw = dict(details or {})
     before = raw.pop("before", None)
@@ -68,11 +91,13 @@ def _audit_split(
     standardized = {"before": before, "after": after, "diff": diff or {}}
     standardized.update(raw)
 
+    canonical_action = _SPLIT_ACTION_MAP.get(action, action)
+
     log_action(
         db,
         organization_id=organization_id,
         user_id=user_id,
-        action=action,
+        action=canonical_action,
         entity_type="RightsSplit",
         entity_id=split_id,
         entity_name=_split_audit_label(holder_name, rights_type, share_percentage),
@@ -591,6 +616,14 @@ def get_contracts_for_song(
 )
 def get_song_splits(
     song_id: int,
+    creator_id: Optional[int] = Query(
+        None,
+        description=(
+            "Task #171 — Phase 4: when supplied, the response is filtered "
+            "to splits whose rights_holder_id matches this creator. Used by "
+            "client-portal callers so a creator only sees their own shares."
+        ),
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -598,8 +631,36 @@ def get_song_splits(
     if not song:
         raise HTTPException(status_code=404, detail="Song not found")
     from ..models import SongCredit
-    song_credit = db.query(SongCredit).filter(SongCredit.song_id == song_id).first()
-    verify_org_access(current_user, song.organization_id, db, creator_id=song_credit.creator_id if song_credit else None)
+
+    # Task #171 — Phase 4: resolve org membership / shared access in one
+    # pass so the auth check matches the eventual creator scope:
+    #
+    # 1. Org members & super-admins pass through with whatever creator_id
+    #    they sent (None = see all).
+    # 2. Shared (client-portal) callers must have shared access on at
+    #    least one of the song's credited creators; we then force
+    #    creator_id to that creator so the optional query param can't be
+    #    used to escalate visibility.
+    #
+    # The previous version called verify_org_access with only the first
+    # SongCredit, which would falsely 403 a shared caller whose access is
+    # on a different credit and would also trust a spoofed creator_id.
+    is_member = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == song.organization_id,
+    ).first()
+    if not is_member and not current_user.is_super_admin:
+        from .client_sharing import has_shared_access
+        shared_creator_id = None
+        for credit in db.query(SongCredit).filter(SongCredit.song_id == song_id).all():
+            if credit.creator_id and has_shared_access(
+                db, current_user.id, credit.creator_id, required_module="contracts"
+            ):
+                shared_creator_id = credit.creator_id
+                break
+        if shared_creator_id is None:
+            raise HTTPException(status_code=403, detail="Access denied")
+        creator_id = shared_creator_id
 
     asset_links = db.query(ContractAsset).filter(
         ContractAsset.asset_type == "SONG",
@@ -608,7 +669,10 @@ def get_song_splits(
 
     splits = []
     for ca in asset_links:
-        ca_splits = db.query(RightsSplit).filter(RightsSplit.contract_asset_id == ca.id).all()
+        ca_query = db.query(RightsSplit).filter(RightsSplit.contract_asset_id == ca.id)
+        if creator_id is not None:
+            ca_query = ca_query.filter(RightsSplit.rights_holder_id == creator_id)
+        ca_splits = ca_query.all()
         contract = db.query(Contract).filter(Contract.id == ca.contract_id).first()
         for s in ca_splits:
             if s.rights_holder_id:
@@ -642,9 +706,18 @@ def get_song_splits(
             ContractAsset.asset_id == song_id,
         ).first()
         if standalone_ca:
-            standalone_splits = db.query(RightsSplit).filter(
+            # Task #171 — Phase 4: apply the same creator scope to the
+            # standalone split sheet path so client-portal callers can't
+            # see another creator's rows by virtue of the split living in
+            # a SPLIT_SHEET contract instead of a deal contract.
+            standalone_q = db.query(RightsSplit).filter(
                 RightsSplit.contract_asset_id == standalone_ca.id
-            ).all()
+            )
+            if creator_id is not None:
+                standalone_q = standalone_q.filter(
+                    RightsSplit.rights_holder_id == creator_id
+                )
+            standalone_splits = standalone_q.all()
             for s in standalone_splits:
                 if any(existing["id"] == s.id for existing in splits):
                     continue

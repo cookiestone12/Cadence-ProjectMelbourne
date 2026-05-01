@@ -12,6 +12,7 @@ from ..models import (
     Placement, ContractAsset, AudioAsset, RoyaltyTransaction, RightsSplit,
 )
 from ..utils.auth import get_current_user
+from ..services.song_lifecycle import auto_release_songs
 from .client_sharing import has_shared_access
 
 
@@ -368,7 +369,13 @@ def get_organization_songs(
             pass
         else:
             raise HTTPException(status_code=403, detail="Not authorized to access this organization")
-    
+
+    # Task #171 — Phase 4: lazy auto-release. Any song whose release_date has
+    # already passed but is still flagged unreleased gets flipped before we
+    # build the response. The query is org-scoped, hits the
+    # ix_songs_organization_id index, and is a no-op on the steady-state path.
+    auto_release_songs(db, organization_id=org_id)
+
     query = db.query(Song).filter(Song.organization_id == org_id)
     
     if creator_id:
@@ -763,7 +770,13 @@ def get_song(
     
     if not membership and not current_user.is_super_admin and not getattr(current_user, "is_cadence_staff", False):
         raise HTTPException(status_code=403, detail="Not authorized to access this song")
-    
+
+    # Task #171 — Phase 4: lazy auto-release for the song-detail path. Refreshes
+    # the in-memory ORM instance after the bulk update so the response payload
+    # reflects the new is_released / release_status values.
+    if auto_release_songs(db, organization_id=song.organization_id) > 0:
+        db.refresh(song)
+
     credits = db.query(SongCredit, Creator).outerjoin(
         Creator, SongCredit.creator_id == Creator.id
     ).filter(SongCredit.song_id == song.id).order_by(SongCredit.id).all()
