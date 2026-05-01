@@ -1737,6 +1737,16 @@ def get_org_catalog_valuation(
     if creator_id is not None:
         _scope_check_creator(db, creator_id, org_id)
 
+    # Spec'd Step 4 semantics: if no persisted BLENDED snapshot yet exists
+    # for this org, compute + persist a fresh full-catalog run before
+    # aggregating, so a single GET serves a usable summary out of the box.
+    has_snapshot = db.query(ValuationCalculation.id).filter(
+        ValuationCalculation.organization_id == org_id,
+        ValuationCalculation.valuation_method == "BLENDED",
+    ).first() is not None
+    if not has_snapshot:
+        compute_full_catalog_valuation(db, org_id=org_id, persist=True)
+
     summary = _aggregate_persisted_blended(
         org_id=org_id,
         db=db,
