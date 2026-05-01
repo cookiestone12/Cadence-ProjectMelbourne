@@ -1745,7 +1745,12 @@ def get_org_catalog_valuation(
         ValuationCalculation.valuation_method == "BLENDED",
     ).first() is not None
     if not has_snapshot:
-        compute_full_catalog_valuation(db, org_id=org_id, persist=True)
+        try:
+            compute_full_catalog_valuation(db, org_id=org_id, persist=True)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
     summary = _aggregate_persisted_blended(
         org_id=org_id,
