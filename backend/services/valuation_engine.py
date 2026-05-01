@@ -24,8 +24,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
-import math
-
 from ..config.statement_formats import get_format_spec
 from ..models.models import (
     ContractAsset,

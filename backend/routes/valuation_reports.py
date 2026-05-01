@@ -1854,15 +1854,20 @@ def get_org_catalog_valuation(
     # ``has_snapshot`` must be scope-aware: a pool that contains *only*
     # creator-scoped BLENDED rows (e.g. from prior `/full/run?scope_creator_id`
     # invocations) would not satisfy an org-wide catalog read because the
-    # aggregator filters those out by scope tag. Walk the row metadata
-    # so we trigger a recompute when the existing pool is unusable for
-    # the requested scope.
+    # aggregator filters those out by scope tag. Stream row metadata
+    # with an early break so we don't load the entire BLENDED pool into
+    # memory just to detect snapshot existence at scale.
     has_snapshot = False
-    for r in db.query(ValuationCalculation).filter(
-        ValuationCalculation.organization_id == org_id,
-        ValuationCalculation.valuation_method == "BLENDED",
-    ).all():
-        meta = r.calc_metadata or {}
+    snapshot_q = (
+        db.query(ValuationCalculation.calc_metadata)
+        .filter(
+            ValuationCalculation.organization_id == org_id,
+            ValuationCalculation.valuation_method == "BLENDED",
+        )
+        .yield_per(200)
+    )
+    for (meta,) in snapshot_q:
+        meta = meta or {}
         row_scope_creator = meta.get("scope_creator_id")
         row_scope_mode = meta.get("scope_mode") or (
             "creator" if row_scope_creator else "org"
