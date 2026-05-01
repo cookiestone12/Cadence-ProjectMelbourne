@@ -62,6 +62,9 @@ export default function ValuationPage() {
   const [methodology, setMethodology] = useState('blended') // income | market_comparable | dcf | blended
   const [trend, setTrend] = useState([])
   const [pdfDownloading, setPdfDownloading] = useState(false)
+  // Org id is needed for the spec'd Phase 5 routes mounted under
+  // /api/v1/organizations/{org_id}/valuation/{catalog,report/pdf}.
+  const [orgId, setOrgId] = useState(null)
 
   // Load creator list once. Org id comes from /current.
   useEffect(() => {
@@ -72,6 +75,7 @@ export default function ValuationPage() {
         if (!alive) return
         const orgId = orgRes.data?.id
         if (!orgId) return
+        setOrgId(orgId)
         // /api/creators/{creator_id} is the single-creator detail route — what
         // we want here is the org-roster endpoint that the Roster page uses.
         // The previous URL silently 404'd (or returned a single-object
@@ -216,8 +220,15 @@ export default function ValuationPage() {
   const handleDownloadPdf = async () => {
     setPdfDownloading(true)
     try {
-      const scopeQs = scopeCreatorId ? `?scope_creator_id=${scopeCreatorId}` : ''
-      const res = await axios.get(`/api/valuation/report/pdf${scopeQs}`, { responseType: 'blob' })
+      // Prefer the spec'd Phase 5 contract route mounted under
+      // /api/v1/organizations/{org_id}/valuation/report/pdf when the
+      // org id is loaded; fall back to the legacy /api/valuation/report
+      // route on first paint (before /current resolves) so the button
+      // never deadlocks on the org fetch.
+      const pdfUrl = orgId
+        ? `/api/v1/organizations/${orgId}/valuation/report/pdf${scopeCreatorId ? `?creator_id=${scopeCreatorId}` : ''}`
+        : `/api/valuation/report/pdf${scopeCreatorId ? `?scope_creator_id=${scopeCreatorId}` : ''}`
+      const res = await axios.get(pdfUrl, { responseType: 'blob' })
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
       const link = document.createElement('a')
       link.href = url

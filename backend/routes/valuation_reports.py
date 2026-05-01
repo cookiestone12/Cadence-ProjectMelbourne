@@ -1801,14 +1801,22 @@ def get_org_catalog_valuation(
     # Default semantics: serve the latest persisted BLENDED snapshot when
     # one exists (low-latency reads). When no snapshot exists OR the caller
     # explicitly passes ?refresh=true, run the full per-method engine over
-    # the catalog and persist a fresh snapshot before aggregating.
+    # the catalog and persist a fresh snapshot before aggregating. When
+    # creator_id is supplied, the recompute is scoped to that creator's
+    # songs so the snapshot reflects strictly the requested scope (rather
+    # than recomputing every song in the org on a per-creator request).
     has_snapshot = db.query(ValuationCalculation.id).filter(
         ValuationCalculation.organization_id == org_id,
         ValuationCalculation.valuation_method == "BLENDED",
     ).first() is not None
     if refresh or not has_snapshot:
         try:
-            compute_full_catalog_valuation(db, org_id=org_id, persist=True)
+            compute_full_catalog_valuation(
+                db,
+                org_id=org_id,
+                scope_creator_id=creator_id,
+                persist=True,
+            )
             db.commit()
         except Exception:
             db.rollback()
