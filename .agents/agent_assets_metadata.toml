@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "Ktveq3H2EI6ntn-dQgmXa"
+uri = "file://attached_assets/cadence-platform-overview.pptx"
+type = "slides"
+title = "Cadence — Platform Overview (15 slides)"

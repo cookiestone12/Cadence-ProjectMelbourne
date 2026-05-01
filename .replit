@@ -58,7 +58,7 @@ externalPort = 8000
 
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "freetype", "glibcLocales", "imagemagick", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc"]
+packages = ["cargo", "freetype", "gitFull", "glibcLocales", "imagemagick", "lcms2", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "openssl", "pkg-config", "playwright-driver", "rustc", "tcl", "tk", "zlib"]
 
 [deployment]
 build = ["bash", "-c", "cd frontend && npm run build"]
