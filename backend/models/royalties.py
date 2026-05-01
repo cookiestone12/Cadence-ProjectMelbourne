@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, JSON, Enum, Date, UniqueConstraint, Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -69,7 +70,7 @@ class RoyaltyStatement(Base):
 
     opening_balance = Column(Float, nullable=True)
     closing_balance = Column(Float, nullable=True)
-    reconciliation_details = Column(JSON, nullable=True)
+    reconciliation_details = Column(JSONB().with_variant(JSON(), 'sqlite'), nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

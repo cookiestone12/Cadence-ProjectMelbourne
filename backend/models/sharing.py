@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON, Enum, Index, LargeBinary, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -67,14 +68,14 @@ class AuditLog(Base):
         Index('ix_audit_logs_entity_type', 'entity_type'),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     action = Column(String, nullable=False)
     entity_type = Column(String, nullable=False)
     entity_id = Column(Integer, nullable=True)
     entity_name = Column(String, nullable=True)
-    details = Column(JSON, nullable=True)
+    details = Column(JSONB().with_variant(JSON(), 'sqlite'), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     organization = relationship("Organization")
@@ -85,6 +86,7 @@ class RegistrationReport(Base):
     __tablename__ = "registration_reports"
     __table_args__ = (
         Index('ix_registration_reports_org_id', 'organization_id'),
+        Index('ix_registration_reports_organization_id', 'organization_id'),
     )
 
     id = Column(Integer, primary_key=True, index=True)

@@ -1,11 +1,16 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Index
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Index, text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from .database import Base
 
 class User(Base):
     __tablename__ = "users"
-    
+    __table_args__ = (
+        # Functional unique index on lower(username) to enforce
+        # case-insensitive username uniqueness at the DB level.
+        Index('idx_users_username_lower', text('lower(username)'), unique=True),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)

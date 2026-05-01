@@ -1,6 +1,20 @@
 import React, { useState, useEffect, Component } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import axios from 'axios'
+import { apiUrl } from './lib/apiBase'
+
+// Global axios request interceptor: route every legacy `/api/...` call
+// through the single API_BASE constant in lib/apiBase.js (currently
+// `/api/v1`). This is the one place every existing call site reads the
+// base URL from — change API_BASE there and every request follows. The
+// helper is a no-op for absolute URLs and for paths already prefixed
+// with `/api/v1/`.
+axios.interceptors.request.use((config) => {
+  if (config.url) {
+    config.url = apiUrl(config.url)
+  }
+  return config
+})
 
 class ErrorBoundary extends Component {
   constructor(props) {

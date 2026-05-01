@@ -1,8 +1,26 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text, JSON, Enum, Index, LargeBinary
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text, JSON, Enum, Index, LargeBinary, CheckConstraint, text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
 from .database import Base
+
+
+class MigrationLock(Base):
+    """Single-row infrastructure table that serializes Alembic upgrades
+    across multiple booting workers. Bootstrapped + acquired/released by
+    backend.utils.migration_lock at app startup; declared here purely so
+    `alembic check` doesn't try to drop it as drift.
+    """
+    __tablename__ = "migration_lock"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="migration_lock_id_check"),
+    )
+
+    id = Column(Integer, primary_key=True, server_default=text("1"))
+    status = Column(String, nullable=False, server_default=text("'idle'"))
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    host = Column(String, nullable=True)
+    revision = Column(String, nullable=True)
 
 class AIUsageLog(Base):
     __tablename__ = "ai_usage_logs"

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean, Text, JSON, Enum, Date, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, SmallInteger, String, Float, DateTime, ForeignKey, Boolean, Text, JSON, Enum, Date, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -76,7 +76,7 @@ class Song(Base):
     audio_file_url = Column(String, nullable=True)
     lyrics = Column(Text, nullable=True)
 
-    spotify_popularity = Column(Integer, nullable=True)
+    spotify_popularity = Column(SmallInteger, nullable=True)
     spotify_popularity_fetched_at = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -204,6 +204,7 @@ class SongEditHistory(Base):
     __table_args__ = (
         Index('ix_song_edit_history_song_id', 'song_id'),
         Index('ix_song_edit_history_org_id', 'organization_id'),
+        Index('ix_song_edit_history_organization_id', 'organization_id'),
         Index('ix_song_edit_history_created_at', 'created_at'),
     )
 

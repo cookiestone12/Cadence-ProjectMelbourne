@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, Text, JSON, Enum, UniqueConstraint, Index, LargeBinary
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -73,7 +74,7 @@ class Creator(Base):
     youtube_url = Column(String, nullable=True)
     instagram_url = Column(String, nullable=True)
     twitter_url = Column(String, nullable=True)
-    custom_links = Column(JSON, default=list)
+    custom_links = Column(JSONB().with_variant(JSON(), 'sqlite'), default=list)
     roster_export_fields = Column(JSON, default=list)
     assigned_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     publisher_contact_id = Column(Integer, nullable=True)

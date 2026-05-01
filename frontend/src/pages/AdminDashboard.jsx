@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import axios from 'axios'
+import { apiUrl } from '../lib/apiBase'
 import {
   UsersIcon,
   BuildingOfficeIcon,
@@ -2455,7 +2456,7 @@ function LeadsTab() {
                           e.stopPropagation();
                           try {
                             const token = localStorage.getItem('token');
-                            const res = await fetch(`/api/admin/leads/${lead.id}/resume`, {
+                            const res = await fetch(apiUrl(`/api/admin/leads/${lead.id}/resume`), {
                               headers: { 'Authorization': `Bearer ${token}` }
                             });
                             if (!res.ok) throw new Error('Download failed');
@@ -2528,7 +2529,7 @@ function LeadsTab() {
                                   e.stopPropagation();
                                   try {
                                     const token = localStorage.getItem('token');
-                                    const res = await fetch(`/api/admin/leads/${lead.id}/resume`, {
+                                    const res = await fetch(apiUrl(`/api/admin/leads/${lead.id}/resume`), {
                                       headers: { 'Authorization': `Bearer ${token}` }
                                     });
                                     if (!res.ok) throw new Error('Download failed');

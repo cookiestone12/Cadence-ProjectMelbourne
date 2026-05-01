@@ -54,6 +54,7 @@ class Placement(Base):
     __tablename__ = "placements"
     __table_args__ = (
         Index('ix_placements_org_id', 'organization_id'),
+        Index('ix_placements_organization_id', 'organization_id'),
         Index('ix_placements_status', 'status'),
         Index('ix_placements_song_id', 'song_id'),
         Index('ix_placements_release_id', 'release_id'),

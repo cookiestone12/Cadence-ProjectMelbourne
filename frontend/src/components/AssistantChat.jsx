@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import axios from 'axios'
+import { apiUrl } from '../lib/apiBase'
 import {
   ChatBubbleLeftRightIcon,
   XMarkIcon,
@@ -114,7 +115,7 @@ export default function AssistantChat({ user }) {
       const controller = new AbortController()
       abortRef.current = controller
 
-      const response = await fetch('/api/assistant/chat', {
+      const response = await fetch(apiUrl('/api/assistant/chat'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

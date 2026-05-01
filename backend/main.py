@@ -481,32 +481,6 @@ app_logger.info(
 #      a 426 in production when X-Forwarded-Proto isn't https. The
 #      rejection still passes back through RequestContext, so the
 #      response carries X-Request-ID.
-class APIVersionRewriteMiddleware:
-    """Rewrites `/api/v1/...` paths to `/api/...` so every existing
-    route is reachable under the new versioned prefix without having
-    to touch every router or every frontend call site. Frontend
-    code may use either `/api/...` (legacy) or `/api/v1/...` and
-    both resolve to the same handler.
-    """
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] in ("http", "websocket"):
-            path = scope.get("path", "")
-            if path.startswith("/api/v1/"):
-                new_path = "/api" + path[len("/api/v1"):]
-                scope = dict(scope)
-                scope["path"] = new_path
-                raw_path = scope.get("raw_path")
-                if raw_path:
-                    prefix = b"/api/v1"
-                    if raw_path.startswith(prefix):
-                        scope["raw_path"] = b"/api" + raw_path[len(prefix):]
-        await self.app(scope, receive, send)
-
-
 app.add_middleware(HTTPSEnforcementMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -516,7 +490,6 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Request-ID"],
 )
-app.add_middleware(APIVersionRewriteMiddleware)
 app.add_middleware(RequestContextMiddleware)
 
 
@@ -670,6 +643,66 @@ app.include_router(schedule_a_imports.router)
 from .routes import leads
 app.include_router(leads.router)
 app.include_router(leads.admin_router)
+
+
+# ---------------------------------------------------------------------------
+# Versioned API namespace: expose every existing /api/... route ALSO under
+# /api/v1/... as a real, first-class route (visible in OpenAPI / /docs).
+# This is true router namespacing — not a request-path rewrite — so the
+# versioned URLs round-trip through the OpenAPI spec, request validation,
+# and dependency injection identically to the legacy /api/... routes.
+#
+# Both prefixes resolve to the same handler functions, giving us a clean
+# deprecation path: new frontend code should use /api/v1/, while existing
+# /api/ callers keep working until they're migrated.
+# ---------------------------------------------------------------------------
+def _mount_v1_routes() -> None:
+    from fastapi.routing import APIRoute  # local import to avoid cycles
+
+    cloned: list[APIRoute] = []
+    for route in list(app.router.routes):
+        if not isinstance(route, APIRoute):
+            continue
+        path = route.path
+        if not path.startswith("/api/") or path.startswith("/api/v1/"):
+            continue
+
+        v1_path = "/api/v1" + path[len("/api"):]
+        cloned.append(
+            APIRoute(
+                path=v1_path,
+                endpoint=route.endpoint,
+                response_model=route.response_model,
+                status_code=route.status_code,
+                tags=route.tags,
+                dependencies=route.dependencies,
+                summary=route.summary,
+                description=route.description,
+                response_description=route.response_description,
+                responses=route.responses,
+                deprecated=route.deprecated,
+                methods=route.methods,
+                operation_id=(route.operation_id + "_v1") if route.operation_id else None,
+                response_model_include=route.response_model_include,
+                response_model_exclude=route.response_model_exclude,
+                response_model_by_alias=route.response_model_by_alias,
+                response_model_exclude_unset=route.response_model_exclude_unset,
+                response_model_exclude_defaults=route.response_model_exclude_defaults,
+                response_model_exclude_none=route.response_model_exclude_none,
+                include_in_schema=route.include_in_schema,
+                response_class=route.response_class,
+                name=(route.name + "_v1") if route.name else None,
+                callbacks=route.callbacks,
+                openapi_extra=route.openapi_extra,
+            )
+        )
+
+    for r in cloned:
+        app.router.routes.append(r)
+
+
+_mount_v1_routes()
+
 
 # Synthesize a one-line summary on every route that doesn't already
 # have a hand-written one so /docs and /redoc are scannable instead

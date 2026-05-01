@@ -117,6 +117,14 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
         { path: '/support', label: 'Support', icon: LifebuoyIcon },
       ],
     },
+    {
+      key: 'settings',
+      label: 'Settings',
+      defaultOpen: false,
+      items: [
+        { path: '/settings', label: 'Settings', icon: Cog6ToothIcon },
+      ],
+    },
   ]
 
   const filterItem = (item) => {
@@ -301,23 +309,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
                 <span className="text-[14px]">Org Admin</span>
               </Link>
             ) : null}
-            
-            <Link
-              to="/settings"
-              onClick={() => window.innerWidth < 1024 && onClose()}
-              className={`
-                flex items-center gap-3 px-3 py-2.5 rounded-xl
-                transition-all duration-150 ease-am
-                ${isActive('/settings')
-                  ? 'bg-am-subtle text-am-accent font-medium'
-                  : 'text-am-text-secondary hover:bg-am-subtle hover:text-am-text'
-                }
-              `}
-            >
-              <Cog6ToothIcon className="w-[20px] h-[20px] stroke-[1.5]" />
-              <span className="text-[14px]">Settings</span>
-            </Link>
-            
+
             <button 
               onClick={onLogout}
               className="w-full px-3 py-2.5 text-am-text-secondary hover:text-am-error hover:bg-red-50 rounded-xl transition-all duration-150 text-left flex items-center gap-3 group"
