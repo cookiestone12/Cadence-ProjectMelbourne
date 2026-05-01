@@ -479,11 +479,7 @@ def compute_source_typed_valuation(
 #   * indie / long-tail   : $0.020 – $0.050  (mid $0.035)
 #   * mid-tier            : $0.050 – $0.100  (mid $0.075)
 #   * premium / front-line: $0.100 – $0.200  (mid $0.150)
-_TIER_BANDS: Dict[str, Tuple[float, float, float]] = {
-    "indie": (0.020, 0.035, 0.050),
-    "mid": (0.050, 0.075, 0.100),
-    "premium": (0.100, 0.150, 0.200),
-}
+from ..config.streaming_rates import MARKET_COMPARABLE_TIER_BANDS as _TIER_BANDS  # noqa: E402
 
 # Catalog multiplier applied to annualized streaming revenue when treating
 # the song as a comparable transaction asset. 10× is the consensus median

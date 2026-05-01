@@ -1746,3 +1746,65 @@ def get_org_catalog_valuation(
     summary["selected_method"] = method
     summary["scope"] = {"org_id": org_id, "creator_id": creator_id}
     return summary
+
+
+# ---------------------------------------------------------------------------
+# Spec'd Phase 5 contract:
+#   GET /api/organizations/{org_id}/valuation/report/pdf?creator_id=X
+# (mirrored at /api/v1/organizations/{org_id}/valuation/report/pdf).
+# Same blended PDF as /api/valuation/report/pdf, with explicit org_id in path
+# and `creator_id` query param matching the org-scoped catalog endpoint.
+# ---------------------------------------------------------------------------
+
+
+@org_router.get(
+    "/{org_id}/valuation/report/pdf",
+    summary="Download the styled blended valuation PDF for an org (or a creator within it)",
+    description=(
+        "Spec'd Phase 5 contract. ReportLab-generated multi-page PDF: cover, "
+        "executive summary (blended NPV band + confidence), methodology "
+        "breakdown (Income / Market / DCF), revenue-by-source table, top-10 "
+        "songs, data-sources & disclaimer.\n\n"
+        "**Path:** `org_id` — must match a current org membership of the caller.\n"
+        "**Query:** `creator_id?` — restrict the deck to a single creator in the org."
+    ),
+)
+def download_org_valuation_pdf(
+    org_id: int,
+    creator_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id,
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member of this organization")
+    if creator_id is not None:
+        _scope_check_creator(db, creator_id, org_id)
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    org_name = org.name if org else "Your Organization"
+    creator_name = None
+    if creator_id is not None:
+        c = db.query(Creator).filter(Creator.id == creator_id).first()
+        creator_name = c.display_name if c else f"Creator #{creator_id}"
+
+    summary = _aggregate_persisted_blended(
+        org_id=org_id,
+        db=db,
+        scope_creator_id=creator_id,
+        method="blended",
+    )
+
+    pdf_bytes = _build_valuation_pdf(summary, org_name, creator_name)
+    filename = (
+        f"cadence_valuation_{(creator_name or 'catalog').lower().replace(' ', '_')}_"
+        f"{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

@@ -91,3 +91,10 @@ def calculate_platform_revenue(streams, platform, stream_type, ownership_pct):
         'master': master_revenue,
         'total': publishing_revenue + master_revenue
     }
+
+
+MARKET_COMPARABLE_TIER_BANDS = {
+    "indie": (0.020, 0.035, 0.050),
+    "mid": (0.050, 0.075, 0.100),
+    "premium": (0.100, 0.150, 0.200),
+}
