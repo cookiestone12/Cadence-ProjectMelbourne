@@ -442,3 +442,265 @@ def test_phase3_fixture_headers_map_confidently(filename, source_type):
     # downstream parse_statement_to_lines to extract any revenue.
     assert result.get("revenue") is not None
     assert result.get("isrc") or result.get("track_title")
+
+
+# ---------------------------------------------------------------------------
+# parse_statement summary metrics without persistence (db_session=None)
+# ---------------------------------------------------------------------------
+
+def test_parse_statement_returns_summary_without_db_session(tmp_path):
+    """Without a session, ``parse_statement`` still computes a real
+    parse summary — total_lines, total_revenue_cents, unmatched —
+    by walking the parsed rows. This is the contract dry-run
+    callers (validators, the wizard preview step) rely on.
+    """
+    from backend.services.statement_parser import parse_statement
+
+    csv_path = tmp_path / "preview.csv"
+    csv_path.write_text(
+        "ISRC,Title,Artist,Net Revenue\n"
+        "USRC12345001,Midnight Dreams,Luna Rivers,1234.56\n"
+        "USRC12345002,Electric Pulse,Luna Rivers,78.00\n"
+        "USRC12345003,Foreign Track,Other,(25.00)\n",
+        encoding="utf-8",
+    )
+
+    result = parse_statement(
+        file_path=str(csv_path),
+        source_type="DSP",
+        org_id=None,
+        db_session=None,
+    )
+
+    assert result["statement_id"] is None
+    assert result["total_lines"] == 3
+    # 1234.56 + 78.00 + (-25.00) = 1287.56 -> 128756 cents
+    assert result["total_revenue_cents"] == 128756, (
+        f"expected 128756 cents; got {result['total_revenue_cents']}"
+    )
+    # Without a session there's no catalog to match against, so every
+    # row is reported as unmatched.
+    assert result["matched"] == 0
+    assert result["unmatched"] == 3
+    assert result["confident"] is True
+    assert result["column_mapping"].get("isrc")
+    assert result["column_mapping"].get("revenue")
+
+
+def test_parse_statement_no_session_with_cents_format_normalizes_revenue(tmp_path):
+    """Same dry-run path, but for a cents-format source: the summary
+    must still divide by 100 before reporting total_revenue_cents.
+    """
+    from backend.config import statement_formats as sf
+    from backend.services.statement_parser import parse_statement
+
+    csv_path = tmp_path / "cents_preview.csv"
+    csv_path.write_text(
+        "ISRC,Track Title,Artist,Net Cents\n"
+        "USRC12345001,Midnight Dreams,Luna Rivers,123456\n"
+        "USRC12345002,Electric Pulse,Luna Rivers,7800\n",
+        encoding="utf-8",
+    )
+
+    original_registry = sf.SOURCE_FORMAT_REGISTRY
+    original_aliases = sf._SOURCE_TYPE_ALIASES
+    sf.SOURCE_FORMAT_REGISTRY = dict(original_registry)
+    sf.SOURCE_FORMAT_REGISTRY["TEST_CENTS_DRY_RUN"] = {
+        "label": "Test Cents Dry-Run",
+        "default_currency": "USD",
+        "period_cadence": "monthly",
+        "amount_format": "cents",
+        "identifier_fields": ["isrc"],
+        "extra_hints": {"revenue": ["net cents"]},
+    }
+    sf._SOURCE_TYPE_ALIASES = dict(original_aliases)
+    sf._SOURCE_TYPE_ALIASES["test_cents_dry_run"] = "TEST_CENTS_DRY_RUN"
+    try:
+        result = parse_statement(
+            file_path=str(csv_path),
+            source_type="TEST_CENTS_DRY_RUN",
+            db_session=None,
+        )
+    finally:
+        sf.SOURCE_FORMAT_REGISTRY = original_registry
+        sf._SOURCE_TYPE_ALIASES = original_aliases
+
+    assert result["total_lines"] == 2
+    assert result["total_revenue_cents"] == 123456 + 7800
+
+
+# ---------------------------------------------------------------------------
+# Period extraction from filename (monthly / quarterly / semi-annual / annual)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("filename,expected_start,expected_end,expected_cadence", [
+    # Quarterly variants
+    ("bmi_q4_2025.csv",          "2025-10-01", "2025-12-31", "quarterly"),
+    ("ascap_2024_q1.csv",        "2024-01-01", "2024-03-31", "quarterly"),
+    ("ascap-q2-2025.xlsx",       "2025-04-01", "2025-06-30", "quarterly"),
+    # Monthly variants
+    ("mlc_dec_2025.csv",         "2025-12-01", "2025-12-31", "monthly"),
+    ("dsp_2024_03.csv",          "2024-03-01", "2024-03-31", "monthly"),
+    ("platform_2025-07_payout.csv", "2025-07-01", "2025-07-31", "monthly"),
+    ("statement_jul_2024.csv",   "2024-07-01", "2024-07-31", "monthly"),
+    # Semi-annual
+    ("label_h2_2025.csv",        "2025-07-01", "2025-12-31", "semi-annual"),
+    ("warner_h1_2024.csv",       "2024-01-01", "2024-06-30", "semi-annual"),
+])
+def test_infer_period_from_filename_extracts_real_periods(
+    filename, expected_start, expected_end, expected_cadence,
+):
+    from datetime import date
+    from backend.services.statement_parser import infer_period_from_filename
+
+    result = infer_period_from_filename(filename)
+    assert result is not None, f"{filename}: expected a period"
+    assert result["period_start"] == date.fromisoformat(expected_start)
+    assert result["period_end"] == date.fromisoformat(expected_end)
+    assert result["cadence"] == expected_cadence
+
+
+def test_infer_period_from_filename_falls_back_to_registry_cadence_for_bare_year():
+    from datetime import date
+    from backend.services.statement_parser import infer_period_from_filename
+
+    # SOUNDEXCHANGE registry cadence is "quarterly", so even when the
+    # filename only carries a year, the helper still returns the
+    # right cadence per source.
+    result = infer_period_from_filename("soundexchange_2024.csv", "SOUNDEXCHANGE")
+    assert result is not None
+    assert result["period_start"] == date(2024, 1, 1)
+    assert result["period_end"] == date(2024, 12, 31)
+    assert result["cadence"] in ("quarterly", "annual")
+
+
+def test_infer_period_from_filename_returns_none_when_no_year():
+    from backend.services.statement_parser import infer_period_from_filename
+    assert infer_period_from_filename("just_some_random_file.csv") is None
+    assert infer_period_from_filename("") is None
+
+
+# ---------------------------------------------------------------------------
+# Identifier-priority matching: ISWC beats fuzzy title
+# ---------------------------------------------------------------------------
+
+def test_iswc_takes_priority_over_fuzzy_title_in_auto_match(tmp_path):
+    """When a statement line carries an ISWC, ``auto_match_lines``
+    must resolve via the song-level ISWC index BEFORE falling back to
+    fuzzy title matching, even when the title is a near-perfect match
+    for a different song in the catalog.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from backend.models.database import Base
+    from backend.models.models import (
+        Organization, RoyaltyStatement, RoyaltyStatementLine, Song,
+    )
+    from backend.services.royalty_processing_engine import auto_match_lines
+
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = Session()
+
+    org = Organization(name="ISWC Priority Org")
+    db.add(org); db.flush()
+
+    # Song A: matches the line by ISWC, but its title is very different.
+    song_iswc = Song(
+        organization_id=org.id, title="Completely Different Title",
+        primary_artist="Artist A",
+        iswc="T-123.456.789-0",
+    )
+    # Song B: matches the line by title fuzzy >0.95, but no ISWC.
+    song_fuzzy = Song(
+        organization_id=org.id, title="Midnight Dreamz",  # near-match for "Midnight Dreams"
+        primary_artist="Artist B",
+    )
+    db.add_all([song_iswc, song_fuzzy]); db.flush()
+
+    stmt = RoyaltyStatement(
+        organization_id=org.id, source_name="MLC", source_type="MLC",
+        currency="USD", file_name="mlc_dec_2025.csv", status="PROCESSING",
+    )
+    db.add(stmt); db.flush()
+
+    # Punctuation in the line ISWC differs from the song's stored
+    # ISWC ("T1234567890" vs "T-123.456.789-0") — the matcher must
+    # normalize both sides before lookup.
+    line = RoyaltyStatementLine(
+        org_id=org.id, statement_id=stmt.id,
+        track_title_raw="Midnight Dreams",
+        iswc="T1234567890",
+        net_amount=10.0, net_amount_statement_currency=10.0,
+        currency="USD", match_status="UNMATCHED",
+    )
+    db.add(line); db.flush()
+
+    stats = auto_match_lines(db, stmt.id, org.id)
+    db.refresh(line)
+
+    assert stats["auto_matched"] == 1
+    assert line.match_method == "ISWC"
+    assert line.matched_song_id == song_iswc.id, (
+        f"expected ISWC match to win over fuzzy; got song_id={line.matched_song_id} "
+        f"(ISWC song={song_iswc.id}, fuzzy song={song_fuzzy.id})"
+    )
+    assert line.match_confidence == 100.0
+    db.close()
+
+
+def test_iswc_work_level_match_resolves_to_first_recorded_song(tmp_path):
+    """When the ISWC is registered on a Work (composition) rather
+    than directly on a Song (recording), the matcher resolves via the
+    WorkTrack link and surfaces the work_id alongside the resolved
+    song_id under match_method ``ISWC_WORK``.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from backend.models.database import Base
+    from backend.models.models import (
+        Organization, RoyaltyStatement, RoyaltyStatementLine, Song,
+        Work, WorkTrack,
+    )
+    from backend.services.royalty_processing_engine import auto_match_lines
+
+    engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = Session()
+
+    org = Organization(name="Work ISWC Org")
+    db.add(org); db.flush()
+
+    song = Song(organization_id=org.id, title="Some Recording", primary_artist="Some Artist")
+    db.add(song); db.flush()
+
+    work = Work(organization_id=org.id, title="The Underlying Composition", iswc="T-987.654.321-0")
+    db.add(work); db.flush()
+
+    db.add(WorkTrack(work_id=work.id, song_id=song.id)); db.flush()
+
+    stmt = RoyaltyStatement(
+        organization_id=org.id, source_name="HARRY_FOX", source_type="HARRY_FOX",
+        currency="USD", file_name="hfa_2025.csv", status="PROCESSING",
+    )
+    db.add(stmt); db.flush()
+
+    line = RoyaltyStatementLine(
+        org_id=org.id, statement_id=stmt.id,
+        track_title_raw="something else entirely",
+        iswc="T9876543210",
+        net_amount=5.0, net_amount_statement_currency=5.0,
+        currency="USD", match_status="UNMATCHED",
+    )
+    db.add(line); db.flush()
+
+    stats = auto_match_lines(db, stmt.id, org.id)
+    db.refresh(line)
+
+    assert stats["auto_matched"] == 1
+    assert line.match_method == "ISWC_WORK"
+    assert line.matched_work_id == work.id
+    assert line.matched_song_id == song.id
+    db.close()

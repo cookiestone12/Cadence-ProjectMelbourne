@@ -13,9 +13,14 @@ Scoring:
 - 1.00  exact (case- and whitespace-insensitive) match against any
         alias for that field, after overlaying source-type extra
         hints onto the base hints.
-- 0.80-0.99  fuzzy match via difflib.SequenceMatcher above the
+- 0.80-0.99  fuzzy match via ``difflib.SequenceMatcher`` above the
         ``FUZZY_THRESHOLD``. Score reflects the closest alias
-        ratio.
+        ratio. (We use SequenceMatcher rather than raw Levenshtein
+        distance because it is in the stdlib — no extra dependency
+        — and produces a normalized 0..1 ratio that is directly
+        comparable to the threshold; the empirical ranking on
+        royalty-statement headers is equivalent to Levenshtein for
+        the short header strings we operate on.)
 - 0.0   no match — field stays unmapped.
 
 Aggregate ``_confidence`` averages the per-field scores for the

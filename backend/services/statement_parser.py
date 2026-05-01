@@ -14,11 +14,13 @@ writes happen here — that's still the job of
 """
 from __future__ import annotations
 
+import calendar
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..config.statement_formats import (
     canonical_source_type,
@@ -269,12 +271,50 @@ def parse_statement(
             if resolved_mapping:
                 confidence_score = 0.5  # legacy suggester, no per-field score
 
+    # Pre-divide cents-format revenue cells once so the summary path
+    # (db_session is None) AND the persistence path (db_session set)
+    # both see the same normalized values.
+    parsed_rows = normalize_rows_for_amount_format(
+        parsed.rows,
+        resolved_mapping,
+        parsed.resolved_source_type,
+    )
+
+    # Compute parse-summary metrics from the normalized rows so callers
+    # who don't want persistence (CLIs, dry-run validators, the
+    # frontend wizard's "preview" step) still get an accurate
+    # total_lines / total_revenue_cents / unmatched count. Without a
+    # session there's no catalog to match against, so every parsed
+    # row is reported as ``unmatched``.
+    rev_col = resolved_mapping.get("revenue") if resolved_mapping else None
+    summary_total_lines = 0
+    summary_total_revenue_cents = 0
+    if rev_col:
+        for row in parsed_rows:
+            if not isinstance(row, dict):
+                continue
+            raw = row.get(rev_col)
+            if raw is None or raw == "":
+                continue
+            try:
+                s = str(raw).strip().replace(",", "").replace("$", "").replace("£", "").replace("€", "")
+                if not s or s == "-":
+                    continue
+                if s.startswith("(") and s.endswith(")"):
+                    s = "-" + s[1:-1]
+                summary_total_revenue_cents += int(round(float(s) * 100))
+                summary_total_lines += 1
+            except (ValueError, TypeError):
+                continue
+    else:
+        summary_total_lines = len([r for r in parsed_rows if isinstance(r, dict)])
+
     response: Dict[str, Any] = {
         "statement_id": None,
-        "total_lines": 0,
+        "total_lines": summary_total_lines,
         "matched": 0,
-        "unmatched": 0,
-        "total_revenue_cents": 0,
+        "unmatched": summary_total_lines,
+        "total_revenue_cents": summary_total_revenue_cents,
         "column_mapping": resolved_mapping,
         "detected_source_type": parsed.resolved_source_type,
         "confident": confident,
@@ -302,13 +342,9 @@ def parse_statement(
     spec = get_format_spec(parsed.resolved_source_type) or {}
     resolved_currency = currency or spec.get("default_currency") or "USD"
 
-    # Pre-divide revenue cells when the registry says this source
-    # delivers integer cents — see ``normalize_rows_for_amount_format``.
-    parsed_rows = normalize_rows_for_amount_format(
-        parsed.rows,
-        resolved_mapping,
-        parsed.resolved_source_type,
-    )
+    # ``parsed_rows`` was already normalized above so the
+    # summary-only branch and the persistence branch see identical
+    # cents-vs-dollars handling — see ``normalize_rows_for_amount_format``.
 
     statement = RoyaltyStatement(
         organization_id=org_id,
@@ -377,9 +413,141 @@ def parse_statement(
     return response
 
 
+_MONTH_TOKENS = {
+    "jan": 1, "january": 1,
+    "feb": 2, "february": 2,
+    "mar": 3, "march": 3,
+    "apr": 4, "april": 4,
+    "may": 5,
+    "jun": 6, "june": 6,
+    "jul": 7, "july": 7,
+    "aug": 8, "august": 8,
+    "sep": 9, "sept": 9, "september": 9,
+    "oct": 10, "october": 10,
+    "nov": 11, "november": 11,
+    "dec": 12, "december": 12,
+}
+
+
+def _last_day(year: int, month: int) -> int:
+    return calendar.monthrange(year, month)[1]
+
+
+def infer_period_from_filename(
+    filename: str,
+    source_type: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Extract (period_start, period_end, cadence) from a statement
+    filename using common naming patterns the industry uses.
+
+    Recognized cadences and example filenames:
+
+    - **monthly**:   ``mlc_dec_2025.csv``, ``dsp_2024_03.csv``,
+                     ``platform_2025-07_payout.csv``
+    - **quarterly**: ``bmi_q4_2025.csv``, ``ascap_2024_q1.csv``
+    - **semi-annual**: ``label_h2_2025.csv``, ``warner_h1_2024.csv``
+    - **annual**:    ``soundexchange_2024.csv``,
+                     ``annual_statement_2023.csv``
+
+    Falls back to the registry's ``period_cadence`` for the source so
+    callers always know which kind of period to expect even when the
+    filename is uninformative.
+
+    Returns ``None`` only when no year can be located at all.
+    """
+    if not filename:
+        return None
+    name = filename.rsplit(".", 1)[0].lower()
+    # normalize separators so "label-h2-2025" and "label_h2_2025" parse identically
+    name = re.sub(r"[-./]", "_", name)
+    name = re.sub(r"_+", "_", name)
+
+    # 1. Quarter pattern:  q1..q4 + 4-digit year (any order)
+    m = re.search(r"(?:^|_)q([1-4])_?(\d{4})(?:_|$)", name)
+    if not m:
+        m = re.search(r"(?:^|_)(\d{4})_?q([1-4])(?:_|$)", name)
+        if m:
+            year, q = int(m.group(1)), int(m.group(2))
+        else:
+            year, q = None, None
+    else:
+        q, year = int(m.group(1)), int(m.group(2))
+    if year is not None:
+        start_month = (q - 1) * 3 + 1
+        end_month = start_month + 2
+        return {
+            "period_start": date(year, start_month, 1),
+            "period_end": date(year, end_month, _last_day(year, end_month)),
+            "cadence": "quarterly",
+        }
+
+    # 2. Half-year pattern: h1/h2 + 4-digit year
+    m = re.search(r"(?:^|_)h([12])_?(\d{4})(?:_|$)", name) or \
+        re.search(r"(?:^|_)(\d{4})_?h([12])(?:_|$)", name)
+    if m:
+        a, b = m.group(1), m.group(2)
+        if a.isdigit() and len(a) == 4:
+            year, half = int(a), int(b)
+        else:
+            half, year = int(a), int(b)
+        start_month = 1 if half == 1 else 7
+        end_month = 6 if half == 1 else 12
+        return {
+            "period_start": date(year, start_month, 1),
+            "period_end": date(year, end_month, _last_day(year, end_month)),
+            "cadence": "semi-annual",
+        }
+
+    # 3. Monthly pattern A: month name + year (e.g. ``dec_2025``)
+    for token, month in _MONTH_TOKENS.items():
+        m = re.search(rf"(?:^|_){token}_?(\d{{4}})(?:_|$)", name)
+        if not m:
+            m = re.search(rf"(?:^|_)(\d{{4}})_?{token}(?:_|$)", name)
+        if m:
+            year = int(m.group(1))
+            return {
+                "period_start": date(year, month, 1),
+                "period_end": date(year, month, _last_day(year, month)),
+                "cadence": "monthly",
+            }
+
+    # 4. Monthly pattern B: numeric YYYY_MM or MM_YYYY
+    m = re.search(r"(?:^|_)(\d{4})_(\d{2})(?:_|$)", name)
+    if m and 1 <= int(m.group(2)) <= 12:
+        year, month = int(m.group(1)), int(m.group(2))
+        return {
+            "period_start": date(year, month, 1),
+            "period_end": date(year, month, _last_day(year, month)),
+            "cadence": "monthly",
+        }
+    m = re.search(r"(?:^|_)(\d{2})_(\d{4})(?:_|$)", name)
+    if m and 1 <= int(m.group(1)) <= 12:
+        month, year = int(m.group(1)), int(m.group(2))
+        return {
+            "period_start": date(year, month, 1),
+            "period_end": date(year, month, _last_day(year, month)),
+            "cadence": "monthly",
+        }
+
+    # 5. Annual fallback: bare 4-digit year
+    m = re.search(r"(?:^|_)(\d{4})(?:_|$)", name)
+    if m:
+        year = int(m.group(1))
+        spec = get_format_spec(source_type) if source_type else None
+        cadence = (spec or {}).get("period_cadence") or "annual"
+        return {
+            "period_start": date(year, 1, 1),
+            "period_end": date(year, 12, 31),
+            "cadence": cadence,
+        }
+
+    return None
+
+
 __all__ = [
     "ParsedStatement",
     "parse_statement_file",
     "parse_statement",
     "normalize_rows_for_amount_format",
+    "infer_period_from_filename",
 ]

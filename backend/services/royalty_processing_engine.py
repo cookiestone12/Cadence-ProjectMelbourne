@@ -8,7 +8,7 @@ from sqlalchemy import func
 from difflib import SequenceMatcher
 
 from ..models import (
-    get_db, Song, Work, Release, Creator, Contract, ContractAsset, RightsSplit,
+    get_db, Song, Work, WorkTrack, Release, Creator, Contract, ContractAsset, RightsSplit,
     RoyaltyStatement, RoyaltyTransaction,
     RoyaltyStatementLine, RoyaltyProcessingRun, RoyaltyLedgerEntry,
     Payee, Advance, PayoutBatch, PayoutItem, ActionItem,
@@ -265,18 +265,49 @@ def auto_match_lines(db: Session, statement_id: int, org_id: int) -> dict:
 
         org_songs = db.query(Song).filter(Song.organization_id == org_id).all()
         org_releases = db.query(Release).filter(Release.organization_id == org_id).all()
+        org_works = db.query(Work).filter(Work.organization_id == org_id).all()
+
+        def _norm_id(s: str) -> str:
+            # ISWC / HFA codes use punctuation that varies per source
+            # (T-123.456.789-0 vs T1234567890); strip everything to the
+            # alphanumeric core for lookups.
+            return re.sub(r"[^A-Za-z0-9]", "", s or "").upper()
 
         isrc_map = {}
         for song in org_songs:
             if song.isrc:
-                clean_isrc = song.isrc.strip().upper().replace("-", "")
-                isrc_map[clean_isrc] = song
+                isrc_map[_norm_id(song.isrc)] = song
+
+        # Song-level ISWC index. Many catalogs put the ISWC directly on
+        # the song; we honor that as the fastest path.
+        song_iswc_map = {}
+        for song in org_songs:
+            if song.iswc:
+                song_iswc_map[_norm_id(song.iswc)] = song
 
         upc_map = {}
         for release in org_releases:
             if release.upc:
-                clean_upc = release.upc.strip().upper().replace("-", "")
-                upc_map[clean_upc] = release
+                upc_map[_norm_id(release.upc)] = release
+
+        # Work-level ISWC / HFA-code index. When a statement line carries
+        # only an ISWC (typical for MLC and Harry Fox), we resolve it
+        # via the Work registry and follow the WorkTrack link to its
+        # primary recorded Song.
+        work_iswc_map: Dict[str, Work] = {}
+        for work in org_works:
+            if work.iswc:
+                work_iswc_map[_norm_id(work.iswc)] = work
+
+        def _song_for_work(work: Work) -> Optional[Song]:
+            tracks = db.query(WorkTrack).filter(WorkTrack.work_id == work.id).all()
+            if not tracks:
+                return None
+            # Prefer the lowest-id (i.e. earliest-linked) track so the
+            # match is deterministic across runs.
+            tracks.sort(key=lambda t: t.id)
+            song_id = tracks[0].song_id
+            return next((s for s in org_songs if s.id == song_id), None)
 
         stats = {
             "total_lines": len(lines),
@@ -290,7 +321,7 @@ def auto_match_lines(db: Session, statement_id: int, org_id: int) -> dict:
             matched = False
 
             if line.isrc:
-                clean_isrc = line.isrc.strip().upper().replace("-", "")
+                clean_isrc = _norm_id(line.isrc)
                 if clean_isrc in isrc_map:
                     song = isrc_map[clean_isrc]
                     line.matched_song_id = song.id
@@ -301,8 +332,36 @@ def auto_match_lines(db: Session, statement_id: int, org_id: int) -> dict:
                     stats["auto_matched"] += 1
                     matched = True
 
+            # ISWC / HFA-code priority: registry-declared identifier
+            # match runs before fuzzy title matching for any source
+            # whose identifier_fields include 'iswc' (MLC, Harry Fox,
+            # PROs, label statements that carry the work code).
+            if not matched and line.iswc:
+                clean_iswc = _norm_id(line.iswc)
+                if clean_iswc in song_iswc_map:
+                    song = song_iswc_map[clean_iswc]
+                    line.matched_song_id = song.id
+                    line.match_status = "AUTO_MATCHED"
+                    line.match_confidence = 100.0
+                    line.match_method = "ISWC"
+                    line.matched_at = datetime.utcnow()
+                    stats["auto_matched"] += 1
+                    matched = True
+                elif clean_iswc in work_iswc_map:
+                    work = work_iswc_map[clean_iswc]
+                    line.matched_work_id = work.id
+                    song_obj = _song_for_work(work)
+                    if song_obj:
+                        line.matched_song_id = song_obj.id
+                    line.match_status = "AUTO_MATCHED"
+                    line.match_confidence = 98.0
+                    line.match_method = "ISWC_WORK"
+                    line.matched_at = datetime.utcnow()
+                    stats["auto_matched"] += 1
+                    matched = True
+
             if not matched and line.upc:
-                clean_upc = line.upc.strip().upper().replace("-", "")
+                clean_upc = _norm_id(line.upc)
                 if clean_upc in upc_map:
                     release = upc_map[clean_upc]
                     line.matched_release_id = release.id
