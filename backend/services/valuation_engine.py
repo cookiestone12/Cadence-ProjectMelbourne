@@ -1155,6 +1155,37 @@ def compute_full_catalog_valuation(
             )
             db.add(row)
 
+    # ------------------------------------------------------------------
+    # Same-scope, same-day dedup (lightweight retention policy).
+    # Without this, rapid-fire recomputes (e.g. UI users hammering
+    # ?refresh=true) would grow `valuation_calculations` unbounded with
+    # functionally identical rows for the same calendar day. We drop
+    # *earlier* same-day BLENDED rows for the SAME (song, scope_mode,
+    # scope_creator_id) tuple — preserving cross-day history that the
+    # /full/trend endpoint relies on for monthly granularity.
+    # ------------------------------------------------------------------
+    if persist:
+        from datetime import time as _time
+        today_start = datetime.combine(now.date(), _time.min)
+        candidate_ids: List[int] = []
+        for r in db.query(ValuationCalculation).filter(
+            ValuationCalculation.organization_id == org_id,
+            ValuationCalculation.valuation_method == "BLENDED",
+            ValuationCalculation.calculation_date >= today_start,
+            ValuationCalculation.calculation_date < now,
+            ValuationCalculation.song_id.in_(list(song_ids)) if song_ids else False,
+        ).all():
+            meta = r.calc_metadata or {}
+            row_scope = meta.get("scope_creator_id")
+            row_mode = meta.get("scope_mode") or ("creator" if row_scope else "org")
+            req_mode = "creator" if scope_creator_id is not None else "org"
+            if row_mode == req_mode and row_scope == scope_creator_id:
+                candidate_ids.append(r.id)
+        if candidate_ids:
+            db.query(ValuationCalculation).filter(
+                ValuationCalculation.id.in_(candidate_ids)
+            ).delete(synchronize_session=False)
+
     # Top songs by blended value (cap at 10 for the API response).
     songs_summary.sort(key=lambda s: s["blended_base"], reverse=True)
     top_songs = songs_summary[:10]

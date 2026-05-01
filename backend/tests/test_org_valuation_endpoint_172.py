@@ -240,16 +240,36 @@ def test_org_catalog_endpoint_refresh_query_recomputes(db, client):
             ValuationCalculation.valuation_method == "BLENDED",
         ).count()
         assert n1 == n0, "default behavior must reuse snapshot, not recompute"
+        dates_before = sorted(
+            r.calculation_date for r in db.query(ValuationCalculation).filter(
+                ValuationCalculation.organization_id == org.id,
+                ValuationCalculation.valuation_method == "BLENDED",
+            ).all()
+        )
 
-        # Third call WITH ?refresh=true must add a fresh BLENDED row per song.
+        # Third call WITH ?refresh=true must produce a fresh recompute.
+        # Same-scope same-day dedup keeps the row COUNT stable but
+        # replaces the rows — assert that calculation_date moved forward
+        # for at least one row (proving recompute) while the count is
+        # preserved per the dedup contract. Note: SQLite recycles PKs
+        # after delete, so comparing row.id is unreliable here.
+        # Sleep briefly so the new datetime.utcnow() is strictly later.
+        import time as _t; _t.sleep(0.01)
         r2 = client.get(f"{_BASE}/{org.id}/valuation/catalog?refresh=true")
         assert r2.status_code == 200, f"got {r2.status_code}: {r2.text[:200]}"
         db.expire_all()
-        n2 = db.query(ValuationCalculation).filter(
+        rows_after = db.query(ValuationCalculation).filter(
             ValuationCalculation.organization_id == org.id,
             ValuationCalculation.valuation_method == "BLENDED",
-        ).count()
-        assert n2 > n1, "refresh=true must persist a fresh recompute"
+        ).all()
+        dates_after = sorted(r.calculation_date for r in rows_after)
+        assert max(dates_after) > max(dates_before), (
+            "refresh=true must produce a fresh calculation_date"
+        )
+        assert len(dates_after) == len(dates_before), (
+            "same-scope same-day dedup must keep the row count stable "
+            "(replace, not append)"
+        )
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

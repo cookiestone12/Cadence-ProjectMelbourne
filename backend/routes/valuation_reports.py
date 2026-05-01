@@ -1009,6 +1009,11 @@ def _aggregate_persisted_blended(
     artist_total = publisher_total = 0
     songs_with_statements = 0
     songs_with_streaming = 0
+    # Full-scope per-source counts (NOT limited to top_songs). This is
+    # what the PDF "Data Sources" coverage table consumes so non-core
+    # sources (rights_splits, song_credits, ...) reflect the entire
+    # scoped catalog rather than just the top contributors.
+    full_scope_data_source_counts: Dict[str, int] = {}
     confidence_sum = 0.0
     latest_calc = None
     songs_meta_ids = list(latest_per_song.keys())
@@ -1036,6 +1041,10 @@ def _aggregate_persisted_blended(
             songs_with_statements += 1
         if "song_streaming_metrics" in ds:
             songs_with_streaming += 1
+        for ds_key in ds:
+            full_scope_data_source_counts[ds_key] = (
+                full_scope_data_source_counts.get(ds_key, 0) + 1
+            )
         conf = meta.get("confidence") or {}
         confidence_sum += float(conf.get("score") or 0.0)
         if latest_calc is None or (r.calculation_date and r.calculation_date > latest_calc):
@@ -1163,6 +1172,11 @@ def _aggregate_persisted_blended(
             "pct_with_streaming": round(songs_with_streaming / song_count * 100, 1) if song_count else 0.0,
             "average_confidence": round(avg_conf, 4),
             "confidence_label": conf_label,
+            # Full-scope per-source coverage counts (over every song in the
+            # scope, not just `top_songs`). The PDF "Data Sources" table
+            # uses this so non-core sources (rights_splits, song_credits,
+            # ...) report true catalog coverage rather than a top-10 sample.
+            "full_scope_data_source_counts": dict(full_scope_data_source_counts),
         },
         "top_songs": top_songs,
         "per_creator_share": per_creator_share,
@@ -1200,6 +1214,7 @@ def _empty_full_summary(org_id: int, scope_creator_id: Optional[int]) -> Dict[st
             "pct_with_streaming": 0.0,
             "average_confidence": 0.0,
             "confidence_label": "low",
+            "full_scope_data_source_counts": {},
         },
         "top_songs": [],
         "per_creator_share": [],
@@ -1703,10 +1718,17 @@ def _build_valuation_pdf(
         "rights_splits": "Rights Splits (Per-Creator Attribution)",
         "song_credits": "Song Credits (Equal-Split Fallback)",
     }
-    src_counts: Dict[str, int] = {}
-    for s in summary.get("top_songs", []):
-        for ds_key in (s.get("data_sources") or []):
-            src_counts[ds_key] = src_counts.get(ds_key, 0) + 1
+    # Prefer the full-scope per-source counts surfaced by
+    # `_aggregate_persisted_blended` (covers EVERY scoped song). Fall
+    # back to iterating `top_songs` for legacy `summary` payloads that
+    # predate the field.
+    src_counts: Dict[str, int] = dict(
+        (dq.get("full_scope_data_source_counts") or {})
+    )
+    if not src_counts:
+        for s in summary.get("top_songs", []):
+            for ds_key in (s.get("data_sources") or []):
+                src_counts[ds_key] = src_counts.get(ds_key, 0) + 1
     # Always show the two canonical coverage numbers from data_quality so
     # the table is meaningful even when top_songs is empty.
     ds_rows = [["Data Source", "Songs Covered", "Catalog Coverage"]]
