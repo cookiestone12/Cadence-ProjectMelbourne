@@ -17,7 +17,7 @@ from ..models import (
     Contract, ContractAsset, RightsSplit,
     RoyaltyStatement, RoyaltyTransaction,
     RoyaltyStatementLine, RoyaltyProcessingRun, RoyaltyLedgerEntry,
-    Payee, AdvanceV2, PayoutBatch, PayoutItem,
+    Payee, Advance, PayoutBatch, PayoutItem,
 )
 from ..utils.auth import get_current_user
 from ..services.royalty_processing_engine import (
@@ -1064,11 +1064,11 @@ def list_payables(
             if creator:
                 creator_name = creator.display_name
 
-        outstanding_advances = db.query(AdvanceV2).filter(
-            AdvanceV2.org_id == org_id,
-            AdvanceV2.payee_id == p.id,
-            AdvanceV2.recoupable == True,
-            AdvanceV2.outstanding_balance_cents > 0,
+        outstanding_advances = db.query(Advance).filter(
+            Advance.org_id == org_id,
+            Advance.payee_id == p.id,
+            Advance.recoupable == True,
+            Advance.outstanding_balance_cents > 0,
         ).all()
 
         last_statement_entry = db.query(RoyaltyLedgerEntry).filter(
@@ -1116,7 +1116,7 @@ def list_payables(
 @router.get(
     "/{org_id}/advances",
     summary='List all advances (recoupable and non-recoupable) in the org',
-    description='Returns every AdvanceV2 record — the principal balances that future royalty allocations will recoup against, including their current recoupment status.\n\n**Path parameter:** `org_id`.\n**Query:** `payee_id`, `contract_id`, `recouped` (bool — only fully/partially recouped), `pool` (recoupment pool name).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ advances: [{id, advance_name, advance_date, principal_amount_cents, recouped_amount_cents, outstanding_cents, currency, recoupment_pool, recoupment_priority, cross_collateralize, payee_id, contract_id, recoupable, start_recouping_on, end_recouping_on}] }`.',
+    description='Returns every Advance record — the principal balances that future royalty allocations will recoup against, including their current recoupment status.\n\n**Path parameter:** `org_id`.\n**Query:** `payee_id`, `contract_id`, `recouped` (bool — only fully/partially recouped), `pool` (recoupment pool name).\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ advances: [{id, advance_name, advance_date, principal_amount_cents, recouped_amount_cents, outstanding_cents, currency, recoupment_pool, recoupment_priority, cross_collateralize, payee_id, contract_id, recoupable, start_recouping_on, end_recouping_on}] }`.',
 )
 def list_advances(
     org_id: int,
@@ -1126,13 +1126,13 @@ def list_advances(
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
-    query = db.query(AdvanceV2).filter(AdvanceV2.org_id == org_id)
+    query = db.query(Advance).filter(Advance.org_id == org_id)
     if contract_id:
-        query = query.filter(AdvanceV2.contract_id == contract_id)
+        query = query.filter(Advance.contract_id == contract_id)
     if payee_id:
-        query = query.filter(AdvanceV2.payee_id == payee_id)
+        query = query.filter(Advance.payee_id == payee_id)
 
-    advances = query.order_by(desc(AdvanceV2.created_at)).all()
+    advances = query.order_by(desc(Advance.created_at)).all()
     return {
         "advances": [
             {
@@ -1170,7 +1170,7 @@ def create_advance(
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
-    advance = AdvanceV2(
+    advance = Advance(
         org_id=org_id,
         contract_id=body.contract_id,
         payee_id=body.payee_id,
@@ -1213,9 +1213,9 @@ def update_advance(
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
-    advance = db.query(AdvanceV2).filter(
-        AdvanceV2.id == advance_id,
-        AdvanceV2.org_id == org_id,
+    advance = db.query(Advance).filter(
+        Advance.id == advance_id,
+        Advance.org_id == org_id,
     ).first()
     if not advance:
         raise HTTPException(status_code=404, detail="Advance not found")
@@ -1258,9 +1258,9 @@ def get_advance_detail(
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
-    advance = db.query(AdvanceV2).filter(
-        AdvanceV2.id == advance_id,
-        AdvanceV2.org_id == org_id,
+    advance = db.query(Advance).filter(
+        Advance.id == advance_id,
+        Advance.org_id == org_id,
     ).first()
     if not advance:
         raise HTTPException(status_code=404, detail="Advance not found")

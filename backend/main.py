@@ -481,6 +481,32 @@ app_logger.info(
 #      a 426 in production when X-Forwarded-Proto isn't https. The
 #      rejection still passes back through RequestContext, so the
 #      response carries X-Request-ID.
+class APIVersionRewriteMiddleware:
+    """Rewrites `/api/v1/...` paths to `/api/...` so every existing
+    route is reachable under the new versioned prefix without having
+    to touch every router or every frontend call site. Frontend
+    code may use either `/api/...` (legacy) or `/api/v1/...` and
+    both resolve to the same handler.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            path = scope.get("path", "")
+            if path.startswith("/api/v1/"):
+                new_path = "/api" + path[len("/api/v1"):]
+                scope = dict(scope)
+                scope["path"] = new_path
+                raw_path = scope.get("raw_path")
+                if raw_path:
+                    prefix = b"/api/v1"
+                    if raw_path.startswith(prefix):
+                        scope["raw_path"] = b"/api" + raw_path[len(prefix):]
+        await self.app(scope, receive, send)
+
+
 app.add_middleware(HTTPSEnforcementMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -490,6 +516,7 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Request-ID"],
 )
+app.add_middleware(APIVersionRewriteMiddleware)
 app.add_middleware(RequestContextMiddleware)
 
 

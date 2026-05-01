@@ -15,7 +15,7 @@ from ..models import (
     get_db, User, OrganizationMember, Song, Creator,
     Contract, ContractAsset, RightsSplit,
     RoyaltyStatement, RoyaltyTransaction, RoyaltyAllocation, Payment,
-    Fee, Advance, Placement, RoyaltyStatementLine,
+    Fee, Advance, Payee, Placement, RoyaltyStatementLine,
 )
 from ..utils.auth import get_current_user
 
@@ -1285,7 +1285,7 @@ def _build_statement_delete_summary(db: Session, stmt: "RoyaltyStatement") -> Di
     """
     from ..models.models import (
         RoyaltyLedgerEntry, RoyaltyProcessingRun, RoyaltyStatementLine,
-        AdvanceV2, ActionItem, PayoutItem,
+        Advance, ActionItem, PayoutItem,
     )
     from datetime import timedelta
 
@@ -1323,7 +1323,7 @@ def _build_statement_delete_summary(db: Session, stmt: "RoyaltyStatement") -> Di
 
     advance_restores = []
     for adv_id, restore_cents in recoup_rows:
-        adv = db.query(AdvanceV2).filter(AdvanceV2.id == adv_id).first()
+        adv = db.query(Advance).filter(Advance.id == adv_id).first()
         advance_restores.append({
             "advance_id": adv_id,
             "advance_name": adv.advance_name if adv else None,
@@ -1608,7 +1608,7 @@ def _perform_statement_delete(
     """
     from ..models.models import (
         RoyaltyLedgerEntry, RoyaltyProcessingRun, RoyaltyStatementLine,
-        AdvanceV2, ActionItem,
+        Advance, ActionItem,
     )
     from ..services.audit_service import log_action
 
@@ -1621,9 +1621,9 @@ def _perform_statement_delete(
     #    royalty_processing_engine.py and is the gap that was causing
     #    advance balances to "stick" after a duplicate was deleted.
     for restore in summary["advance_restores"]:
-        adv = db.query(AdvanceV2).filter(
-            AdvanceV2.id == restore["advance_id"],
-            AdvanceV2.org_id == org_id,
+        adv = db.query(Advance).filter(
+            Advance.id == restore["advance_id"],
+            Advance.org_id == org_id,
         ).first()
         if adv:
             adv.outstanding_balance_cents = (adv.outstanding_balance_cents or 0) + restore["restore_cents"]
@@ -2976,27 +2976,66 @@ def fee_to_dict(f: Fee, db: Session) -> dict:
     }
 
 
+def _resolve_or_create_creator_payee(db: Session, org_id: int, creator_id: int) -> Payee:
+    """Find or auto-create a Payee row keyed to (org_id, creator_id) of type CREATOR.
+
+    The v2 ``advances`` schema is keyed by ``payee_id`` (a Payee may wrap a
+    Creator or a company). The legacy v1 API contract takes ``creator_id``
+    directly, so we transparently bridge the two here.
+    """
+    payee = (
+        db.query(Payee)
+        .filter(Payee.org_id == org_id, Payee.creator_id == creator_id)
+        .first()
+    )
+    if payee:
+        return payee
+    payee = Payee(
+        org_id=org_id,
+        payee_type="CREATOR",
+        creator_id=creator_id,
+    )
+    db.add(payee)
+    db.flush()
+    return payee
+
+
 def advance_to_dict(a: Advance, db: Session) -> dict:
-    creator = db.query(Creator).filter(Creator.id == a.creator_id).first()
+    """Serialize a v2 ``Advance`` row using the legacy v1 JSON shape.
+
+    Keeps the existing frontend (`/api/royalties/advances/...`) working without
+    field renames. Maps:
+        principal_amount_cents → amount_cents
+        outstanding_balance_cents → remaining_cents
+        principal - outstanding → recouped_cents
+        advance_name → description
+        payee.creator_id → creator_id
+    """
+    creator_id = a.payee.creator_id if a.payee else None
+    creator = db.query(Creator).filter(Creator.id == creator_id).first() if creator_id else None
     contract = db.query(Contract).filter(Contract.id == a.contract_id).first() if a.contract_id else None
+    principal = a.principal_amount_cents or 0
+    remaining = a.outstanding_balance_cents or 0
+    recouped = max(principal - remaining, 0)
+    fully_recouped = principal > 0 and remaining <= 0
     return {
         "id": a.id,
-        "creator_id": a.creator_id,
+        "creator_id": creator_id,
         "creator_name": creator.display_name if creator else None,
         "contract_id": a.contract_id,
         "contract_title": contract.title if contract else None,
-        "description": a.description,
-        "amount_cents": a.amount_cents,
-        "amount_dollars": a.amount_cents / 100.0,
-        "recouped_cents": a.recouped_cents,
-        "recouped_dollars": a.recouped_cents / 100.0,
-        "remaining_cents": a.amount_cents - a.recouped_cents,
-        "remaining_dollars": (a.amount_cents - a.recouped_cents) / 100.0,
-        "recoupment_pct": round((a.recouped_cents / a.amount_cents * 100), 1) if a.amount_cents > 0 else 0,
+        "description": a.advance_name,
+        "amount_cents": principal,
+        "amount_dollars": principal / 100.0,
+        "recouped_cents": recouped,
+        "recouped_dollars": recouped / 100.0,
+        "remaining_cents": remaining,
+        "remaining_dollars": remaining / 100.0,
+        "recoupment_pct": round((recouped / principal * 100), 1) if principal > 0 else 0,
         "currency": a.currency,
         "advance_date": a.advance_date.isoformat() if a.advance_date else None,
-        "fully_recouped": a.fully_recouped,
-        "status": a.status,
+        "fully_recouped": fully_recouped,
+        "status": "RECOUPED" if fully_recouped else "ACTIVE",
         "notes": a.notes,
         "created_at": a.created_at.isoformat() if a.created_at else None,
     }
@@ -3118,13 +3157,17 @@ def list_advances(
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
-    query = db.query(Advance).filter(Advance.organization_id == org_id)
-    if creator_id:
-        query = query.filter(Advance.creator_id == creator_id)
-    if status:
-        query = query.filter(Advance.status == status)
+    query = db.query(Advance).filter(Advance.org_id == org_id)
+    if creator_id is not None:
+        query = (
+            query.join(Payee, Payee.id == Advance.payee_id)
+            .filter(Payee.creator_id == creator_id)
+        )
     advances = query.order_by(desc(Advance.created_at)).all()
-    return {"advances": [advance_to_dict(a, db) for a in advances], "total": len(advances)}
+    rows = [advance_to_dict(a, db) for a in advances]
+    if status:
+        rows = [r for r in rows if (r.get("status") or "").upper() == status.upper()]
+    return {"advances": rows, "total": len(rows)}
 
 
 @router.post(
@@ -3143,14 +3186,21 @@ def create_advance(
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found")
 
+    payee = _resolve_or_create_creator_payee(db, org_id, body.creator_id)
+
     advance = Advance(
-        organization_id=org_id,
-        creator_id=body.creator_id,
+        org_id=org_id,
         contract_id=body.contract_id,
-        description=body.description,
-        amount_cents=body.amount_cents,
-        currency=body.currency,
-        advance_date=body.advance_date,
+        payee_id=payee.id,
+        advance_name=body.description or f"Advance for {creator.display_name}",
+        advance_date=body.advance_date or date.today(),
+        currency=body.currency or "USD",
+        principal_amount_cents=body.amount_cents or 0,
+        recoupable=True,
+        recoupment_pool="ALL",
+        recoupment_priority=1,
+        cross_collateralize=False,
+        outstanding_balance_cents=body.amount_cents or 0,
         notes=body.notes,
         created_by_user_id=current_user.id,
     )
@@ -3173,13 +3223,23 @@ def update_advance(
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
-    advance = db.query(Advance).filter(Advance.id == advance_id, Advance.organization_id == org_id).first()
+    advance = db.query(Advance).filter(Advance.id == advance_id, Advance.org_id == org_id).first()
     if not advance:
         raise HTTPException(status_code=404, detail="Advance not found")
-    for field, value in body.dict(exclude_unset=True).items():
-        setattr(advance, field, value)
-    if advance.recouped_cents >= advance.amount_cents and advance.amount_cents > 0:
-        advance.fully_recouped = True
+    patch = body.dict(exclude_unset=True)
+
+    # Translate legacy v1 PATCH fields onto the v2 schema.
+    if "description" in patch:
+        advance.advance_name = patch["description"] or advance.advance_name
+    if "advance_date" in patch and patch["advance_date"] is not None:
+        advance.advance_date = patch["advance_date"]
+    if "notes" in patch:
+        advance.notes = patch["notes"]
+    if "recouped_cents" in patch and patch["recouped_cents"] is not None:
+        recouped = max(int(patch["recouped_cents"]), 0)
+        advance.outstanding_balance_cents = max((advance.principal_amount_cents or 0) - recouped, 0)
+    # ``status`` and ``fully_recouped`` are derived from the principal/outstanding
+    # balance — no direct setter on the v2 schema.
     db.commit()
     db.refresh(advance)
     return advance_to_dict(advance, db)
@@ -3197,7 +3257,7 @@ def delete_advance(
     current_user: User = Depends(get_current_user),
 ):
     verify_org_access(current_user, org_id, db)
-    advance = db.query(Advance).filter(Advance.id == advance_id, Advance.organization_id == org_id).first()
+    advance = db.query(Advance).filter(Advance.id == advance_id, Advance.org_id == org_id).first()
     if not advance:
         raise HTTPException(status_code=404, detail="Advance not found")
     db.delete(advance)
@@ -3226,7 +3286,7 @@ def confirm_contract_payment(
         raise HTTPException(status_code=400, detail="No advance amount on this contract")
 
     existing_advance = db.query(Advance).filter(
-        Advance.organization_id == org_id,
+        Advance.org_id == org_id,
         Advance.contract_id == contract_id,
     ).first()
 
@@ -3239,17 +3299,21 @@ def confirm_contract_payment(
 
     if contract.creator_id:
         direction = contract.payment_direction or "INCOMING"
+        payee = _resolve_or_create_creator_payee(db, org_id, contract.creator_id)
+        principal_cents = int(advance_amount * 100)
         new_advance = Advance(
-            organization_id=org_id,
-            creator_id=contract.creator_id,
+            org_id=org_id,
+            payee_id=payee.id,
             contract_id=contract_id,
-            description=f"Advance from {contract.title}",
-            amount_cents=int(advance_amount * 100),
-            recouped_cents=0,
+            advance_name=f"Advance from {contract.title}",
+            principal_amount_cents=principal_cents,
+            outstanding_balance_cents=principal_cents,
             currency=contract.advance_currency or "USD",
             advance_date=contract.start_date or datetime.utcnow().date(),
-            fully_recouped=False,
-            status="ACTIVE" if direction == "OUTGOING" else "RECEIVED",
+            recoupable=True,
+            recoupment_pool="ALL",
+            recoupment_priority=1,
+            cross_collateralize=False,
             notes=f"Auto-created from contract confirmation. Direction: {direction}",
             created_by_user_id=current_user.id,
         )
@@ -3311,10 +3375,16 @@ def get_creator_accounting(
     fees = db.query(Fee).filter(Fee.organization_id == org_id, Fee.creator_id == creator_id).order_by(desc(Fee.created_at)).all()
     total_fees_cents = sum(f.amount_cents for f in fees)
 
-    advances = db.query(Advance).filter(Advance.organization_id == org_id, Advance.creator_id == creator_id).order_by(desc(Advance.created_at)).all()
-    total_advances_cents = sum(a.amount_cents for a in advances)
-    total_recouped_cents = sum(a.recouped_cents for a in advances)
-    outstanding_advances_cents = total_advances_cents - total_recouped_cents
+    advances = (
+        db.query(Advance)
+        .join(Payee, Payee.id == Advance.payee_id)
+        .filter(Advance.org_id == org_id, Payee.creator_id == creator_id)
+        .order_by(desc(Advance.created_at))
+        .all()
+    )
+    total_advances_cents = sum((a.principal_amount_cents or 0) for a in advances)
+    outstanding_advances_cents = sum((a.outstanding_balance_cents or 0) for a in advances)
+    total_recouped_cents = total_advances_cents - outstanding_advances_cents
 
     placements = db.query(Placement).filter(Placement.organization_id == org_id).all()
     creator_song_ids = [s.id for s in db.query(Song).filter(Song.organization_id == org_id).all()]
@@ -3341,7 +3411,7 @@ def get_creator_accounting(
         direction = c.payment_direction or "INCOMING"
 
         has_linked_advance = db.query(Advance).filter(
-            Advance.organization_id == org_id,
+            Advance.org_id == org_id,
             Advance.contract_id == c.id,
         ).first() is not None
         is_confirmed = has_linked_advance

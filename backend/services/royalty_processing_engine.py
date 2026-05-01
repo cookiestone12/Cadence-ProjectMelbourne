@@ -11,7 +11,7 @@ from ..models import (
     get_db, Song, Work, Release, Creator, Contract, ContractAsset, RightsSplit,
     RoyaltyStatement, RoyaltyTransaction,
     RoyaltyStatementLine, RoyaltyProcessingRun, RoyaltyLedgerEntry,
-    Payee, AdvanceV2, PayoutBatch, PayoutItem, ActionItem,
+    Payee, Advance, PayoutBatch, PayoutItem, ActionItem,
 )
 from .classification_engine import classify_line
 
@@ -626,12 +626,12 @@ def get_allocation_preview(db: Session, statement_id: int, org_id: int) -> dict:
                 payee_totals[payee.id]["earnings_cents"] += earning_cents
 
         for payee_id, totals in payee_totals.items():
-            advances = db.query(AdvanceV2).filter(
-                AdvanceV2.org_id == org_id,
-                AdvanceV2.payee_id == payee_id,
-                AdvanceV2.recoupable == True,
-                AdvanceV2.outstanding_balance_cents > 0,
-            ).order_by(AdvanceV2.recoupment_priority).all()
+            advances = db.query(Advance).filter(
+                Advance.org_id == org_id,
+                Advance.payee_id == payee_id,
+                Advance.recoupable == True,
+                Advance.outstanding_balance_cents > 0,
+            ).order_by(Advance.recoupment_priority).all()
 
             remaining = totals["earnings_cents"] - totals["fees_cents"]
             total_recoup = 0
@@ -844,12 +844,12 @@ def process_statement(db: Session, statement_id: int, org_id: int, user_id: int)
                 summary["total_earnings_cents"] += earning_cents
 
                 payable = earning_cents
-                advances = db.query(AdvanceV2).filter(
-                    AdvanceV2.org_id == org_id,
-                    AdvanceV2.payee_id == payee.id,
-                    AdvanceV2.recoupable == True,
-                    AdvanceV2.outstanding_balance_cents > 0,
-                ).order_by(AdvanceV2.recoupment_priority).all()
+                advances = db.query(Advance).filter(
+                    Advance.org_id == org_id,
+                    Advance.payee_id == payee.id,
+                    Advance.recoupable == True,
+                    Advance.outstanding_balance_cents > 0,
+                ).order_by(Advance.recoupment_priority).all()
 
                 for adv in advances:
                     if payable <= 0:
@@ -995,9 +995,9 @@ def reprocess_statement(
             db.add(reversal)
 
             if entry.entry_type == "RECOUPMENT_APPLIED" and entry.advance_id:
-                adv = db.query(AdvanceV2).filter(
-                    AdvanceV2.id == entry.advance_id,
-                    AdvanceV2.org_id == org_id,
+                adv = db.query(Advance).filter(
+                    Advance.id == entry.advance_id,
+                    Advance.org_id == org_id,
                 ).first()
                 if adv:
                     adv.outstanding_balance_cents += abs(entry.amount_cents)

@@ -20,7 +20,7 @@ from backend.models.models import (
     User, Organization, OrganizationMember,
     RoyaltyStatement, RoyaltyStatementLine, RoyaltyTransaction,
     RoyaltyLedgerEntry, RoyaltyProcessingRun,
-    AdvanceV2, ActionItem, Payee, PayoutBatch, PayoutItem,
+    Advance, ActionItem, Payee, PayoutBatch, PayoutItem,
 )
 from backend.utils.auth import get_current_user
 from backend.models.database import get_db as original_get_db
@@ -120,7 +120,7 @@ def test_delete_restores_advance_balance(db, org_user, client):
     payee = _make_payee(db, org.id)
     run = _make_run(db, org.id, stmt.id)
 
-    advance = AdvanceV2(
+    advance = Advance(
         org_id=org.id, payee_id=payee.id, advance_name="Q1 Advance",
         advance_date=date(2026, 1, 1), currency="USD",
         principal_amount_cents=100_000, recoupable=True,
@@ -147,7 +147,7 @@ def test_delete_restores_advance_balance(db, org_user, client):
     assert res.status_code == 200, res.text
 
     db.expire_all()
-    adv = db.query(AdvanceV2).filter(AdvanceV2.id == advance_id).first()
+    adv = db.query(Advance).filter(Advance.id == advance_id).first()
     assert adv.outstanding_balance_cents == 100_000, (
         f"expected 70_000 + 30_000 restored = 100_000, got {adv.outstanding_balance_cents}"
     )
@@ -450,7 +450,7 @@ def test_delete_preview_is_non_mutating_and_matches_summary(db, org_user, client
     payee = _make_payee(db, org.id)
     run = _make_run(db, org.id, stmt.id)
 
-    advance = AdvanceV2(
+    advance = Advance(
         org_id=org.id, payee_id=payee.id, advance_name="A1",
         advance_date=date(2026, 1, 1), currency="USD",
         principal_amount_cents=50_000, recoupable=True,
@@ -482,7 +482,7 @@ def test_delete_preview_is_non_mutating_and_matches_summary(db, org_user, client
     # Preview must not mutate
     db.expire_all()
     assert db.query(RoyaltyStatement).filter(RoyaltyStatement.id == stmt.id).first() is not None
-    assert db.query(AdvanceV2).filter(AdvanceV2.id == advance.id).first().outstanding_balance_cents == 40_000
+    assert db.query(Advance).filter(Advance.id == advance.id).first().outstanding_balance_cents == 40_000
     assert db.query(ActionItem).filter(ActionItem.organization_id == org.id).count() == 1
 
     # Now delete and confirm the summary in the response matches preview
@@ -523,7 +523,7 @@ def _seed_large_statement(db, org_id, *, num_tx=10_000, num_ledger=50_000):
     # multiple advance_id values (exercises the GROUP BY in the summary).
     advances = []
     for i in range(20):
-        a = AdvanceV2(
+        a = Advance(
             org_id=org_id, payee_id=payee.id,
             advance_name=f"Adv {i}",
             advance_date=date(2026, 1, 1), currency="USD",
@@ -533,7 +533,7 @@ def _seed_large_statement(db, org_id, *, num_tx=10_000, num_ledger=50_000):
         )
         db.add(a)
     db.commit()
-    advances = db.query(AdvanceV2).filter(AdvanceV2.org_id == org_id).all()
+    advances = db.query(Advance).filter(Advance.org_id == org_id).all()
     advance_ids = [a.id for a in advances]
 
     # Bulk-insert transactions
@@ -641,7 +641,7 @@ def test_delete_preview_and_delete_stay_within_budget_for_huge_statement(db, org
     # Advance balances were restored: each advance got back 30%/20 of the
     # 50k ledger entries * 50 cents = 37_500 cents per advance on top of
     # its starting 1_000_000.
-    adv_balances = [a.outstanding_balance_cents for a in db.query(AdvanceV2).filter(AdvanceV2.org_id == org.id).all()]
+    adv_balances = [a.outstanding_balance_cents for a in db.query(Advance).filter(Advance.org_id == org.id).all()]
     assert all(b > 1_000_000 for b in adv_balances), (
         f"advance balances were not restored after delete: {adv_balances}"
     )

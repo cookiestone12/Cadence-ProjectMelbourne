@@ -23,7 +23,9 @@ import {
   CloudArrowUpIcon,
   StarIcon,
   ShareIcon,
-  LifebuoyIcon
+  LifebuoyIcon,
+  ChevronDownIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline'
 import NotificationBell from './NotificationBell'
 
@@ -58,38 +60,98 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
     if (path === '/catalog') return location.pathname === '/catalog'
     return location.pathname.startsWith(path)
   }
-  
+
   const clientNavItems = [
     { path: '/client-portal', label: 'My Portal', icon: HomeIcon },
     { path: '/support', label: 'Support', icon: LifebuoyIcon },
   ]
 
-  const allNavItems = [
+  const topItems = [
     { path: '/', label: 'Home', icon: HomeIcon },
     { path: '/search', label: 'Search', icon: MagnifyingGlassIcon },
-    { path: '/roster', label: 'Roster', icon: UsersIcon, requiresRoster: true },
-    { path: '/directory', label: 'Directory', icon: UserGroupIcon },
-    { path: '/catalog', label: 'Catalog', icon: MusicalNoteIcon },
-    { path: '/catalog/unreleased', label: 'Unreleased', icon: DocumentTextIcon, indent: true },
-    { path: '/releases', label: 'Artist Releases', icon: RectangleStackIcon },
-    { path: '/contracts', label: 'Contracts', icon: ClipboardDocumentListIcon },
-    { path: '/actions', label: 'Actions', icon: ClipboardDocumentCheckIcon },
-    { path: '/royalties', label: 'Royalties', icon: BanknotesIcon },
-    { path: '/placements', label: 'Sync HQ', icon: FilmIcon },
-    { path: '/brief-builder', label: 'Brief Builder', icon: SparklesIcon },
-    { path: '/credits', label: 'Credits', icon: StarIcon },
-    { path: '/storage-scan', label: 'Storage Scan', icon: CloudArrowUpIcon },
-    { path: '/registration-reports', label: 'Bulk Registration', icon: DocumentTextIcon },
-    { path: '/reports', label: 'Reports', icon: ChartBarIcon },
-    { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
-    { path: '/shared-with-me', label: 'Shared With Me', icon: ShareIcon },
-    { path: '/support', label: 'Support', icon: LifebuoyIcon },
   ]
 
-  const navItems = isClient ? clientNavItems : allNavItems.filter(item => {
+  const sectionDefs = [
+    {
+      key: 'catalog',
+      label: 'Catalog',
+      defaultOpen: true,
+      items: [
+        { path: '/catalog', label: 'Catalog', icon: MusicalNoteIcon },
+        { path: '/catalog/unreleased', label: 'Unreleased', icon: DocumentTextIcon, indent: true },
+        { path: '/releases', label: 'Artist Releases', icon: RectangleStackIcon },
+        { path: '/credits', label: 'Credits', icon: StarIcon },
+        { path: '/storage-scan', label: 'Storage Scan', icon: CloudArrowUpIcon },
+        { path: '/registration-reports', label: 'Bulk Registration', icon: DocumentTextIcon },
+      ],
+    },
+    {
+      key: 'financials',
+      label: 'Financials',
+      defaultOpen: true,
+      items: [
+        { path: '/contracts', label: 'Contracts', icon: ClipboardDocumentListIcon },
+        { path: '/royalties', label: 'Royalties', icon: BanknotesIcon },
+        { path: '/valuation', label: 'Valuation', icon: CurrencyDollarIcon },
+        { path: '/actions', label: 'Actions', icon: ClipboardDocumentCheckIcon },
+      ],
+    },
+    {
+      key: 'analytics',
+      label: 'Analytics',
+      defaultOpen: false,
+      items: [
+        { path: '/reports', label: 'Reports', icon: ChartBarIcon },
+        { path: '/placements', label: 'Sync HQ', icon: FilmIcon },
+        { path: '/brief-builder', label: 'Brief Builder', icon: SparklesIcon },
+      ],
+    },
+    {
+      key: 'team',
+      label: 'Team',
+      defaultOpen: false,
+      items: [
+        { path: '/roster', label: 'Roster', icon: UsersIcon, requiresRoster: true },
+        { path: '/directory', label: 'Directory', icon: UserGroupIcon },
+        { path: '/shared-with-me', label: 'Shared With Me', icon: ShareIcon },
+        { path: '/support', label: 'Support', icon: LifebuoyIcon },
+      ],
+    },
+  ]
+
+  const filterItem = (item) => {
     if (item.requiresRoster) return canManageRoster
     return true
-  })
+  }
+
+  const sections = sectionDefs
+    .map((sec) => ({ ...sec, items: sec.items.filter(filterItem) }))
+    .filter((sec) => sec.items.length > 0)
+
+  const initialOpen = () => {
+    const next = {}
+    for (const sec of sectionDefs) {
+      next[sec.key] = sec.defaultOpen || sec.items.some((it) => isActive(it.path))
+    }
+    return next
+  }
+  const [openSections, setOpenSections] = useState(initialOpen)
+
+  useEffect(() => {
+    setOpenSections((prev) => {
+      const next = { ...prev }
+      for (const sec of sectionDefs) {
+        if (sec.items.some((it) => isActive(it.path))) {
+          next[sec.key] = true
+        }
+      }
+      return next
+    })
+  }, [location.pathname])
+
+  const toggleSection = (key) => {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
   
   return (
     <>
@@ -135,27 +197,72 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
       
         <div className="flex-1 overflow-y-auto">
           <nav className="px-3 py-4 space-y-0.5">
-            {navItems.map((item) => {
+            {(isClient ? clientNavItems : topItems).map((item) => {
               const Icon = item.icon
               const active = isActive(item.path)
-              
               return (
                 <Link
                   key={item.path}
                   to={item.path}
                   onClick={() => window.innerWidth < 1024 && onClose()}
                   className={`
-                    flex items-center gap-3 ${item.indent ? 'pl-8 pr-3' : 'px-3'} py-2.5 rounded-xl
+                    flex items-center gap-3 px-3 py-2.5 rounded-xl
                     transition-all duration-150 ease-am
-                    ${active 
-                      ? 'bg-gradient-to-r from-am-accent to-am-accent-light text-white shadow-am-button' 
+                    ${active
+                      ? 'bg-gradient-to-r from-am-accent to-am-accent-light text-white shadow-am-button'
                       : 'text-am-text hover:bg-am-subtle'
                     }
                   `}
                 >
-                  <Icon className={`${item.indent ? 'w-[18px] h-[18px]' : 'w-[22px] h-[22px]'} ${active ? 'stroke-[1.8]' : 'stroke-[1.5]'}`} />
-                  <span className={`${item.indent ? 'text-[13px]' : 'text-[15px]'} ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                  <Icon className={`w-[22px] h-[22px] ${active ? 'stroke-[1.8]' : 'stroke-[1.5]'}`} />
+                  <span className={`text-[15px] ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
                 </Link>
+              )
+            })}
+
+            {!isClient && sections.map((sec) => {
+              const isOpen = !!openSections[sec.key]
+              return (
+                <div key={sec.key} className="pt-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(sec.key)}
+                    className="w-full flex items-center justify-between px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-am-text-secondary hover:text-am-text transition-colors duration-150"
+                  >
+                    <span>{sec.label}</span>
+                    {isOpen ? (
+                      <ChevronDownIcon className="w-3.5 h-3.5" />
+                    ) : (
+                      <ChevronRightIcon className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                  {isOpen && (
+                    <div className="space-y-0.5">
+                      {sec.items.map((item) => {
+                        const Icon = item.icon
+                        const active = isActive(item.path)
+                        return (
+                          <Link
+                            key={item.path}
+                            to={item.path}
+                            onClick={() => window.innerWidth < 1024 && onClose()}
+                            className={`
+                              flex items-center gap-3 ${item.indent ? 'pl-8 pr-3' : 'px-3'} py-2.5 rounded-xl
+                              transition-all duration-150 ease-am
+                              ${active
+                                ? 'bg-gradient-to-r from-am-accent to-am-accent-light text-white shadow-am-button'
+                                : 'text-am-text hover:bg-am-subtle'
+                              }
+                            `}
+                          >
+                            <Icon className={`${item.indent ? 'w-[18px] h-[18px]' : 'w-[22px] h-[22px]'} ${active ? 'stroke-[1.8]' : 'stroke-[1.5]'}`} />
+                            <span className={`${item.indent ? 'text-[13px]' : 'text-[15px]'} ${active ? 'font-semibold' : 'font-medium'}`}>{item.label}</span>
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </nav>
