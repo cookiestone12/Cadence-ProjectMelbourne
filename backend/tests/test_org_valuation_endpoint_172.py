@@ -215,6 +215,45 @@ def test_org_catalog_endpoint_rejects_foreign_org(db, client):
         app.dependency_overrides.pop(get_current_user, None)
 
 
+def test_org_catalog_endpoint_refresh_query_recomputes(db, client):
+    """`?refresh=true` must trigger a fresh full-catalog compute even when
+    a BLENDED snapshot already exists (default is snapshot-reuse). We
+    detect the recompute by counting BLENDED rows before and after."""
+    org, _, user, _, _ = _seed(db)
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        # First call seeds the snapshot via the auto-compute path.
+        r0 = client.get(f"{_BASE}/{org.id}/valuation/catalog")
+        assert r0.status_code == 200
+        n0 = db.query(ValuationCalculation).filter(
+            ValuationCalculation.organization_id == org.id,
+            ValuationCalculation.valuation_method == "BLENDED",
+        ).count()
+        assert n0 >= 1
+
+        # Second call WITHOUT refresh must NOT add new rows (snapshot reuse).
+        r1 = client.get(f"{_BASE}/{org.id}/valuation/catalog")
+        assert r1.status_code == 200
+        db.expire_all()
+        n1 = db.query(ValuationCalculation).filter(
+            ValuationCalculation.organization_id == org.id,
+            ValuationCalculation.valuation_method == "BLENDED",
+        ).count()
+        assert n1 == n0, "default behavior must reuse snapshot, not recompute"
+
+        # Third call WITH ?refresh=true must add a fresh BLENDED row per song.
+        r2 = client.get(f"{_BASE}/{org.id}/valuation/catalog?refresh=true")
+        assert r2.status_code == 200, f"got {r2.status_code}: {r2.text[:200]}"
+        db.expire_all()
+        n2 = db.query(ValuationCalculation).filter(
+            ValuationCalculation.organization_id == org.id,
+            ValuationCalculation.valuation_method == "BLENDED",
+        ).count()
+        assert n2 > n1, "refresh=true must persist a fresh recompute"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_v1_mirror_route_is_registered():
     """Sanity: the spec'd `/api/v1/organizations/{org_id}/valuation/catalog`
     path must be present in the OpenAPI schema (auto-mirrored by

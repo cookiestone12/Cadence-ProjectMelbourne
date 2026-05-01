@@ -1768,13 +1768,16 @@ _VALID_METHODS = {"income", "market_comparable", "dcf", "blended"}
         "`selected_method` discriminator chosen by the `?method=` query.\n\n"
         "**Path:** `org_id` — must match a current org membership of the caller.\n"
         "**Query:** `creator_id?` (per-creator scope), `method?` "
-        "(income | market_comparable | dcf | blended; default = blended)."
+        "(income | market_comparable | dcf | blended; default = blended), "
+        "`refresh?` (true to force a fresh recompute even if a snapshot "
+        "already exists; defaults to snapshot-reuse for low latency)."
     ),
 )
 def get_org_catalog_valuation(
     org_id: int,
     creator_id: Optional[int] = None,
     method: str = "blended",
+    refresh: bool = False,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -1795,14 +1798,15 @@ def get_org_catalog_valuation(
     if creator_id is not None:
         _scope_check_creator(db, creator_id, org_id)
 
-    # Spec'd Step 4 semantics: if no persisted BLENDED snapshot yet exists
-    # for this org, compute + persist a fresh full-catalog run before
-    # aggregating, so a single GET serves a usable summary out of the box.
+    # Default semantics: serve the latest persisted BLENDED snapshot when
+    # one exists (low-latency reads). When no snapshot exists OR the caller
+    # explicitly passes ?refresh=true, run the full per-method engine over
+    # the catalog and persist a fresh snapshot before aggregating.
     has_snapshot = db.query(ValuationCalculation.id).filter(
         ValuationCalculation.organization_id == org_id,
         ValuationCalculation.valuation_method == "BLENDED",
     ).first() is not None
-    if not has_snapshot:
+    if refresh or not has_snapshot:
         try:
             compute_full_catalog_valuation(db, org_id=org_id, persist=True)
             db.commit()
