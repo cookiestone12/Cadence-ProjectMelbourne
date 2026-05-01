@@ -2376,9 +2376,9 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
                                   {diffKeys.slice(0, 4).map(k => (
                                     <li key={k} className="text-[11px] text-[#7A8580]">
                                       <span className="font-medium text-[#3D4A44]">{k}:</span>{' '}
-                                      <span className="line-through opacity-70">{String(diff[k]?.from ?? '—')}</span>
+                                      <span className="line-through opacity-70">{String(diff[k]?.old ?? diff[k]?.from ?? '—')}</span>
                                       {' → '}
-                                      <span>{String(diff[k]?.to ?? '—')}</span>
+                                      <span>{String(diff[k]?.new ?? diff[k]?.to ?? '—')}</span>
                                     </li>
                                   ))}
                                 </ul>

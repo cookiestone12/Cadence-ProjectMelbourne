@@ -1025,8 +1025,12 @@ def add_song_split(
     record_split_change(db, song_id, song.organization_id, current_user.id, holder_name, data.rights_type, None, data.share_percentage, notes=data.notes)
 
     _sync_song_pub_percentage(db, song_id)
-    if data.rights_holder_id and data.rights_type in ("PUBLISHING", "MASTER"):
-        _sync_splits_to_credits(db, song_id, data.rights_holder_id)
+    # Task #171 — Phase 4: use the RESOLVED holder id (split.rights_holder_id)
+    # rather than the request input. When the caller passes only a name,
+    # _resolve_rights_holder_id has already converted it to an id; that's
+    # the value persisted on the row and the value the credit sync needs.
+    if split.rights_holder_id and data.rights_type in ("PUBLISHING", "MASTER"):
+        _sync_splits_to_credits(db, song_id, split.rights_holder_id)
 
     # Task #140 — adding a split through the standalone Rights & Splits tab
     # can flip LG-02 to COMPLETED once pub shares total 100%.
@@ -1973,8 +1977,11 @@ def add_split(
         from ..utils.health_sync import sync_song_to_checklist
         record_split_change(db, ca.asset_id, contract.organization_id, current_user.id, holder_name, data.rights_type, None, data.share_percentage, notes=data.notes)
         _sync_song_pub_percentage(db, ca.asset_id)
-        if data.rights_holder_id and data.rights_type in ("PUBLISHING", "MASTER"):
-            _sync_splits_to_credits(db, ca.asset_id, data.rights_holder_id)
+        # Task #171 — Phase 4: use the resolved holder id post-create (the
+        # value persisted on the split), not the raw request input — so
+        # name-only callers also get downstream credit sync.
+        if split.rights_holder_id and data.rights_type in ("PUBLISHING", "MASTER"):
+            _sync_splits_to_credits(db, ca.asset_id, split.rights_holder_id)
         song_obj = db.query(Song).filter(Song.id == ca.asset_id).first()
         if song_obj:
             sync_song_to_checklist(db, song_obj)
