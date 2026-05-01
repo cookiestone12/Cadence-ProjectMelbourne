@@ -658,9 +658,9 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
           headers: { 'Content-Type': 'multipart/form-data' }
         })
         result.status = 'done'
-        result.transactions = uploadRes.data?.transactions_count || uploadRes.data?.rows_imported || 0
-        result.matched = uploadRes.data?.matched_count || 0
-        result.unmatched = uploadRes.data?.unmatched_count || 0
+        result.transactions = uploadRes.data?.total_transactions ?? uploadRes.data?.transactions_count ?? uploadRes.data?.rows_imported ?? 0
+        result.matched = uploadRes.data?.matched_transactions ?? uploadRes.data?.matched_count ?? 0
+        result.unmatched = uploadRes.data?.unmatched_transactions ?? uploadRes.data?.unmatched_count ?? 0
       } catch (err) {
         result.status = 'error'
         result.error = err.response?.data?.detail || err.message || 'Upload failed'
@@ -835,15 +835,6 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
               {uploadStep === 1 && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">File (CSV/Excel/PDF)</label>
-                    <input
-                      type="file"
-                      accept=".csv,.xlsx,.xls,.pdf,application/pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                      onChange={e => setUploadFile(e.target.files?.[0] || null)}
-                      className="w-full text-sm text-[#3D4A44] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-[rgba(91,138,114,0.1)] file:text-[#5B8A72] hover:file:bg-[rgba(91,138,114,0.2)]"
-                    />
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium text-[#3D4A44] mb-1">Statement Source</label>
                     <select
                       value={uploadSourceType}
@@ -855,7 +846,16 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                     >
                       {SOURCE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
-                    <p className="text-xs text-[#7A8580] mt-1">Select the type of statement for better column detection</p>
+                    <p className="text-xs text-[#7A8580] mt-1">Pick the source first so we can detect columns automatically</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">File (CSV/Excel/PDF)</label>
+                    <input
+                      type="file"
+                      accept=".csv,.xlsx,.xls,.pdf,application/pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                      onChange={e => setUploadFile(e.target.files?.[0] || null)}
+                      className="w-full text-sm text-[#3D4A44] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-[rgba(91,138,114,0.1)] file:text-[#5B8A72] hover:file:bg-[rgba(91,138,114,0.2)]"
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Name</label>
@@ -903,6 +903,21 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                       <p className="text-sm text-[#3D4A44]">
                         Detected as <span className="font-semibold">{detectedSourceType}</span> statement — columns mapped accordingly
                       </p>
+                    </div>
+                  )}
+                  {previewData.mapping_confident === false && (
+                    <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                      <ExclamationCircleIcon className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-[#3D4A44]">
+                        <p className="font-medium">
+                          Low-confidence column mapping{typeof previewData.mapping_confidence === 'number' ? ` (${Math.round(previewData.mapping_confidence * 100)}%)` : ''} — review carefully.
+                        </p>
+                        {Array.isArray(previewData.unmapped_headers) && previewData.unmapped_headers.length > 0 && (
+                          <p className="text-xs text-[#7A8580] mt-1">
+                            Unmatched headers: <span className="font-mono">{previewData.unmapped_headers.join(', ')}</span>
+                          </p>
+                        )}
+                      </div>
                     </div>
                   )}
                   <p className="text-sm text-[#7A8580]">
@@ -961,14 +976,29 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                 <div className="text-center py-6">
                   <CheckCircleSolid className="w-16 h-16 text-[#5B8A72] mx-auto mb-4" />
                   <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Upload Successful</h4>
-                  <p className="text-sm text-[#7A8580] mb-1">
-                    {uploadResult?.transactions_count || uploadResult?.rows_imported || 0} transactions imported
-                  </p>
-                  {uploadResult?.matched_count != null && (
-                    <p className="text-sm text-[#7A8580]">
-                      {uploadResult.matched_count} matched, {uploadResult.unmatched_count || 0} unmatched
-                    </p>
-                  )}
+                  {(() => {
+                    const total = uploadResult?.total_transactions ?? uploadResult?.transactions_count ?? uploadResult?.rows_imported ?? 0
+                    const matched = uploadResult?.matched_transactions ?? uploadResult?.matched_count
+                    const unmatched = uploadResult?.unmatched_transactions ?? uploadResult?.unmatched_count ?? 0
+                    const totalRevenue = uploadResult?.total_revenue_dollars ?? (uploadResult?.total_revenue_cents != null ? uploadResult.total_revenue_cents / 100 : null)
+                    return (
+                      <>
+                        <p className="text-sm text-[#7A8580] mb-1">
+                          {total} transactions imported
+                        </p>
+                        {matched != null && (
+                          <p className="text-sm text-[#7A8580]">
+                            {matched} matched, {unmatched} unmatched
+                          </p>
+                        )}
+                        {totalRevenue != null && (
+                          <p className="text-sm text-[#7A8580] mt-1">
+                            Total revenue: ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        )}
+                      </>
+                    )
+                  })()}
                   <button onClick={resetUpload} className="mt-6 px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
                     Done
                   </button>

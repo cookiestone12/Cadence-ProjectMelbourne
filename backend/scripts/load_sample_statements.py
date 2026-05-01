@@ -48,6 +48,44 @@ SAMPLE_FIXTURES = [
         "period_end": date(2024, 12, 31),
         "currency": "USD",
     },
+    # Phase 3 (Task #170) — uniform-ingestion fixtures using real
+    # seed-catalog ISRCs (USRC12345001-005) so the matcher demos
+    # ISRC-priority matching alongside fuzzy-title fallback. Each
+    # file mixes matched + unmatched + varied amount formatting
+    # ($1,234.56 / 1234.56 / large round numbers) to exercise the
+    # normalizer.
+    {
+        "file_name": "bmi_q4_2025.csv",
+        "source_name": "BMI Q4 2025 (Sample)",
+        "source_type": "BMI",
+        "period_start": date(2025, 10, 1),
+        "period_end": date(2025, 12, 31),
+        "currency": "USD",
+    },
+    {
+        "file_name": "mlc_dec_2025.csv",
+        "source_name": "MLC December 2025 (Sample)",
+        "source_type": "MLC",
+        "period_start": date(2025, 12, 1),
+        "period_end": date(2025, 12, 31),
+        "currency": "USD",
+    },
+    {
+        "file_name": "ascap_q4_2025.csv",
+        "source_name": "ASCAP Q4 2025 (Sample)",
+        "source_type": "ASCAP",
+        "period_start": date(2025, 10, 1),
+        "period_end": date(2025, 12, 31),
+        "currency": "USD",
+    },
+    {
+        "file_name": "label_h2_2025.csv",
+        "source_name": "Label Statement H2 2025 (Sample)",
+        "source_type": "LABEL",
+        "period_start": date(2025, 7, 1),
+        "period_end": date(2025, 12, 31),
+        "currency": "USD",
+    },
 ]
 
 
@@ -69,7 +107,10 @@ def load_sample_statements_for_org(
     line_count}`` dicts. Skips fixtures that already exist for the org.
     """
     from ..models.models import RoyaltyStatement
-    from ..services.statement_parser import parse_statement_file
+    from ..services.statement_parser import (
+        parse_statement_file,
+        normalize_rows_for_amount_format,
+    )
     from ..services.royalty_processing_engine import (
         parse_statement_to_lines,
         auto_match_lines,
@@ -122,12 +163,17 @@ def load_sample_statements_for_org(
         db.add(statement)
         db.flush()
 
+        normalized_rows = normalize_rows_for_amount_format(
+            parsed.rows,
+            parsed.suggested_mapping or {},
+            parsed.resolved_source_type or fixture["source_type"],
+        )
         line_count = parse_statement_to_lines(
             db,
             statement.id,
             org_id,
             parsed.suggested_mapping,
-            parsed.rows,
+            normalized_rows,
             pdf_metadata=parsed.pdf_metadata,
         )
         statement.status = "UPLOADED"

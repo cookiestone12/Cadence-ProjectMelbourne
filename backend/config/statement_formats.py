@@ -126,6 +126,13 @@ BASE_COLUMN_HINTS: Dict[str, List[str]] = {
 #     engine and for sanity-checking reported periods.
 #   - default_currency: the currency these statements are usually
 #     denominated in if the upload form omits one.
+#   - amount_format: "dollars" (decimal dollars, may use $/,) or
+#     "cents" (integer cents already). Drives the amount normalizer
+#     so we never double-multiply.
+#   - identifier_fields: ordered list of identifier fields this
+#     source typically carries (used by the matcher to pick its
+#     priority and by the column mapper to know which ID columns to
+#     hunt for).
 #   - extra_hints: per-field header aliases that take precedence over
 #     ``BASE_COLUMN_HINTS`` when this source is detected.
 SOURCE_FORMAT_REGISTRY: Dict[str, Dict] = {
@@ -133,6 +140,8 @@ SOURCE_FORMAT_REGISTRY: Dict[str, Dict] = {
         "keywords": ["bmi", "broadcast music"],
         "period_cadence": "quarterly",
         "default_currency": "USD",
+        "amount_format": "dollars",
+        "identifier_fields": ["work_id", "iswc", "isrc"],
         "extra_hints": {
             "track_title": ["work title", "song title"],
             "artist": ["writer", "writer name", "affiliated writer"],
@@ -146,6 +155,8 @@ SOURCE_FORMAT_REGISTRY: Dict[str, Dict] = {
         "keywords": ["ascap", "american society"],
         "period_cadence": "quarterly",
         "default_currency": "USD",
+        "amount_format": "dollars",
+        "identifier_fields": ["work_id", "iswc", "isrc"],
         "extra_hints": {
             "track_title": ["title", "work title"],
             "artist": ["writer/publisher", "interested party", "writer name"],
@@ -158,6 +169,8 @@ SOURCE_FORMAT_REGISTRY: Dict[str, Dict] = {
         "keywords": ["sesac"],
         "period_cadence": "quarterly",
         "default_currency": "USD",
+        "amount_format": "dollars",
+        "identifier_fields": ["work_id", "iswc"],
         "extra_hints": {
             "track_title": ["composition", "title"],
             "artist": ["affiliate", "writer"],
@@ -170,6 +183,8 @@ SOURCE_FORMAT_REGISTRY: Dict[str, Dict] = {
         "keywords": ["mlc", "mechanical licensing collective", "the mlc", "the_mlc"],
         "period_cadence": "monthly",
         "default_currency": "USD",
+        "amount_format": "dollars",
+        "identifier_fields": ["isrc", "iswc"],
         "extra_hints": {
             "track_title": ["song title", "track title", "title", "work title"],
             "artist": ["performer", "artist", "writer"],
@@ -184,6 +199,8 @@ SOURCE_FORMAT_REGISTRY: Dict[str, Dict] = {
         "keywords": ["harry fox", "harry_fox", "harry-fox", "hfa", "rumblefish"],
         "period_cadence": "quarterly",
         "default_currency": "USD",
+        "amount_format": "dollars",
+        "identifier_fields": ["isrc", "iswc"],
         "extra_hints": {
             "track_title": ["song title", "track title", "title"],
             "artist": ["recording artist", "performer", "artist"],
@@ -198,6 +215,8 @@ SOURCE_FORMAT_REGISTRY: Dict[str, Dict] = {
         "keywords": ["label statement", "record label", "master royalty"],
         "period_cadence": "semi-annual",
         "default_currency": "USD",
+        "amount_format": "dollars",
+        "identifier_fields": ["isrc", "upc"],
         "extra_hints": {
             "track_title": ["track", "track title", "title", "release title"],
             "artist": ["artist", "primary artist"],
@@ -213,6 +232,8 @@ SOURCE_FORMAT_REGISTRY: Dict[str, Dict] = {
         "keywords": ["soundexchange", "sound exchange"],
         "period_cadence": "quarterly",
         "default_currency": "USD",
+        "amount_format": "dollars",
+        "identifier_fields": ["isrc"],
         "extra_hints": {
             "track_title": ["featured title", "track title", "sound recording"],
             "artist": ["featured artist", "artist"],
@@ -224,6 +245,8 @@ SOURCE_FORMAT_REGISTRY: Dict[str, Dict] = {
         "keywords": ["socan"],
         "period_cadence": "quarterly",
         "default_currency": "CAD",
+        "amount_format": "dollars",
+        "identifier_fields": ["work_id", "iswc"],
         "extra_hints": {
             "track_title": ["work title", "title"],
             "artist": ["member", "writer"],
@@ -234,6 +257,8 @@ SOURCE_FORMAT_REGISTRY: Dict[str, Dict] = {
         "keywords": ["prs", "prs for music"],
         "period_cadence": "quarterly",
         "default_currency": "GBP",
+        "amount_format": "dollars",
+        "identifier_fields": ["work_id", "iswc"],
         "extra_hints": {
             "track_title": ["work title", "title"],
             "artist": ["writer", "member"],
@@ -244,6 +269,8 @@ SOURCE_FORMAT_REGISTRY: Dict[str, Dict] = {
         "keywords": ["spotify", "apple music", "amazon music", "youtube music", "tidal", "deezer", "distrokid", "tunecore", "cd baby", "stem"],
         "period_cadence": "monthly",
         "default_currency": "USD",
+        "amount_format": "dollars",
+        "identifier_fields": ["isrc", "upc"],
         "extra_hints": {
             "track_title": ["track title", "track name", "title"],
             "artist": ["artist name", "artist", "primary artist"],

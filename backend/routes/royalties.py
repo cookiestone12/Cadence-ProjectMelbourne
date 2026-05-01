@@ -607,7 +607,25 @@ async def preview_statement(
     headers, rows, pdf_metadata = parse_uploaded_file(content, file.filename or "data.csv", org_id=org_id)
     detected_source = detect_pro_source(headers, source_name or "", file.filename or "")
     suggested = pdf_metadata.get("suggested_mapping") if pdf_metadata else None
-    mapping = suggested if suggested else suggest_column_mapping(headers, source_name or "")
+    if suggested:
+        mapping = suggested
+        confident = True
+        confidence = 1.0
+        unmapped: list = []
+    else:
+        # Phase 3 (Task #170): use the confidence-scored auto-mapper
+        # so the UI can warn when the file's headers don't match any
+        # known source layout. Falls back to the legacy registry-only
+        # suggester if the new mapper produces nothing usable.
+        from ..services.statement_column_mapper import auto_map_columns
+        auto = auto_map_columns(headers, detected_source or source_name or "")
+        confident = bool(auto.get("_confident"))
+        confidence = float(auto.get("_confidence") or 0.0)
+        unmapped = list(auto.get("_unmapped") or [])
+        mapping = {k: v for k, v in auto.items() if v and not k.startswith("_")}
+        if not mapping:
+            mapping = suggest_column_mapping(headers, source_name or "")
+            confident = False
     preview = rows[:10]
     return {
         "headers": headers,
@@ -616,6 +634,9 @@ async def preview_statement(
         "preview_rows": preview,
         "row_count": len(rows),
         "detected_source_type": detected_source,
+        "mapping_confidence": confidence,
+        "mapping_confident": confident,
+        "unmapped_headers": unmapped,
         "success": True,
     }
 
@@ -1115,6 +1136,17 @@ async def upload_statement(
                 f"falling back to header-based column suggestion"
             )
             mapping = suggest_column_mapping(list(row_keys), source_name or "")
+
+    # Honour the registry's ``amount_format`` *before* we touch any
+    # revenue cell. For sources that ship integer cents (no decimal
+    # point), this rewrites the mapped revenue column on a shallow
+    # copy of each row so both the legacy ``parse_revenue_to_cents``
+    # transaction loop below and the newer ``parse_statement_to_lines``
+    # call see consistent dollar-formatted values. Dollar-format
+    # sources — every entry in the registry today — pass through
+    # unchanged.
+    from ..services.statement_parser import normalize_rows_for_amount_format
+    rows = normalize_rows_for_amount_format(rows, mapping or {}, source_type)
 
     logger.info(
         f"upload_statement: parsed {len(rows)} rows from {file.filename!r}; "
