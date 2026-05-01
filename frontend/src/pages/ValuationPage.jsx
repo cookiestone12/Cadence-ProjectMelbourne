@@ -370,8 +370,8 @@ export default function ValuationPage() {
 
   return (
     <div className="p-4 sm:p-8">
-      <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
+      <div className="mb-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+        <div className="min-w-0">
           <div className="flex items-center space-x-3">
             <h1 className="text-2xl sm:text-3xl font-bold text-[#3D4A44]">Catalog Valuation</h1>
             <span className="px-1.5 py-0.5 text-[9px] font-semibold tracking-wide uppercase bg-[#5B8A72]/10 text-[#5B8A72] rounded-md">Beta</span>
@@ -383,13 +383,13 @@ export default function ValuationPage() {
             )}
           </p>
         </div>
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center space-x-2">
+        <div className="w-full lg:w-auto flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <label className="text-xs font-medium text-[#7A8580] hidden sm:inline">Scope:</label>
             <select
               value={scopeCreatorId || ''}
               onChange={e => setScopeCreatorId(e.target.value ? parseInt(e.target.value, 10) : null)}
-              className="border border-[rgba(59,77,67,0.15)] bg-white text-[#3D4A44] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent min-w-[180px]"
+              className="flex-1 sm:flex-none border border-[rgba(59,77,67,0.15)] bg-white text-[#3D4A44] rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent sm:min-w-[180px]"
               title="Limit valuation to a single client's catalog"
             >
               <option value="">All clients (org-wide)</option>
@@ -577,7 +577,7 @@ export default function ValuationPage() {
       })()}
 
       {hasUW && (
-        <div className="flex space-x-1 mb-6 bg-[#EEF1EC] rounded-lg p-1">
+        <div className="flex space-x-1 mb-6 bg-[#EEF1EC] rounded-lg p-1 overflow-x-auto whitespace-nowrap">
           {[
             { key: 'overview', label: 'Overview', icon: ChartBarIcon },
             { key: 'spine', label: 'Revenue Spine', icon: TableCellsIcon },
@@ -589,7 +589,7 @@ export default function ValuationPage() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all ${activeTab === tab.key ? 'bg-white text-[#3D4A44] shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'}`}
+              className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all flex-shrink-0 ${activeTab === tab.key ? 'bg-white text-[#3D4A44] shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'}`}
             >
               <tab.icon className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">{tab.label}</span>
@@ -786,7 +786,8 @@ export default function ValuationPage() {
                   </div>
                 </div>
                 <div className="p-5">
-                  <table className="w-full">
+                  <div className="overflow-x-auto -mx-5 px-5">
+                  <table className="w-full min-w-[480px]">
                     <thead>
                       <tr className="text-[10px] font-medium text-[#7A8580] uppercase border-b border-[rgba(59,77,67,0.08)]">
                         <th className="text-left pb-2">Source</th>
@@ -818,6 +819,7 @@ export default function ValuationPage() {
                       })}
                     </tbody>
                   </table>
+                  </div>
 
                   <div className="mt-6 pt-5 border-t border-[rgba(59,77,67,0.08)]">
                     <div className="flex items-center justify-between mb-2">
@@ -1270,16 +1272,16 @@ export default function ValuationPage() {
                     setActiveTab('overview')
                   } catch (e) { console.error(e) }
                 }}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className={`w-2 h-2 rounded-full ${run.status === 'COMPLETED' ? 'bg-[#5B9A6E]' : run.status === 'FAILED' ? 'bg-[#C47068]' : 'bg-[#C4956B]'}`} />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${run.status === 'COMPLETED' ? 'bg-[#5B9A6E]' : run.status === 'FAILED' ? 'bg-[#C47068]' : 'bg-[#C4956B]'}`} />
                       <span className="text-sm font-medium text-[#3D4A44]">Run #{run.id}</span>
                       <span className="text-xs text-[#7A8580]">{run.status}</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${run.scope_creator_id ? 'bg-[#E5EEDF] text-[#5B8A72]' : 'bg-[rgba(59,77,67,0.08)] text-[#7A8580]'}`}>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full max-w-[180px] truncate ${run.scope_creator_id ? 'bg-[#E5EEDF] text-[#5B8A72]' : 'bg-[rgba(59,77,67,0.08)] text-[#7A8580]'}`}>
                         {run.scope_creator_id ? (run.scope_creator_name || `Creator #${run.scope_creator_id}`) : 'Org-wide'}
                       </span>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right ml-auto">
                       {run.valuation && <span className="text-sm font-semibold text-[#5B8A72] mr-4">{fmt(run.valuation.base)}</span>}
                       <span className="text-xs text-[#7A8580]">{run.created_at ? new Date(run.created_at).toLocaleString() : ''}</span>
                     </div>
