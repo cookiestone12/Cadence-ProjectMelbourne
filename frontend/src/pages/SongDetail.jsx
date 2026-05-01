@@ -6,10 +6,24 @@ export default function SongDetail() {
   const { id } = useParams()
   const [song, setSong] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [registrations, setRegistrations] = useState([])
 
   useEffect(() => {
     fetchSongDetail()
+    fetchRegistrations()
   }, [id])
+
+  const fetchRegistrations = async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const response = await axios.get(`/api/v1/songs/${id}/registrations`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      setRegistrations(response.data?.registrations || [])
+    } catch (error) {
+      console.error('Error fetching registrations:', error)
+    }
+  }
 
   const fetchSongDetail = async () => {
     try {
@@ -246,6 +260,36 @@ export default function SongDetail() {
             </div>
           </div>
         )}
+
+        <div className="bg-surface-black border border-border-grey rounded-lg shadow p-6 mt-6">
+          <h2 className="text-xl font-bold font-heading mb-4 text-white uppercase tracking-wide">Registrations</h2>
+          {registrations.length === 0 ? (
+            <p className="text-tech-grey text-sm">No registrations on file.</p>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {registrations.map((reg) => {
+                const ok = reg.registration_status === 'REGISTERED'
+                return (
+                  <div
+                    key={reg.registry_type}
+                    className={`p-3 rounded border ${ok ? 'border-green-500 bg-green-500 bg-opacity-10' : 'border-border-grey bg-black bg-opacity-50'}`}
+                  >
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="font-semibold text-white text-sm">{reg.registry_type}</span>
+                      <span className={`text-xs ${ok ? 'text-green-400' : 'text-tech-grey'}`}>
+                        {ok ? '✓' : '—'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-tech-grey capitalize">{(reg.registration_status || 'not_started').toLowerCase().replace(/_/g, ' ')}</p>
+                    {reg.registration_id && (
+                      <p className="text-xs text-tech-grey mt-1 truncate" title={reg.registration_id}>{reg.registration_id}</p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
         {song.spotify_link && (
           <div className="mt-6 text-center">

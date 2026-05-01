@@ -29,7 +29,9 @@ from .creators import (
 from .catalog import (
     Song, SongCredit, SongDSPLink, ChecklistItem, SongChecklistStatus,
     SongValuationSnapshot, Songwriter, Catalog, Settings, SongEditHistory,
+    SongRegistration,
     DSPPlatform, ChecklistStatus, ChecklistCategory,
+    RegistryType, RegistrationStatus,
 )
 from .works import Work, WorkFolder, WorkTrack, WorkCredit
 from .releases import Release, ReleaseTrack, ReleaseType, ReleaseStatus
@@ -42,9 +44,10 @@ from .contracts import (
 from .royalties import (
     RoyaltyStatement, RoyaltyTransaction, RoyaltyAllocation, Payment, Fee, Advance,
     Payee, RoyaltyStatementLine, RoyaltyProcessingRun, RoyaltyLedgerEntry,
-    PayoutBatch, PayoutItem,
+    PayoutBatch, PayoutItem, RoyaltyAudit,
     LegacyStatementStatus, StatementStatus, TransactionMatchStatus, PaymentStatus,
     FeeType, PayeeType, RecoupmentPool, PayoutStatus,
+    RoyaltyAuditType, RoyaltyAuditSeverity,
 )
 from .financials import Expense, ExpenseCategory, Placement
 from .analytics import (

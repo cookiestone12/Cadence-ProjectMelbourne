@@ -14,7 +14,9 @@ from .routes import (
     tenant_admin, creative_directory, registration_reports, audit_log, expenses,
     client_sharing, integrations, audio, brief_builder, royalty_processing,
     push, storage_scan, client_portal, account_merge, streaming_credits,
-    document_sharing, support, assistant, schedule_a_imports, internal_dev
+    document_sharing, support, assistant, schedule_a_imports, internal_dev,
+    audit as audit_route,
+    song_registrations as song_registrations_route,
 )
 from .utils.logging_config import logger
 from .utils.settings import (
@@ -157,6 +159,7 @@ def _deferred_startup_tasks():
         from .models.database import engine
         from .models.models import (
             RuntimeConfig, DeployEvent, SavedQuery, QueryHistoryEntry,
+            RoyaltyAudit, SongRegistration,
         )
         from sqlalchemy import inspect as _inspect
         _insp = _inspect(engine)
@@ -164,10 +167,38 @@ def _deferred_startup_tasks():
         for tbl in [
             RuntimeConfig.__table__, DeployEvent.__table__,
             SavedQuery.__table__, QueryHistoryEntry.__table__,
+            # Task #173 — Phase 6: audit engine + per-PRO registration
+            RoyaltyAudit.__table__, SongRegistration.__table__,
         ]:
             if tbl.name not in _existing:
                 tbl.create(engine, checkfirst=True)
                 log.info(f"Created table {tbl.name}")
+
+        # Task #173 — Phase 6: Luminate-ready columns added to
+        # song_streaming_metrics. Add them to existing deployments via
+        # idempotent ALTER TABLE statements (only when missing).
+        try:
+            from sqlalchemy import text as _text
+            existing_cols = {c["name"] for c in _insp.get_columns("song_streaming_metrics")}
+            new_cols = [
+                ("luminate_total_streams", "INTEGER"),
+                ("period_start", "DATE"),
+                ("period_end", "DATE"),
+                ("last_synced", "TIMESTAMP"),
+                ("data_source", "VARCHAR"),
+            ]
+            with engine.begin() as conn:
+                for name, sql_type in new_cols:
+                    if name not in existing_cols:
+                        conn.execute(_text(
+                            f"ALTER TABLE song_streaming_metrics "
+                            f"ADD COLUMN {name} {sql_type}"
+                        ))
+                        log.info(
+                            f"Added column song_streaming_metrics.{name}"
+                        )
+        except Exception as e:
+            log.warning(f"Luminate column backfill failed: {e}")
     except Exception as e:
         log.warning(f"Internal-dev table creation failed: {e}")
 
@@ -696,6 +727,8 @@ app.include_router(creative_directory.router)
 app.include_router(creative_directory.public_router)
 app.include_router(registration_reports.router)
 app.include_router(audit_log.router)
+app.include_router(audit_route.router)
+app.include_router(song_registrations_route.router)
 app.include_router(expenses.router)
 app.include_router(client_sharing.router)
 app.include_router(integrations.router)

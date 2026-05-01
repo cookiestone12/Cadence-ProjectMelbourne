@@ -522,3 +522,72 @@ RoyaltyStatement.processing_runs = relationship("RoyaltyProcessingRun", backref=
 # Backwards-compatibility alias: code that still imports ``AdvanceV2`` keeps
 # working. New code should use ``Advance`` directly.
 AdvanceV2 = Advance
+
+
+class RoyaltyAuditType(str, enum.Enum):
+    CROSS_STATEMENT = "CROSS_STATEMENT"
+    RATE_CHECK = "RATE_CHECK"
+    MISSING_PERIOD = "MISSING_PERIOD"
+    DECAY_ANOMALY = "DECAY_ANOMALY"
+
+
+class RoyaltyAuditSeverity(str, enum.Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+
+
+class RoyaltyAudit(Base):
+    """A discrepancy or anomaly detected by the royalty audit engine
+    (Task #173). Persists findings so the Audit page can list them with
+    severity, allow one-click resolve, and track resolution notes.
+    """
+    __tablename__ = "royalty_audits"
+    __table_args__ = (
+        Index('ix_royalty_audits_org_id', 'organization_id'),
+        Index('ix_royalty_audits_org_resolved', 'organization_id', 'resolved'),
+        Index('ix_royalty_audits_song_id', 'song_id'),
+        Index('ix_royalty_audits_audit_type', 'audit_type'),
+        Index('ix_royalty_audits_severity', 'severity'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False
+    )
+    song_id = Column(
+        Integer, ForeignKey("songs.id", ondelete="SET NULL"), nullable=True
+    )
+    statement_id = Column(
+        Integer, ForeignKey("royalty_statements.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    audit_type = Column(String, nullable=False)
+    severity = Column(String, nullable=False, default="MEDIUM")
+
+    expected_cents = Column(Integer, nullable=True)
+    actual_cents = Column(Integer, nullable=True)
+    discrepancy_cents = Column(Integer, nullable=True)
+    period_start = Column(Date, nullable=True)
+    period_end = Column(Date, nullable=True)
+
+    description = Column(Text, nullable=False)
+    details = Column(JSON, nullable=True)
+
+    resolved = Column(Boolean, default=False, nullable=False)
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    resolution_notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    organization = relationship("Organization")
+    song = relationship("Song", foreign_keys=[song_id])
+    statement = relationship("RoyaltyStatement", foreign_keys=[statement_id])
+    resolved_by = relationship("User", foreign_keys=[resolved_by_user_id])

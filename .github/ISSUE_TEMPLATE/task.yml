@@ -1,0 +1,89 @@
+name: Cadence Task
+description: Track a feature, bug, or chore against the Cadence backlog.
+title: "[Task] "
+labels: ["triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for any actionable work item — feature, bug,
+        chore, or follow-up. Pair it with a short `Done looks like`
+        section so the work is testable.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the platform does this affect?
+      options:
+        - Catalog
+        - Royalties / Audit
+        - Valuation
+        - Contracts & Rights
+        - Releases & Distribution
+        - Streaming / Analytics
+        - Client Portal
+        - Auth / Multi-Tenant
+        - Frontend / UI
+        - Backend / Infra
+        - DX / Tests / CI
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How urgent is this?
+      options:
+        - P0 — drop everything
+        - P1 — this sprint
+        - P2 — next sprint
+        - P3 — backlog
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      options:
+        - Feature
+        - Bug
+        - Chore / Refactor
+        - Performance
+        - Security
+        - Documentation
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What needs to happen and why?
+      placeholder: |
+        Context, motivation, and any links to related work.
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done looks like
+      description: Concrete acceptance criteria a reviewer can check.
+      placeholder: |
+        - [ ] Endpoint X returns 200 with payload Y
+        - [ ] Tests cover the new behaviour
+        - [ ] Frontend page Z renders the new field
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything else worth flagging (risks, blockers, screenshots).
+      placeholder: Optional.

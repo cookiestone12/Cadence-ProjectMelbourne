@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import or_
 from typing import List
 from pydantic import BaseModel
@@ -10,6 +10,7 @@ from ..utils.auth import get_current_user
 from ..services import chartmetric_service, spotify_service, luminate_service
 from ..services import valuation_engine, scoring_engine
 from ..services.song_lifecycle import auto_release_songs
+from ..routes.song_registrations import compute_registration_completeness
 from ..config.streaming_rates import (
     TRACKED_PLATFORMS,
     MARKET_MULTIPLIER,
@@ -379,40 +380,60 @@ def get_songs(
     # steady-state has been reached. `current_user` is required because
     # this is a GET that now writes (commits).
     auto_release_songs(db)
-    songs = db.query(Song).all()
+    # Task #173 — Phase 6 perf sweep: eager-load `analytics` to avoid an
+    # N+1 burst (one extra SELECT per song for `song.analytics.*`), and
+    # batch-load credits + creators in a single round-trip per kind
+    # instead of two queries per song.
+    songs = db.query(Song).options(joinedload(Song.analytics)).all()
+    song_ids = [s.id for s in songs]
+    first_credit_by_song: dict = {}
+    if song_ids:
+        for credit in (
+            db.query(SongCredit)
+            .filter(SongCredit.song_id.in_(song_ids))
+            .all()
+        ):
+            first_credit_by_song.setdefault(credit.song_id, credit)
+        creator_ids = {c.creator_id for c in first_credit_by_song.values() if c.creator_id}
+        creators_by_id = {
+            c.id: c
+            for c in db.query(Creator).filter(Creator.id.in_(creator_ids)).all()
+        } if creator_ids else {}
+    else:
+        creators_by_id = {}
     result = []
-    
+
     for song in songs:
         spotify_streams = song.analytics.spotify_streams if song.analytics else None
-        
+
         publishing_revenue = 0.0
         master_revenue = 0.0
-        
+
         if song.analytics and song.analytics.streams_by_type:
             streams_by_type = song.analytics.streams_by_type
             pub_pct = song.publishing_percentage / 100.0
             master_pct = song.master_percentage / 100.0
-            
+
             for platform, stream_data in streams_by_type.items():
                 premium_streams = stream_data.get('premium', 0)
                 ad_supported_streams = stream_data.get('ad_supported', 0)
-                
+
                 pub_premium_rate = get_publishing_rate('premium')
                 pub_ad_rate = get_publishing_rate('ad_supported')
-                
+
                 master_premium_rate = get_master_rate(platform, 'premium')
                 master_ad_rate = get_master_rate(platform, 'ad_supported')
-                
+
                 publishing_revenue += (premium_streams * pub_premium_rate * pub_pct) + \
                                      (ad_supported_streams * pub_ad_rate * pub_pct)
                 master_revenue += (premium_streams * master_premium_rate * master_pct) + \
                                  (ad_supported_streams * master_ad_rate * master_pct)
-        
+
         client_name = None
         client_id = None
-        credit = db.query(SongCredit).filter(SongCredit.song_id == song.id).first()
+        credit = first_credit_by_song.get(song.id)
         if credit:
-            creator = db.query(Creator).filter(Creator.id == credit.creator_id).first()
+            creator = creators_by_id.get(credit.creator_id)
             if creator:
                 client_name = creator.display_name
                 client_id = creator.id
@@ -820,6 +841,7 @@ async def upload_schedule_a(
             # Calculate valuation and score using analytics_combined (has all derived fields like growth_3_month, has_isrc, etc.)
             # Revenue already uses fresh streams_by_type from updated Analytics
             valuation = valuation_engine.calculate_valuation(analytics_combined, publishing_revenue, master_revenue)
+            analytics_combined['registration_completeness'] = compute_registration_completeness(db, existing_song)
             score = scoring_engine.calculate_score(analytics_combined)
             
             # Update song with fresh valuations
@@ -911,6 +933,7 @@ async def upload_schedule_a(
             
             # Calculate valuation and score using fresh analytics
             valuation = valuation_engine.calculate_valuation(analytics_combined, publishing_revenue, master_revenue)
+            analytics_combined['registration_completeness'] = compute_registration_completeness(db, song)
             score = scoring_engine.calculate_score(analytics_combined)
             
             # Update song with calculated valuations

@@ -64,16 +64,29 @@ def calculate_score(analytics_data: Dict[str, Any]) -> Dict[str, float]:
     has_isrc = analytics_data.get('has_isrc', True)
     has_iswc = analytics_data.get('has_iswc', True)
     has_spotify_link = analytics_data.get('has_spotify_link', True)
-    
+    # Task #173 — fraction in [0, 1] of applicable PRO/MLC/SoundExchange
+    # registries that are marked REGISTERED. Defaults to 1.0 (full
+    # credit) when callers don't supply a value, so legacy paths that
+    # don't yet pass the factor get the same score they did before.
+    try:
+        reg_completeness = float(
+            analytics_data.get('registration_completeness', 1.0)
+        )
+    except (TypeError, ValueError):
+        reg_completeness = 1.0
+    reg_completeness = max(0.0, min(1.0, reg_completeness))
+
     metadata_health_score = 0.0
-    metadata_health_score += 8 if has_isrc else 0
-    metadata_health_score += 8 if has_iswc else 0
-    metadata_health_score += 9 if has_spotify_link else 0
-    
+    metadata_health_score += 7 if has_isrc else 0
+    metadata_health_score += 7 if has_iswc else 0
+    metadata_health_score += 7 if has_spotify_link else 0
+    metadata_health_score += 4 * reg_completeness
+
     if chartmetric_score > 80:
         metadata_health_score = 25
     elif chartmetric_score > 60:
         metadata_health_score = max(metadata_health_score, 20)
+    metadata_health_score = min(25.0, metadata_health_score)
     
     exploitation_potential_score = 0.0
     

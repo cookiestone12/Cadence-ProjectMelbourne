@@ -38,6 +38,7 @@ class SongStreamingMetrics(Base):
     __table_args__ = (
         Index('ix_streaming_metrics_song_id', 'song_id'),
         Index('ix_streaming_metrics_period_date', 'period_date'),
+        Index('ix_streaming_metrics_org_period', 'organization_id', 'period_date'),
     )
     
     id = Column(Integer, primary_key=True, index=True)
@@ -58,7 +59,21 @@ class SongStreamingMetrics(Base):
     song_sales = Column(Integer, default=0)
     
     ownership_percentage = Column(Float, default=1.0)
-    
+
+    # Task #173 — Luminate-ready columns. ``luminate_total_streams`` is
+    # the headline number on a Luminate row (sum of all stream types
+    # they report); ``period_start`` / ``period_end`` give an explicit
+    # period range (Luminate reports custom date ranges, not just a
+    # single point-in-time). ``last_synced`` records the most recent
+    # successful pull; ``data_source`` tags the row's provenance
+    # ("luminate", "spotify", "manual", "csv-import", ...) so the audit
+    # engine can cross-check sources against each other.
+    luminate_total_streams = Column(Integer, nullable=True)
+    period_start = Column(Date, nullable=True)
+    period_end = Column(Date, nullable=True)
+    last_synced = Column(DateTime, nullable=True)
+    data_source = Column(String, nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

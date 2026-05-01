@@ -104,6 +104,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
         { path: '/reports', label: 'Reports', icon: ChartBarIcon },
         { path: '/placements', label: 'Sync HQ', icon: FilmIcon },
         { path: '/brief-builder', label: 'Brief Builder', icon: SparklesIcon },
+        { path: '/audit', label: 'Royalty Audit', icon: ShieldCheckIcon },
       ],
     },
     {

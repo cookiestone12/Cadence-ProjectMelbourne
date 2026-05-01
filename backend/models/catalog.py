@@ -50,6 +50,11 @@ class Song(Base):
         Index('ix_songs_organization_id', 'organization_id'),
         Index('ix_songs_org_health', 'organization_id', 'status_health_score'),
         Index('ix_songs_org_asset_type', 'organization_id', 'asset_type'),
+        # Task #173 — performance sweep. Catalog listing endpoints filter
+        # by (organization_id, is_released) constantly (Released vs
+        # Unreleased tabs); without a composite index these scans walk
+        # every song in the org.
+        Index('ix_songs_org_is_released', 'organization_id', 'is_released'),
     )
     
     id = Column(Integer, primary_key=True, index=True)
@@ -214,6 +219,71 @@ class Catalog(Base):
     name = Column(String, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class RegistryType(str, enum.Enum):
+    BMI = "BMI"
+    ASCAP = "ASCAP"
+    SESAC = "SESAC"
+    GMR = "GMR"
+    MLC = "MLC"
+    SOUNDEXCHANGE = "SOUNDEXCHANGE"
+    HFA = "HFA"
+
+
+class RegistrationStatus(str, enum.Enum):
+    NOT_STARTED = "NOT_STARTED"
+    PENDING = "PENDING"
+    REGISTERED = "REGISTERED"
+    REJECTED = "REJECTED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+class SongRegistration(Base):
+    """Per-PRO / per-registry registration row for a Song (Task #173).
+
+    Replaces the single ``Song.is_registered_with_pro`` boolean +
+    ``soundexchange_registered`` / ``mlc_registered`` strings with a
+    structured row per registry, so the song detail view can render a
+    real checklist (BMI / ASCAP / MLC / SoundExchange / HFA) and the
+    health score can factor *registration completeness* (% of
+    applicable registries marked REGISTERED).
+
+    Existing legacy flags on ``Song`` are kept for backward
+    compatibility; the audit-engine + health-score path reads from the
+    new rows when present, and falls back to the legacy flags otherwise.
+    """
+    __tablename__ = "song_registrations"
+    __table_args__ = (
+        UniqueConstraint('song_id', 'registry_type', name='uq_song_registry'),
+        Index('ix_song_registrations_song_id', 'song_id'),
+        Index('ix_song_registrations_org_id', 'organization_id'),
+        Index('ix_song_registrations_org_status', 'organization_id', 'registration_status'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    song_id = Column(
+        Integer, ForeignKey("songs.id", ondelete="CASCADE"), nullable=False
+    )
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    registry_type = Column(String, nullable=False)
+    registration_status = Column(String, nullable=False, default="NOT_STARTED")
+    registration_id = Column(String, nullable=True)
+    registered_date = Column(Date, nullable=True)
+    registered_by_user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    song = relationship("Song", foreign_keys=[song_id])
+    organization = relationship("Organization", foreign_keys=[organization_id])
+    registered_by = relationship("User", foreign_keys=[registered_by_user_id])
 
 
 class SongEditHistory(Base):
