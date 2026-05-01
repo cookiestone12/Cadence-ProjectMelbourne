@@ -2450,6 +2450,8 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [statementsPage, setStatementsPage] = useState(1)
+  const STATEMENTS_PAGE_SIZE = 20
   const [uploading, setUploading] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [uploadForm, setUploadForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD', creator_id: selectedCreatorId || '' })
@@ -2517,7 +2519,15 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
     ? statements.filter(s => s.status === statusFilter)
     : statements
 
-  const visibleProcessingIds = filteredStatements.slice(0, 20).map(s => s.id)
+  useEffect(() => { setStatementsPage(1) }, [statusFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filteredStatements.length / STATEMENTS_PAGE_SIZE))
+  const safePage = Math.min(statementsPage, totalPages)
+  const pagedStatements = filteredStatements.slice(
+    (safePage - 1) * STATEMENTS_PAGE_SIZE,
+    safePage * STATEMENTS_PAGE_SIZE,
+  )
+  const visibleProcessingIds = pagedStatements.map(s => s.id)
   const allVisibleSelected = visibleProcessingIds.length > 0 && visibleProcessingIds.every(id => selectedIds.has(id))
   const someVisibleSelected = visibleProcessingIds.some(id => selectedIds.has(id)) && !allVisibleSelected
 
@@ -2693,7 +2703,7 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
           </div>
         ) : (
           <div className="divide-y divide-[rgba(59,77,67,0.05)]">
-            {filteredStatements.slice(0, 20).map(stmt => {
+            {pagedStatements.map(stmt => {
               const colors = STATEMENT_STATUS_COLORS[stmt.status] || { bg: 'bg-gray-100', text: 'text-gray-700' }
               return (
                 <div
@@ -2735,6 +2745,33 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
                 </div>
               )
             })}
+          </div>
+        )}
+        {filteredStatements.length > STATEMENTS_PAGE_SIZE && (
+          <div className="flex items-center justify-between px-6 py-3 border-t border-[rgba(59,77,67,0.05)] bg-white">
+            <div className="text-sm text-[#7A8580]">
+              Showing {(safePage - 1) * STATEMENTS_PAGE_SIZE + 1}–
+              {Math.min(safePage * STATEMENTS_PAGE_SIZE, filteredStatements.length)} of {filteredStatements.length}
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                className="px-3 py-1 rounded border border-[rgba(59,77,67,0.2)] text-sm disabled:opacity-40"
+                disabled={safePage === 1}
+                onClick={() => setStatementsPage(p => Math.max(1, p - 1))}
+              >
+                Previous
+              </button>
+              <span className="text-sm text-[#3D4A44]">
+                Page {safePage} of {totalPages}
+              </span>
+              <button
+                className="px-3 py-1 rounded border border-[rgba(59,77,67,0.2)] text-sm disabled:opacity-40"
+                disabled={safePage >= totalPages}
+                onClick={() => setStatementsPage(p => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>

@@ -66,6 +66,9 @@ class AuditLog(Base):
         Index('ix_audit_logs_created_at', 'created_at'),
         Index('ix_audit_logs_action', 'action'),
         Index('ix_audit_logs_entity_type', 'entity_type'),
+        # Task #173 — composite for the most common access pattern:
+        # "show me all audit log rows for this entity in this org".
+        Index('ix_audit_logs_org_entity', 'organization_id', 'entity_type', 'entity_id'),
     )
 
     id = Column(Integer, primary_key=True)

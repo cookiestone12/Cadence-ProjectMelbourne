@@ -418,6 +418,8 @@ export default function NewCatalogPage() {
 
   const [unifiedSortField, setUnifiedSortField] = useState('title')
   const [unifiedSortDir, setUnifiedSortDir] = useState('asc')
+  const [unifiedPage, setUnifiedPage] = useState(1)
+  const UNIFIED_PAGE_SIZE = 100
 
   const handleUnifiedSort = (field) => {
     if (unifiedSortField === field) {
@@ -964,7 +966,7 @@ export default function NewCatalogPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[rgba(59,77,67,0.08)]">
-                {unifiedItems.map(item => (
+                {unifiedItems.slice((unifiedPage - 1) * UNIFIED_PAGE_SIZE, unifiedPage * UNIFIED_PAGE_SIZE).map(item => (
                   <tr
                     key={`${item._itemType}-${item.id}`}
                     onClick={() => {
@@ -1047,6 +1049,33 @@ export default function NewCatalogPage() {
               </tbody>
             </table>
           </div>
+          {unifiedItems.length > UNIFIED_PAGE_SIZE && (
+            <div className="flex items-center justify-between px-6 py-3 border-t border-[rgba(59,77,67,0.08)] bg-white">
+              <div className="text-sm text-[#7A8580]">
+                Showing {(unifiedPage - 1) * UNIFIED_PAGE_SIZE + 1}–
+                {Math.min(unifiedPage * UNIFIED_PAGE_SIZE, unifiedItems.length)} of {unifiedItems.length}
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  className="px-3 py-1 rounded border border-[rgba(59,77,67,0.2)] text-sm disabled:opacity-40"
+                  disabled={unifiedPage === 1}
+                  onClick={() => setUnifiedPage(p => Math.max(1, p - 1))}
+                >
+                  Previous
+                </button>
+                <span className="text-sm text-[#3B4D43]">
+                  Page {unifiedPage} of {Math.max(1, Math.ceil(unifiedItems.length / UNIFIED_PAGE_SIZE))}
+                </span>
+                <button
+                  className="px-3 py-1 rounded border border-[rgba(59,77,67,0.2)] text-sm disabled:opacity-40"
+                  disabled={unifiedPage * UNIFIED_PAGE_SIZE >= unifiedItems.length}
+                  onClick={() => setUnifiedPage(p => p + 1)}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

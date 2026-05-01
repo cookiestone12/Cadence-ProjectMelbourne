@@ -142,7 +142,10 @@ def _upsert_audit(
 
 def check_cross_statement(db: Session, org_id: int) -> List[RoyaltyAudit]:
     """Flag the same (song, period) appearing on two+ statements with
-    mismatched net totals. Tolerance: 5% or $5, whichever is greater."""
+    mismatched net totals OR unit counts (e.g. PRO statement reports a
+    very different stream count than the label/distributor statement
+    for the same song-period). Tolerance: 5% or $5 (amounts) /
+    5% or 100 units (counts), whichever is greater."""
     findings: List[RoyaltyAudit] = []
 
     rows = (
@@ -152,6 +155,7 @@ def check_cross_statement(db: Session, org_id: int) -> List[RoyaltyAudit]:
             RoyaltyStatementLine.activity_period_end,
             RoyaltyStatementLine.statement_id,
             RoyaltyStatementLine.net_amount,
+            RoyaltyStatementLine.unit_count,
         )
         .filter(
             RoyaltyStatementLine.org_id == org_id,
@@ -163,41 +167,70 @@ def check_cross_statement(db: Session, org_id: int) -> List[RoyaltyAudit]:
         .all()
     )
 
-    grouped: Dict[Tuple[int, date, date], Dict[int, float]] = defaultdict(
-        lambda: defaultdict(float)
+    grouped: Dict[Tuple[int, date, date], Dict[int, Dict[str, float]]] = defaultdict(
+        lambda: defaultdict(lambda: {"net": 0.0, "units": 0.0})
     )
     for r in rows:
         key = (r.matched_song_id, r.activity_period_start, r.activity_period_end)
-        grouped[key][r.statement_id] += float(r.net_amount or 0)
+        bucket = grouped[key][r.statement_id]
+        bucket["net"] += float(r.net_amount or 0)
+        bucket["units"] += float(r.unit_count or 0)
 
     for (song_id, ps, pe), per_stmt in grouped.items():
         if len(per_stmt) < 2:
             continue
-        amounts = list(per_stmt.values())
+        amounts = [b["net"] for b in per_stmt.values()]
+        units = [b["units"] for b in per_stmt.values()]
+
+        # Net-amount mismatch
         hi, lo = max(amounts), min(amounts)
-        delta = hi - lo
-        tolerance = max(5.0, hi * 0.05)
-        if delta <= tolerance:
+        amount_delta = hi - lo
+        amount_tolerance = max(5.0, hi * 0.05)
+        amount_mismatch = amount_delta > amount_tolerance
+
+        # Unit-count mismatch (only meaningful when at least one
+        # statement reports >0 units — typical pattern is PRO statement
+        # vs label statement reporting different stream counts)
+        u_hi, u_lo = max(units), min(units)
+        unit_delta = u_hi - u_lo
+        unit_tolerance = max(100.0, u_hi * 0.05)
+        unit_mismatch = u_hi > 0 and unit_delta > unit_tolerance
+
+        if not amount_mismatch and not unit_mismatch:
             continue
-        pct = (delta / hi * 100) if hi else 0
-        severity = _severity_from_pct(pct)
+
+        # Severity is driven by the larger of the two relative deltas.
+        amount_pct = (amount_delta / hi * 100) if hi else 0.0
+        unit_pct = (unit_delta / u_hi * 100) if u_hi else 0.0
+        severity = _severity_from_pct(max(amount_pct, unit_pct))
+
+        bits = []
+        if amount_mismatch:
+            bits.append(f"${lo:.2f}–${hi:.2f} ({amount_pct:.1f}% gap)")
+        if unit_mismatch:
+            bits.append(f"{int(u_lo):,}–{int(u_hi):,} units ({unit_pct:.1f}% gap)")
+
         finding = _upsert_audit(
             db, org_id,
             audit_type="CROSS_STATEMENT",
             severity=severity,
             description=(
-                f"Song {song_id} reports ${lo:.2f}–${hi:.2f} on "
-                f"{len(per_stmt)} statements for {ps} → {pe} "
-                f"(delta ${delta:.2f}, {pct:.1f}%)"
+                f"Song {song_id} on {len(per_stmt)} statements for "
+                f"{ps} → {pe}: " + "; ".join(bits)
             ),
             song_id=song_id,
             period_start=ps,
             period_end=pe,
             expected_cents=int(round(hi * 100)),
             actual_cents=int(round(lo * 100)),
-            discrepancy_cents=int(round(delta * 100)),
+            discrepancy_cents=int(round(amount_delta * 100)),
             details={
-                "statements": {str(k): round(v, 2) for k, v in per_stmt.items()},
+                "statements": {
+                    str(k): {"net": round(v["net"], 2), "units": int(v["units"])}
+                    for k, v in per_stmt.items()
+                },
+                "amount_mismatch": amount_mismatch,
+                "unit_mismatch": unit_mismatch,
             },
         )
         findings.append(finding)

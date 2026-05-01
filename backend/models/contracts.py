@@ -258,6 +258,10 @@ class RightsSplit(Base):
     __table_args__ = (
         Index('ix_rights_splits_contract_asset_id', 'contract_asset_id'),
         Index('ix_rights_splits_rights_holder_id', 'rights_holder_id'),
+        # Task #173 — composite for the per-creator share calculation
+        # used by valuation/audit (single index covers the asset → holder
+        # join key path).
+        Index('ix_rights_splits_asset_holder', 'contract_asset_id', 'rights_holder_id'),
     )
 
     id = Column(Integer, primary_key=True, index=True)
