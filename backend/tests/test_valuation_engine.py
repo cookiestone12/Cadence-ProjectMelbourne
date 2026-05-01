@@ -201,6 +201,57 @@ def test_market_comparable_tier_band_constants():
     assert ve._TIER_BANDS["premium"][0] == 0.100 and ve._TIER_BANDS["premium"][2] == 0.200
 
 
+def test_market_comparable_ownership_fraction_canonical(db, org):
+    """Regression: codebase canonical ownership convention is a *fraction*
+    in [0.0, 1.0] (model default 1.0; seed uses 1.0/0.5/0.25/0.333/0.125).
+    Pre-fix the engine divided by 100 unconditionally, so 1.0 was
+    interpreted as 1% and valuations were ~100x understated for any
+    fraction-stored row.
+    """
+    song = _make_song(db, org, "Frac Full", release_years_ago=2)
+    sm = SongStreamingMetrics(
+        song_id=song.id, organization_id=org.id,
+        period_date=date.today(), total_streams=4_000_000,
+        ownership_percentage=1.0,  # FRACTION = 100% ownership
+    )
+    db.add(sm); db.commit()
+    res = ve.market_comparable_valuation(db, song.id)
+    # 2M streams/yr × $0.150 (premium mid) × 1.0 × 10x = $3,000,000
+    assert res["value_base"] == pytest.approx(2_000_000 * 0.150 * 1.0 * 10.0, rel=0.001)
+    assert res["ownership_pct"] == pytest.approx(100.0)
+
+
+def test_market_comparable_ownership_fraction_half(db, org):
+    """Regression: fractional 0.5 must mean 50% (NOT 0.5%)."""
+    song = _make_song(db, org, "Frac Half", release_years_ago=2)
+    sm = SongStreamingMetrics(
+        song_id=song.id, organization_id=org.id,
+        period_date=date.today(), total_streams=4_000_000,
+        ownership_percentage=0.5,  # FRACTION = 50% ownership
+    )
+    db.add(sm); db.commit()
+    res = ve.market_comparable_valuation(db, song.id)
+    # 2M × 0.150 × 0.5 × 10 = $1,500,000
+    assert res["value_base"] == pytest.approx(2_000_000 * 0.150 * 0.5 * 10.0, rel=0.001)
+    assert res["ownership_pct"] == pytest.approx(50.0)
+
+
+def test_market_comparable_ownership_legacy_percent_compat(db, org):
+    """Backward compat: any legacy row stored as percent (>1.0) is
+    auto-detected and divided by 100, then clamped to [0, 1]."""
+    song = _make_song(db, org, "Legacy Pct", release_years_ago=2)
+    sm = SongStreamingMetrics(
+        song_id=song.id, organization_id=org.id,
+        period_date=date.today(), total_streams=4_000_000,
+        ownership_percentage=50.0,  # LEGACY percent = 50%
+    )
+    db.add(sm); db.commit()
+    res = ve.market_comparable_valuation(db, song.id)
+    # Same as the fraction-0.5 case above — auto-detected as percent.
+    assert res["value_base"] == pytest.approx(2_000_000 * 0.150 * 0.5 * 10.0, rel=0.001)
+    assert res["ownership_pct"] == pytest.approx(50.0)
+
+
 # ---------------------------------------------------------------------------
 # DCF engine
 # ---------------------------------------------------------------------------

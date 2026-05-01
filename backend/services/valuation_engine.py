@@ -601,7 +601,11 @@ def market_comparable_valuation(
          releases).
       3. Pick a tier band (indie / mid / premium) from annual streams.
       4. Compute annualized revenue = streams × per-stream rate ×
-         (ownership_percentage / 100).
+         ownership_fraction. ``SongStreamingMetrics.ownership_percentage``
+         is canonically a fraction in [0.0, 1.0] (model default 1.0,
+         seed values 1.0/0.5/0.25/0.333/0.125). For backward compat with
+         any legacy rows entered as a percent (>1.0), values >1.0 are
+         interpreted as percent and divided by 100.
       5. Apply the 10× catalog multiplier.
       6. Adjust ±10/15% based on the decay / growth signal:
           * fitted decay (k > 0.05 with R² ≥ 0.5)  -> -15%
@@ -635,16 +639,23 @@ def market_comparable_valuation(
     tier = _pick_tier(annual_streams)
     low_rate, mid_rate, high_rate = _TIER_BANDS[tier]
 
-    # Ownership handling: only fall back to 100% when the column is
-    # *missing* (None). An explicit 0 means the org owns nothing of this
-    # song and the market valuation must reflect that — defaulting it to
-    # 100% would materially overvalue assets the org doesn't control.
+    # Ownership handling: the canonical convention in this codebase is a
+    # *fraction* in [0.0, 1.0] (model default 1.0; seed uses
+    # 1.0/0.5/0.25/0.333/0.125). Only fall back to 100% (1.0) when the
+    # column is *missing* (None) — an explicit 0.0 means the org owns
+    # nothing and the market value must reflect that. For backward compat
+    # with legacy rows that may have been written as a percent (>1.0),
+    # treat values >1.0 as percent and divide by 100, then clamp to
+    # [0.0, 1.0].
     raw_ownership = metric.ownership_percentage
     if raw_ownership is None:
         ownership = 1.0
     else:
         try:
-            ownership = max(0.0, float(raw_ownership)) / 100.0
+            v = max(0.0, float(raw_ownership))
+            if v > 1.0:
+                v = v / 100.0
+            ownership = min(1.0, v)
         except (TypeError, ValueError):
             ownership = 1.0
 
