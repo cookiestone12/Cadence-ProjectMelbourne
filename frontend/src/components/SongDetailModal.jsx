@@ -238,25 +238,32 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     }
   }
 
-  // Task #171 — Phase 4: pull every RightsSplit AuditLog row for this org and
-  // filter client-side by song_id. The audit-log endpoint accepts
-  // `entity_type` directly but does not accept a JSON-detail filter, so we
-  // do the song scope here. Returns SPLIT_CREATED/SPLIT_MODIFIED/SPLIT_DELETED
-  // entries written by the helper in `backend/routes/contracts_mgmt.py`.
+  // Task #171 — Phase 4: pull every RightsSplit AuditLog row for this song
+  // (server-scoped via `song_id` query param). Returns
+  // SPLIT_CREATED / SPLIT_MODIFIED / SPLIT_DELETED entries written by the
+  // helper in `backend/routes/contracts_mgmt.py`.
   async function loadSplitHistory() {
     if (!song?.id || !song?.organization_id) return
     setSplitHistoryLoading(true)
     try {
+      // Task #171 — Phase 4: server-side song scope. The audit-log
+      // endpoint now accepts `song_id` and JSON-queries
+      // details->>'song_id' so we get every event for this song without
+      // having to client-side filter through 200 org-wide rows. We still
+      // pass `entity_type=RightsSplit` for the index hit, and bump limit
+      // to 200 as a defensive cap (a song with that many split events
+      // is implausible).
       const response = await axios.get(
         `/api/audit-log/org/${song.organization_id}`,
-        { params: { entity_type: 'RightsSplit', limit: 200 } }
+        {
+          params: {
+            entity_type: 'RightsSplit',
+            song_id: song.id,
+            limit: 200,
+          },
+        }
       )
-      const all = response.data?.logs || []
-      const forThisSong = all.filter(entry => {
-        const sid = entry?.details?.song_id
-        return sid === song.id || sid === String(song.id)
-      })
-      setSplitHistory(forThisSong)
+      setSplitHistory(response.data?.logs || [])
     } catch (error) {
       console.error('Failed to load split history:', error)
       setSplitHistory([])

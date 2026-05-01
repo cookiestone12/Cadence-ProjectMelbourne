@@ -27,6 +27,7 @@ def get_audit_logs(
     action: Optional[str] = None,
     entity_type: Optional[str] = None,
     user_id: Optional[int] = None,
+    song_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     limit: int = Query(default=50, le=200),
@@ -44,6 +45,18 @@ def get_audit_logs(
         query = query.filter(AuditLog.entity_type == entity_type)
     if user_id:
         query = query.filter(AuditLog.user_id == user_id)
+    if song_id is not None:
+        # Task #171 — Phase 4: server-side song scope for the SongDetailModal
+        # Split History timeline. Split mutation rows store the affected
+        # song under details.song_id; without this filter the frontend had
+        # to fetch up to 200 org-wide rows and slice client-side, which
+        # silently dropped events on busy orgs. We use the JSONB ->>
+        # text-extract operator (Postgres) which still returns matches
+        # even when other audit rows have a different details schema.
+        from sqlalchemy import cast, String
+        query = query.filter(
+            cast(AuditLog.details["song_id"], String) == str(song_id)
+        )
     if start_date:
         try:
             start = datetime.fromisoformat(start_date)

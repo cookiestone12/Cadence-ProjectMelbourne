@@ -208,24 +208,74 @@ def _deferred_startup_tasks():
     except Exception as e:
         log.warning(f"Staged Schedule A cleanup failed: {e}")
 
-    # Task #171 — Phase 4: surface any RightsSplit rows that lack a
+    # Task #171 — Phase 4: backfill RightsSplit rows that lack a
     # rights_holder_id. These rows can't be creator-scoped (e.g. for the
-    # client portal) so we warn at boot rather than silently dropping them
-    # from per-creator queries. We do NOT auto-backfill — the right writer
-    # is data-entry context an admin must supply.
+    # client portal) so we try to resolve them at boot:
+    #
+    #   1. For each NULL row, walk RightsSplit -> ContractAsset -> Contract
+    #      -> organization_id to scope the lookup.
+    #   2. Match `rights_holder_name` (case-insensitive) against
+    #      Creator.display_name within the same org. A unique match wins.
+    #   3. Whatever remains is logged so an admin can fix the data; we do
+    #      not guess on ambiguous matches.
     try:
-        from .models import RightsSplit
+        from sqlalchemy import func
+        from .models import RightsSplit, ContractAsset, Contract, Creator
         from .models.database import SessionLocal
         s = SessionLocal()
         try:
-            null_count = s.query(RightsSplit).filter(
+            orphans = s.query(RightsSplit).filter(
                 RightsSplit.rights_holder_id.is_(None)
-            ).count()
-            if null_count:
+            ).all()
+            resolved = 0
+            unresolved_ambiguous = 0
+            unresolved_nameless = 0
+            unresolved_no_match = 0
+            for split in orphans:
+                if not split.rights_holder_name:
+                    unresolved_nameless += 1
+                    continue
+                ca = s.query(ContractAsset).filter(
+                    ContractAsset.id == split.contract_asset_id
+                ).first()
+                if not ca:
+                    unresolved_no_match += 1
+                    continue
+                contract = s.query(Contract).filter(
+                    Contract.id == ca.contract_id
+                ).first()
+                if not contract:
+                    unresolved_no_match += 1
+                    continue
+                matches = s.query(Creator).filter(
+                    Creator.organization_id == contract.organization_id,
+                    func.lower(Creator.display_name)
+                        == split.rights_holder_name.strip().lower(),
+                ).all()
+                if len(matches) == 1:
+                    split.rights_holder_id = matches[0].id
+                    resolved += 1
+                elif len(matches) > 1:
+                    unresolved_ambiguous += 1
+                else:
+                    unresolved_no_match += 1
+            if resolved:
+                s.commit()
+                log.info(
+                    "RightsSplit backfill: linked %s orphan row(s) to a "
+                    "Creator by display_name match within the same org.",
+                    resolved,
+                )
+            remaining = unresolved_nameless + unresolved_no_match + unresolved_ambiguous
+            if remaining:
                 log.warning(
-                    "RightsSplit audit: %s row(s) have NULL rights_holder_id "
-                    "and will not appear in creator-scoped Schedule A views.",
-                    null_count,
+                    "RightsSplit audit: %s row(s) still have NULL "
+                    "rights_holder_id (%s nameless, %s no Creator match, "
+                    "%s ambiguous). These will not appear in "
+                    "creator-scoped Schedule A views — an admin must "
+                    "edit the split or rename the Creator to fix them.",
+                    remaining, unresolved_nameless,
+                    unresolved_no_match, unresolved_ambiguous,
                 )
         finally:
             s.close()

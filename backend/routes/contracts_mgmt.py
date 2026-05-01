@@ -41,6 +41,51 @@ def _split_audit_label(holder_name: str, rights_type: str, share_percentage) -> 
     return f"{name} · {rights_type} {pct}%"
 
 
+def _resolve_rights_holder_id(
+    db: Session,
+    organization_id: int,
+    holder_id,
+    holder_name,
+):
+    """Resolve a RightsSplit's rights_holder_id at write time.
+
+    Task #171 — Phase 4 enforces non-NULL creator linkage so per-creator
+    Schedule A views and the client-portal scope can never silently drop
+    rows. The rule is:
+
+      1. If `holder_id` is supplied, trust it (the calling endpoint has
+         already validated it belongs to the org).
+      2. Otherwise, look up Creator.display_name (case-insensitive) inside
+         the same org. A unique match wins and is returned.
+      3. An ambiguous match (multiple Creators with the same display_name)
+         raises 400 — the admin must disambiguate by passing the explicit
+         holder_id.
+      4. No match returns None and the caller may proceed with a name-only
+         row, which the boot-time backfill will pick up later if a Creator
+         is added that matches.
+    """
+    if holder_id:
+        return holder_id
+    if not holder_name:
+        return None
+    matches = db.query(Creator).filter(
+        Creator.organization_id == organization_id,
+        func.lower(Creator.display_name) == holder_name.strip().lower(),
+    ).all()
+    if len(matches) == 1:
+        return matches[0].id
+    if len(matches) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Ambiguous rights_holder_name '{holder_name}': "
+                f"{len(matches)} Creators match in this org — pass an "
+                "explicit rights_holder_id to disambiguate."
+            ),
+        )
+    return None
+
+
 # Task #171 — Phase 4: every split mutation produces a date-stamped AuditLog
 # row. The action vocabulary is intentionally split-specific (rather than the
 # generic CREATE/UPDATE/DELETE) so a UI consumer filtering on
@@ -904,9 +949,13 @@ def add_song_split(
             db.add(new_contact)
             db.flush()
 
+    # Task #171 — Phase 4: enforce non-NULL creator linkage at write time.
+    resolved_holder_id = _resolve_rights_holder_id(
+        db, song.organization_id, data.rights_holder_id, holder_name
+    )
     split = RightsSplit(
         contract_asset_id=ca.id,
-        rights_holder_id=data.rights_holder_id,
+        rights_holder_id=resolved_holder_id,
         rights_holder_name=holder_name,
         rights_type=data.rights_type,
         share_percentage=data.share_percentage,
@@ -1265,9 +1314,13 @@ def add_release_split(
             db.add(new_contact)
             db.flush()
 
+    # Task #171 — Phase 4: enforce non-NULL creator linkage at write time.
+    resolved_holder_id = _resolve_rights_holder_id(
+        db, release.organization_id, data.rights_holder_id, holder_name
+    )
     split = RightsSplit(
         contract_asset_id=ca.id,
-        rights_holder_id=data.rights_holder_id,
+        rights_holder_id=resolved_holder_id,
         rights_holder_name=holder_name,
         rights_type=data.rights_type,
         share_percentage=data.share_percentage,
@@ -1828,9 +1881,13 @@ def add_split(
             detail=f"Total splits for {data.rights_type} would exceed 100% (current: {existing_total}%, adding: {data.share_percentage}%)"
         )
 
+    # Task #171 — Phase 4: enforce non-NULL creator linkage at write time.
+    resolved_holder_id = _resolve_rights_holder_id(
+        db, contract.organization_id, data.rights_holder_id, holder_name
+    )
     split = RightsSplit(
         contract_asset_id=ca.id,
-        rights_holder_id=data.rights_holder_id,
+        rights_holder_id=resolved_holder_id,
         rights_holder_name=holder_name,
         rights_type=data.rights_type,
         share_percentage=data.share_percentage,

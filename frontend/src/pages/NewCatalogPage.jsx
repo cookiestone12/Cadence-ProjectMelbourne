@@ -320,12 +320,21 @@ export default function NewCatalogPage() {
       (song.project_title && song.project_title.toLowerCase().includes(searchTerm.toLowerCase()))
     )
     
-    const matchesTab = activeTab === 'all' || activeTab === 'released' || activeTab === 'unreleased'
-    
+    // Task #171 — Phase 4: tabs are asset-type semantic.
+    //   - "Recordings" = Songs that are mastered/released (have a recording
+    //     ready to ship). Filter: release_status === 'released'.
+    //   - "Compositions" = Songs still in the songwriting phase
+    //     (unreleased). Filter: release_status === 'unreleased'.
+    //   - "All" = both. The unreleased entry-type sub-filter (Song /
+    //     Instrumental / Remix / Sample / Demo) is only meaningful inside
+    //     the Compositions bucket because once a track is released its
+    //     master is the source of truth.
+    const matchesTab = activeTab === 'all' || activeTab === 'recordings' || activeTab === 'compositions'
+
     let matchesSubFilter = true
-    if (activeTab === 'released') {
+    if (activeTab === 'recordings') {
       matchesSubFilter = (song.release_status || (song.is_released ? 'released' : 'unreleased')) === 'released'
-    } else if (activeTab === 'unreleased') {
+    } else if (activeTab === 'compositions') {
       matchesSubFilter = (song.release_status || (song.is_released ? 'released' : 'unreleased')) === 'unreleased'
       if (matchesSubFilter && entryTypeFilter) {
         matchesSubFilter = (song.entry_type || 'Song') === entryTypeFilter
@@ -829,12 +838,10 @@ export default function NewCatalogPage() {
         </div>
       </div>
       
-      {/* Task #171 — Phase 4: tab labels rebranded "All / Recordings /
-          Compositions". The activeTab values stay 'all' / 'released' /
-          'unreleased' so the underlying filter logic and downstream
-          consumers (entryTypeFilter, releasedCount, unreleasedCount,
-          analytics) continue to work unchanged. The UI text is the only
-          thing that changes; the tooltip below explains the framing. */}
+      {/* Task #171 — Phase 4: tabs are asset-type semantic ("Recordings" /
+          "Compositions"). activeTab values match the labels exactly so the
+          filter logic, the dormant compositions branch below, and any
+          downstream consumers all read the same vocabulary. */}
       <div className="mb-6 border-b border-[rgba(59,77,67,0.08)] overflow-x-auto">
         <div className="flex items-center space-x-4 sm:space-x-8 min-w-max">
           <button
@@ -848,9 +855,9 @@ export default function NewCatalogPage() {
             All ({songs.length})
           </button>
           <button
-            onClick={() => { setActiveTab('released'); setEntryTypeFilter('') }}
+            onClick={() => { setActiveTab('recordings'); setEntryTypeFilter('') }}
             className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
-              activeTab === 'released'
+              activeTab === 'recordings'
                 ? 'border-[#5B8A72] text-[#5B8A72]'
                 : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
@@ -859,9 +866,9 @@ export default function NewCatalogPage() {
             Recordings ({releasedCount})
           </button>
           <button
-            onClick={() => setActiveTab('unreleased')}
+            onClick={() => setActiveTab('compositions')}
             className={`pb-3 px-1 border-b-2 font-medium transition-colors ${
-              activeTab === 'unreleased'
+              activeTab === 'compositions'
                 ? 'border-[#5B8A72] text-[#5B8A72]'
                 : 'border-transparent text-[#7A8580] hover:text-[#3D4A44]'
             }`}
@@ -882,7 +889,7 @@ export default function NewCatalogPage() {
         </div>
       </div>
 
-      {activeTab === 'unreleased' && (
+      {activeTab === 'compositions' && (
         <div className="mb-4 flex items-center gap-2 flex-wrap">
           {['', 'Song', 'Instrumental', 'Remix', 'Sample', 'Demo'].map(type => (
             <button
@@ -1043,7 +1050,7 @@ export default function NewCatalogPage() {
         </div>
       )}
 
-      {(activeTab === 'released' || activeTab === 'unreleased') && (<>
+      {(activeTab === 'recordings' || activeTab === 'compositions') && (<>
       <div className="bg-[#FAFBF9] rounded-xl shadow-sm p-4 mb-6">
         <div className="flex items-center space-x-4 mb-3 sm:mb-0">
           <div className="flex-1 relative">

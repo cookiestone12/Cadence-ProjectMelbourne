@@ -237,8 +237,15 @@ def get_schedule_a_data(
         # Task #171 — Phase 4: gather RightsSplit rows attached to this song
         # via any of its ContractAssets. Client-portal callers see only their
         # own creator's splits; org members see every holder so they can audit
-        # 100% totals.
+        # 100% totals. Org callers ALSO get `writer_splits_by_holder` — a
+        # dict keyed by holder display_name with the holder's split rows
+        # underneath — so the UI can render the org Schedule A view as
+        # "split totals grouped by client" without re-bucketing the flat
+        # list on the frontend. Client-portal callers receive an empty
+        # `writer_splits_by_holder` because by definition they only see
+        # one holder.
         writer_splits = []
+        writer_splits_by_holder = {}
         asset_ids = [
             ca.id for ca in db.query(ContractAsset).filter(
                 ContractAsset.asset_type == "SONG",
@@ -256,14 +263,19 @@ def get_schedule_a_data(
                 if s.rights_holder_id and not holder_name:
                     h = db.query(Creator).filter(Creator.id == s.rights_holder_id).first()
                     holder_name = h.display_name if h else None
-                writer_splits.append({
+                row = {
                     "id": s.id,
                     "rights_holder_id": s.rights_holder_id,
                     "rights_holder_name": holder_name or "Unknown",
                     "rights_type": s.rights_type,
                     "share_percentage": s.share_percentage,
                     "role": s.role,
-                })
+                }
+                writer_splits.append(row)
+                if not is_client_portal_caller:
+                    writer_splits_by_holder.setdefault(
+                        row["rights_holder_name"], []
+                    ).append(row)
 
         song_data = {
             "id": song.id,
@@ -288,6 +300,7 @@ def get_schedule_a_data(
             "notes": song.notes or "",
             "credits": credit_info,
             "writer_splits": writer_splits,
+            "writer_splits_by_holder": writer_splits_by_holder,
         }
         
         if song.is_released or song.release_date:
