@@ -22,7 +22,7 @@ The frontend employs an Apple Music-style aesthetic with a collapsible sidebar, 
 - **Data Models**: Comprehensive schema for Organizations, Users, Creators, Songs, Works, Releases, Contracts, Placements, and Royalty data.
 - **Rights & Contract Tracking**: Supports deal-level contracts, asset-to-contract linking, and validates per-asset rights splits.
 - **Multi-Client Song Grouping**: Facilitates shared song management across multiple clients.
-- **Catalog Valuation Tool**: Utilizes multiple valuation engines (source-typed income, market comparable, discounted cash flow) and a blended view to provide comprehensive catalog valuation, including an underwriting engine.
+- **Catalog Valuation Tool**: Utilizes multiple valuation engines (source-typed income, market comparable, discounted cash flow) and a 40/30/30 blended view to provide comprehensive catalog valuation, including an underwriting engine. Exposes `GET /api/v1/organizations/{org_id}/valuation/catalog?creator_id=&method=` (income | market_comparable | dcf | blended) plus `/api/valuation/full/{run,summary,trend}` and a ReportLab PDF report. Per-creator share is RightsSplit-weighted via `_attribute_songs_to_creators` (single source of truth for both fresh-run and persisted summaries; falls back to equal-split SongCredit only when no RightsSplit rows exist for a song).
 - **AI-Powered Data Ingestion**: Employs OpenAI for intelligent CSV column mapping, PDF/Word parsing, and contract term extraction.
 - **Notification & Action Items System**: Provides customizable in-app and email notifications.
 - **Placement Management**: Tracks sync licensing placements through a status pipeline.

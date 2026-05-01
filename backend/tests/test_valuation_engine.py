@@ -18,8 +18,11 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.models.database import Base
 from backend.models.models import (
+    Contract,
+    ContractAsset,
     Creator,
     Organization,
+    RightsSplit,
     RoyaltyStatement,
     RoyaltyStatementLine,
     Song,
@@ -475,3 +478,104 @@ def test_persisted_blended_row_carries_scope_metadata(db, org, creator_a):
     assert (org_row.calc_metadata or {}).get("scope_creator_id") is None
     assert (scoped_row.calc_metadata or {}).get("scope_mode") == "creator"
     assert (scoped_row.calc_metadata or {}).get("scope_creator_id") == creator_a.id
+
+
+# ---------------------------------------------------------------------------
+# RightsSplit-weighted per-creator attribution
+# ---------------------------------------------------------------------------
+
+
+def _attach_rights(db, song, splits):
+    """Helper: create a Contract + ContractAsset + RightsSplit rows for `song`.
+
+    `splits` is a list of (creator, share_pct, rights_type) tuples.
+    """
+    contract = Contract(
+        organization_id=song.organization_id,
+        title=f"Rights for {song.title}",
+        contract_type="OTHER",
+        status="ACTIVE",
+    )
+    db.add(contract)
+    db.flush()
+    asset = ContractAsset(
+        contract_id=contract.id,
+        asset_type="SONG",
+        asset_id=song.id,
+    )
+    db.add(asset)
+    db.flush()
+    for creator, pct, rights_type in splits:
+        db.add(RightsSplit(
+            contract_asset_id=asset.id,
+            rights_holder_id=creator.id,
+            rights_holder_name=creator.display_name,
+            rights_type=rights_type,
+            share_percentage=pct,
+        ))
+    db.commit()
+
+
+def test_per_creator_share_uses_rightssplit_unequal_shares(db, org, creator_a, creator_b):
+    """RightsSplit-weighted attribution must reflect unequal shares.
+
+    Equal-split SongCredit would give 50/50; with a 70/30 RightsSplit the
+    creators' blended_value must follow 70/30 instead.
+    """
+    s = _make_song(db, org, "Shared Song", release_years_ago=1)
+    db.add_all([
+        SongCredit(song_id=s.id, creator_id=creator_a.id, role="ARTIST", share_percentage=70.0),
+        SongCredit(song_id=s.id, creator_id=creator_b.id, role="ARTIST", share_percentage=30.0),
+    ])
+    cur_year = date.today().year
+    st = _make_statement(db, org, source_type="GENERIC", year=cur_year - 1)
+    _make_line(db, org, st, s, 1000.0, category="streaming")
+    _attach_rights(db, s, [(creator_a, 70.0, "MASTER"), (creator_b, 30.0, "MASTER")])
+
+    summary = ve.compute_full_catalog_valuation(db, org_id=org.id, persist=False)
+    pcs = {r["creator_id"]: r for r in summary["per_creator_share"]}
+    assert creator_a.id in pcs and creator_b.id in pcs
+    a_val = pcs[creator_a.id]["blended_value"]
+    b_val = pcs[creator_b.id]["blended_value"]
+    # 70/30 attribution → ratio ≈ 70/30 ≈ 2.333
+    assert a_val > b_val
+    assert b_val > 0
+    assert a_val / b_val == pytest.approx(70.0 / 30.0, rel=0.02)
+    # Shares sum to 100% (only two creators on the catalog).
+    assert pcs[creator_a.id]["share_pct"] + pcs[creator_b.id]["share_pct"] == pytest.approx(100.0, abs=0.5)
+
+
+def test_per_creator_share_falls_back_to_equal_split_when_no_rights(db, org, creator_a, creator_b):
+    """Songs without RightsSplit rows fall back to equal SongCredit split."""
+    s = _make_song(db, org, "Unmapped Song", release_years_ago=1)
+    db.add_all([
+        SongCredit(song_id=s.id, creator_id=creator_a.id, role="ARTIST", share_percentage=50.0),
+        SongCredit(song_id=s.id, creator_id=creator_b.id, role="ARTIST", share_percentage=50.0),
+    ])
+    cur_year = date.today().year
+    st = _make_statement(db, org, source_type="GENERIC", year=cur_year - 1)
+    _make_line(db, org, st, s, 1000.0, category="streaming")
+    db.commit()
+
+    summary = ve.compute_full_catalog_valuation(db, org_id=org.id, persist=False)
+    pcs = {r["creator_id"]: r for r in summary["per_creator_share"]}
+    a_val = pcs[creator_a.id]["blended_value"]
+    b_val = pcs[creator_b.id]["blended_value"]
+    assert a_val == pytest.approx(b_val, rel=0.001)
+
+
+def test_attribute_helper_normalizes_share_fractions(db, org, creator_a, creator_b):
+    """RightsSplit shares for a song must sum to 1.0 in the helper output."""
+    s = _make_song(db, org, "Norm Song", release_years_ago=1)
+    _attach_rights(db, s, [
+        (creator_a, 60.0, "MASTER"),
+        (creator_a, 50.0, "PUBLISHING"),  # Same creator multiple rights_types
+        (creator_b, 40.0, "MASTER"),
+    ])
+    out = ve._attribute_songs_to_creators(db, [s.id])
+    assert s.id in out
+    fractions = {cid: frac for cid, _, frac in out[s.id]}
+    assert sum(fractions.values()) == pytest.approx(1.0, abs=0.001)
+    # Creator A should get (60+50)/(60+50+40) = 110/150 = 0.733
+    assert fractions[creator_a.id] == pytest.approx(110.0 / 150.0, rel=0.001)
+    assert fractions[creator_b.id] == pytest.approx(40.0 / 150.0, rel=0.001)

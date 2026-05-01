@@ -22,6 +22,11 @@ import json
 
 router = APIRouter(prefix="/api/valuation", tags=["Valuations"])
 
+# Org-scoped catalog valuation router (Task #172 spec contract).
+# Mirrored to /api/v1/organizations/{org_id}/valuation/catalog by
+# main._mount_v1_routes() the same way the rest of the API is.
+org_router = APIRouter(prefix="/api/organizations", tags=["Valuations"])
+
 class SongValuationDetail(BaseModel):
     song_id: int
     title: str
@@ -1065,26 +1070,20 @@ def _aggregate_persisted_blended(
     songs_summary.sort(key=lambda s: s["_metric_cents"], reverse=True)
     top_songs = [{k: v for k, v in s.items() if k != "_metric_cents"} for s in songs_summary[:10]]
 
-    # Per-creator share (org-wide only)
+    # Per-creator share (org-wide only). Uses RightsSplit-weighted
+    # attribution via the engine helper so persisted summaries match the
+    # economically correct allocation a fresh run produces.
     per_creator_share: List[Dict[str, Any]] = []
+    blended_lookup = {s["song_id"]: s["blended_base"] for s in songs_summary}
     if scope_creator_id is None and songs_meta_ids:
-        credit_rows = (
-            db.query(SongCredit.song_id, SongCredit.creator_id, Creator.display_name)
-            .join(Creator, Creator.id == SongCredit.creator_id)
-            .filter(SongCredit.song_id.in_(songs_meta_ids))
-            .all()
-        )
-        from collections import defaultdict
-        credits_per_song: Dict[int, List[Any]] = defaultdict(list)
-        for sid, cid, cname in credit_rows:
-            credits_per_song[sid].append((cid, cname))
+        from ..services.valuation_engine import _attribute_songs_to_creators
+        attribution = _attribute_songs_to_creators(db, songs_meta_ids)
         creator_totals: Dict[int, Dict[str, Any]] = {}
-        blended_lookup = {s["song_id"]: s["blended_base"] for s in songs_summary}
-        for sid, creators in credits_per_song.items():
-            if not creators:
+        for sid, allocations in attribution.items():
+            song_value = blended_lookup.get(sid, 0.0)
+            if not allocations or song_value <= 0:
                 continue
-            per = blended_lookup.get(sid, 0.0) / len(creators)
-            for cid, cname in creators:
+            for cid, cname, share_fraction in allocations:
                 if cid not in creator_totals:
                     creator_totals[cid] = {
                         "creator_id": cid,
@@ -1092,7 +1091,7 @@ def _aggregate_persisted_blended(
                         "blended_value": 0.0,
                         "song_count": 0,
                     }
-                creator_totals[cid]["blended_value"] += per
+                creator_totals[cid]["blended_value"] += song_value * share_fraction
                 creator_totals[cid]["song_count"] += 1
         per_creator_share = sorted(
             creator_totals.values(), key=lambda r: r["blended_value"], reverse=True
@@ -1689,3 +1688,61 @@ def _build_valuation_pdf(
 
     doc.build(elements)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Spec'd Phase 5 contract: GET /api/organizations/{org_id}/valuation/catalog
+# (mirrored at /api/v1/organizations/{org_id}/valuation/catalog by
+# main._mount_v1_routes). Single endpoint with method discriminator that
+# returns the full per-method catalog summary used by the Valuation page.
+# ---------------------------------------------------------------------------
+
+_VALID_METHODS = {"income", "market_comparable", "dcf", "blended"}
+
+
+@org_router.get(
+    "/{org_id}/valuation/catalog",
+    summary="Get the full catalog valuation summary for the org",
+    description=(
+        "Spec'd Phase 5 contract. Returns the same shape as "
+        "`/api/valuation/full/summary` (by_methodology, by_source, top_songs, "
+        "per_creator_share, data_quality, weights, confidence) plus a "
+        "`selected_method` discriminator chosen by the `?method=` query.\n\n"
+        "**Path:** `org_id` — must match a current org membership of the caller.\n"
+        "**Query:** `creator_id?` (per-creator scope), `method?` "
+        "(income | market_comparable | dcf | blended; default = blended)."
+    ),
+)
+def get_org_catalog_valuation(
+    org_id: int,
+    creator_id: Optional[int] = None,
+    method: str = "blended",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    method = (method or "blended").lower()
+    if method not in _VALID_METHODS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"method must be one of {sorted(_VALID_METHODS)}",
+        )
+
+    # Auth: caller must be a member of the requested org.
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id,
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member of this organization")
+    if creator_id is not None:
+        _scope_check_creator(db, creator_id, org_id)
+
+    summary = _aggregate_persisted_blended(
+        org_id=org_id,
+        db=db,
+        scope_creator_id=creator_id,
+        method=method,
+    )
+    summary["selected_method"] = method
+    summary["scope"] = {"org_id": org_id, "creator_id": creator_id}
+    return summary

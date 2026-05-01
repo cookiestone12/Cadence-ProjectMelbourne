@@ -40,13 +40,10 @@ from ..models.models import (
 
 # Decay-fit helper lives in the underwriting engine; re-export here so
 # the Phase 5 market & DCF engines can use it without forcing callers to
-# touch underwriting_engine directly. Falls back to a stub if the import
-# ever breaks (defensive — both modules ship together).
-try:
-    from .underwriting_engine import compute_decay_params  # noqa: F401
-except Exception:  # pragma: no cover
-    def compute_decay_params(_series):  # type: ignore[no-redef]
-        return None
+# touch underwriting_engine directly. Both modules ship together — if
+# this import ever fails it's a real bug and we want it surfaced loudly,
+# not swallowed by a stub that silently degrades the valuation math.
+from .underwriting_engine import compute_decay_params  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -921,6 +918,87 @@ def full_valuation(db: Session, song_id: int) -> Dict[str, Any]:
 # Catalog-level full valuation orchestrator (Task #172 Phase 5)
 # ---------------------------------------------------------------------------
 
+
+def _attribute_songs_to_creators(
+    db: Session, song_ids: List[int]
+) -> Dict[int, List[Tuple[int, Optional[str], float]]]:
+    """Return ``{song_id: [(creator_id, creator_name, share_fraction), ...]}``.
+
+    Per-creator attribution uses **RightsSplit** rows (joined via
+    ``ContractAsset.asset_type='SONG'``) as the economic source of truth:
+    each creator's share for a song = sum of their RightsSplit
+    ``share_percentage`` across all rights_types they hold for that song,
+    normalized so all returned shares for a song sum to 1.0.
+
+    Songs that have no RightsSplit rows fall back to an **equal split
+    across SongCredit** rows so the per-creator panel doesn't silently
+    drop creators whose songs haven't been formally rights-mapped yet.
+    """
+    if not song_ids:
+        return {}
+
+    from collections import defaultdict
+    from ..models.models import SongCredit as _SC, Creator as _Creator
+
+    rs_rows = (
+        db.query(
+            ContractAsset.asset_id,
+            RightsSplit.rights_holder_id,
+            _Creator.display_name,
+            RightsSplit.share_percentage,
+        )
+        .join(RightsSplit, RightsSplit.contract_asset_id == ContractAsset.id)
+        .outerjoin(_Creator, _Creator.id == RightsSplit.rights_holder_id)
+        .filter(
+            ContractAsset.asset_type == "SONG",
+            ContractAsset.asset_id.in_(song_ids),
+            RightsSplit.rights_holder_id.isnot(None),
+        )
+        .all()
+    )
+
+    rights_per_song: Dict[int, Dict[int, Dict[str, Any]]] = defaultdict(
+        lambda: defaultdict(lambda: {"name": None, "pct": 0.0})
+    )
+    for sid, cid, cname, share in rs_rows:
+        if cid is None or share is None or float(share) <= 0:
+            continue
+        slot = rights_per_song[sid][cid]
+        slot["name"] = cname or f"Creator #{cid}"
+        slot["pct"] += float(share)
+
+    result: Dict[int, List[Tuple[int, Optional[str], float]]] = {}
+    for sid, by_creator in rights_per_song.items():
+        total = sum(v["pct"] for v in by_creator.values())
+        if total <= 0:
+            continue
+        result[sid] = [
+            (cid, slot["name"], slot["pct"] / total)
+            for cid, slot in by_creator.items()
+        ]
+
+    # Equal-split fallback for songs without any usable RightsSplit row.
+    songs_without_rights = [sid for sid in song_ids if sid not in result]
+    if songs_without_rights:
+        cred_rows = (
+            db.query(_SC.song_id, _SC.creator_id, _Creator.display_name)
+            .join(_Creator, _Creator.id == _SC.creator_id)
+            .filter(_SC.song_id.in_(songs_without_rights))
+            .all()
+        )
+        cred_per_song: Dict[int, List[Tuple[int, Optional[str]]]] = defaultdict(list)
+        for sid, cid, cname in cred_rows:
+            cred_per_song[sid].append((cid, cname or f"Creator #{cid}"))
+        for sid, creds in cred_per_song.items():
+            n = len(creds)
+            if n == 0:
+                continue
+            share = 1.0 / n
+            result[sid] = [(cid, cname, share) for cid, cname in creds]
+
+    return result
+
+
 def compute_full_catalog_valuation(
     db: Session,
     org_id: int,
@@ -1077,27 +1155,20 @@ def compute_full_catalog_valuation(
     # Per-creator share (only meaningful when scope is org-wide).
     per_creator_share: List[Dict[str, Any]] = []
     if scope_creator_id is None and song_ids:
-        from ..models.models import Creator as _Creator
-        credit_rows = (
-            db.query(SongCredit.song_id, SongCredit.creator_id, _Creator.display_name)
-            .join(_Creator, _Creator.id == SongCredit.creator_id)
-            .filter(SongCredit.song_id.in_(song_ids))
-            .all()
-        )
-        # Multi-credit songs split equally across credited creators
-        # (this mirrors how rights are typically displayed; per-credit
-        # share % math lives in the Income engine and isn't repeated here).
-        credits_per_song: Dict[int, List[Tuple[int, Optional[str]]]] = defaultdict(list)
-        for sid, cid, cname in credit_rows:
-            credits_per_song[sid].append((cid, cname))
-
+        # RightsSplit-weighted attribution: each song's blended value is
+        # split among creators by their normalized RightsSplit share
+        # (falls back to equal-split SongCredit only for songs that have
+        # no rights records). This is the economically correct allocation
+        # for unequal shares — the previous equal-split version would
+        # misstate creator attribution whenever rights are not 50/50.
+        attribution = _attribute_songs_to_creators(db, list(song_ids))
         creator_totals: Dict[int, Dict[str, Any]] = {}
         song_blended_lookup = {s["song_id"]: s["blended_base"] for s in songs_summary}
-        for sid, creators in credits_per_song.items():
-            if not creators:
+        for sid, allocations in attribution.items():
+            song_value = song_blended_lookup.get(sid, 0.0)
+            if not allocations or song_value <= 0:
                 continue
-            per = song_blended_lookup.get(sid, 0.0) / len(creators)
-            for cid, cname in creators:
+            for cid, cname, share_fraction in allocations:
                 if cid not in creator_totals:
                     creator_totals[cid] = {
                         "creator_id": cid,
@@ -1105,7 +1176,7 @@ def compute_full_catalog_valuation(
                         "blended_value": 0.0,
                         "song_count": 0,
                     }
-                creator_totals[cid]["blended_value"] += per
+                creator_totals[cid]["blended_value"] += song_value * share_fraction
                 creator_totals[cid]["song_count"] += 1
         per_creator_share = sorted(
             creator_totals.values(), key=lambda r: r["blended_value"], reverse=True
