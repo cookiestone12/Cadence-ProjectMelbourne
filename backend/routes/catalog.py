@@ -1058,6 +1058,7 @@ def search_songs(
                     }
                     
                     valuation = valuation_engine.calculate_valuation(analytics_data)
+                    analytics_data['registration_completeness'] = 1.0
                     score = scoring_engine.calculate_score(analytics_data)
                     
                     artist_data = artist_metrics.get(artist_name, {})
