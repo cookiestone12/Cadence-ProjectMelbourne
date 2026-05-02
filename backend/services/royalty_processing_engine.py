@@ -185,6 +185,43 @@ def parse_statement_to_lines(
                 deductions=None,
             )
 
+            # Task #199 — pull BMI extras when the BMI v2 parser produced
+            # them. These keys are absent on generic CSV/PDF rows; the
+            # column reads default to None and leave the new RSL columns
+            # NULL, preserving the existing parser behavior end-to-end.
+            def _bmi_str(key):
+                v = row.get(key)
+                if v is None:
+                    return None
+                s = str(v).strip()
+                return s or None
+
+            def _bmi_bool(key):
+                v = row.get(key)
+                if v in (None, "", "0"):
+                    return None
+                return True
+
+            def _bmi_pct(key):
+                s = _bmi_str(key)
+                if not s:
+                    return None
+                try:
+                    return float(s.replace("%", "").strip())
+                except ValueError:
+                    return None
+
+            def _bmi_super_cents(key):
+                s = _bmi_str(key)
+                if not s:
+                    return None
+                try:
+                    return int(round(float(s) * 100))
+                except ValueError:
+                    return None
+
+            parse_quality = (pdf_metadata or {}).get("parse_quality")
+            section_code = _bmi_str("Section Code")
             line = RoyaltyStatementLine(
                 org_id=org_id,
                 statement_id=statement_id,
@@ -212,6 +249,20 @@ def parse_statement_to_lines(
                 territory_confidence=classification["territory_confidence"],
                 activity_period_start=statement.period_start,
                 activity_period_end=statement.period_end,
+                # BMI v2 extras (NULL for non-BMI rows)
+                platform_source=_bmi_str("Platform Source"),
+                platform_tier=_bmi_str("Platform Tier"),
+                source_t_suffix=_bmi_bool("T Suffix"),
+                writer_share_pct=_bmi_pct("Writer Share"),
+                bmi_work_number=_bmi_str("Work Number"),
+                period_code=_bmi_str("Period Code"),
+                super_usage_cents=_bmi_super_cents("Super Usage"),
+                country=_bmi_str("Country"),
+                society=_bmi_str("Society"),
+                is_aggregate=_bmi_bool("Is Aggregate"),
+                is_adjustment=_bmi_bool("Is Adjustment"),
+                section_code=section_code,
+                parse_quality=parse_quality,
             )
             db.add(line)
             existing_hashes.add(line_hash)

@@ -742,6 +742,8 @@ app.include_router(integrations.router)
 app.include_router(audio.router)
 app.include_router(brief_builder.router)
 app.include_router(royalty_processing.router)
+from .routes import royalty_intelligence  # Task #199
+app.include_router(royalty_intelligence.router)
 app.include_router(push.router)
 app.include_router(storage_scan.router)
 app.include_router(client_portal.router)

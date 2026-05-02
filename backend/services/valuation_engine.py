@@ -82,8 +82,67 @@ _BUCKET_MULTIPLIERS: Dict[str, float] = {
     "mechanical": 9.0,
     "sync": 7.0,
     "streaming": 12.5,
+    # Task #199 Phase 3 — finer source-typed buckets used by the v2
+    # source-typed engine when BMI lines carry a ``platform_source``.
+    "sync_adjacent": 8.5,    # cable/local TV placements (sync-like)
+    "international": 8.0,    # foreign PRO performance income
     # 'other' has no multiplier — it's reported but excluded from value.
 }
+
+# Task #199 Phase 3 — territory-specific multipliers for the
+# international bucket. Applied on top of the base ``international``
+# multiplier when the line carries a society code (BMI international
+# section). Numbers from spec; reflect liquidity / FX risk.
+INTERNATIONAL_MULTIPLIERS: Dict[str, float] = {
+    "APRA": 9.0,    # Australia
+    "PRS": 9.5,     # UK
+    "SOCAN": 9.0,   # Canada
+    "SADAIC": 6.0,  # Argentina — currency risk
+    "UBC": 7.0,     # Brazil
+    "SABAM": 8.0,   # Belgium
+    "GEMA": 9.0,    # Germany
+    "SACEM": 9.0,   # France
+    "JASRAC": 8.5,  # Japan
+    "STIM": 9.0,    # Sweden
+    "SUISA": 9.0,   # Switzerland
+    "DEFAULT": 7.5,
+}
+
+
+def classify_bmi_source(source: Optional[str]) -> str:
+    """Map a BMI ``platform_source`` (e.g. ``SPOTIFY PREM``, ``BET``,
+    ``COMMERCIAL RADIO``) onto a valuation bucket.
+
+    Returns one of: ``streaming`` | ``sync_adjacent`` | ``performance``.
+    """
+    if not source:
+        return "performance"
+    s = source.strip().upper()
+    streaming = (
+        "SPOTIFY", "APPLE", "AMAZON", "YOUTUBE", "PANDORA",
+        "TIDAL", "DEEZER", "SOUNDCLOUD", "AUDIOMACK", "TIKTOK",
+        "PELOTON", "FACEBOOK", "NAPSTER", "SIRIUSXM",
+    )
+    tv = (
+        "BET", "FX", "FXX", "DIRECTV", "ECHOSTAR", "IN DEMAND",
+        "HBO", "SHOWTIME", "MTV", "VH1", "COMEDY CENTRAL",
+        "DISCOVERY", "TBS", "TNT",
+    )
+    for prefix in streaming:
+        if s.startswith(prefix):
+            return "streaming"
+    for prefix in tv:
+        if s.startswith(prefix):
+            return "sync_adjacent"
+    return "performance"
+
+
+def international_multiplier(society: Optional[str]) -> float:
+    """Return the territory-adjusted multiplier for a foreign society."""
+    if not society:
+        return INTERNATIONAL_MULTIPLIERS["DEFAULT"]
+    key = society.strip().upper()
+    return INTERNATIONAL_MULTIPLIERS.get(key, INTERNATIONAL_MULTIPLIERS["DEFAULT"])
 
 # Fallback bucket inferred from the parent statement's ``source_type``
 # when ``canonical_right_category`` is missing or 'other'. Lets the
@@ -1390,4 +1449,107 @@ def calculate_valuation(
         "valuation_low_master": round(valuation_low_master, 2),
         "valuation_base_master": round(valuation_base_master, 2),
         "valuation_high_master": round(valuation_high_master, 2),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Task #199 Phase 3 — confidence score for the source-typed valuation.
+# ---------------------------------------------------------------------------
+
+def compute_confidence(db: Session, org_id: int) -> Dict[str, Any]:
+    """Return a 0–1 confidence score for the source-typed valuation.
+
+    The score is a weighted blend of four signals:
+      - Match coverage: % of statement lines matched to a song.
+      - Parse quality: average BMI parse_quality across statements.
+      - Bucket coverage: number of distinct revenue buckets present.
+      - History depth: distinct quarters of recorded earnings.
+
+    Returns the score plus the component sub-scores so the UI can
+    explain *why* confidence is low.
+    """
+    from sqlalchemy import func as _f
+    from ..models import RoyaltyStatementLine
+
+    # 1. Match coverage.
+    total_lines = (
+        db.query(_f.count(RoyaltyStatementLine.id))
+        .filter(RoyaltyStatementLine.org_id == org_id)
+        .scalar() or 0
+    )
+    matched_lines = (
+        db.query(_f.count(RoyaltyStatementLine.id))
+        .filter(
+            RoyaltyStatementLine.org_id == org_id,
+            RoyaltyStatementLine.matched_song_id.isnot(None),
+        )
+        .scalar() or 0
+    )
+    match_coverage = (matched_lines / total_lines) if total_lines else 0.0
+
+    # 2. Parse quality (BMI lines only; defaults to 1.0 when no BMI data).
+    avg_quality = (
+        db.query(_f.avg(RoyaltyStatementLine.parse_quality))
+        .filter(
+            RoyaltyStatementLine.org_id == org_id,
+            RoyaltyStatementLine.parse_quality.isnot(None),
+        )
+        .scalar()
+    )
+    parse_quality_score = float(avg_quality) if avg_quality is not None else 1.0
+
+    # 3. Bucket coverage.
+    distinct_categories = (
+        db.query(RoyaltyStatementLine.canonical_right_category)
+        .filter(
+            RoyaltyStatementLine.org_id == org_id,
+            RoyaltyStatementLine.canonical_right_category.isnot(None),
+        )
+        .distinct()
+        .count()
+    )
+    bucket_coverage = min(1.0, distinct_categories / 4.0)
+
+    # 4. History depth: distinct quarters of recorded earnings.
+    distinct_periods = (
+        db.query(RoyaltyStatementLine.activity_period_end)
+        .filter(
+            RoyaltyStatementLine.org_id == org_id,
+            RoyaltyStatementLine.activity_period_end.isnot(None),
+        )
+        .distinct()
+        .count()
+    )
+    history_depth = min(1.0, distinct_periods / 8.0)
+
+    score = round(
+        0.35 * match_coverage
+        + 0.30 * parse_quality_score
+        + 0.20 * bucket_coverage
+        + 0.15 * history_depth,
+        4,
+    )
+
+    if score >= 0.80:
+        rating = "high"
+    elif score >= 0.55:
+        rating = "medium"
+    else:
+        rating = "low"
+
+    return {
+        "score": score,
+        "rating": rating,
+        "components": {
+            "match_coverage": round(match_coverage, 4),
+            "parse_quality": round(parse_quality_score, 4),
+            "bucket_coverage": round(bucket_coverage, 4),
+            "history_depth": round(history_depth, 4),
+        },
+        "details": {
+            "total_lines": total_lines,
+            "matched_lines": matched_lines,
+            "distinct_categories": distinct_categories,
+            "distinct_periods": distinct_periods,
+        },
     }

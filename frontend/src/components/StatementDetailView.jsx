@@ -26,6 +26,7 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline'
 import DeleteStatementDialog from './DeleteStatementDialog'
+import BMIIntelligencePanel from './BMIIntelligencePanel'
 
 const MATCH_STATUS_COLORS = {
   MATCHED: { bg: 'bg-green-100', text: 'text-green-700' },
@@ -69,6 +70,7 @@ const DETAIL_TABS = [
   { key: 'lines', label: 'Lines', icon: DocumentTextIcon },
   { key: 'matching', label: 'Matching', icon: LinkIcon },
   { key: 'reconciliation', label: 'Reconciliation', icon: ShieldCheckIcon },
+  { key: 'bmi_intel', label: 'BMI Intelligence', icon: ChartBarIcon },
   { key: 'classification', label: 'Classification', icon: ChartBarIcon },
   { key: 'allocation', label: 'Allocation Preview', icon: CurrencyDollarIcon },
   { key: 'runs', label: 'Run History', icon: ClockIcon },
@@ -472,6 +474,9 @@ export default function StatementDetailView({ orgId, statementId, onBack, initia
       )}
       {activeTab === 'reconciliation' && (
         <ReconciliationPane orgId={orgId} statementId={statementId} />
+      )}
+      {activeTab === 'bmi_intel' && (
+        <BMIIntelligencePanel orgId={orgId} statementId={statementId} />
       )}
       {activeTab === 'classification' && (
         <ClassificationPane orgId={orgId} statementId={statementId} />

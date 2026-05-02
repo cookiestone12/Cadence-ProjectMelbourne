@@ -446,6 +446,29 @@ def check_decay_anomaly(db: Session, org_id: int) -> List[RoyaltyAudit]:
         .all()
     )
 
+    # Task #199 — pre-compute the org's catalog decay rate ONCE outside
+    # the per-song loop so the fallback path stays O(N) instead of O(N²).
+    _catalog_rate: Optional[float] = None
+    _catalog_rate_loaded = False
+
+    def _get_catalog_rate() -> Optional[float]:
+        nonlocal _catalog_rate, _catalog_rate_loaded
+        if _catalog_rate_loaded:
+            return _catalog_rate
+        _catalog_rate_loaded = True
+        try:
+            trajectories = decay_analytics_engine.compute_song_trajectories(
+                db, org_id
+            )
+            catalog = decay_analytics_engine.compute_catalog_decay_rate(
+                trajectories
+            )
+            _catalog_rate = catalog.get("catalog_decay_rate")
+        except Exception as e:
+            log.debug(f"catalog decay precompute failed for org {org_id}: {e}")
+            _catalog_rate = None
+        return _catalog_rate
+
     for (song_id,) in distinct_songs:
         if not song_id:
             continue
@@ -459,20 +482,46 @@ def check_decay_anomaly(db: Session, org_id: int) -> List[RoyaltyAudit]:
         if len(series) < 4:
             continue
         fit = decay_analytics_engine.fit_exponential_decay(series)
+        # Task #199 Phase 4 — when the per-song fit is too noisy to
+        # trust, fall back to projecting the prior period forward by
+        # the median measured catalog decay rate. This catches songs
+        # that crater (or spike) even when their own history is too
+        # short / too noisy for an exponential fit.
         if not fit or fit.get("decay_quality") == "poor":
-            continue
-        observed_fitted = fit.get("observed_vs_fitted") or []
-        if not observed_fitted:
-            continue
-        last = observed_fitted[-1]
-        observed = last.get("observed") or 0
-        fitted = last.get("fitted")
-        if not fitted or fitted <= 0:
-            continue
-        delta = observed - fitted
-        pct = abs(delta) / fitted * 100
-        if pct < 40:
-            continue
+            if len(series) < 2:
+                continue
+            rate = _get_catalog_rate()
+            if rate is None:
+                continue
+            prev = float(series[-2].get("net_total") or 0)
+            obs = float(series[-1].get("net_total") or 0)
+            fitted_proj = prev * (1.0 + float(rate))
+            if fitted_proj <= 0:
+                continue
+            delta = obs - fitted_proj
+            pct = abs(delta) / fitted_proj * 100
+            if pct < 40:
+                continue
+            observed = obs
+            fitted = fitted_proj
+            last = {
+                "period": series[-1].get("period"),
+                "observed": observed,
+                "fitted": fitted,
+            }
+        else:
+            observed_fitted = fit.get("observed_vs_fitted") or []
+            if not observed_fitted:
+                continue
+            last = observed_fitted[-1]
+            observed = last.get("observed") or 0
+            fitted = last.get("fitted")
+            if not fitted or fitted <= 0:
+                continue
+            delta = observed - fitted
+            pct = abs(delta) / fitted * 100
+            if pct < 40:
+                continue
         severity = _severity_from_pct(pct)
         direction = "below" if delta < 0 else "above"
         # Task #173 — derive concrete period_start/period_end from the

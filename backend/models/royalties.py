@@ -383,6 +383,21 @@ class RoyaltyStatementLine(Base):
     territory_confidence = Column(String, nullable=True)
     activity_period_start = Column(Date, nullable=True)
     activity_period_end = Column(Date, nullable=True)
+    # Task #199 — BMI parser additive columns. Nullable across the board,
+    # filled only by the dedicated BMI parser (and future re-parses).
+    platform_source = Column(String, nullable=True)
+    platform_tier = Column(String, nullable=True)
+    source_t_suffix = Column(Boolean, nullable=True)
+    writer_share_pct = Column(Float, nullable=True)
+    bmi_work_number = Column(String, nullable=True)
+    period_code = Column(String, nullable=True)
+    super_usage_cents = Column(Integer, nullable=True)
+    country = Column(String, nullable=True)
+    society = Column(String, nullable=True)
+    is_aggregate = Column(Boolean, nullable=True)
+    is_adjustment = Column(Boolean, nullable=True)
+    section_code = Column(String, nullable=True)
+    parse_quality = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

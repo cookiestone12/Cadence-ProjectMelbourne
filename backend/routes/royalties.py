@@ -406,6 +406,36 @@ def parse_uploaded_file(content: bytes, filename: str, org_id: int = None) -> tu
                 is_vanguard_statement, parse_vanguard_statement,
                 is_bmi_writer_statement, parse_bmi_writer_statement,
             )
+            # Task #199 — try the new dedicated BMI quarterly parser first.
+            # It handles the multi-section Diego-style format the legacy
+            # `parse_bmi_writer_statement` can't reliably parse. If it
+            # detects but fails to extract rows, fall through to the
+            # legacy parser below.
+            try:
+                from ..services.bmi_parser import (
+                    is_bmi_quarterly_statement,
+                    parse_bmi_quarterly_pdf,
+                    to_row_dicts as _bmi_to_rows,
+                    to_metadata as _bmi_to_meta,
+                    BMI_V2_HEADERS,
+                )
+                if is_bmi_quarterly_statement(content):
+                    qresult = parse_bmi_quarterly_pdf(content)
+                    if qresult and qresult.line_items:
+                        meta = _bmi_to_meta(qresult)
+                        rows = _bmi_to_rows(qresult)
+                        logger.info(
+                            "BMI quarterly v2 parser: %d rows, "
+                            "delta=$%.2f, quality=%.2f",
+                            len(rows),
+                            float(qresult.validation_delta),
+                            qresult.parse_quality,
+                        )
+                        return BMI_V2_HEADERS, rows, meta
+            except Exception as e:
+                logger.warning(
+                    "BMI quarterly v2 parser failed, falling back: %s", e
+                )
             if is_bmi_writer_statement(content):
                 bresult = parse_bmi_writer_statement(content)
                 if bresult and bresult.get("rows"):
