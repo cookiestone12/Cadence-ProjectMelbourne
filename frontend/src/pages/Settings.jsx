@@ -23,6 +23,8 @@ export default function Settings() {
   const [orgSettings, setOrgSettings] = useState([])
   const [organizationId, setOrganizationId] = useState(null)
   const [isOrgAdmin, setIsOrgAdmin] = useState(false)
+  const [assistantWriteEnabled, setAssistantWriteEnabled] = useState(false)
+  const [assistantToggleSaving, setAssistantToggleSaving] = useState(false)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -123,6 +125,13 @@ export default function Settings() {
       if (role === 'OWNER' || role === 'ADMIN') {
         const settingsResponse = await axios.get(`/api/notifications/org/${orgId}/settings`)
         setOrgSettings(settingsResponse.data)
+      }
+
+      try {
+        const aRes = await axios.get(`/api/organizations/${orgId}/assistant-settings`)
+        setAssistantWriteEnabled(!!aRes.data?.assistant_write_enabled)
+      } catch (e) {
+        console.error('Failed to load assistant settings', e)
       }
     } catch (error) {
       console.error('Error fetching org data:', error)
@@ -1190,6 +1199,48 @@ export default function Settings() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+              <h2 className="text-[22px] font-medium text-[#3D4A44] mb-2">Cadence AI Assistant</h2>
+              <p className="text-[15px] text-[#7A8580] mb-6">
+                Control whether the in-app AI assistant can <strong>propose changes</strong> to your catalog (status changes, registrations, fees, action items, etc.). The assistant is read-only by default. When this is on, every proposed change still requires a member of your team to click <strong>Confirm</strong> before anything happens — nothing is executed silently.
+              </p>
+              <div className="p-4 bg-[#FAFBF9] rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 pr-4">
+                    <div className="text-[15px] font-medium text-[#3D4A44]">Allow assistant to propose write actions</div>
+                    <div className="text-[13px] text-[#7A8580]">Off = the assistant can only read & explain. On = the assistant can also draft updates that your team confirms.</div>
+                  </div>
+                  <button
+                    disabled={assistantToggleSaving || !organizationId}
+                    onClick={async () => {
+                      if (!organizationId) return
+                      setAssistantToggleSaving(true)
+                      const next = !assistantWriteEnabled
+                      try {
+                        const res = await axios.put(
+                          `/api/organizations/${organizationId}/assistant-settings`,
+                          { assistant_write_enabled: next }
+                        )
+                        setAssistantWriteEnabled(!!res.data?.assistant_write_enabled)
+                      } catch (err) {
+                        console.error('Failed to update assistant settings', err)
+                        alert(err.response?.data?.detail || 'Could not update assistant settings.')
+                      } finally {
+                        setAssistantToggleSaving(false)
+                      }
+                    }}
+                    className={`w-12 h-7 rounded-full transition-colors relative ${
+                      assistantWriteEnabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                    } ${assistantToggleSaving ? 'opacity-60 cursor-wait' : ''}`}
+                  >
+                    <span className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                      assistantWriteEnabled ? 'left-6' : 'left-1'
+                    }`} />
+                  </button>
+                </div>
               </div>
             </div>
 

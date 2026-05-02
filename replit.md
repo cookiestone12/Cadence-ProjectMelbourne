@@ -36,7 +36,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Universal Document & Item Sharing**: Allows sharing via email or directly within Cadence.
 - **Catalog Refactor**: Introduced "Unreleased" catalog sections and statuses.
 - **Comprehensive Audit Logging**: Organization-scoped audit trail for critical actions.
-- **AI Assistant Chat**: OpenAI `gpt-4o-mini` powered chat for guidance, leveraging a knowledge base and tool registry for read/write actions, with user confirmation for mutations.
+- **AI Assistant Chat**: OpenAI-powered chat for guidance, leveraging a rewritten domain knowledge base and tool registry for read/write actions, with user confirmation for mutations. Smart model routing (`gpt-4o` for valuation/audit/calculation, `gpt-4o-mini` otherwise), `temperature=0.3 / top_p=0.9 / MAX_TOOL_ITERATIONS=8`. Org-level `assistant_write_enabled` flag (admin toggle in Settings) gates the proposal write tools — when off, the assistant is read-only. Per-user 20/hr write rate limit (HTTP 429), payload field blocklist, and 8 additional write tools (`mark_song_registered` for MLC + 6 other registries, `add_fee_to_song`, `update_song_status`, `update_creator_pro`, `update_release_status`, `update_release_type`, `update_contract_status`, `update_action_item_status`).
 - **Production Infrastructure Foundation**: Environment separation, health endpoints, CORS, request IDs, HTTPS enforcement, and global exception handling.
 - **Spotify Integration**: OAuth-based integration for API calls, token management, and playlist imports.
 - **Spotify Popularity Cache + Circuit Breaker**: Manages Spotify API calls and caches popularity data.

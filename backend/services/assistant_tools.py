@@ -15,6 +15,22 @@ Exposes:
 Org scoping: every tool requires ``org_id`` and refuses to operate
 without one. Tools that take an entity id (song / creator / etc) re-
 verify ``organization_id == org_id`` before returning anything.
+
+================================================================
+PERMANENTLY DISALLOWED through the assistant — DO NOT add tools for
+these no matter how natural the user's request feels:
+  * Bulk delete of any kind.
+  * Bulk status change across many rows in one call.
+  * Royalty statement ingestion / re-parsing / re-allocation.
+  * Royalty allocation rewrites or override of computed earnings.
+  * Multi-payment posting or any payment beyond a single recorded
+    cash disbursement.
+  * Org-settings mutations (plan, branding, access codes, billing).
+  * User or role management (invite, remove, reassign).
+  * Anything that touches Stripe IDs, password hashes, super-admin
+    flags, or computed totals — see ``BLOCKED_PAYLOAD_FIELDS``.
+The assistant is a single-step admin helper, not a batch processor.
+================================================================
 """
 
 from __future__ import annotations
@@ -43,6 +59,9 @@ from ..models import (
     RoyaltyStatementLine,
     Payment,
 )
+from ..models.catalog import SongRegistration
+from ..models.releases import Release
+from ..models.royalties import Fee
 
 logger = logging.getLogger("cadence")
 
@@ -51,6 +70,86 @@ PLACEMENT_STATUSES = {
     "PITCHED", "IN_REVIEW", "IN_NEGOTIATION", "SECURED",
     "DELIVERED", "AIRED", "PAID", "DECLINED", "CANCELLED",
 }
+
+# ---- Static-choice enums for the new write tools (Task #196 Phase 3B) ----
+REGISTRY_TYPES = {"BMI", "ASCAP", "SESAC", "GMR", "MLC", "SOUNDEXCHANGE", "HFA"}
+REGISTRATION_STATUSES = {"NOT_STARTED", "PENDING", "REGISTERED",
+                          "REJECTED", "NOT_APPLICABLE"}
+FEE_TYPES = {"MANAGEMENT_FEE", "ADMIN_FEE", "DISTRIBUTION_FEE",
+             "SYNC_FEE", "LEGAL_FEE", "OTHER"}
+# Cadence stores Song.release_status as lowercase strings
+# ("unreleased" / "released" / "archived"); the tool surface uses the
+# friendlier UPPERCASE labels and maps on the way in.
+SONG_STATUSES = {"DRAFT", "RELEASED", "ARCHIVED"}
+SONG_STATUS_TO_DB = {"DRAFT": "unreleased", "RELEASED": "released",
+                      "ARCHIVED": "archived"}
+CREATOR_PROS = {"BMI", "ASCAP", "SESAC", "GMR", "SOCAN",
+                "PRS", "PRO_OTHER", "NONE"}
+RELEASE_STATUSES = {"DRAFT", "READY", "SUBMITTED", "RELEASED"}
+RELEASE_TYPES = {"SINGLE", "EP", "ALBUM", "COMPILATION", "MIXTAPE", "OTHER"}
+CONTRACT_STATUSES = {"DRAFT", "PENDING", "ACTIVE", "EXPIRED", "TERMINATED"}
+# Action items in the codebase use these literals; the tool also accepts
+# the friendly aliases OPEN (= PENDING) and DONE (= COMPLETED).
+ACTION_ITEM_STATUSES = {"PENDING", "IN_PROGRESS", "COMPLETED", "CANCELLED"}
+ACTION_ITEM_STATUS_ALIASES = {
+    "OPEN": "PENDING",
+    "DONE": "COMPLETED",
+    "PENDING": "PENDING",
+    "IN_PROGRESS": "IN_PROGRESS",
+    "COMPLETED": "COMPLETED",
+    "CANCELLED": "CANCELLED",
+}
+
+# ---- Security: payload field blocklist (Task #196 Phase 4 step 20) ----
+# Any of these keys are stripped from a ProposedAction.payload before any
+# executor runs. Belt-and-braces — no current tool builds payloads with
+# these keys, but a malicious or buggy tool definition (or a future one)
+# could, and we want a single chokepoint to enforce it.
+BLOCKED_PAYLOAD_FIELDS = frozenset({
+    "organization_id", "user_id", "is_admin", "is_super_admin",
+    "password_hash", "total_revenue_cents", "valuation_amount",
+    "stripe_customer_id", "stripe_connect_id",
+})
+
+# ---- Security: per-user rate limit (Task #196 Phase 4 step 19) ----
+WRITE_RATE_LIMIT = 20  # confirmed actions
+WRITE_RATE_WINDOW_SECONDS = 3600  # rolling 1 hour
+_RATE_LOG: dict[int, list[datetime]] = {}
+_RATE_LOCK = threading.Lock()
+
+
+class RateLimitExceeded(Exception):
+    """Raised by ``execute_proposed_action`` when the per-user write
+    rate limit (20/hour) is exceeded. The chat route maps this to HTTP
+    429 with a retry-after-style message."""
+
+
+def _check_and_record_write(user_id: int) -> None:
+    now = datetime.utcnow()
+    cutoff = now - timedelta(seconds=WRITE_RATE_WINDOW_SECONDS)
+    with _RATE_LOCK:
+        bucket = _RATE_LOG.get(user_id) or []
+        bucket = [t for t in bucket if t > cutoff]
+        if len(bucket) >= WRITE_RATE_LIMIT:
+            oldest = bucket[0]
+            retry_in = WRITE_RATE_WINDOW_SECONDS - int(
+                (now - oldest).total_seconds()
+            )
+            retry_in = max(retry_in, 1)
+            _RATE_LOG[user_id] = bucket
+            raise RateLimitExceeded(
+                f"You've confirmed {WRITE_RATE_LIMIT} assistant write actions "
+                f"in the last hour. Please wait about {retry_in // 60 + 1} "
+                "minute(s) before confirming another."
+            )
+        bucket.append(now)
+        _RATE_LOG[user_id] = bucket
+
+
+def _strip_blocked_fields(payload: dict | None) -> dict:
+    if not payload:
+        return {}
+    return {k: v for k, v in payload.items() if k not in BLOCKED_PAYLOAD_FIELDS}
 
 
 # ----------------------------------------------------------------------
@@ -1250,6 +1349,527 @@ def _exec_record_payment(pa: ProposedAction, db: Session,
     }
 
 
+# ----------------------------------------------------------------------
+# Task #196 Phase 3B — additional write tools (covers MLC + the static
+# enums for song/release/contract/creator/action-item status changes).
+# Each follows the same pattern: a `_write_*` builder that validates and
+# stores a ProposedAction, and a `_exec_*` that mutates on confirm.
+# ----------------------------------------------------------------------
+
+def _write_mark_song_registered(db: Session, org_id: int, user_id: int,
+                                song_id: int,
+                                registry: str,
+                                status: str = "REGISTERED",
+                                registration_id: str | None = None) -> dict:
+    song = db.query(Song).filter(
+        Song.id == song_id, Song.organization_id == org_id,
+    ).first()
+    if not song:
+        return {"error": "Song not found in your organization."}
+    reg = (registry or "").upper()
+    if reg not in REGISTRY_TYPES:
+        return {"error": f"Invalid registry. Allowed: {sorted(REGISTRY_TYPES)}"}
+    st = (status or "REGISTERED").upper()
+    if st not in REGISTRATION_STATUSES:
+        return {"error": f"Invalid status. Allowed: {sorted(REGISTRATION_STATUSES)}"}
+
+    existing = db.query(SongRegistration).filter(
+        SongRegistration.song_id == song.id,
+        SongRegistration.registry_type == reg,
+        SongRegistration.organization_id == org_id,
+    ).first()
+    payload = {
+        "song_id": song.id,
+        "song_title": song.title,
+        "registry": reg,
+        "to_status": st,
+        "registration_id": (registration_id or "").strip() or None,
+        "from_status": existing.registration_status if existing else None,
+    }
+    summary = (
+        f"Mark \"{song.title}\" as {st} with {reg}"
+        + (f" (id {payload['registration_id']})" if payload["registration_id"] else "")
+        + "."
+    )
+    pa = ProposedAction(
+        kind="mark_song_registered", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _exec_mark_song_registered(pa: ProposedAction, db: Session,
+                               user: User) -> dict:
+    p = pa.payload
+    song = db.query(Song).filter(
+        Song.id == p["song_id"], Song.organization_id == pa.org_id,
+    ).first()
+    if not song:
+        raise ValueError("Song no longer exists.")
+    reg = db.query(SongRegistration).filter(
+        SongRegistration.song_id == song.id,
+        SongRegistration.registry_type == p["registry"],
+        SongRegistration.organization_id == pa.org_id,
+    ).first()
+    set_today = p["to_status"] == "REGISTERED"
+    if reg is None:
+        reg = SongRegistration(
+            song_id=song.id,
+            organization_id=pa.org_id,
+            registry_type=p["registry"],
+            registration_status=p["to_status"],
+            registration_id=p.get("registration_id"),
+            registered_date=date.today() if set_today else None,
+            registered_by_user_id=user.id if set_today else None,
+        )
+        db.add(reg)
+    else:
+        reg.registration_status = p["to_status"]
+        if p.get("registration_id"):
+            reg.registration_id = p["registration_id"]
+        if set_today and not reg.registered_date:
+            reg.registered_date = date.today()
+            reg.registered_by_user_id = user.id
+    db.flush()
+    return {
+        "kind": "mark_song_registered",
+        "entity_type": "SONG_REGISTRATION",
+        "entity_id": reg.id,
+        "entity_name": f"{p['registry']} on \"{song.title}\"",
+        "result": {
+            "song_id": song.id,
+            "registry": p["registry"],
+            "from_status": p.get("from_status"),
+            "to_status": reg.registration_status,
+            "registration_id": reg.registration_id,
+        },
+    }
+
+
+def _write_add_fee_to_song(db: Session, org_id: int, user_id: int,
+                           song_id: int,
+                           creator_id: int,
+                           fee_type: str,
+                           amount: float,
+                           description: str | None = None) -> dict:
+    song = db.query(Song).filter(
+        Song.id == song_id, Song.organization_id == org_id,
+    ).first()
+    if not song:
+        return {"error": "Song not found in your organization."}
+    creator = db.query(Creator).filter(
+        Creator.id == creator_id, Creator.organization_id == org_id,
+    ).first()
+    if not creator:
+        return {"error": "Creator not found in your organization."}
+    ftype = (fee_type or "").upper()
+    if ftype not in FEE_TYPES:
+        return {"error": f"Invalid fee_type. Allowed: {sorted(FEE_TYPES)}"}
+    try:
+        amount_f = float(amount)
+    except (TypeError, ValueError):
+        return {"error": "amount must be a number (in dollars)."}
+    if amount_f <= 0:
+        return {"error": "amount must be positive."}
+
+    creator_name = (
+        getattr(creator, "display_name", None)
+        or getattr(creator, "name", None)
+        or f"Creator #{creator.id}"
+    )
+    payload = {
+        "song_id": song.id,
+        "song_title": song.title,
+        "creator_id": creator.id,
+        "creator_name": creator_name,
+        "fee_type": ftype,
+        "amount_dollars": amount_f,
+        "description": (description or "").strip() or None,
+    }
+    summary = (
+        f"Log a {ftype} fee of ${amount_f:,.2f} against \"{song.title}\" "
+        f"to {creator_name}."
+    )
+    pa = ProposedAction(
+        kind="add_fee_to_song", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _exec_add_fee_to_song(pa: ProposedAction, db: Session,
+                          user: User) -> dict:
+    p = pa.payload
+    song = db.query(Song).filter(
+        Song.id == p["song_id"], Song.organization_id == pa.org_id,
+    ).first()
+    if not song:
+        raise ValueError("Song no longer exists.")
+    creator = db.query(Creator).filter(
+        Creator.id == p["creator_id"], Creator.organization_id == pa.org_id,
+    ).first()
+    if not creator:
+        raise ValueError("Creator no longer exists.")
+    amount_cents = int(round(float(p["amount_dollars"]) * 100))
+    fee = Fee(
+        organization_id=pa.org_id,
+        creator_id=creator.id,
+        song_id=song.id,
+        fee_type=p["fee_type"],
+        amount_cents=amount_cents,
+        description=p.get("description"),
+    )
+    db.add(fee)
+    db.flush()
+    return {
+        "kind": "add_fee_to_song",
+        "entity_type": "FEE",
+        "entity_id": fee.id,
+        "entity_name": f"{p['fee_type']} on \"{song.title}\"",
+        "result": {
+            "id": fee.id,
+            "song_id": song.id,
+            "creator_id": creator.id,
+            "fee_type": p["fee_type"],
+            "amount_cents": amount_cents,
+            "amount_dollars": float(p["amount_dollars"]),
+        },
+    }
+
+
+def _write_update_song_status(db: Session, org_id: int, user_id: int,
+                              song_id: int,
+                              new_status: str) -> dict:
+    song = db.query(Song).filter(
+        Song.id == song_id, Song.organization_id == org_id,
+    ).first()
+    if not song:
+        return {"error": "Song not found in your organization."}
+    incoming = (new_status or "").upper()
+    if incoming not in SONG_STATUSES:
+        return {"error": f"Invalid status. Allowed: {sorted(SONG_STATUSES)}"}
+    db_value = SONG_STATUS_TO_DB[incoming]
+    payload = {
+        "song_id": song.id,
+        "song_title": song.title,
+        "from_status": song.release_status,
+        "to_status": incoming,
+        "to_status_db": db_value,
+    }
+    summary = (
+        f"Set status of \"{song.title}\" "
+        f"from {song.release_status} to {incoming}."
+    )
+    pa = ProposedAction(
+        kind="update_song_status", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _exec_update_song_status(pa: ProposedAction, db: Session,
+                             user: User) -> dict:
+    p = pa.payload
+    song = db.query(Song).filter(
+        Song.id == p["song_id"], Song.organization_id == pa.org_id,
+    ).first()
+    if not song:
+        raise ValueError("Song no longer exists.")
+    song.release_status = p["to_status_db"]
+    if p["to_status"] == "RELEASED":
+        song.is_released = True
+    elif p["to_status"] in ("DRAFT", "ARCHIVED"):
+        song.is_released = False
+    song.updated_at = datetime.utcnow()
+    return {
+        "kind": "update_song_status",
+        "entity_type": "SONG",
+        "entity_id": song.id,
+        "entity_name": song.title,
+        "result": {
+            "id": song.id,
+            "from_status": p.get("from_status"),
+            "to_status": p["to_status"],
+            "release_status": song.release_status,
+            "is_released": bool(song.is_released),
+        },
+    }
+
+
+def _write_update_creator_pro(db: Session, org_id: int, user_id: int,
+                              creator_id: int,
+                              new_pro: str) -> dict:
+    creator = db.query(Creator).filter(
+        Creator.id == creator_id, Creator.organization_id == org_id,
+    ).first()
+    if not creator:
+        return {"error": "Creator not found in your organization."}
+    incoming = (new_pro or "").upper().strip()
+    if incoming == "OTHER":
+        incoming = "PRO_OTHER"
+    if incoming not in CREATOR_PROS:
+        return {"error": f"Invalid PRO. Allowed: {sorted(CREATOR_PROS)} (OTHER is accepted as PRO_OTHER)."}
+    creator_name = (
+        getattr(creator, "display_name", None)
+        or getattr(creator, "name", None)
+        or f"Creator #{creator.id}"
+    )
+    db_value = None if incoming == "NONE" else incoming
+    payload = {
+        "creator_id": creator.id,
+        "creator_name": creator_name,
+        "from_pro": creator.primary_pro,
+        "to_pro": incoming,
+        "to_pro_db": db_value,
+    }
+    summary = f"Set {creator_name}'s PRO from {creator.primary_pro or 'none'} to {incoming}."
+    pa = ProposedAction(
+        kind="update_creator_pro", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _exec_update_creator_pro(pa: ProposedAction, db: Session,
+                             user: User) -> dict:
+    p = pa.payload
+    creator = db.query(Creator).filter(
+        Creator.id == p["creator_id"], Creator.organization_id == pa.org_id,
+    ).first()
+    if not creator:
+        raise ValueError("Creator no longer exists.")
+    creator.primary_pro = p.get("to_pro_db")
+    return {
+        "kind": "update_creator_pro",
+        "entity_type": "CREATOR",
+        "entity_id": creator.id,
+        "entity_name": p.get("creator_name") or f"Creator #{creator.id}",
+        "result": {
+            "id": creator.id,
+            "from_pro": p.get("from_pro"),
+            "to_pro": p["to_pro"],
+        },
+    }
+
+
+def _write_update_release_status(db: Session, org_id: int, user_id: int,
+                                 release_id: int,
+                                 new_status: str) -> dict:
+    release = db.query(Release).filter(
+        Release.id == release_id, Release.organization_id == org_id,
+    ).first()
+    if not release:
+        return {"error": "Release not found in your organization."}
+    incoming = (new_status or "").upper()
+    if incoming not in RELEASE_STATUSES:
+        return {"error": f"Invalid status. Allowed: {sorted(RELEASE_STATUSES)}"}
+    payload = {
+        "release_id": release.id,
+        "release_title": release.title,
+        "from_status": release.status,
+        "to_status": incoming,
+    }
+    summary = (
+        f"Move release \"{release.title}\" from {release.status} to {incoming}."
+    )
+    pa = ProposedAction(
+        kind="update_release_status", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _exec_update_release_status(pa: ProposedAction, db: Session,
+                                user: User) -> dict:
+    p = pa.payload
+    release = db.query(Release).filter(
+        Release.id == p["release_id"], Release.organization_id == pa.org_id,
+    ).first()
+    if not release:
+        raise ValueError("Release no longer exists.")
+    release.status = p["to_status"]
+    return {
+        "kind": "update_release_status",
+        "entity_type": "RELEASE",
+        "entity_id": release.id,
+        "entity_name": release.title,
+        "result": {
+            "id": release.id,
+            "from_status": p.get("from_status"),
+            "to_status": release.status,
+        },
+    }
+
+
+def _write_update_release_type(db: Session, org_id: int, user_id: int,
+                               release_id: int,
+                               new_type: str) -> dict:
+    release = db.query(Release).filter(
+        Release.id == release_id, Release.organization_id == org_id,
+    ).first()
+    if not release:
+        return {"error": "Release not found in your organization."}
+    incoming = (new_type or "").upper()
+    if incoming not in RELEASE_TYPES:
+        return {"error": f"Invalid release_type. Allowed: {sorted(RELEASE_TYPES)}"}
+    payload = {
+        "release_id": release.id,
+        "release_title": release.title,
+        "from_type": release.release_type,
+        "to_type": incoming,
+    }
+    summary = (
+        f"Set release \"{release.title}\" type from "
+        f"{release.release_type} to {incoming}."
+    )
+    pa = ProposedAction(
+        kind="update_release_type", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _exec_update_release_type(pa: ProposedAction, db: Session,
+                              user: User) -> dict:
+    p = pa.payload
+    release = db.query(Release).filter(
+        Release.id == p["release_id"], Release.organization_id == pa.org_id,
+    ).first()
+    if not release:
+        raise ValueError("Release no longer exists.")
+    release.release_type = p["to_type"]
+    return {
+        "kind": "update_release_type",
+        "entity_type": "RELEASE",
+        "entity_id": release.id,
+        "entity_name": release.title,
+        "result": {
+            "id": release.id,
+            "from_type": p.get("from_type"),
+            "to_type": release.release_type,
+        },
+    }
+
+
+def _write_update_contract_status(db: Session, org_id: int, user_id: int,
+                                  contract_id: int,
+                                  new_status: str) -> dict:
+    contract = db.query(Contract).filter(
+        Contract.id == contract_id, Contract.organization_id == org_id,
+    ).first()
+    if not contract:
+        return {"error": "Contract not found in your organization."}
+    incoming = (new_status or "").upper()
+    if incoming not in CONTRACT_STATUSES:
+        return {"error": f"Invalid status. Allowed: {sorted(CONTRACT_STATUSES)}"}
+    payload = {
+        "contract_id": contract.id,
+        "contract_title": contract.title,
+        "from_status": contract.status,
+        "to_status": incoming,
+    }
+    summary = (
+        f"Move contract \"{contract.title}\" from "
+        f"{contract.status} to {incoming}."
+    )
+    pa = ProposedAction(
+        kind="update_contract_status", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _exec_update_contract_status(pa: ProposedAction, db: Session,
+                                 user: User) -> dict:
+    p = pa.payload
+    contract = db.query(Contract).filter(
+        Contract.id == p["contract_id"], Contract.organization_id == pa.org_id,
+    ).first()
+    if not contract:
+        raise ValueError("Contract no longer exists.")
+    contract.status = p["to_status"]
+    return {
+        "kind": "update_contract_status",
+        "entity_type": "CONTRACT",
+        "entity_id": contract.id,
+        "entity_name": contract.title,
+        "result": {
+            "id": contract.id,
+            "from_status": p.get("from_status"),
+            "to_status": contract.status,
+        },
+    }
+
+
+def _write_update_action_item_status(db: Session, org_id: int, user_id: int,
+                                     action_item_id: int,
+                                     new_status: str) -> dict:
+    item = db.query(ActionItem).filter(
+        ActionItem.id == action_item_id,
+        ActionItem.organization_id == org_id,
+    ).first()
+    if not item:
+        return {"error": "Action item not found in your organization."}
+    raw = (new_status or "").upper()
+    canonical = ACTION_ITEM_STATUS_ALIASES.get(raw)
+    if canonical is None:
+        return {"error": (
+            "Invalid status. Allowed: OPEN / IN_PROGRESS / DONE / CANCELLED "
+            "(aliases: OPEN→PENDING, DONE→COMPLETED)."
+        )}
+    payload = {
+        "action_item_id": item.id,
+        "action_item_title": item.title,
+        "from_status": item.status,
+        "to_status_label": raw,
+        "to_status": canonical,
+    }
+    summary = (
+        f"Move action item \"{item.title}\" from "
+        f"{item.status or 'PENDING'} to {raw}."
+    )
+    pa = ProposedAction(
+        kind="update_action_item_status", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _exec_update_action_item_status(pa: ProposedAction, db: Session,
+                                    user: User) -> dict:
+    p = pa.payload
+    item = db.query(ActionItem).filter(
+        ActionItem.id == p["action_item_id"],
+        ActionItem.organization_id == pa.org_id,
+    ).first()
+    if not item:
+        raise ValueError("Action item no longer exists.")
+    item.status = p["to_status"]
+    item.updated_at = datetime.utcnow()
+    if p["to_status"] == "COMPLETED":
+        item.completed_at = datetime.utcnow()
+        item.completed_by_user_id = user.id
+    return {
+        "kind": "update_action_item_status",
+        "entity_type": "ACTION_ITEM",
+        "entity_id": item.id,
+        "entity_name": item.title,
+        "result": {
+            "id": item.id,
+            "from_status": p.get("from_status"),
+            "to_status": item.status,
+        },
+    }
+
+
 _EXECUTORS: dict[str, Callable[[ProposedAction, Session, User], dict]] = {
     "create_song": _exec_create_song,
     "create_placement": _exec_create_placement,
@@ -1261,6 +1881,15 @@ _EXECUTORS: dict[str, Callable[[ProposedAction, Session, User], dict]] = {
     "assign_action_item": _exec_assign_action_item,
     "add_song_credit": _exec_add_song_credit,
     "record_payment": _exec_record_payment,
+    # Phase 3B additions
+    "mark_song_registered": _exec_mark_song_registered,
+    "add_fee_to_song": _exec_add_fee_to_song,
+    "update_song_status": _exec_update_song_status,
+    "update_creator_pro": _exec_update_creator_pro,
+    "update_release_status": _exec_update_release_status,
+    "update_release_type": _exec_update_release_type,
+    "update_contract_status": _exec_update_contract_status,
+    "update_action_item_status": _exec_update_action_item_status,
 }
 
 
@@ -1280,6 +1909,15 @@ def execute_proposed_action(action_id: str, db: Session, user: User) -> dict:
     ).first()
     if not membership and not getattr(user, "is_super_admin", False):
         raise PermissionError("Not authorized to act in that organization.")
+
+    # Phase 4 — rate limit (20 writes / rolling hour, per user).
+    _check_and_record_write(user.id)
+
+    # Phase 4 — strip dangerous fields the model could have hand-rolled
+    # into a payload (org_id spoofing, super-admin escalation, computed
+    # totals, Stripe ids). No current tool builds these, but the chokepoint
+    # is here so future tools can't regress the guarantee.
+    pa.payload = _strip_blocked_fields(pa.payload)
 
     fn = _EXECUTORS.get(pa.kind)
     if fn is None:
@@ -1670,6 +2308,195 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    # ---- Phase 3B writes (Task #196) ----
+    {
+        "type": "function",
+        "function": {
+            "name": "mark_song_registered",
+            "description": (
+                "Propose marking a song as registered (or any other "
+                "registration status) with one of the seven supported "
+                "registries: BMI, ASCAP, SESAC, GMR, MLC, SoundExchange, "
+                "or HFA. Upserts the per-registry SongRegistration row."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "song_id": {"type": "integer"},
+                    "registry": {
+                        "type": "string",
+                        "enum": ["BMI", "ASCAP", "SESAC", "GMR",
+                                 "MLC", "SOUNDEXCHANGE", "HFA"],
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["NOT_STARTED", "PENDING", "REGISTERED",
+                                 "REJECTED", "NOT_APPLICABLE"],
+                        "default": "REGISTERED",
+                    },
+                    "registration_id": {
+                        "type": "string",
+                        "description": "Optional society-side id (BMI work id, MLC work id, etc.)",
+                    },
+                },
+                "required": ["song_id", "registry"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_fee_to_song",
+            "description": (
+                "Propose logging a fee against a song, owed to / from a "
+                "specific creator. `amount` is in DOLLARS. `fee_type` is "
+                "one of MANAGEMENT_FEE / ADMIN_FEE / DISTRIBUTION_FEE / "
+                "SYNC_FEE / LEGAL_FEE / OTHER."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "song_id": {"type": "integer"},
+                    "creator_id": {"type": "integer"},
+                    "fee_type": {
+                        "type": "string",
+                        "enum": ["MANAGEMENT_FEE", "ADMIN_FEE",
+                                 "DISTRIBUTION_FEE", "SYNC_FEE",
+                                 "LEGAL_FEE", "OTHER"],
+                    },
+                    "amount": {"type": "number", "minimum": 0.01,
+                               "description": "Fee amount in dollars."},
+                    "description": {"type": "string"},
+                },
+                "required": ["song_id", "creator_id", "fee_type", "amount"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_song_status",
+            "description": (
+                "Propose changing a song's lifecycle status. DRAFT = "
+                "unreleased, RELEASED = live, ARCHIVED = retired. The "
+                "song's `is_released` flag is kept in sync automatically."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "song_id": {"type": "integer"},
+                    "new_status": {"type": "string",
+                                   "enum": ["DRAFT", "RELEASED", "ARCHIVED"]},
+                },
+                "required": ["song_id", "new_status"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_creator_pro",
+            "description": (
+                "Propose changing a creator's PRO affiliation. Allowed: "
+                "BMI / ASCAP / SESAC / GMR / SOCAN / PRS / PRO_OTHER / "
+                "NONE. The literal `OTHER` is accepted as an alias of "
+                "PRO_OTHER. Note: a US writer can only be affiliated with "
+                "one PRO at a time."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "creator_id": {"type": "integer"},
+                    "new_pro": {"type": "string",
+                                "enum": ["BMI", "ASCAP", "SESAC", "GMR",
+                                         "SOCAN", "PRS", "PRO_OTHER",
+                                         "OTHER", "NONE"]},
+                },
+                "required": ["creator_id", "new_pro"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_release_status",
+            "description": (
+                "Propose moving a release between DRAFT / READY / "
+                "SUBMITTED / RELEASED."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "release_id": {"type": "integer"},
+                    "new_status": {"type": "string",
+                                   "enum": ["DRAFT", "READY",
+                                            "SUBMITTED", "RELEASED"]},
+                },
+                "required": ["release_id", "new_status"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_release_type",
+            "description": (
+                "Propose changing a release's product type "
+                "(SINGLE / EP / ALBUM / COMPILATION / MIXTAPE / OTHER)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "release_id": {"type": "integer"},
+                    "new_type": {"type": "string",
+                                 "enum": ["SINGLE", "EP", "ALBUM",
+                                          "COMPILATION", "MIXTAPE", "OTHER"]},
+                },
+                "required": ["release_id", "new_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_contract_status",
+            "description": (
+                "Propose moving a contract through its lifecycle "
+                "(DRAFT / PENDING / ACTIVE / EXPIRED / TERMINATED)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contract_id": {"type": "integer"},
+                    "new_status": {"type": "string",
+                                   "enum": ["DRAFT", "PENDING", "ACTIVE",
+                                            "EXPIRED", "TERMINATED"]},
+                },
+                "required": ["contract_id", "new_status"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_action_item_status",
+            "description": (
+                "Propose changing an action item's status. Accepts the "
+                "user-friendly OPEN / IN_PROGRESS / DONE / CANCELLED "
+                "labels — OPEN maps to PENDING, DONE maps to COMPLETED."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action_item_id": {"type": "integer"},
+                    "new_status": {"type": "string",
+                                   "enum": ["OPEN", "PENDING", "IN_PROGRESS",
+                                            "DONE", "COMPLETED", "CANCELLED"]},
+                },
+                "required": ["action_item_id", "new_status"],
+            },
+        },
+    },
 ]
 
 
@@ -1694,6 +2521,15 @@ _HANDLERS: dict[str, Callable[..., dict]] = {
     "assign_action_item": _write_assign_action_item,
     "add_song_credit": _write_add_song_credit,
     "record_payment": _write_record_payment,
+    # Phase 3B additions
+    "mark_song_registered": _write_mark_song_registered,
+    "add_fee_to_song": _write_add_fee_to_song,
+    "update_song_status": _write_update_song_status,
+    "update_creator_pro": _write_update_creator_pro,
+    "update_release_status": _write_update_release_status,
+    "update_release_type": _write_update_release_type,
+    "update_contract_status": _write_update_contract_status,
+    "update_action_item_status": _write_update_action_item_status,
 }
 
 WRITE_TOOL_NAMES = {
@@ -1701,6 +2537,11 @@ WRITE_TOOL_NAMES = {
     "create_action_item", "create_contract_stub",
     "mark_song_released", "update_song_metadata", "assign_action_item",
     "add_song_credit", "record_payment",
+    # Phase 3B additions
+    "mark_song_registered", "add_fee_to_song",
+    "update_song_status", "update_creator_pro",
+    "update_release_status", "update_release_type",
+    "update_contract_status", "update_action_item_status",
 }
 
 # Write tools that are still safe for CLIENT users — they're proposing

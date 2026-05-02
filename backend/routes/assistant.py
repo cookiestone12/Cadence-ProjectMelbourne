@@ -8,15 +8,42 @@ import os
 import json
 import logging
 
-from ..models import get_db, User, OrganizationMember
+from ..models import get_db, User, OrganizationMember, Organization
 from ..utils.auth import get_current_user, get_active_membership
 from ..services import assistant_tools
 
 logger = logging.getLogger("cadence")
 router = APIRouter(prefix="/api/assistant", tags=["AI Assistant"])
 
-MAX_TOOL_ITERATIONS = 5
-MODEL_NAME = "gpt-4o-mini"
+MAX_TOOL_ITERATIONS = 8
+DEFAULT_MODEL = "gpt-4o-mini"
+SMART_MODEL = "gpt-4o"
+
+CALCULATION_KEYWORDS = (
+    "valuation", "worth", "value", "calculate", "calculation",
+    "split", "splits", "royalty", "royalties", "payment", "payments",
+    "audit", "dcf", "multiplier", "rate", "earnings", "reconcil",
+)
+SMART_PAGES = {"valuation", "audit", "royalty-audit", "reports", "reconciliation"}
+
+
+def _pick_model(messages: List["ChatMessage"], context: Optional["PageContext"]) -> str:
+    """Route calculation/audit/valuation questions to gpt-4o; everything
+    else stays on gpt-4o-mini. Cost-cheap heuristic — never blocks."""
+    try:
+        if context and context.page and context.page.lower() in SMART_PAGES:
+            return SMART_MODEL
+        last_user = next(
+            (m.content for m in reversed(messages) if m.role == "user"),
+            "",
+        ) or ""
+        lowered = last_user.lower()
+        if any(kw in lowered for kw in CALCULATION_KEYWORDS):
+            return SMART_MODEL
+    except Exception:
+        pass
+    return DEFAULT_MODEL
+
 
 # ---------------------------------------------------------------------------
 # Knowledge base — loaded once at module import.
@@ -37,15 +64,25 @@ def _read_kb(filename: str) -> str:
 APP_GUIDE = _read_kb("assistant_app_guide.md")
 INDUSTRY_KB = _read_kb("assistant_industry_knowledge.md")
 
+BEHAVIOR_RULES = """\
+
+---
+
+## ASSISTANT BEHAVIOR RULES (always follow)
+
+1. **Tool-first.** When the user asks about anything that lives in this org's data — songs, creators, contracts, placements, royalties, action items, valuations, audit findings — call the matching read tool **before** writing a sentence about numbers, names, or status. Never invent ids, dollar amounts, stream counts, percentages, or row counts.
+2. **Page-context-aware.** A `CURRENT PAGE CONTEXT` block tells you which entity the user is currently looking at. Pass those ids straight into tool calls instead of asking the user to repeat them.
+3. **Never hallucinate numbers.** If a tool returns no data, say so plainly ("I don't see any matching royalty lines for that period"). Do not estimate, average, or back-fill missing values from your training data.
+4. **Show your work.** When you answer with a number, name the source: "From the Royalty Audit engine…", "Per the most recent statement matched on 2026-04-15…", "The Income method values it at…". Cite the tool you called.
+5. **Structured response format.** For data-rich answers, lead with a one-line direct answer, then a short bulleted breakdown (what / where / why), then a single concrete next-step the user can take in the app.
+6. **Write-tool confirm flow.** For any change to data (create song, mark registered, change status, log a fee, record a payment, etc.) propose the action through the matching write tool and tell the user, in chat, exactly what they're about to confirm. Do **not** describe the change as already done. The platform shows the user a Confirm/Cancel UI; that is the only path to a real mutation.
+"""
+
 BASE_SYSTEM_PROMPT = (
     APP_GUIDE
     + "\n\n---\n\n"
     + INDUSTRY_KB
-    + "\n\n---\n\nWhen tools are available, you may call them to answer "
-      "questions about the user's actual data. Always pass real values from "
-      "the page-context block when relevant. For write actions, propose them "
-      "via the matching tool and explain in the chat what the user is about "
-      "to confirm — do not pretend the action is already done."
+    + BEHAVIOR_RULES
 )
 
 
@@ -140,6 +177,31 @@ def _sum_usage(running: dict, usage_obj) -> None:
         pass
 
 
+def _filter_tools_for_org(db: Session, org_id: Optional[int],
+                          user_role: str) -> list[dict]:
+    """Return the tool schemas allowed for this org/role.
+
+    Write tools are gated behind the org's `assistant_write_enabled` flag
+    (default OFF). CLIENT users keep their existing narrow allow-list.
+    """
+    schemas = list(assistant_tools.TOOL_SCHEMAS)
+    write_enabled = False
+    if org_id is not None:
+        org = db.query(Organization).filter(Organization.id == org_id).first()
+        write_enabled = bool(getattr(org, "assistant_write_enabled", False))
+    if not write_enabled:
+        if (user_role or "").upper() == "CLIENT":
+            allowed = assistant_tools.CLIENT_ALLOWED_WRITE_TOOLS
+        else:
+            allowed = set()
+        schemas = [
+            s for s in schemas
+            if s.get("function", {}).get("name") not in assistant_tools.WRITE_TOOL_NAMES
+            or s.get("function", {}).get("name") in allowed
+        ]
+    return schemas
+
+
 # ---------------------------------------------------------------------------
 # Chat endpoint
 # ---------------------------------------------------------------------------
@@ -188,6 +250,9 @@ async def assistant_chat(
         if msg.role in ("user", "assistant"):
             conversation.append({"role": msg.role, "content": msg.content})
 
+    tool_schemas = _filter_tools_for_org(db, org_id, user_role)
+    chosen_model = _pick_model(request.messages, request.context)
+
     # Snapshot user/org so the streaming generator doesn't keep stale ORM
     # references after the request scope.
     user_id = current_user.id
@@ -208,11 +273,12 @@ async def assistant_chat(
                 # Step 1 — model decides whether to call a tool. Non-stream
                 # so we get tool_calls in one piece.
                 resp = client.chat.completions.create(
-                    model=MODEL_NAME,
+                    model=chosen_model,
                     messages=conversation,
-                    tools=assistant_tools.TOOL_SCHEMAS,
+                    tools=tool_schemas,
                     tool_choice="auto",
                     temperature=0.3,
+                    top_p=0.9,
                     max_tokens=600,
                 )
                 _sum_usage(usage_running, getattr(resp, "usage", None))
@@ -223,9 +289,6 @@ async def assistant_chat(
                     # Final text answer — stream it as content chunks.
                     final_text = msg.content or ""
                     if final_text:
-                        # Chunk by ~24 chars to simulate streaming output;
-                        # one round-trip would also be fine but the chunked
-                        # version lets the UI grow the bubble incrementally.
                         chunk = 24
                         for i in range(0, len(final_text), chunk):
                             yield _sse({"content": final_text[i:i + chunk]})
@@ -270,8 +333,6 @@ async def assistant_chat(
                             "proposed_action": result["proposed_action"],
                         })
                     else:
-                        # Trim large arrays before sending to the UI; the
-                        # full result still goes back to the model below.
                         ui_result = result
                         if isinstance(result, dict) and "results" in result:
                             ui_result = {
@@ -304,7 +365,7 @@ async def assistant_chat(
                     log_ai_usage(
                         db=db,
                         feature="assistant_chat",
-                        model=MODEL_NAME,
+                        model=chosen_model,
                         input_tokens=usage_running["input"],
                         output_tokens=usage_running["output"],
                         org_id=org_id,
@@ -342,7 +403,9 @@ async def assistant_chat(
         "a tool call. The action_id is the uuid the assistant returned in a "
         "`proposed_action` SSE event. Mutations and an audit-log entry "
         "(tagged `source=\"assistant\"`) are written in a single transaction. "
-        "Proposed actions expire after 10 minutes."
+        "Proposed actions expire after 10 minutes. A per-user rate limit of "
+        "20 confirmed write actions per rolling hour is enforced — exceeding "
+        "it returns HTTP 429 with a retry-after message."
     ),
 )
 def confirm_action(
@@ -358,6 +421,8 @@ def confirm_action(
         raise HTTPException(status_code=404, detail=str(e))
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
+    except assistant_tools.RateLimitExceeded as e:
+        raise HTTPException(status_code=429, detail=str(e))
     except Exception as e:
         logger.exception("Assistant confirm failed: %s", e)
         raise HTTPException(status_code=500,

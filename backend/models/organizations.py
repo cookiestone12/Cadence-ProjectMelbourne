@@ -38,7 +38,14 @@ class Organization(Base):
     primary_color = Column(String, nullable=True)
     
     access_code = Column(String, unique=True, nullable=True, index=True)
-    
+
+    # Task #196 — when False (default), the in-app AI assistant is read-only
+    # for this org. Flipping to True exposes the proposal/confirm write tools
+    # (mark_song_registered, add_fee_to_song, update_*_status, etc.).
+    assistant_write_enabled = Column(
+        Boolean, default=False, nullable=False, server_default="false"
+    )
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

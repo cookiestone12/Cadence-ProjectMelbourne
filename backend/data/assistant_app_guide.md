@@ -212,6 +212,50 @@ Go to **Contracts** in the sidebar → Click **New Contract** → Click **Upload
 ### "How do I submit a support ticket?"
 Go to **Support** in the sidebar → Click **New Ticket** → Select a category → Write subject and description → Optionally attach and annotate screenshots → Click **Submit**
 
+## DATA INTERPRETATION GUIDE
+
+When the user asks "what does this number mean?" or "is this good?" on one of the data-rich pages, use the explanations below. Always pair the explanation with a tool call to fetch the actual number — never invent values.
+
+### Catalog page — Health Score
+A song's **Health Score** (0–100) is computed from five things, equally weighted:
+1. **Core metadata** — title, primary artist, ISRC, ISWC populated.
+2. **Credits** — at least one writer + one master holder, splits totalling 100% per side.
+3. **Registrations** — `SongRegistration` rows REGISTERED for every applicable society (PRO + MLC + SoundExchange where relevant).
+4. **Rights coverage** — at least one Rights row defining the song's commercial position.
+5. **Release readiness** — `is_released` true (or in DRAFT for an unreleased song with planned date).
+
+Bands: **80–100** healthy / **50–79** workable / **< 50** needs attention. Tell the user which of the five buckets is dragging the score by calling `get_song_health` and reading the `gaps` field.
+
+### Valuation page
+- The big card shows the **Blended** valuation (40% Income + 30% Market Comparable + 30% DCF) with a confidence percentage.
+- **Confidence < 50%** — the underlying data isn't dense enough to underwrite a precise number. Quote the *range*, not the midpoint. Push the user to ingest more recent royalty statements.
+- **Multipliers** shown next to each method are *the implied multiple of trailing 12-month net royalties*. Streaming-heavy contemporary catalogues commonly comp at **5–8x**; heritage / sync-heavy at **10–20x**.
+- The **Underwriting Engine** drills into a single statement-driven valuation with explicit decay + discount rate inputs. Use it for institutional pitches.
+
+### Royalty Audit page — the 4 checks
+- **CROSS_STATEMENT** — same `(period, song, source)` reports different `net` across two payers. CRITICAL when delta > $100 *or* > 10%.
+- **RATE_CHECK** — effective per-stream rate is below contract rate-card minimum (HIGH) or > 30% below period mean (MEDIUM).
+- **MISSING_PERIOD** — expected statement is late by > 60 days (HIGH) or just overdue (MEDIUM).
+- **DECAY_ANOMALY** — month-over-month earnings drop steeper than the modelled decay curve. MEDIUM by default; HIGH when the song is in a Top-50 contract.
+
+Severity → action: **CRITICAL** open finding now + freeze affected payouts; **HIGH** investigate this period; **MEDIUM** batch into the monthly review; **LOW** trend-watch.
+
+### Royalty Statements page — match rate
+- **≥ 95%** green — trustworthy allocations.
+- **80–95%** yellow — review the Unmatched Lines tab; usually ISRC typos or songs missing from the catalogue.
+- **< 80%** red — the column mapping is probably wrong, or the file is for a catalogue you don't represent. Re-run the mapping step.
+
+### Creator profile page
+- **Open action items** count — anything not in `COMPLETED` status assigned to that creator. Surface high-priority items first.
+- **Recoupment** progress shows `recouped_cents / advance_cents`. When ≥ 100%, the creator is fully recouped and earnings flow through net.
+- **Top earners** lists are last-90-days unless the user asked for a specific window.
+
+### Placements page (Sync HQ)
+Pipeline: `PITCHED → IN_REVIEW → IN_NEGOTIATION → SECURED → DELIVERED → AIRED → PAID`. Side branches: `DECLINED`, `CANCELLED`. Only `SECURED` and later imply a real fee commitment. `PAID` means the fee has been received and reconciled, not just invoiced.
+
+### Action items
+Status field uses the codebase's literal values: **PENDING** / **IN_PROGRESS** / **COMPLETED** / **CANCELLED**. The chat may use the friendlier aliases **OPEN** (= PENDING) and **DONE** (= COMPLETED) — the `update_action_item_status` write tool accepts both.
+
 ## PUBLIC PAGES (no login required)
 
 ### Landing Page (/)

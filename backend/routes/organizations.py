@@ -429,3 +429,103 @@ def get_organization_members(
         }
         for member, user in members
     ]
+
+
+# ---------------------------------------------------------------------------
+# Assistant settings (Task #196 Phase 3A)
+# ---------------------------------------------------------------------------
+
+class AssistantSettingsResponse(BaseModel):
+    assistant_write_enabled: bool
+
+
+class AssistantSettingsRequest(BaseModel):
+    assistant_write_enabled: bool
+
+
+@router.get(
+    "/{org_id}/assistant-settings",
+    response_model=AssistantSettingsResponse,
+    summary="Get this org's AI-assistant settings",
+    description=(
+        "Returns whether the in-app AI assistant is allowed to propose "
+        "write actions for this organization. Any member can read this.\n\n"
+        "**Auth:** Bearer JWT — caller must be a member of the org.\n"
+        "**Response:** `{ assistant_write_enabled: bool }`."
+    ),
+)
+def get_assistant_settings(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id,
+    ).first()
+    if not membership and not getattr(current_user, "is_super_admin", False):
+        raise HTTPException(status_code=403,
+                            detail="Not authorized to access this organization")
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return AssistantSettingsResponse(
+        assistant_write_enabled=bool(getattr(org, "assistant_write_enabled", False)),
+    )
+
+
+@router.put(
+    "/{org_id}/assistant-settings",
+    response_model=AssistantSettingsResponse,
+    summary="Update this org's AI-assistant settings (admin only)",
+    description=(
+        "Flips the org-level `assistant_write_enabled` toggle. When OFF "
+        "(the default), the in-app assistant is read-only for this org. "
+        "When ON, write tools (mark_song_registered, add_fee_to_song, "
+        "update_*_status, etc.) become callable — every mutation still "
+        "requires the user to confirm the proposed action.\n\n"
+        "**Auth:** Bearer JWT — caller must be OWNER or ADMIN of the org.\n"
+        "**Body:** `{ assistant_write_enabled: bool }`.\n"
+        "**Response:** the updated settings."
+    ),
+)
+def update_assistant_settings(
+    org_id: int,
+    payload: AssistantSettingsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id,
+    ).first()
+    is_super = getattr(current_user, "is_super_admin", False)
+    if not is_super and (not membership or membership.role not in ("OWNER", "ADMIN")):
+        raise HTTPException(status_code=403,
+                            detail="Only org Owners or Admins can change assistant settings.")
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    org.assistant_write_enabled = bool(payload.assistant_write_enabled)
+    db.commit()
+    db.refresh(org)
+
+    try:
+        from ..services.audit_service import log_action
+        log_action(
+            db=db,
+            organization_id=org_id,
+            user_id=current_user.id,
+            action="ORG_ASSISTANT_WRITE_TOGGLE",
+            entity_type="ORGANIZATION",
+            entity_id=org_id,
+            entity_name=org.name,
+            details={"assistant_write_enabled": org.assistant_write_enabled},
+        )
+        db.commit()
+    except Exception:
+        pass
+
+    return AssistantSettingsResponse(
+        assistant_write_enabled=bool(org.assistant_write_enabled),
+    )
