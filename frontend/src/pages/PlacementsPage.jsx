@@ -28,6 +28,7 @@ import {
   DocumentDuplicateIcon
 } from '@heroicons/react/24/outline'
 import SyncReportsPage from './SyncReportsPage'
+import { setAssistantContext, clearAssistantContext } from '../lib/assistantContext'
 
 const STATUS_BADGE_STYLES = {
   PITCHED: { bg: 'rgba(91, 138, 114, 0.12)', text: '#5B8A72' },
@@ -270,6 +271,14 @@ export default function PlacementsPage() {
     setEditMode(false)
     loadDetail(p.id)
   }
+
+  useEffect(() => {
+    if (!selectedPlacement) return
+    setAssistantContext({ placement_id: selectedPlacement })
+    return () => {
+      clearAssistantContext(['placement_id'])
+    }
+  }, [selectedPlacement])
 
   const handleCreate = async (e) => {
     e.preventDefault()

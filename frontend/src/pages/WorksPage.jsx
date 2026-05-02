@@ -9,6 +9,7 @@ import {
   XCircleIcon, DocumentTextIcon
 } from '@heroicons/react/24/outline'
 import SongDetailModal from '../components/SongDetailModal'
+import { setAssistantContext, clearAssistantContext } from '../lib/assistantContext'
 
 export default function WorksPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -202,6 +203,15 @@ export default function WorksPage() {
   }, [filteredWorks, unreleasedRecordings, itemTypeFilter, activeFolderId, sortOption])
 
   const totalUnreleasedCount = works.length + songs.filter(s => isSongUnreleased(s)).length
+
+  useEffect(() => {
+    const workId = selectedWork?.id
+    if (!workId) return
+    setAssistantContext({ work_id: workId })
+    return () => {
+      clearAssistantContext(['work_id'])
+    }
+  }, [selectedWork?.id])
 
   async function openWorkDetail(work) {
     setSelectedWork(work)

@@ -13,6 +13,7 @@ import {
 } from '@heroicons/react/24/outline'
 import EmailSendModal from '../components/EmailSendModal'
 import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
+import { setAssistantContext, clearAssistantContext } from '../lib/assistantContext'
 
 const READINESS_TOOLTIPS = {
   'UPC/EAN code': 'A Universal Product Code is required by all digital stores and streaming platforms to identify your release.',
@@ -117,6 +118,14 @@ export default function ReleasesPage() {
     loadReleases()
     loadCreators()
   }, [filters])
+
+  useEffect(() => {
+    if (!selectedRelease) return
+    setAssistantContext({ release_id: selectedRelease })
+    return () => {
+      clearAssistantContext(['release_id'])
+    }
+  }, [selectedRelease])
 
   async function fetchArtworkBlob(releaseId) {
     try {

@@ -9,6 +9,7 @@ import PlatformIcon from '../components/PlatformIcon'
 import SocialCard from '../components/SocialCard'
 import SongDetailModal from '../components/SongDetailModal'
 import AddSongModal from '../components/AddSongModal'
+import { setAssistantContext, clearAssistantContext } from '../lib/assistantContext'
 
 const DollarOrNAInput = ({ value, onChange, placeholder = "Amount" }) => {
   const isNA = value === 'N/A'
@@ -491,6 +492,16 @@ export default function CreatorDetailPage() {
       loadContracts()
     }
   }, [activeTab, id])
+
+  useEffect(() => {
+    if (!id) return
+    const creatorId = parseInt(id)
+    if (!Number.isFinite(creatorId)) return
+    setAssistantContext({ creator_id: creatorId })
+    return () => {
+      clearAssistantContext(['creator_id'])
+    }
+  }, [id])
 
   useEffect(() => {
     if (organizationId) {

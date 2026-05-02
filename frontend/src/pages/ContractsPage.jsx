@@ -10,6 +10,7 @@ import {
 import ContractAdvancesSection from '../components/ContractAdvancesSection'
 import ViewToggle, { getStoredViewMode, setStoredViewMode } from '../components/ViewToggle'
 import ShareModal from '../components/ShareModal'
+import { setAssistantContext, clearAssistantContext } from '../lib/assistantContext'
 
 function SearchableSelect({ options, value, onChange, placeholder, className }) {
   const [search, setSearch] = useState('')
@@ -290,6 +291,15 @@ function ContractsPageInner() {
       setDetailLoading(false)
     }
   }
+
+  useEffect(() => {
+    const contractId = selectedContract?.id
+    if (!contractId) return
+    setAssistantContext({ contract_id: contractId })
+    return () => {
+      clearAssistantContext(['contract_id'])
+    }
+  }, [selectedContract?.id])
 
   async function refreshDetail() {
     if (!contractDetail) return
