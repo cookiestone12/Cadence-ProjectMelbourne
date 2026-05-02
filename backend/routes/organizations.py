@@ -57,7 +57,8 @@ def get_current_organization(
     # Task #190: honor users.current_organization_id (with self-heal)
     # so multi-org users see whichever org they last switched to,
     # instead of whichever membership a no-order .first() returned.
-    active_org_id = resolve_active_org_id(db, current_user)
+    # Read-only context — staff/super-admin can impersonate.
+    active_org_id = resolve_active_org_id(db, current_user, allow_staff_impersonation=True)
 
     if active_org_id is None:
         if current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False):
@@ -95,8 +96,9 @@ def get_current_membership(
     current_user: User = Depends(get_current_user)
 ):
     # Task #190: align with /current — return the membership for the
-    # active org pointer, not whichever row .first() picked.
-    active_org_id = resolve_active_org_id(db, current_user)
+    # active org pointer, not whichever row .first() picked. Read-only
+    # context, so staff impersonation is honored here.
+    active_org_id = resolve_active_org_id(db, current_user, allow_staff_impersonation=True)
 
     if active_org_id is not None:
         membership = db.query(OrganizationMember).filter(
@@ -141,7 +143,9 @@ def list_my_organizations(
         OrganizationMember.user_id == current_user.id,
     ).order_by(OrganizationMember.id.asc()).all()
 
-    active_org_id = resolve_active_org_id(db, current_user)
+    # Read-only listing — staff impersonation honored so the active
+    # flag matches what /current is showing.
+    active_org_id = resolve_active_org_id(db, current_user, allow_staff_impersonation=True)
 
     return {
         "active_organization_id": active_org_id,

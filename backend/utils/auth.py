@@ -102,7 +102,12 @@ def get_current_user(
     return user
 
 
-def resolve_active_org_id(db: Session, user: User) -> Optional[int]:
+def resolve_active_org_id(
+    db: Session,
+    user: User,
+    *,
+    allow_staff_impersonation: bool = False,
+) -> Optional[int]:
     """Task #190: single source of truth for "which org is this user
     looking at right now".
 
@@ -111,12 +116,26 @@ def resolve_active_org_id(db: Session, user: User) -> Optional[int]:
     membership (lowest ``organization_members.id``) and persists the
     pointer so the next call is stable.
 
-    Returns ``None`` only when the user has no memberships at all
-    (and is not staff/super-admin). Staff / super-admin can have
-    their pointer point at any existing org for cross-tenant
-    impersonation (mirrors `PATCH /api/organizations/current` and
-    `GET /api/organizations/{org_id}` semantics) — the pointer is
-    only invalidated if the org row itself is gone.
+    Returns ``None`` only when the user has no memberships at all.
+
+    ``allow_staff_impersonation`` (default **False**) controls whether
+    a non-member pointer is honored for ``is_super_admin`` /
+    ``is_cadence_staff`` users:
+
+    * **False (default — used by every write-context helper):** the
+      pointer is only valid if there is a real ``OrganizationMember``
+      row. This guarantees that changing the pointer can never grant
+      cross-tenant write access, mirroring ``user_can_write_org``
+      (where ``is_cadence_staff`` is read-only).
+    * **True:** opt-in for read-only routes that need to display the
+      org a staff user is impersonating (``GET /api/organizations/current``,
+      ``/current/membership``, ``/mine``). The pointer is then honored
+      as long as the org row still exists.
+
+    Cross-tenant write access by staff would otherwise be possible by
+    PATCHing ``/current`` to a non-member org and hitting any helper
+    that resolves an org context from this function, which is why the
+    default is strict.
     """
     from ..models import OrganizationMember, Organization
 
@@ -130,10 +149,11 @@ def resolve_active_org_id(db: Session, user: User) -> Optional[int]:
         ).first()
         if valid is not None:
             return pointed
-        # Staff impersonation: a non-member pointer is still honored
-        # as long as the org exists, so the durable PATCH /current
-        # contract holds for is_super_admin / is_cadence_staff.
-        if is_staff:
+        # Staff impersonation: a non-member pointer is honored only
+        # when the caller has explicitly opted in. Write-context
+        # helpers leave the default off so they cannot be tricked
+        # into writing into another tenant via PATCH /current.
+        if allow_staff_impersonation and is_staff:
             org_exists = db.query(Organization.id).filter(
                 Organization.id == pointed,
             ).first()
@@ -143,8 +163,24 @@ def resolve_active_org_id(db: Session, user: User) -> Optional[int]:
     fallback = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id,
     ).order_by(OrganizationMember.id.asc()).first()
+
+    # Decide whether to overwrite the persisted pointer. We must NOT
+    # clobber a staff-impersonation pointer (a non-member pointer to
+    # an existing org) just because a strict-mode caller reached this
+    # function — otherwise the very next read-context call would no
+    # longer see the impersonation. Only persist a self-heal when the
+    # current pointer is genuinely invalid (None, missing org, or the
+    # user has been removed from a real org and isn't a staff
+    # impersonator).
+    pointer_is_intentional_impersonation = False
+    if is_staff and pointed is not None:
+        org_exists = db.query(Organization.id).filter(
+            Organization.id == pointed,
+        ).first()
+        pointer_is_intentional_impersonation = org_exists is not None
+
     if fallback is None:
-        if pointed is not None:
+        if pointed is not None and not pointer_is_intentional_impersonation:
             try:
                 user.current_organization_id = None
                 db.commit()
@@ -152,7 +188,7 @@ def resolve_active_org_id(db: Session, user: User) -> Optional[int]:
                 db.rollback()
         return None
 
-    if pointed != fallback.organization_id:
+    if pointed != fallback.organization_id and not pointer_is_intentional_impersonation:
         try:
             user.current_organization_id = fallback.organization_id
             db.commit()

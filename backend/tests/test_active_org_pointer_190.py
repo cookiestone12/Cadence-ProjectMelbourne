@@ -240,8 +240,13 @@ def test_patch_current_allows_cadence_staff_to_switch_to_any_org(client):
     db.refresh(staff)
     assert staff.current_organization_id == org_b.id
 
-    # And resolve_active_org_id directly returns the impersonated org
-    assert resolve_active_org_id(db, staff) == org_b.id
+    # resolve_active_org_id is STRICT by default — staff impersonation
+    # only kicks in for opt-in read-only call sites. The strict default
+    # is what protects every write helper from cross-tenant escalation.
+    assert resolve_active_org_id(db, staff) == org_a.id  # falls back to real membership
+    assert resolve_active_org_id(
+        db, staff, allow_staff_impersonation=True,
+    ) == org_b.id  # opt-in read context honors the impersonation
 
 
 def test_resolve_active_org_id_falls_back_when_impersonated_org_deleted(client):
@@ -264,6 +269,36 @@ def test_resolve_active_org_id_falls_back_when_impersonated_org_deleted(client):
     db.refresh(staff)
 
     assert resolve_active_org_id(db, staff) == org_a.id
+    assert resolve_active_org_id(
+        db, staff, allow_staff_impersonation=True,
+    ) == org_a.id
+
+
+def test_staff_impersonation_does_not_grant_cross_tenant_writes(client):
+    """Critical security guard: a Cadence staff user who switches
+    `current_organization_id` to a tenant they are not a member of
+    must NOT be able to write into that tenant. The default-strict
+    `resolve_active_org_id` enforces this — write helpers (which use
+    the default mode) resolve back to the staff member's *real*
+    membership, so any mutation attempt either lands in the staff's
+    own org or fails the membership check entirely.
+    """
+    db, c = client
+    org_a = _make_org(db, "AAA")  # staff's real membership
+    org_b = _make_org(db, "BBB")  # impersonated, not a member
+    staff = _make_user(db, "staff_writer", is_cadence_staff=True)
+    _join(db, org_a, staff)
+    staff.current_organization_id = org_b.id  # impersonation pointer
+    db.commit()
+
+    # The strict (default) resolver falls back to org_a — i.e. the
+    # write context never sees org_b just because the pointer says so.
+    assert resolve_active_org_id(db, staff) == org_a.id
+    # Membership-based active resolver also returns the org_a row
+    # (no membership exists in org_b).
+    active_member = get_active_membership(db, staff)
+    assert active_member is not None
+    assert active_member.organization_id == org_a.id
 
 
 # ----------------------------------------------------- POST / auto-activation
