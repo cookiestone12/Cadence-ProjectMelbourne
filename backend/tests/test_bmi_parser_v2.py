@@ -275,6 +275,25 @@ def test_parse_bmi_quarterly_text_handles_parens_negative_intl():
     assert neg_rows[0].royalty_amount == Decimal("-3.50")
 
 
+def test_parse_bmi_quarterly_text_preserves_intl_source_per_row():
+    """International rows must persist the per-row source token (PRS,
+    GEMA, etc.) on ``BMILineItem.source`` so downstream ingestion keeps
+    society-level fidelity instead of falling back to a blank/BMI label.
+    """
+    result = parse_bmi_quarterly_text(SAMPLE_BMI_TEXT)
+    assert result is not None
+    intl_rows = [li for li in result.line_items if li.section == "intl_audio"]
+    assert intl_rows, "expected at least one international row"
+    sources = {(li.source or "").upper() for li in intl_rows}
+    assert "PRS" in sources, (
+        f"intl row source token lost; got {sources!r}"
+    )
+    for li in intl_rows:
+        assert li.source, (
+            f"intl row {li.title!r} has empty source — fidelity dropped"
+        )
+
+
 def test_parse_bmi_quarterly_text_captures_multiperiod_codes():
     """Both 20243 and 20242 codes coexist in the same section; parser
     keeps the original code per row so per-period reporting works."""

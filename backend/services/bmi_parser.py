@@ -617,7 +617,10 @@ def _walk_lines_with_state(lines: List[str], result: BMIParsedStatement) -> None
             continue
 
         item.section = current_section
-        item.source = current_source
+        # For intl rows the row regex captured the source per-line; only
+        # overwrite if we have an explicit standalone source header.
+        if current_source or not item.source:
+            item.source = current_source or item.source
         item.source_t_suffix = current_t_suffix
         if current_section.startswith("intl"):
             item.country = current_country
@@ -675,9 +678,15 @@ def _try_intl_row(line: str) -> Optional[BMILineItem]:
     if not m:
         return None
     try:
+        # Carry the row-level source token (e.g. "PRS", "GEMA") onto
+        # the line item so international source fidelity is preserved
+        # through ingestion. The state-machine in ``_walk_lines_with_state``
+        # leaves intl ``item.source`` alone unless ``current_source`` is
+        # populated from a standalone source-header line.
         return BMILineItem(
             title=m.group("title").strip(),
             work_number=m.group("work"),
+            source=(m.group("source") or "").strip(),
             period_code=(m.group("period") or ""),
             writer_share_pct=Decimal("0"),
             withholding=parse_amount(m.group("wh") or "0"),
