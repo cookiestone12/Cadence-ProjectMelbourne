@@ -479,9 +479,14 @@ def check_decay_anomaly(db: Session, org_id: int) -> List[RoyaltyAudit]:
         except Exception as e:
             log.debug(f"build_time_series failed for song {song_id}: {e}")
             continue
-        if len(series) < 4:
+        # Need at least 2 periods for either branch (fit needs ≥4, the
+        # catalog-fallback projection needs ≥2 to compare obs vs prev).
+        if len(series) < 2:
             continue
-        fit = decay_analytics_engine.fit_exponential_decay(series)
+        fit = (
+            decay_analytics_engine.fit_exponential_decay(series)
+            if len(series) >= 4 else None
+        )
         # Task #199 Phase 4 — when the per-song fit is too noisy to
         # trust, fall back to projecting the prior period forward by
         # the median measured catalog decay rate. This catches songs

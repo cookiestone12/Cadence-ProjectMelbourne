@@ -134,8 +134,15 @@ def compute_per_platform_rates(
         band = EXPECTED_BANDS_CENTS.get(platform)
         if band:
             lo, hi = band
-            if effective_cents < lo:
+            # Spec taxonomy: CRITICALLY_LOW (< 50% of band floor), LOW
+            # (between 50% and floor), NORMAL (in band), UNUSUALLY_HIGH
+            # (> 1.5× band ceiling), HIGH (between ceiling and 1.5×).
+            if effective_cents < lo * 0.5:
+                flag = "CRITICALLY_LOW"
+            elif effective_cents < lo:
                 flag = "LOW"
+            elif effective_cents > hi * 1.5:
+                flag = "UNUSUALLY_HIGH"
             elif effective_cents > hi:
                 flag = "HIGH"
             else:

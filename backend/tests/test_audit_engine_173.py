@@ -283,6 +283,60 @@ def test_decay_anomaly_flags_observed_below_fit(db):
     assert findings[0].song_id == song.id
 
 
+def test_decay_anomaly_uses_catalog_fallback_when_per_song_fit_poor(db):
+    """Task #199 Phase 4 regression — when a song has too few quarters
+    to fit its own decay curve, ``check_decay_anomaly`` must fall back
+    to projecting the prior period forward by the catalog's measured
+    decay rate (median per-song decay). This exercises the rewired
+    fallback branch and proves the ``net``/``net_total`` key alignment
+    between ``build_time_series`` and the fallback code is correct.
+    """
+    org, _ = _seed_org_user(db)
+
+    # Catalog reference songs — 4 quarters of clean monotonic decay
+    # each, enough for ``compute_catalog_decay_rate`` (min_periods=4).
+    quarters_full = [(2024, 1), (2024, 2), (2024, 3), (2024, 4)]
+    catalog_curves = [
+        [1000.0, 700.0, 490.0, 343.0],
+        [800.0, 560.0, 392.0, 274.0],
+        [1200.0, 840.0, 588.0, 411.0],
+    ]
+    for i, curve in enumerate(catalog_curves):
+        s = _add_song(db, org.id, f"CatalogSong{i}")
+        for (y, q), v in zip(quarters_full, curve):
+            ps = date(y, (q - 1) * 3 + 1, 1)
+            pe_month = q * 3
+            pe = (date(y, 12, 31) if pe_month == 12
+                  else date(y, pe_month + 1, 1) - timedelta(days=1))
+            st = _add_stmt(db, org.id, ps, pe, src=f"Cat{i}{y}{q}")
+            _add_line(db, org.id, st.id, s.id, ps, pe, v)
+
+    # Subject song: only 2 quarters → ``fit_exponential_decay`` returns
+    # None, forcing the fallback path. Last quarter craters from $500
+    # to $20 (96% drop), well past the catalog decay's expected ~30%.
+    subject = _add_song(db, org.id, "ShortHistoryCrash")
+    for (y, q), v in zip([(2025, 1), (2025, 2)], [500.0, 20.0]):
+        ps = date(y, (q - 1) * 3 + 1, 1)
+        pe = date(y, q * 3 + 1, 1) - timedelta(days=1)
+        st = _add_stmt(db, org.id, ps, pe, src=f"Sub{y}{q}")
+        _add_line(db, org.id, st.id, subject.id, ps, pe, v)
+
+    findings = audit_engine.check_decay_anomaly(db, org.id)
+    db.commit()
+
+    subject_findings = [f for f in findings if f.song_id == subject.id]
+    assert subject_findings, (
+        "expected catalog-fallback path to flag the subject song's "
+        "97% drop against the projected catalog decay baseline"
+    )
+    f = subject_findings[0]
+    assert f.audit_type == "DECAY_ANOMALY"
+    # Fallback path stamps a distinct decay_quality marker so we can
+    # verify which branch produced the finding.
+    assert (f.details or {}).get("decay_quality") == "catalog_fallback"
+    assert (f.details or {}).get("catalog_decay_rate") is not None
+
+
 # --- Orchestrator + idempotency -------------------------------------------
 
 def test_run_full_scan_is_idempotent(db):

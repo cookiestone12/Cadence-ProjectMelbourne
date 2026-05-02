@@ -6,9 +6,11 @@ const fmtPct = (v, digits = 2) => (v == null ? '—' : `${(Number(v) * 100).toFi
 const fmtNum = (n) => (n == null ? '—' : Number(n).toLocaleString('en-US'))
 
 const FLAG_STYLES = {
+  CRITICALLY_LOW: 'bg-red-100 text-red-700',
   LOW: 'bg-amber-100 text-amber-700',
-  HIGH: 'bg-purple-100 text-purple-700',
   NORMAL: 'bg-green-100 text-green-700',
+  HIGH: 'bg-purple-100 text-purple-700',
+  UNUSUALLY_HIGH: 'bg-fuchsia-100 text-fuchsia-700',
   NO_BENCHMARK: 'bg-gray-100 text-gray-600',
 }
 
