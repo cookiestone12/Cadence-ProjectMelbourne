@@ -175,21 +175,35 @@ def get_organization_creators(
 
     count_map = {}
     if creator_ids:
-        all_counts = db.query(SongCredit.creator_id, func.count(SongCredit.id)).join(
+        all_counts = db.query(
+            SongCredit.creator_id,
+            func.count(func.distinct(SongCredit.song_id))
+        ).join(
             Song, Song.id == SongCredit.song_id
+        ).join(
+            Creator, Creator.id == SongCredit.creator_id
         ).filter(
-            SongCredit.creator_id.in_(creator_ids)
+            SongCredit.creator_id.in_(creator_ids),
+            Song.organization_id == Creator.organization_id,
         ).group_by(SongCredit.creator_id).all()
         for cid, cnt in all_counts:
             count_map[cid] = cnt
 
     avg_map = {}
     if creator_ids:
-        avgs = db.query(SongCredit.creator_id, func.avg(Song.status_health_score)).join(
+        song_health_subq = db.query(
+            SongCredit.creator_id.label("cid"),
+            Song.id.label("sid"),
+            Song.status_health_score.label("hs"),
+        ).join(
             Song, Song.id == SongCredit.song_id
+        ).join(
+            Creator, Creator.id == SongCredit.creator_id
         ).filter(
-            SongCredit.creator_id.in_(creator_ids)
-        ).group_by(SongCredit.creator_id).all()
+            SongCredit.creator_id.in_(creator_ids),
+            Song.organization_id == Creator.organization_id,
+        ).distinct().subquery()
+        avgs = db.query(song_health_subq.c.cid, func.avg(song_health_subq.c.hs)).group_by(song_health_subq.c.cid).all()
         avg_map = {cid: float(avg) if avg else 0.0 for cid, avg in avgs}
     
     shared_names = {c.display_name.strip().lower() for c in shared_creators} if shared_creators else set()
@@ -343,7 +357,7 @@ def get_creator(
                 raise HTTPException(status_code=403, detail="Not authorized to access this creator")
             is_shared = True
     
-    song_count = db.query(func.count(SongCredit.id)).join(
+    song_count = db.query(func.count(func.distinct(SongCredit.song_id))).join(
         Song, Song.id == SongCredit.song_id
     ).filter(
         SongCredit.creator_id == creator.id,
@@ -355,7 +369,7 @@ def get_creator(
     ).filter(
         SongCredit.creator_id == creator.id,
         Song.organization_id == creator.organization_id
-    ).all()
+    ).distinct().all()
     try:
         from ..utils.health_sync import ensure_songs_health
         ensure_songs_health(db, creator_songs)
@@ -502,15 +516,23 @@ def update_creator(
     db.commit()
     db.refresh(creator)
     
-    song_count = db.query(func.count(SongCredit.id)).filter(
-        SongCredit.creator_id == creator.id
+    song_count = db.query(func.count(func.distinct(SongCredit.song_id))).join(
+        Song, Song.id == SongCredit.song_id
+    ).filter(
+        SongCredit.creator_id == creator.id,
+        Song.organization_id == creator.organization_id,
     ).scalar() or 0
     
-    avg_health = db.query(func.avg(Song.status_health_score)).join(
+    avg_subq = db.query(
+        Song.id.label("sid"),
+        Song.status_health_score.label("hs"),
+    ).join(
         SongCredit, Song.id == SongCredit.song_id
     ).filter(
-        SongCredit.creator_id == creator.id
-    ).scalar() or 0.0
+        SongCredit.creator_id == creator.id,
+        Song.organization_id == creator.organization_id,
+    ).distinct().subquery()
+    avg_health = db.query(func.avg(avg_subq.c.hs)).scalar() or 0.0
     
     return {
         "id": creator.id,
