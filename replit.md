@@ -49,6 +49,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Per-PRO Song Registration**: Tracks song registrations across various PROs.
 - **Performance Sweep**: Added composite indexes and fixed N+1 query issues.
 - **Active-Org Pointer & Org Switcher**: Enhanced user experience for multi-organization users with a robust active organization management system and secure switching.
+- **Bulk Royalty Upload — Inline Mapping Review & Retry**: Multi-file royalty statement uploads run as a single batch with per-row status (uploading / done / overwritten / needs review / error). Users can fix individual file mappings inline before processing and re-run only the failed rows via a "Retry failed" button without rebuilding the batch or re-uploading successful files.
 
 ## External Dependencies
 - PostgreSQL
