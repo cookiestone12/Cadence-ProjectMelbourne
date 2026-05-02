@@ -102,9 +102,10 @@ function ToolChip({ name, completed }) {
 function _deepLinkFor(name, row) {
   if (!row?.id) return null
   if (name === 'search_songs') return `/catalog?songId=${row.id}`
-  if (name === 'search_creators') return `/creators/${row.id}`
+  if (name === 'search_creators' || name === 'get_creator_summary')
+    return `/roster/${row.id}`
   if (name === 'search_contracts' || name === 'list_expiring_contracts')
-    return `/contracts/${row.id}`
+    return `/contracts?contractId=${row.id}`
   if (name === 'list_action_items_for_user') return `/actions`
   return null
 }
