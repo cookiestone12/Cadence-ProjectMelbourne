@@ -41,6 +41,7 @@ from ..models import (
     SongStreamingMetrics,
     RoyaltyStatement,
     RoyaltyStatementLine,
+    Payment,
 )
 
 logger = logging.getLogger("cadence")
@@ -665,6 +666,260 @@ def _write_create_action_item(db: Session, org_id: int, user_id: int,
     return {"proposed_action": pa.to_public_dict()}
 
 
+def _write_mark_song_released(db: Session, org_id: int, user_id: int,
+                              song_id: int,
+                              release_date: str | None = None) -> dict:
+    song = db.query(Song).filter(
+        Song.id == song_id, Song.organization_id == org_id
+    ).first()
+    if not song:
+        return {"error": "Song not found in your organization."}
+    parsed_date = None
+    if release_date:
+        try:
+            parsed_date = date.fromisoformat(str(release_date)[:10])
+        except ValueError:
+            return {"error": "release_date must be ISO-8601 (YYYY-MM-DD)."}
+    payload = {
+        "song_id": song.id,
+        "title": song.title,
+        "release_date": parsed_date.isoformat() if parsed_date else None,
+        "from_release_status": song.release_status,
+        "from_is_released": bool(song.is_released),
+    }
+    summary_bits = [f"Mark song \"{song.title}\" as released"]
+    if parsed_date:
+        summary_bits.append(f"with release date {parsed_date.isoformat()}")
+    summary = " ".join(summary_bits) + "."
+    pa = ProposedAction(
+        kind="mark_song_released", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _write_update_song_metadata(db: Session, org_id: int, user_id: int,
+                                song_id: int,
+                                title: str | None = None,
+                                isrc: str | None = None,
+                                iswc: str | None = None) -> dict:
+    song = db.query(Song).filter(
+        Song.id == song_id, Song.organization_id == org_id
+    ).first()
+    if not song:
+        return {"error": "Song not found in your organization."}
+
+    changes: dict = {}
+    if title is not None:
+        new_title = (title or "").strip()
+        if not new_title:
+            return {"error": "title cannot be blank."}
+        if new_title != (song.title or ""):
+            changes["title"] = {"old": song.title, "new": new_title}
+    if isrc is not None:
+        new_isrc = (isrc or "").strip() or None
+        if new_isrc != song.isrc:
+            changes["isrc"] = {"old": song.isrc, "new": new_isrc}
+    if iswc is not None:
+        new_iswc = (iswc or "").strip() or None
+        if new_iswc != song.iswc:
+            changes["iswc"] = {"old": song.iswc, "new": new_iswc}
+
+    if not changes:
+        return {"error": "No metadata fields changed."}
+
+    payload = {
+        "song_id": song.id,
+        "title": song.title,
+        "changes": changes,
+    }
+    fields = ", ".join(sorted(changes.keys()))
+    summary = f"Update {fields} on song \"{song.title}\"."
+    pa = ProposedAction(
+        kind="update_song_metadata", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _write_assign_action_item(db: Session, org_id: int, user_id: int,
+                              action_item_id: int,
+                              assignee_user_id: int | None) -> dict:
+    item = db.query(ActionItem).filter(
+        ActionItem.id == action_item_id,
+        ActionItem.organization_id == org_id,
+    ).first()
+    if not item:
+        return {"error": "Action item not found in your organization."}
+
+    new_assignee: int | None = None
+    new_name: str | None = None
+    if assignee_user_id is not None:
+        try:
+            assignee_id_int = int(assignee_user_id)
+        except (TypeError, ValueError):
+            return {"error": "assignee_user_id must be an integer or null."}
+        member = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == assignee_id_int,
+            OrganizationMember.organization_id == org_id,
+        ).first()
+        if not member:
+            return {"error": "assignee_user_id is not a member of your organization."}
+        assignee = db.query(User).filter(User.id == assignee_id_int).first()
+        if not assignee:
+            return {"error": "Assignee user not found."}
+        new_assignee = assignee_id_int
+        new_name = (
+            getattr(assignee, "username", None)
+            or getattr(assignee, "email", None)
+            or f"User #{assignee_id_int}"
+        )
+
+    payload = {
+        "action_item_id": item.id,
+        "title": item.title,
+        "from_assignee_user_id": item.assigned_to_user_id,
+        "to_assignee_user_id": new_assignee,
+    }
+    if new_assignee is None:
+        summary = f"Unassign action item \"{item.title}\"."
+    else:
+        summary = (
+            f"Assign action item \"{item.title}\" to {new_name}."
+        )
+    pa = ProposedAction(
+        kind="assign_action_item", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _write_add_song_credit(db: Session, org_id: int, user_id: int,
+                           song_id: int,
+                           creator_id: int,
+                           role: str,
+                           pub_share: float | None = None,
+                           master_share: float | None = None) -> dict:
+    if not role or not str(role).strip():
+        return {"error": "role is required."}
+    song = db.query(Song).filter(
+        Song.id == song_id, Song.organization_id == org_id
+    ).first()
+    if not song:
+        return {"error": "Song not found in your organization."}
+    creator = db.query(Creator).filter(
+        Creator.id == creator_id, Creator.organization_id == org_id
+    ).first()
+    if not creator:
+        return {"error": "Creator not found in your organization."}
+
+    def _coerce_share(name: str, val) -> tuple[float | None, str | None]:
+        if val is None:
+            return None, None
+        try:
+            f = float(val)
+        except (TypeError, ValueError):
+            return None, f"{name} must be a number between 0 and 100."
+        if f < 0 or f > 100:
+            return None, f"{name} must be between 0 and 100."
+        return f, None
+
+    pub, err = _coerce_share("pub_share", pub_share)
+    if err:
+        return {"error": err}
+    mas, err = _coerce_share("master_share", master_share)
+    if err:
+        return {"error": err}
+
+    creator_name = (
+        getattr(creator, "display_name", None)
+        or getattr(creator, "name", None)
+        or f"Creator #{creator.id}"
+    )
+    payload = {
+        "song_id": song.id,
+        "song_title": song.title,
+        "creator_id": creator.id,
+        "creator_name": creator_name,
+        "role": str(role).strip(),
+        "pub_share": pub,
+        "master_share": mas,
+    }
+    summary_bits = [
+        f"Add credit: {creator_name} as {payload['role']} on \"{song.title}\""
+    ]
+    extras: list[str] = []
+    if pub is not None:
+        extras.append(f"pub {pub:g}%")
+    if mas is not None:
+        extras.append(f"master {mas:g}%")
+    if extras:
+        summary_bits.append(f"({', '.join(extras)})")
+    summary = " ".join(summary_bits) + "."
+    pa = ProposedAction(
+        kind="add_song_credit", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
+def _write_record_payment(db: Session, org_id: int, user_id: int,
+                          payee_id: int,
+                          amount_cents: int,
+                          currency: str = "USD",
+                          contract_id: int | None = None,
+                          payment_method: str | None = None,
+                          payment_reference: str | None = None,
+                          notes: str | None = None) -> dict:
+    payee = db.query(Creator).filter(
+        Creator.id == payee_id, Creator.organization_id == org_id
+    ).first()
+    if not payee:
+        return {"error": "payee_id does not belong to your organization."}
+    try:
+        amount_int = int(amount_cents)
+    except (TypeError, ValueError):
+        return {"error": "amount_cents must be an integer (in cents)."}
+    if amount_int <= 0:
+        return {"error": "amount_cents must be positive."}
+    if contract_id is not None:
+        contract = db.query(Contract).filter(
+            Contract.id == contract_id, Contract.organization_id == org_id
+        ).first()
+        if not contract:
+            return {"error": "contract_id does not belong to your organization."}
+
+    payee_name = (
+        getattr(payee, "display_name", None)
+        or getattr(payee, "name", None)
+        or f"Creator #{payee.id}"
+    )
+    payload = {
+        "payee_id": payee.id,
+        "payee_name": payee_name,
+        "amount_cents": amount_int,
+        "currency": (currency or "USD").upper(),
+        "contract_id": contract_id,
+        "payment_method": (payment_method or "").strip() or None,
+        "payment_reference": (payment_reference or "").strip() or None,
+        "notes": (notes or "").strip() or None,
+    }
+    summary = (
+        f"Record a {payload['currency']} "
+        f"${amount_int / 100.0:,.2f} payment to {payee_name}."
+    )
+    pa = ProposedAction(
+        kind="record_payment", summary=summary, payload=payload,
+        org_id=org_id, user_id=user_id,
+    )
+    store_proposed_action(pa)
+    return {"proposed_action": pa.to_public_dict()}
+
+
 def _write_create_contract_stub(db: Session, org_id: int, user_id: int,
                                 title: str,
                                 contract_type: str = "OTHER",
@@ -831,12 +1086,181 @@ def _exec_create_contract_stub(pa: ProposedAction, db: Session,
     }
 
 
+def _exec_mark_song_released(pa: ProposedAction, db: Session,
+                             user: User) -> dict:
+    p = pa.payload
+    song = db.query(Song).filter(
+        Song.id == p["song_id"],
+        Song.organization_id == pa.org_id,
+    ).first()
+    if not song:
+        raise ValueError("Song no longer exists.")
+    song.is_released = True
+    song.release_status = "released"
+    if p.get("release_date"):
+        try:
+            song.release_date = date.fromisoformat(p["release_date"])
+        except ValueError:
+            pass
+    return {
+        "kind": "mark_song_released",
+        "entity_type": "SONG",
+        "entity_id": song.id,
+        "entity_name": song.title,
+        "result": {
+            "id": song.id,
+            "is_released": song.is_released,
+            "release_status": song.release_status,
+            "release_date": song.release_date.isoformat()
+                if song.release_date else None,
+        },
+    }
+
+
+def _exec_update_song_metadata(pa: ProposedAction, db: Session,
+                               user: User) -> dict:
+    p = pa.payload
+    song = db.query(Song).filter(
+        Song.id == p["song_id"],
+        Song.organization_id == pa.org_id,
+    ).first()
+    if not song:
+        raise ValueError("Song no longer exists.")
+    changes = p.get("changes") or {}
+    applied: dict = {}
+    for field in ("title", "isrc", "iswc"):
+        spec = changes.get(field)
+        if not spec:
+            continue
+        new_val = spec.get("new")
+        setattr(song, field, new_val)
+        applied[field] = {"old": spec.get("old"), "new": new_val}
+    song.updated_at = datetime.utcnow()
+    return {
+        "kind": "update_song_metadata",
+        "entity_type": "SONG",
+        "entity_id": song.id,
+        "entity_name": song.title,
+        "result": {"id": song.id, "changes": applied},
+    }
+
+
+def _exec_assign_action_item(pa: ProposedAction, db: Session,
+                             user: User) -> dict:
+    p = pa.payload
+    item = db.query(ActionItem).filter(
+        ActionItem.id == p["action_item_id"],
+        ActionItem.organization_id == pa.org_id,
+    ).first()
+    if not item:
+        raise ValueError("Action item no longer exists.")
+    new_assignee = p.get("to_assignee_user_id")
+    if new_assignee is not None:
+        member = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == int(new_assignee),
+            OrganizationMember.organization_id == pa.org_id,
+        ).first()
+        if not member:
+            raise ValueError(
+                "Assignee is no longer a member of this organization."
+            )
+    item.assigned_to_user_id = int(new_assignee) if new_assignee is not None else None
+    item.updated_at = datetime.utcnow()
+    return {
+        "kind": "assign_action_item",
+        "entity_type": "ACTION_ITEM",
+        "entity_id": item.id,
+        "entity_name": item.title,
+        "result": {
+            "id": item.id,
+            "from_assignee_user_id": p.get("from_assignee_user_id"),
+            "to_assignee_user_id": item.assigned_to_user_id,
+        },
+    }
+
+
+def _exec_add_song_credit(pa: ProposedAction, db: Session,
+                          user: User) -> dict:
+    p = pa.payload
+    song = db.query(Song).filter(
+        Song.id == p["song_id"],
+        Song.organization_id == pa.org_id,
+    ).first()
+    if not song:
+        raise ValueError("Song no longer exists.")
+    creator = db.query(Creator).filter(
+        Creator.id == p["creator_id"],
+        Creator.organization_id == pa.org_id,
+    ).first()
+    if not creator:
+        raise ValueError("Creator no longer exists.")
+    credit = SongCredit(
+        song_id=song.id,
+        creator_id=creator.id,
+        role=p["role"],
+        pub_share=p.get("pub_share"),
+        master_share=p.get("master_share"),
+    )
+    db.add(credit)
+    db.flush()
+    return {
+        "kind": "add_song_credit",
+        "entity_type": "SONG_CREDIT",
+        "entity_id": credit.id,
+        "entity_name": f"{p.get('creator_name')} on \"{song.title}\"",
+        "result": {
+            "id": credit.id,
+            "song_id": song.id,
+            "creator_id": creator.id,
+            "role": credit.role,
+            "pub_share": credit.pub_share,
+            "master_share": credit.master_share,
+        },
+    }
+
+
+def _exec_record_payment(pa: ProposedAction, db: Session,
+                         user: User) -> dict:
+    p = pa.payload
+    payment = Payment(
+        organization_id=pa.org_id,
+        payee_id=p["payee_id"],
+        contract_id=p.get("contract_id"),
+        amount_cents=int(p["amount_cents"]),
+        currency=p.get("currency", "USD"),
+        status="PENDING",
+        payment_method=p.get("payment_method"),
+        payment_reference=p.get("payment_reference"),
+        notes=p.get("notes"),
+        created_by_user_id=user.id,
+    )
+    db.add(payment)
+    db.flush()
+    return {
+        "kind": "record_payment",
+        "entity_type": "PAYMENT",
+        "entity_id": payment.id,
+        "entity_name": f"Payment to {p.get('payee_name')}",
+        "result": {
+            "id": payment.id,
+            "amount_cents": payment.amount_cents,
+            "currency": payment.currency,
+            "status": payment.status,
+        },
+    }
+
+
 _EXECUTORS: dict[str, Callable[[ProposedAction, Session, User], dict]] = {
     "create_song": _exec_create_song,
     "create_placement": _exec_create_placement,
     "update_placement_status": _exec_update_placement_status,
     "create_action_item": _exec_create_action_item,
     "create_contract_stub": _exec_create_contract_stub,
+    "mark_song_released": _exec_mark_song_released,
+    "update_song_metadata": _exec_update_song_metadata,
+    "assign_action_item": _exec_assign_action_item,
+    "add_song_credit": _exec_add_song_credit,
+    "record_payment": _exec_record_payment,
 }
 
 
@@ -1106,6 +1530,124 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "mark_song_released",
+            "description": (
+                "Propose flipping a song's release status to RELEASED. "
+                "Optionally set the release date (defaults to leaving it as-is). "
+                "Returns a proposed_action."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "song_id": {"type": "integer"},
+                    "release_date": {
+                        "type": "string",
+                        "description": "ISO date YYYY-MM-DD (optional).",
+                    },
+                },
+                "required": ["song_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_song_metadata",
+            "description": (
+                "Propose updating a song's title, ISRC, or ISWC. Pass only the "
+                "fields you want to change — others are left alone. Releases, "
+                "credits, and rights are NOT touched by this tool."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "song_id": {"type": "integer"},
+                    "title": {"type": "string"},
+                    "isrc": {"type": "string"},
+                    "iswc": {"type": "string"},
+                },
+                "required": ["song_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "assign_action_item",
+            "description": (
+                "Propose assigning an action item to a user in this org, or "
+                "unassigning it by passing assignee_user_id=null."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action_item_id": {"type": "integer"},
+                    "assignee_user_id": {
+                        "type": ["integer", "null"],
+                        "description": "User id of the assignee, or null to unassign.",
+                    },
+                },
+                "required": ["action_item_id", "assignee_user_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_song_credit",
+            "description": (
+                "Propose adding a creator credit (writer / producer / featured / "
+                "etc.) to a song with optional publishing % and master % shares."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "song_id": {"type": "integer"},
+                    "creator_id": {"type": "integer"},
+                    "role": {
+                        "type": "string",
+                        "description": "e.g. WRITER, PRODUCER, FEATURED, PERFORMER",
+                    },
+                    "pub_share": {
+                        "type": "number",
+                        "description": "Publishing share percentage 0–100.",
+                    },
+                    "master_share": {
+                        "type": "number",
+                        "description": "Master share percentage 0–100.",
+                    },
+                },
+                "required": ["song_id", "creator_id", "role"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "record_payment",
+            "description": (
+                "Propose recording a cash disbursement (royalty payment) to a "
+                "creator. Amount is in CENTS. Status is created as PENDING."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "payee_id": {"type": "integer",
+                                 "description": "Creator id of the payee."},
+                    "amount_cents": {"type": "integer", "minimum": 1},
+                    "currency": {"type": "string", "default": "USD"},
+                    "contract_id": {"type": "integer"},
+                    "payment_method": {"type": "string"},
+                    "payment_reference": {"type": "string"},
+                    "notes": {"type": "string"},
+                },
+                "required": ["payee_id", "amount_cents"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "create_contract_stub",
             "description": (
                 "Propose creating a DRAFT contract row. Parties, dates, and "
@@ -1147,11 +1689,18 @@ _HANDLERS: dict[str, Callable[..., dict]] = {
     "update_placement_status": _write_update_placement_status,
     "create_action_item": _write_create_action_item,
     "create_contract_stub": _write_create_contract_stub,
+    "mark_song_released": _write_mark_song_released,
+    "update_song_metadata": _write_update_song_metadata,
+    "assign_action_item": _write_assign_action_item,
+    "add_song_credit": _write_add_song_credit,
+    "record_payment": _write_record_payment,
 }
 
 WRITE_TOOL_NAMES = {
     "create_song", "create_placement", "update_placement_status",
     "create_action_item", "create_contract_stub",
+    "mark_song_released", "update_song_metadata", "assign_action_item",
+    "add_song_credit", "record_payment",
 }
 
 # Write tools that are still safe for CLIENT users — they're proposing
