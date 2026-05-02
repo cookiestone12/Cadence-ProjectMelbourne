@@ -751,3 +751,167 @@ def export_analytics(org_id: int, report_type: str, db: Session = Depends(get_db
 
     else:
         raise HTTPException(status_code=400, detail=f"Unknown report type: {report_type}")
+
+
+@router.get(
+    "/org/{org_id}/export/{report_type}.pdf",
+    summary="Export an analytics report as branded PDF",
+)
+def export_analytics_pdf(org_id: int, report_type: str,
+                         db: Session = Depends(get_db),
+                         current_user: User = Depends(get_current_user)):
+    """Branded PDF sibling for the CSV analytics exports."""
+    verify_org_access(db, current_user.id, org_id)
+    from fastapi import Response
+    from ..models import Organization
+    from ..services.branding import theme_from_org, safe_filename_segment
+    from ..services.pdf_engine import BrandedPDF
+    from ..services.excel_engine import pdf_response_headers
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    theme = theme_from_org(org)
+
+    title_map = {
+        "catalog-summary": ("Catalog Summary",
+                            ["Title", "Artist", "ISRC", "ISWC", "Health", "Released", "Release Date", "Created"]),
+        "revenue-summary": ("Revenue Summary",
+                            ["Track", "Artist", "Platform", "Territory", "Revenue"]),
+        "creators-summary": ("Creators Summary",
+                             ["Name", "Legal Name", "Email", "Roles", "PRO", "IPI", "Territory"]),
+        "contracts-summary": ("Contracts Summary",
+                              ["Title", "Type", "Status", "Start", "End", "Territory", "Advance"]),
+        "placements-summary": ("Placements Summary",
+                               ["Title", "Type", "Status", "Client", "Project", "Fee", "Currency", "Pitched", "Secured"]),
+    }
+    if report_type not in title_map:
+        raise HTTPException(status_code=400, detail=f"Unknown report type: {report_type}")
+
+    title, headers = title_map[report_type]
+    rows: List[List] = []
+
+    if report_type == "catalog-summary":
+        for s in db.query(Song).filter(Song.organization_id == org_id).all():
+            rows.append([s.title, s.primary_artist, s.isrc or "", s.iswc or "",
+                         f"{round(s.status_health_score or 0, 1)}",
+                         "Yes" if s.is_released else "No",
+                         s.release_date.isoformat() if s.release_date else "",
+                         s.created_at.strftime("%Y-%m-%d") if s.created_at else ""])
+    elif report_type == "revenue-summary":
+        q = db.query(
+            Song.title, Song.primary_artist, RoyaltyTransaction.platform,
+            RoyaltyTransaction.territory, RoyaltyTransaction.revenue_cents
+        ).outerjoin(Song, Song.id == RoyaltyTransaction.song_id).filter(
+            RoyaltyTransaction.organization_id == org_id
+        ).all()
+        for t in q:
+            rows.append([t.title or "Unknown", t.primary_artist or "", t.platform or "",
+                         t.territory or "", f"${(t.revenue_cents or 0) / 100:,.2f}"])
+    elif report_type == "creators-summary":
+        for c in db.query(Creator).filter(Creator.organization_id == org_id).all():
+            rows.append([c.display_name, c.legal_name or "", c.email or "",
+                         ", ".join(c.roles or []), c.primary_pro or "",
+                         c.primary_ipi or "", c.primary_territory or ""])
+    elif report_type == "contracts-summary":
+        for c in db.query(Contract).filter(Contract.organization_id == org_id).all():
+            rows.append([c.title, c.contract_type or "", c.status or "",
+                         c.start_date.isoformat() if c.start_date else "",
+                         c.end_date.isoformat() if c.end_date else "",
+                         c.territory or "", f"${float(c.advance_amount or 0):,.2f}"])
+    elif report_type == "placements-summary":
+        for p in db.query(Placement).filter(Placement.organization_id == org_id).all():
+            rows.append([p.title, p.placement_type or "", p.status or "",
+                         p.client_name or "", p.project_name or "",
+                         f"${float(p.license_fee or 0):,.2f}", p.license_currency or "USD",
+                         p.pitched_date.isoformat() if p.pitched_date else "",
+                         p.secured_date.isoformat() if p.secured_date else ""])
+
+    pdf = BrandedPDF(theme, title=title,
+                     subtitle=org.name if org else f"Organization #{org_id}",
+                     landscape_orientation=len(headers) > 6)
+    pdf.cover()
+    pdf.kpi_row([{"label": "Rows", "value": str(len(rows))}])
+    pdf.table(headers=headers, rows=rows[:1000], wrap_cells=True)
+    if len(rows) > 1000:
+        pdf.small(f"Showing first 1,000 of {len(rows):,} rows. Use the CSV export for the full dataset.")
+
+    safe_org = safe_filename_segment(org.name if org else f"org_{org_id}", "org")
+    filename = f"{report_type}-{safe_org}-{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+    return Response(content=pdf.build(), headers=pdf_response_headers(filename))
+
+
+@router.get(
+    "/org/{org_id}/export/{report_type}.xlsx",
+    summary="Export an analytics report as branded Excel",
+)
+def export_analytics_xlsx(org_id: int, report_type: str,
+                          db: Session = Depends(get_db),
+                          current_user: User = Depends(get_current_user)):
+    """Branded Excel sibling for the CSV analytics exports."""
+    verify_org_access(db, current_user.id, org_id)
+    from fastapi import Response
+    from ..models import Organization
+    from ..services.branding import theme_from_org, safe_filename_segment
+    from ..services.excel_engine import BrandedWorkbook, excel_response_headers
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    theme = theme_from_org(org)
+
+    title_map = {
+        "catalog-summary": ("Catalog Summary",
+                            ["Title", "Artist", "ISRC", "ISWC", "Health", "Released", "Release Date", "Created"]),
+        "revenue-summary": ("Revenue Summary",
+                            ["Track", "Artist", "Platform", "Territory", "Revenue"]),
+        "creators-summary": ("Creators Summary",
+                             ["Name", "Legal Name", "Email", "Roles", "PRO", "IPI", "Territory"]),
+        "contracts-summary": ("Contracts Summary",
+                              ["Title", "Type", "Status", "Start", "End", "Territory", "Advance"]),
+        "placements-summary": ("Placements Summary",
+                               ["Title", "Type", "Status", "Client", "Project", "Fee", "Currency", "Pitched", "Secured"]),
+    }
+    if report_type not in title_map:
+        raise HTTPException(status_code=400, detail=f"Unknown report type: {report_type}")
+
+    title, headers = title_map[report_type]
+    rows: List[List] = []
+    if report_type == "catalog-summary":
+        for s in db.query(Song).filter(Song.organization_id == org_id).all():
+            rows.append([s.title, s.primary_artist, s.isrc or "", s.iswc or "",
+                         round(s.status_health_score or 0, 1),
+                         "Yes" if s.is_released else "No",
+                         s.release_date.isoformat() if s.release_date else "",
+                         s.created_at.strftime("%Y-%m-%d") if s.created_at else ""])
+    elif report_type == "revenue-summary":
+        q = db.query(
+            Song.title, Song.primary_artist, RoyaltyTransaction.platform,
+            RoyaltyTransaction.territory, RoyaltyTransaction.revenue_cents
+        ).outerjoin(Song, Song.id == RoyaltyTransaction.song_id).filter(
+            RoyaltyTransaction.organization_id == org_id
+        ).all()
+        for t in q:
+            rows.append([t.title or "Unknown", t.primary_artist or "", t.platform or "",
+                         t.territory or "", round((t.revenue_cents or 0) / 100, 2)])
+    elif report_type == "creators-summary":
+        for c in db.query(Creator).filter(Creator.organization_id == org_id).all():
+            rows.append([c.display_name, c.legal_name or "", c.email or "",
+                         ", ".join(c.roles or []), c.primary_pro or "",
+                         c.primary_ipi or "", c.primary_territory or ""])
+    elif report_type == "contracts-summary":
+        for c in db.query(Contract).filter(Contract.organization_id == org_id).all():
+            rows.append([c.title, c.contract_type or "", c.status or "",
+                         c.start_date.isoformat() if c.start_date else "",
+                         c.end_date.isoformat() if c.end_date else "",
+                         c.territory or "", float(c.advance_amount or 0)])
+    elif report_type == "placements-summary":
+        for p in db.query(Placement).filter(Placement.organization_id == org_id).all():
+            rows.append([p.title, p.placement_type or "", p.status or "",
+                         p.client_name or "", p.project_name or "",
+                         float(p.license_fee or 0), p.license_currency or "USD",
+                         p.pitched_date.isoformat() if p.pitched_date else "",
+                         p.secured_date.isoformat() if p.secured_date else ""])
+
+    wb = BrandedWorkbook(theme, title=title,
+                         subtitle=org.name if org else f"Organization #{org_id}")
+    wb.add_sheet(name=report_type[:28], headers=headers, rows=rows)
+    safe_org = safe_filename_segment(org.name if org else f"org_{org_id}", "org")
+    filename = f"{report_type}-{safe_org}-{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    return Response(content=wb.build(), headers=excel_response_headers(filename))

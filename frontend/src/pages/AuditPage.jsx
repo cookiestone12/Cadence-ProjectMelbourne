@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
+import ExportButton from '../components/ExportButton'
 import {
   ShieldCheckIcon,
   ExclamationTriangleIcon,
@@ -187,6 +188,16 @@ export default function AuditPage() {
             <ArrowPathIcon className={`w-4 h-4 ${scanning ? 'animate-spin' : ''}`} />
             {scanning ? 'Scanning…' : 'Run Audit Scan'}
           </button>
+          {orgId && (
+            <ExportButton
+              baseUrl={`/api/organizations/${orgId}/audit/report/pdf`}
+              filename={`cadence_audit_report_${new Date().toISOString().slice(0, 10)}`}
+              formats={['pdf']}
+              variant="secondary"
+              size="md"
+              onError={(msg) => setError(msg)}
+            />
+          )}
         </div>
       </div>
 

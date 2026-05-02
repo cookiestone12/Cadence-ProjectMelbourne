@@ -641,53 +641,21 @@ def export_release_csv(release_id: int, db: Session = Depends(get_db), current_u
     description="Renders the release with artwork, tracklist, credits, and splits into a branded one-sheet PDF.\n\n**Path parameter:** `release_id`.\n**Auth:** Bearer JWT — caller must be a member of the release's org.\n**Response:** `application/pdf` download.",
 )
 def export_release_pdf(release_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, HRFlowable
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-    import os
+    from ..services.branding import theme_from_org, safe_filename_segment
+    from ..services.pdf_engine import BrandedPDF
 
     release = db.query(Release).filter(Release.id == release_id).first()
     if not release:
         raise HTTPException(status_code=404, detail="Release not found")
     verify_org_access(current_user, release.organization_id, db)
 
+    org = db.query(Organization).filter(Organization.id == release.organization_id).first()
+    theme = theme_from_org(org)
+
     release_tracks = db.query(ReleaseTrack).filter(
         ReleaseTrack.release_id == release_id
     ).order_by(ReleaseTrack.disc_number, ReleaseTrack.track_number).all()
 
-    sage = colors.HexColor("#5B8A72")
-    sage_light = colors.HexColor("#E8F0EB")
-    dark_text = colors.HexColor("#3D4A44")
-    muted = colors.HexColor("#7A8580")
-
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter,
-                            topMargin=0.5*inch, bottomMargin=0.5*inch,
-                            leftMargin=0.6*inch, rightMargin=0.6*inch)
-
-    styles = getSampleStyleSheet()
-    style_title = ParagraphStyle('RTitle', parent=styles['Title'], fontSize=22, textColor=dark_text, spaceAfter=4)
-    style_subtitle = ParagraphStyle('RSub', parent=styles['Normal'], fontSize=11, textColor=muted, spaceAfter=12)
-    style_heading = ParagraphStyle('RHead', parent=styles['Heading2'], fontSize=14, textColor=sage, spaceBefore=16, spaceAfter=8)
-    style_normal = ParagraphStyle('RNorm', parent=styles['Normal'], fontSize=10, textColor=dark_text, leading=14)
-    style_small = ParagraphStyle('RSmall', parent=styles['Normal'], fontSize=8, textColor=muted, leading=11)
-    style_lyrics = ParagraphStyle('RLyrics', parent=styles['Normal'], fontSize=9, textColor=dark_text, leading=13, leftIndent=12, fontName='Courier')
-    style_link = ParagraphStyle('RLink', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor("#2563EB"), leading=12)
-    style_center = ParagraphStyle('RCenter', parent=styles['Normal'], fontSize=8, textColor=muted, alignment=TA_CENTER)
-
-    elements = []
-
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'cadence-logo.png')
-    if os.path.exists(logo_path):
-        logo = Image(logo_path, width=2.0*inch, height=1.125*inch)
-        logo.hAlign = 'LEFT'
-        elements.append(logo)
-        elements.append(Spacer(1, 6))
-
-    elements.append(Paragraph(release.title or "Untitled Release", style_title))
     subtitle_parts = []
     if release.primary_artist:
         subtitle_parts.append(release.primary_artist)
@@ -695,55 +663,51 @@ def export_release_pdf(release_id: int, db: Session = Depends(get_db), current_u
         subtitle_parts.append(release.release_type)
     if release.label:
         subtitle_parts.append(release.label)
-    elements.append(Paragraph(" · ".join(subtitle_parts), style_subtitle))
 
-    elements.append(HRFlowable(width="100%", thickness=1, color=sage_light, spaceAfter=12))
+    pdf = BrandedPDF(
+        theme,
+        title=release.title or "Untitled Release",
+        subtitle=" · ".join(subtitle_parts) if subtitle_parts else None,
+    )
+    pdf.cover()
+    pdf.hr()
 
-    elements.append(Paragraph("Release Information", style_heading))
-    meta_data = [
+    pdf.section("Release Information")
+    meta_rows = [
         ["UPC", release.upc or "—", "Catalog #", release.catalog_number or "—"],
-        ["Release Date", release.release_date.strftime("%B %d, %Y") if release.release_date else "—",
-         "Genre", f"{release.genre or '—'}{(' / ' + release.subgenre) if release.subgenre else ''}"],
-        ["Copyright", f"{release.copyright_line or '—'} ({release.copyright_year or '—'})",
+        ["Release Date",
+         release.release_date.strftime("%B %d, %Y") if release.release_date else "—",
+         "Genre",
+         f"{release.genre or '—'}{(' / ' + release.subgenre) if release.subgenre else ''}"],
+        ["Copyright",
+         f"{release.copyright_line or '—'} ({release.copyright_year or '—'})",
          "Status", release.status or "—"],
     ]
-    meta_table = Table(meta_data, colWidths=[1.2*inch, 2.3*inch, 1.2*inch, 2.3*inch])
-    meta_table.setStyle(TableStyle([
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('TEXTCOLOR', (0, 0), (0, -1), muted),
-        ('TEXTCOLOR', (2, 0), (2, -1), muted),
-        ('TEXTCOLOR', (1, 0), (1, -1), dark_text),
-        ('TEXTCOLOR', (3, 0), (3, -1), dark_text),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-    ]))
-    elements.append(meta_table)
-    elements.append(Spacer(1, 8))
+    pdf.table(
+        headers=None,
+        rows=meta_rows,
+        col_widths=[1.2, 2.3, 1.2, 2.3],
+        wrap_cells=True,
+    )
 
-    elements.append(Paragraph(f"Track Listing ({len(release_tracks)} tracks)", style_heading))
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=sage_light, spaceAfter=6))
-
+    pdf.section(f"Track Listing ({len(release_tracks)} tracks)")
     for rt in release_tracks:
         song = db.query(Song).filter(Song.id == rt.song_id).first()
         if not song:
             continue
-
         track_num = f"{rt.disc_number}-{rt.track_number}" if rt.disc_number and rt.disc_number > 1 else str(rt.track_number)
         bonus_tag = " [Bonus]" if rt.is_bonus else ""
-        elements.append(Paragraph(f"<b>{track_num}. {song.title}{bonus_tag}</b>", style_normal))
+        pdf.subsection(f"{track_num}. {song.title}{bonus_tag}")
 
         detail_parts = []
         if song.primary_artist:
             detail_parts.append(f"Artist: {song.primary_artist}")
         if song.isrc:
             detail_parts.append(f"ISRC: {song.isrc}")
-        if getattr(song, 'iswc', None):
+        if getattr(song, "iswc", None):
             detail_parts.append(f"ISWC: {song.iswc}")
         if detail_parts:
-            elements.append(Paragraph(" · ".join(detail_parts), style_small))
+            pdf.small(" · ".join(detail_parts))
 
         credits = db.query(SongCredit).filter(SongCredit.song_id == song.id).all()
         if credits:
@@ -754,60 +718,43 @@ def export_release_pdf(release_id: int, db: Session = Depends(get_db), current_u
                     share = f" ({c.share_percentage}%)" if c.share_percentage else ""
                     credit_strs.append(f"{creator.display_name} — {c.role}{share}")
             if credit_strs:
-                elements.append(Paragraph("Credits: " + ", ".join(credit_strs), style_small))
+                pdf.small("Credits: " + ", ".join(credit_strs))
 
-        audio_url = getattr(song, 'audio_file_url', None)
+        audio_url = getattr(song, "audio_file_url", None)
         if audio_url:
-            elements.append(Paragraph(f'Audio: <a href="{audio_url}" color="#2563EB">{audio_url}</a>', style_link))
+            pdf.small(f"Audio: {audio_url}")
 
-        lyrics = getattr(song, 'lyrics', None)
+        lyrics = getattr(song, "lyrics", None)
         if lyrics:
-            elements.append(Spacer(1, 4))
-            elements.append(Paragraph("<b>Lyrics:</b>", style_small))
-            for line in lyrics.split('\n'):
-                elements.append(Paragraph(line or "&nbsp;", style_lyrics))
-
-        elements.append(Spacer(1, 8))
-        elements.append(HRFlowable(width="100%", thickness=0.3, color=sage_light, spaceAfter=6))
+            pdf.spacer(4)
+            pdf.small("Lyrics:")
+            for line in lyrics.split("\n"):
+                pdf.text(line or " ", style="small")
+        pdf.spacer(8)
 
     health_data = get_release_health(release, release_tracks, db)
     if health_data:
-        elements.append(Paragraph("Distribution Readiness", style_heading))
+        pdf.section("Distribution Readiness")
         score = health_data.get("score", 0)
-        score_color = sage if score >= 80 else (colors.HexColor("#D97706") if score >= 50 else colors.HexColor("#DC2626"))
-        elements.append(Paragraph(f"<b>Readiness Score: {score}%</b>", ParagraphStyle('Score', parent=style_normal, textColor=score_color, fontSize=12)))
-        elements.append(Spacer(1, 6))
-
-        issues = health_data.get("issues", [])
         passed = health_data.get("passed", 0)
         total = health_data.get("total_checks", 0)
-        elements.append(Paragraph(f"{passed} of {total} checks passed", style_small))
-        elements.append(Spacer(1, 4))
-
+        pdf.kpi_row([
+            {"label": "Readiness Score", "value": f"{score}%"},
+            {"label": "Checks Passed", "value": f"{passed} / {total}"},
+        ])
+        issues = health_data.get("issues", [])
         if issues:
             for issue in issues:
-                elements.append(Paragraph(
-                    f'<font color="#DC2626">✗</font> {issue}',
-                    style_normal
-                ))
+                pdf.text(f"✗ {issue}")
         else:
-            elements.append(Paragraph(
-                f'<font color="{sage}">✓</font> All checks passed — ready for distribution',
-                style_normal
-            ))
+            pdf.text("✓ All checks passed — ready for distribution")
 
-    elements.append(Spacer(1, 20))
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=sage_light, spaceAfter=8))
-    elements.append(Paragraph(f"Generated by Cadence Catalog Intelligence · {datetime.utcnow().strftime('%B %d, %Y at %H:%M UTC')}", style_center))
-
-    doc.build(elements)
-    buffer.seek(0)
-
-    safe_title = "".join(c if c.isalnum() or c in (" ", "-", "_") else "" for c in release.title).strip().replace(" ", "_")
+    pdf_bytes = pdf.build()
+    safe_title = safe_filename_segment(release.title, "Release")
     filename = f"{safe_title}_distribution_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
 
     return StreamingResponse(
-        buffer,
+        io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

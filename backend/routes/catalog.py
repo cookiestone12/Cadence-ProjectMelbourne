@@ -1108,80 +1108,57 @@ def export_catalog_report(
     db: Session = Depends(get_db)
 ):
     """Generate comprehensive Excel report for a catalog"""
+    from ..services.branding import theme_from_org, safe_filename_segment
+    from ..services.excel_engine import BrandedWorkbook, excel_response_headers
+
     catalog = db.query(Catalog).filter(Catalog.id == catalog_id).first()
     if not catalog:
         raise HTTPException(status_code=404, detail="Catalog not found")
-    
+
     songs = catalog.songs
     if not songs:
         raise HTTPException(status_code=404, detail="No songs found in catalog")
-    
-    # Create Excel workbook
-    wb = openpyxl.Workbook()
-    
-    # Remove default sheet
-    wb.remove(wb.active)
-    
-    # Define styles - Cadence branding
-    header_fill = PatternFill(start_color="E62E2E", end_color="E62E2E", fill_type="solid")
-    header_font = Font(name="Inter", color="FFFFFF", bold=True, size=11)
-    header_alignment = Alignment(horizontal="center", vertical="center")
-    
-    # Title styles
-    title_font = Font(name="Inter", size=16, bold=True, color="E62E2E")
-    subtitle_font = Font(name="Inter", size=10, color="666666")
-    
-    # Sheet 1: Catalog Summary
-    ws_summary = wb.create_sheet("Catalog Summary")
-    ws_summary.append(["CADENCE CATALOG INTELLIGENCE REPORT"])
-    ws_summary["A1"].font = title_font
-    ws_summary.append(["Catalog:", catalog.name])
-    ws_summary["A2"].font = subtitle_font
-    ws_summary["B2"].font = Font(name="Inter", size=10, bold=True)
-    ws_summary.append(["Generated:", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")])
-    ws_summary["A3"].font = subtitle_font
-    ws_summary["B3"].font = subtitle_font
-    ws_summary.append([])
-    
-    # Calculate summary metrics
+
+    org = db.query(Organization).filter(Organization.id == catalog.organization_id).first() if catalog.organization_id else None
+    theme = theme_from_org(org)
+
     PREMIUM_RATE = 0.0012
     AD_SUPPORTED_RATE = 0.0004
-    
-    total_songs = len(songs)
+
     total_publishing_pct = sum(s.publishing_percentage for s in songs)
     total_master_pct = sum(s.master_percentage for s in songs)
     avg_score = sum(s.score for s in songs) / len(songs) if songs else 0
     total_val_low = sum(s.valuation_low for s in songs)
     total_val_base = sum(s.valuation_base for s in songs)
     total_val_high = sum(s.valuation_high for s in songs)
-    
+
     total_publishing_revenue = 0.0
     total_master_revenue = 0.0
     collectible_publishing_value = 0.0
     black_box_loss = 0.0
     total_streams = 0
-    
+
+    territory_data = {}
+
     for song in songs:
         if not song.analytics:
             continue
-        
+
         total_streams += song.analytics.spotify_streams or 0
-        
         streams_by_type = song.analytics.streams_by_type or {}
         spotify_streams = streams_by_type.get('spotify', {})
         premium_streams = spotify_streams.get('premium', 0)
         ad_supported_streams = spotify_streams.get('ad_supported', 0)
-        
+
         pub_pct = song.publishing_percentage / 100.0
         master_pct = song.master_percentage / 100.0
-        
+
         pub_rev = (premium_streams * PREMIUM_RATE + ad_supported_streams * AD_SUPPORTED_RATE) * pub_pct
         master_rev = (premium_streams * PREMIUM_RATE + ad_supported_streams * AD_SUPPORTED_RATE) * master_pct
-        
+
         total_publishing_revenue += pub_rev
         total_master_revenue += master_rev
-        
-        # Black box calculation
+
         if song.release_date:
             song_age_years = (datetime.utcnow() - song.release_date).days / 365.25
             if song_age_years <= 3.0:
@@ -1192,115 +1169,69 @@ def export_catalog_report(
                 decay_factor = 0.1
         else:
             decay_factor = 1.0
-        
+
         collectible_publishing_value += pub_rev * decay_factor
         black_box_loss += pub_rev * (1.0 - decay_factor)
-    
-    ws_summary.append(["Metric", "Value"])
-    ws_summary["A5"].fill = header_fill
-    ws_summary["A5"].font = header_font
-    ws_summary["B5"].fill = header_fill
-    ws_summary["B5"].font = header_font
-    
-    ws_summary.append(["Total Songs", total_songs])
-    ws_summary.append(["Total Publishing %", f"{total_publishing_pct:.2f}%"])
-    ws_summary.append(["Total Master %", f"{total_master_pct:.2f}%"])
-    ws_summary.append(["Average Score", f"{avg_score:.2f}/100"])
-    ws_summary.append(["Total Streams", f"{total_streams:,}"])
-    ws_summary.append([])
-    ws_summary.append(["Valuation (Low)", f"${total_val_low:,.2f}"])
-    ws_summary.append(["Valuation (Base)", f"${total_val_base:,.2f}"])
-    ws_summary.append(["Valuation (High)", f"${total_val_high:,.2f}"])
-    ws_summary.append([])
-    ws_summary.append(["Total Publishing Revenue", f"${total_publishing_revenue:,.2f}"])
-    ws_summary.append(["Total Master Revenue", f"${total_master_revenue:,.2f}"])
-    ws_summary.append(["Collectible Publishing Value", f"${collectible_publishing_value:,.2f}"])
-    ws_summary.append(["Est. Black Box Loss", f"${black_box_loss:,.2f}"])
-    ws_summary.append([])
-    ws_summary.append(["Label Share (80/20)", f"${total_publishing_revenue * 0.2:,.2f}"])
-    ws_summary.append(["Label Share (60/40)", f"${total_publishing_revenue * 0.4:,.2f}"])
-    
-    # Adjust column widths
-    ws_summary.column_dimensions['A'].width = 30
-    ws_summary.column_dimensions['B'].width = 25
-    
-    # Sheet 2: Territory Breakdown
-    ws_territory = wb.create_sheet("Territory Breakdown")
-    ws_territory.append(["Territory", "Total Streams", "Publishing Revenue", "Master Revenue", "Total Revenue"])
-    
-    for cell in ws_territory[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = header_alignment
-    
-    territory_data = {}
-    for song in songs:
-        if not song.analytics:
-            continue
-        
-        pub_pct = song.publishing_percentage / 100.0
-        master_pct = song.master_percentage / 100.0
-        
+
         territory_streams = song.analytics.territory_streams or {}
         for territory, streams in territory_streams.items():
-            if territory not in territory_data:
-                territory_data[territory] = {'streams': 0, 'publishing': 0.0, 'master': 0.0}
-            
+            entry = territory_data.setdefault(territory, {'streams': 0, 'publishing': 0.0, 'master': 0.0})
             terr_premium = streams.get('premium', 0)
             terr_ad = streams.get('ad_supported', 0)
-            territory_data[territory]['streams'] += terr_premium + terr_ad
-            
-            terr_pub_rev = (terr_premium * PREMIUM_RATE + terr_ad * AD_SUPPORTED_RATE) * pub_pct
-            terr_master_rev = (terr_premium * PREMIUM_RATE + terr_ad * AD_SUPPORTED_RATE) * master_pct
-            
-            territory_data[territory]['publishing'] += terr_pub_rev
-            territory_data[territory]['master'] += terr_master_rev
-    
+            entry['streams'] += terr_premium + terr_ad
+            entry['publishing'] += (terr_premium * PREMIUM_RATE + terr_ad * AD_SUPPORTED_RATE) * pub_pct
+            entry['master'] += (terr_premium * PREMIUM_RATE + terr_ad * AD_SUPPORTED_RATE) * master_pct
+
+    wb = BrandedWorkbook(theme, title="Catalog Report", subtitle=catalog.name)
+
+    wb.add_kpi_sheet(
+        "Summary",
+        kpis=[
+            {"label": "Total Songs", "value": len(songs)},
+            {"label": "Total Publishing %", "value": f"{total_publishing_pct:.2f}%"},
+            {"label": "Total Master %", "value": f"{total_master_pct:.2f}%"},
+            {"label": "Average Score", "value": f"{avg_score:.2f}/100"},
+            {"label": "Total Streams", "value": f"{total_streams:,}"},
+            {"label": "Valuation (Low)", "value": f"${total_val_low:,.2f}"},
+            {"label": "Valuation (Base)", "value": f"${total_val_base:,.2f}"},
+            {"label": "Valuation (High)", "value": f"${total_val_high:,.2f}"},
+            {"label": "Total Publishing Revenue", "value": f"${total_publishing_revenue:,.2f}"},
+            {"label": "Total Master Revenue", "value": f"${total_master_revenue:,.2f}"},
+            {"label": "Collectible Publishing Value", "value": f"${collectible_publishing_value:,.2f}"},
+            {"label": "Est. Black Box Loss", "value": f"${black_box_loss:,.2f}"},
+            {"label": "Label Share (80/20)", "value": f"${total_publishing_revenue * 0.2:,.2f}"},
+            {"label": "Label Share (60/40)", "value": f"${total_publishing_revenue * 0.4:,.2f}"},
+        ],
+    )
+
+    territory_rows = []
     for territory, data in sorted(territory_data.items(), key=lambda x: x[1]['streams'], reverse=True):
         total_rev = data['publishing'] + data['master']
-        ws_territory.append([
+        territory_rows.append([
             territory,
             f"{data['streams']:,}",
             f"${data['publishing']:,.2f}",
             f"${data['master']:,.2f}",
-            f"${total_rev:,.2f}"
+            f"${total_rev:,.2f}",
         ])
-    
-    for col in ['A', 'B', 'C', 'D', 'E']:
-        ws_territory.column_dimensions[col].width = 20
-    
-    # Sheet 3: Song Details
-    ws_songs = wb.create_sheet("Song Details")
-    ws_songs.append([
-        "Title", "Artist", "Release Date", "Song Age (Years)", 
-        "Publishing %", "Master %", "Total Streams", 
-        "Publishing Revenue", "Master Revenue",
-        "Collectible Value", "Black Box Loss",
-        "Score", "Valuation (Base)"
-    ])
-    
-    for cell in ws_songs[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = header_alignment
-    
+    wb.add_sheet(
+        "Territory Breakdown",
+        headers=["Territory", "Total Streams", "Publishing Revenue", "Master Revenue", "Total Revenue"],
+        rows=territory_rows,
+    )
+
+    song_rows = []
     for song in songs:
         streams = song.analytics.spotify_streams if song.analytics else 0
-        
-        # Calculate revenue
         if song.analytics:
             streams_by_type = song.analytics.streams_by_type or {}
             spotify_streams = streams_by_type.get('spotify', {})
             premium_streams = spotify_streams.get('premium', 0)
             ad_supported_streams = spotify_streams.get('ad_supported', 0)
-            
             pub_pct = song.publishing_percentage / 100.0
             master_pct = song.master_percentage / 100.0
-            
             pub_rev = (premium_streams * PREMIUM_RATE + ad_supported_streams * AD_SUPPORTED_RATE) * pub_pct
             master_rev = (premium_streams * PREMIUM_RATE + ad_supported_streams * AD_SUPPORTED_RATE) * master_pct
-            
-            # Black box calculation
             if song.release_date:
                 song_age_years = (datetime.utcnow() - song.release_date).days / 365.25
                 if song_age_years <= 3.0:
@@ -1312,22 +1243,16 @@ def export_catalog_report(
             else:
                 song_age_years = 0
                 decay_factor = 1.0
-            
             collectible = pub_rev * decay_factor
             lost = pub_rev * (1.0 - decay_factor)
         else:
-            pub_rev = 0
-            master_rev = 0
-            collectible = 0
-            lost = 0
+            pub_rev = master_rev = collectible = lost = 0
             song_age_years = 0
-        
-        release_date_str = song.release_date.strftime("%Y-%m-%d") if song.release_date else "Unknown"
-        
-        ws_songs.append([
+
+        song_rows.append([
             song.title,
             song.artist_name,
-            release_date_str,
+            song.release_date.strftime("%Y-%m-%d") if song.release_date else "Unknown",
             f"{song_age_years:.1f}",
             f"{song.publishing_percentage:.1f}%",
             f"{song.master_percentage:.1f}%",
@@ -1337,66 +1262,43 @@ def export_catalog_report(
             f"${collectible:,.2f}",
             f"${lost:,.2f}",
             f"{song.score:.1f}/100",
-            f"${song.valuation_base:,.2f}"
+            f"${song.valuation_base:,.2f}",
         ])
-    
-    for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M']:
-        ws_songs.column_dimensions[col].width = 18
-    
-    # Sheet 4: Methodology
-    ws_method = wb.create_sheet("Methodology")
-    ws_method.append(["Cadence Catalog Intelligence - Calculation Methodology"])
-    ws_method.append([])
-    ws_method.append(["Revenue Calculations:"])
-    ws_method.append(["- Premium Stream Rate: $0.0012 per stream"])
-    ws_method.append(["- Ad-Supported Stream Rate: $0.0004 per stream"])
-    ws_method.append(["- Stream Type Split: 70% Premium / 30% Ad-Supported"])
-    ws_method.append(["- Publishing Revenue = Streams × Rate × Publishing %"])
-    ws_method.append(["- Master Revenue = Streams × Rate × Master %"])
-    ws_method.append([])
-    ws_method.append(["Black Box Collection Windows:"])
-    ws_method.append(["- 0-3 Years Old: 100% Collectible"])
-    ws_method.append(["- 3-5 Years Old: 50% Collectible (50% Lost to Black Box)"])
-    ws_method.append(["- 5+ Years Old: 10% Collectible (90% Lost to Black Box)"])
-    ws_method.append([])
-    ws_method.append(["Valuation Methodology:"])
-    ws_method.append(["- Low Valuation: 8× Revenue Multiple"])
-    ws_method.append(["- Base Valuation: 12× Revenue Multiple"])
-    ws_method.append(["- High Valuation: 18× Revenue Multiple"])
-    ws_method.append(["- Multipliers adjusted based on:"])
-    ws_method.append(["  * Stream volume and growth trends"])
-    ws_method.append(["  * Playlist placement and follower counts"])
-    ws_method.append(["  * Chartmetric score (market momentum)"])
-    ws_method.append(["  * Regional performance diversity"])
-    ws_method.append([])
-    ws_method.append(["4-Factor Scoring System (0-100 points):"])
-    ws_method.append(["1. Catalog Value (0-25): Based on stream volume and revenue"])
-    ws_method.append(["2. Growth Momentum (0-25): 3-month and 12-month growth trends"])
-    ws_method.append(["3. Metadata Health (0-25): Completeness of ISRC, ISWC, Spotify links"])
-    ws_method.append(["4. Exploitation Potential (0-25): Playlist presence and regional reach"])
-    ws_method.append([])
-    ws_method.append(["Label Share Scenarios:"])
-    ws_method.append(["- 80/20 Split: 20% to label from publishing revenue"])
-    ws_method.append(["- 60/40 Split: 40% to label from publishing revenue"])
-    ws_method.append(["- Note: Label shares apply to publishing revenue only"])
-    
-    ws_method.column_dimensions['A'].width = 70
-    
-    # Save to BytesIO buffer
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    
-    # Sanitize filename to remove special characters that can't be encoded in latin-1
-    safe_catalog_name = ''.join(c if c.isalnum() or c in (' ', '_', '-') else '_' for c in catalog.name)
-    safe_catalog_name = safe_catalog_name.replace(' ', '_')
-    filename = f"Cadence_Catalog_Report_{safe_catalog_name}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
-    
-    return StreamingResponse(
-        output,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+
+    wb.add_sheet(
+        "Song Details",
+        headers=["Title", "Artist", "Release Date", "Song Age (Years)",
+                 "Publishing %", "Master %", "Total Streams",
+                 "Publishing Revenue", "Master Revenue",
+                 "Collectible Value", "Black Box Loss",
+                 "Score", "Valuation (Base)"],
+        rows=song_rows,
     )
+
+    method_rows = [
+        ["Premium Stream Rate", "$0.0012 per stream"],
+        ["Ad-Supported Stream Rate", "$0.0004 per stream"],
+        ["Stream Type Split", "70% Premium / 30% Ad-Supported"],
+        ["Black Box (0-3 yrs)", "100% Collectible"],
+        ["Black Box (3-5 yrs)", "50% Collectible"],
+        ["Black Box (5+ yrs)", "10% Collectible"],
+        ["Valuation (Low)", "8× Revenue Multiple"],
+        ["Valuation (Base)", "12× Revenue Multiple"],
+        ["Valuation (High)", "18× Revenue Multiple"],
+        ["Score: Catalog Value", "0-25 pts (streams + revenue)"],
+        ["Score: Growth Momentum", "0-25 pts (3- & 12-month trend)"],
+        ["Score: Metadata Health", "0-25 pts (ISRC, ISWC, Spotify)"],
+        ["Score: Exploitation Potential", "0-25 pts (playlists + regional reach)"],
+    ]
+    wb.add_sheet(
+        "Methodology",
+        headers=["Item", "Value"],
+        rows=method_rows,
+    )
+
+    safe_name = safe_filename_segment(catalog.name, "catalog")
+    filename = f"Cadence_Catalog_Report_{safe_name}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    return Response(content=wb.build(), headers=excel_response_headers(filename))
 
 @router.get("/template/schedule-a", summary="Generate and serve the official Cadence Schedule A upload template", description='Generates and serves the official Cadence Schedule A upload template (Excel) so users have the exact column set the parser expects.\n\n**Auth:** Bearer JWT.\n**Response:** `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` download containing the empty template with header row + sample row.')
 def download_schedule_a_template():

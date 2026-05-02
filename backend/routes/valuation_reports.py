@@ -329,92 +329,68 @@ def download_catalog_valuation_excel(
     current_user: User = Depends(get_current_user)
 ):
     """Download catalog valuation report as Excel file"""
-    
-    import io
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
-    
+    from ..services.branding import theme_from_org, safe_filename_segment
+    from ..services.excel_engine import BrandedWorkbook, excel_response_headers
+
     membership = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == current_user.id
     ).first()
-    
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
-    
+
     org = db.query(Organization).filter(Organization.id == membership.organization_id).first()
-    
-    wb = Workbook()
-    
-    ws_summary = wb.active
-    ws_summary.title = "Catalog Summary"
-    
-    ws_summary['A1'] = "Cadence Catalog Report"
-    ws_summary['A1'].font = Font(size=14, bold=True)
-    ws_summary['A2'] = f"Catalog: {org.name}"
-    ws_summary['A3'] = f"Generated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
-    
-    ws_summary['A5'] = "Metric"
-    ws_summary['B5'] = "Value"
-    ws_summary['A5'].font = Font(bold=True)
-    ws_summary['B5'].font = Font(bold=True)
-    
+    theme = theme_from_org(org)
+
     songs = db.query(Song).filter(Song.organization_id == org.id).all()
     valuations = db.query(ValuationCalculation).filter(
         ValuationCalculation.organization_id == org.id
     ).all()
-    
+
     valuation_by_song = {}
     for v in valuations:
         if v.song_id not in valuation_by_song:
             valuation_by_song[v.song_id] = v
-    
+
     total_catalog_value = sum(v.final_valuation_cents for v in valuation_by_song.values()) / 100
     total_annual_revenue = sum(v.annual_revenue_cents for v in valuation_by_song.values()) / 100
-    
-    ws_summary['A6'] = "Total Songs"
-    ws_summary['B6'] = len(songs)
-    ws_summary['A7'] = "Total Catalog Value"
-    ws_summary['B7'] = f"${total_catalog_value:,.2f}"
-    ws_summary['A8'] = "Annual Revenue"
-    ws_summary['B8'] = f"${total_annual_revenue:,.2f}"
-    
-    ws_details = wb.create_sheet("Song Details")
-    headers = ['Title', 'Artist', 'ISRC', 'Release Date', 'Total Streams', 'Valuation', 'Annual Revenue', 'Growth Rate']
-    for col, header in enumerate(headers, 1):
-        cell = ws_details.cell(row=1, column=col, value=header)
-        cell.font = Font(bold=True)
-        cell.fill = PatternFill(start_color="D0D0D0", end_color="D0D0D0", fill_type="solid")
-    
-    row = 2
+
+    wb = BrandedWorkbook(theme, title="Catalog Valuation", subtitle=org.name if org else None)
+    wb.add_kpi_sheet(
+        "Summary",
+        kpis=[
+            {"label": "Total Songs", "value": len(songs)},
+            {"label": "Total Catalog Value", "value": f"${total_catalog_value:,.2f}"},
+            {"label": "Annual Revenue", "value": f"${total_annual_revenue:,.2f}"},
+        ],
+    )
+
+    detail_rows = []
     for song in songs:
         val = valuation_by_song.get(song.id)
         metrics = db.query(SongStreamingMetrics).filter(
             SongStreamingMetrics.song_id == song.id
         ).order_by(SongStreamingMetrics.period_date.desc()).first()
-        
-        ws_details.cell(row=row, column=1, value=song.title)
-        ws_details.cell(row=row, column=2, value=song.primary_artist)
-        ws_details.cell(row=row, column=3, value=song.isrc or "")
-        ws_details.cell(row=row, column=4, value=song.release_date.isoformat() if song.release_date else "")
-        ws_details.cell(row=row, column=5, value=metrics.total_streams if metrics else 0)
-        ws_details.cell(row=row, column=6, value=f"${val.final_valuation_cents / 100:,.2f}" if val else "$0.00")
-        ws_details.cell(row=row, column=7, value=f"${val.annual_revenue_cents / 100:,.2f}" if val else "$0.00")
-        ws_details.cell(row=row, column=8, value=f"{val.growth_rate * 100:.1f}%" if val else "0.0%")
-        row += 1
-    
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    
-    filename = f"cadence_catalog_report_{org.name.replace(' ', '_')}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
-    
-    return Response(
-        content=output.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={
-            "Content-Disposition": f"attachment; filename={filename}"
-        }
+        detail_rows.append([
+            song.title,
+            song.primary_artist,
+            song.isrc or "",
+            song.release_date.isoformat() if song.release_date else "",
+            metrics.total_streams if metrics else 0,
+            f"${val.final_valuation_cents / 100:,.2f}" if val else "$0.00",
+            f"${val.annual_revenue_cents / 100:,.2f}" if val else "$0.00",
+            f"{val.growth_rate * 100:.1f}%" if val else "0.0%",
+        ])
+
+    wb.add_sheet(
+        "Song Details",
+        headers=["Title", "Artist", "ISRC", "Release Date",
+                 "Total Streams", "Valuation", "Annual Revenue", "Growth Rate"],
+        rows=detail_rows,
     )
+
+    safe_org = safe_filename_segment(org.name if org else "catalog", "catalog")
+    filename = f"cadence_catalog_report_{safe_org}_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
+    return Response(content=wb.build(), headers=excel_response_headers(filename))
 
 
 class UnderwritingRunRequest(BaseModel):
@@ -1434,7 +1410,8 @@ def download_full_valuation_pdf(
         membership.organization_id, db, scope_creator_id, method="blended"
     )
 
-    pdf_bytes = _build_valuation_pdf(summary, org_name, creator_name)
+    from ..services.branding import theme_from_org
+    pdf_bytes = _build_valuation_pdf(summary, org_name, creator_name, theme=theme_from_org(org))
     filename = (
         f"cadence_valuation_{(creator_name or 'catalog').lower().replace(' ', '_')}_"
         f"{datetime.utcnow().strftime('%Y%m%d')}.pdf"
@@ -1450,23 +1427,198 @@ def _build_valuation_pdf(
     summary: Dict[str, Any],
     org_name: str,
     creator_name: Optional[str] = None,
+    theme: Optional[Any] = None,
 ) -> bytes:
-    """Render a multi-page blended-valuation PDF in the Cadence sage palette.
+    """Render a multi-page blended-valuation PDF using the unified BrandedPDF engine."""
+    from ..services.branding import OrgTheme
+    from ..services.pdf_engine import BrandedPDF
 
-    Sections (in order):
-      1. Cover page — title, scope, blended NPV band.
-      2. Executive summary — by-methodology table with bands + confidence pill.
-      3. Revenue-by-source — bucket table with multipliers.
-      4. Top-10 songs by blended value.
-      5. Data sources & disclaimer.
-    """
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-    from reportlab.lib.units import inch
-    from reportlab.platypus import (
-        SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    if theme is None:
+        theme = OrgTheme(name=org_name, display_name=org_name)
+
+    scope_label = f"{org_name}"
+    if creator_name:
+        scope_label += f" · Scoped to {creator_name}"
+
+    pdf = BrandedPDF(theme, title="Catalog Valuation Report", subtitle=scope_label)
+    pdf.cover()
+
+    bm = summary.get("by_methodology", {})
+    blended = bm.get("blended", {"low": 0, "base": 0, "high": 0})
+    fmt = lambda v: f"${(v or 0):,.0f}"
+    dq = summary.get("data_quality", {})
+
+    pdf.kpi_row([
+        {"label": "Blended NPV", "value": fmt(blended.get("base")),
+         "sub": f"Range: {fmt(blended.get('low'))} – {fmt(blended.get('high'))}"},
+        {"label": "Confidence", "value": (dq.get("confidence_label") or "low").upper()},
+        {"label": "Songs", "value": str(dq.get("song_count", 0))},
+        {"label": "With Statements", "value": f"{dq.get('pct_with_statements', 0)}%"},
+    ])
+
+    pdf.section("Methodology Breakdown")
+    pdf.text(
+        "Each methodology is computed independently from the same underlying data, then "
+        "blended at <b>40% Income / 30% Market-Comparable / 30% DCF</b>. "
+        "Bands reflect low / base / high scenarios."
     )
+    weights = summary.get("weights", {"income": 0.4, "market_comparable": 0.3, "dcf": 0.3})
+    method_rows = []
+    for key, label in (
+        ("income", "Income (source-typed)"),
+        ("market_comparable", "Market Comparable"),
+        ("dcf", "Discounted Cash Flow"),
+        ("blended", "Blended"),
+    ):
+        seg = bm.get(key, {})
+        wt = weights.get(key, "—") if key != "blended" else "100%"
+        if isinstance(wt, float):
+            wt = f"{int(wt * 100)}%"
+        method_rows.append([
+            label, fmt(seg.get("low")), fmt(seg.get("base")),
+            fmt(seg.get("high")), str(wt),
+        ])
+    pdf.table(
+        headers=["Methodology", "Low", "Base", "High", "Weight"],
+        rows=method_rows,
+        col_widths=[2.4, 1.0, 1.0, 1.0, 0.7],
+        align=["LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
+    )
+
+    pdf.section("Revenue by Source")
+    pdf.text(
+        "Annualized revenue from matched royalty statements, bucketed by canonical right "
+        "category and valued at industry multiples."
+    )
+    src_rows = []
+    bs = summary.get("by_source", {})
+    for key, label in (
+        ("performance", "Performance (PROs)"),
+        ("mechanical", "Mechanical (MLC / HFA)"),
+        ("sync", "Sync"),
+        ("streaming", "Streaming (DSPs)"),
+        ("other", "Other / Unclassified"),
+    ):
+        seg = bs.get(key, {})
+        rev = (seg.get("revenue_cents") or 0) / 100.0
+        val = (seg.get("value_cents") or 0) / 100.0
+        mult = seg.get("multiplier")
+        src_rows.append([label, fmt(rev), f"{mult}×" if mult else "—", fmt(val)])
+    pdf.table(
+        headers=["Source", "Annual Revenue", "Multiplier", "Contribution to Value"],
+        rows=src_rows,
+        col_widths=[2.4, 1.4, 1.0, 1.7],
+        align=["LEFT", "RIGHT", "RIGHT", "RIGHT"],
+    )
+
+    top_songs = summary.get("top_songs", [])[:10]
+    if top_songs:
+        pdf.page_break()
+        pdf.section("Top Songs by Blended Value")
+        ts_rows = []
+        for i, s in enumerate(top_songs, start=1):
+            ts_rows.append([
+                str(i),
+                (s.get("title") or "—")[:35],
+                (s.get("primary_artist") or "—")[:25],
+                fmt(s.get("income_base")),
+                fmt(s.get("market_base")),
+                fmt(s.get("dcf_base")),
+                fmt(s.get("blended_base")),
+            ])
+        pdf.table(
+            headers=["#", "Title", "Artist", "Income", "Market", "DCF", "Blended"],
+            rows=ts_rows,
+            col_widths=[0.3, 2.0, 1.4, 0.7, 0.7, 0.7, 0.7],
+            align=["CENTER", "LEFT", "LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT"],
+            wrap_cells=True,
+        )
+
+    pcs = summary.get("per_creator_share", [])[:10]
+    if pcs:
+        pdf.section("Top Contributors by Blended Value")
+        pc_rows = []
+        for i, c in enumerate(pcs, start=1):
+            pc_rows.append([
+                str(i),
+                (c.get("creator_name") or "—")[:40],
+                str(c.get("song_count", 0)),
+                fmt(c.get("blended_value")),
+            ])
+        pdf.table(
+            headers=["#", "Creator", "Songs", "Blended Value"],
+            rows=pc_rows,
+            col_widths=[0.3, 3.6, 0.8, 1.8],
+            align=["CENTER", "LEFT", "RIGHT", "RIGHT"],
+            wrap_cells=True,
+        )
+
+    pdf.section("Data Sources")
+    pdf.text(
+        "Inputs feeding the valuation engines for this run, with coverage "
+        "across the catalog. Higher coverage materially improves confidence."
+    )
+    src_label_map = {
+        "matched_royalty_statements": "Matched Royalty Statements (Income / DCF)",
+        "song_streaming_metrics": "Song Streaming Metrics (Market-Comparable)",
+        "rights_splits": "Rights Splits (Per-Creator Attribution)",
+        "song_credits": "Song Credits (Equal-Split Fallback)",
+    }
+    src_counts: Dict[str, int] = dict((dq.get("full_scope_data_source_counts") or {}))
+    if not src_counts:
+        for s in summary.get("top_songs", []):
+            for ds_key in (s.get("data_sources") or []):
+                src_counts[ds_key] = src_counts.get(ds_key, 0) + 1
+    n_total = max(1, dq.get("song_count", 0) or 0)
+    ds_rows = [
+        [src_label_map["matched_royalty_statements"],
+         str(dq.get("songs_with_statements", 0)),
+         f"{dq.get('pct_with_statements', 0)}%"],
+        [src_label_map["song_streaming_metrics"],
+         str(dq.get("songs_with_streaming", 0)),
+         f"{dq.get('pct_with_streaming', 0)}%"],
+    ]
+    for key, label in src_label_map.items():
+        if key in ("matched_royalty_statements", "song_streaming_metrics"):
+            continue
+        n = src_counts.get(key, 0)
+        if n:
+            ds_rows.append([label, str(n), f"{round(n / n_total * 100, 1)}%"])
+    pdf.table(
+        headers=["Data Source", "Songs Covered", "Catalog Coverage"],
+        rows=ds_rows,
+        col_widths=[3.4, 1.2, 1.5],
+        align=["LEFT", "RIGHT", "RIGHT"],
+        wrap_cells=True,
+    )
+
+    pdf.section("Methodology & Disclaimer")
+    pdf.small(
+        "<b>Income</b> annualizes matched royalty-statement revenue by source type and "
+        "applies industry multiples (performance 10×, mechanical 9×, sync 7×, streaming 12.5×). "
+        "<b>Market-Comparable</b> annualizes streams from connected DSPs by song age, applies a "
+        "tier-band per-stream rate, and multiplies by 10× to mirror recent catalog transactions. "
+        "<b>DCF</b> projects historical annual revenue forward using the song's fitted growth/decay "
+        "rate, discounts at 10%, and adds a Gordon-growth terminal value (g=2%)."
+    )
+    pdf.small(
+        "These valuations are model-derived estimates and should not be construed as a binding "
+        "bid, appraisal, or financial advice. Final transaction value depends on counterparty "
+        "due-diligence, contract structure, and market conditions."
+    )
+    return pdf.build()
+
+
+def _legacy_unused_old_valuation_pdf_renderer():
+    return None
+    if False:
+        from reportlab.lib import colors  # noqa: F401
+        from reportlab.lib.pagesizes import letter  # noqa: F401
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet  # noqa: F401
+        from reportlab.lib.units import inch  # noqa: F401
+        from reportlab.platypus import (  # noqa: F401
+            SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+        )
 
     sage = colors.HexColor("#5B8A72")
     sage_light = colors.HexColor("#E5EEDF")

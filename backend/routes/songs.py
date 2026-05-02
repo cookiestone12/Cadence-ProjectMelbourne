@@ -667,89 +667,52 @@ def export_song_history_pdf(
             u = db.query(User).filter(User.id == e.user_id).first()
             user_cache[e.user_id] = u.username if u else "Unknown"
 
-    try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.lib import colors
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        import io
+    from ..services.branding import theme_from_org, safe_filename_segment
+    from ..services.pdf_engine import BrandedPDF
 
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
-        styles = getSampleStyleSheet()
+    org = db.query(Organization).filter(Organization.id == song.organization_id).first()
+    theme = theme_from_org(org)
 
-        sage = colors.HexColor('#5B8A72')
-        title_style = ParagraphStyle('CustomTitle', parent=styles['Title'], fontSize=16, textColor=colors.HexColor('#3D4A44'))
-        subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#7A8580'))
-        cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=7, leading=9)
-        header_cell_style = ParagraphStyle('HeaderCell', parent=styles['Normal'], fontSize=7, leading=9, textColor=colors.white)
+    pdf = BrandedPDF(
+        theme,
+        title=f"Edit History — {song.title}",
+        subtitle=f"ISRC: {song.isrc or 'N/A'} · {len(entries)} change{'s' if len(entries) != 1 else ''}",
+    )
+    pdf.cover()
 
-        elements = []
-        elements.append(Paragraph(f"Edit History — {song.title}", title_style))
-        elements.append(Paragraph(f"ISRC: {song.isrc or 'N/A'} | Total changes: {len(entries)}", subtitle_style))
-        elements.append(Spacer(1, 12))
-
-        if entries:
-            header = [
-                Paragraph("<b>Date</b>", header_cell_style),
-                Paragraph("<b>User</b>", header_cell_style),
-                Paragraph("<b>Type</b>", header_cell_style),
-                Paragraph("<b>Field</b>", header_cell_style),
-                Paragraph("<b>Old Value</b>", header_cell_style),
-                Paragraph("<b>New Value</b>", header_cell_style),
-                Paragraph("<b>Notes</b>", header_cell_style),
-            ]
-            data = [header]
-            for e in entries:
-                ts = e.created_at.strftime("%Y-%m-%d %H:%M") if e.created_at else ""
-                old_v = str(e.old_value) if e.old_value is not None else ""
-                new_v = str(e.new_value) if e.new_value is not None else ""
-                data.append([
-                    Paragraph(ts, cell_style),
-                    Paragraph(user_cache.get(e.user_id, ""), cell_style),
-                    Paragraph(e.change_type or "", cell_style),
-                    Paragraph(e.field_name or "", cell_style),
-                    Paragraph(old_v[:80], cell_style),
-                    Paragraph(new_v[:80], cell_style),
-                    Paragraph((e.notes or "")[:80], cell_style),
-                ])
-
-            col_widths = [1.1*inch, 0.9*inch, 0.8*inch, 0.9*inch, 1.2*inch, 1.2*inch, 1.4*inch]
-            table = Table(data, colWidths=col_widths)
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), sage),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                ('FONTSIZE', (0, 0), (-1, -1), 7),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#EEF1EC')]),
-                ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#D1D5DB')),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('TOPPADDING', (0, 0), (-1, -1), 3),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ]))
-            elements.append(table)
-        else:
-            elements.append(Paragraph("No edit history found.", subtitle_style))
-
-        elements.append(Spacer(1, 20))
-        footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#7A8580'), alignment=1)
-        elements.append(Paragraph("Cadence — Catalog Intelligence | Confidential", footer_style))
-
-        doc.build(elements)
-        buffer.seek(0)
-        pdf_bytes = buffer.getvalue()
-
-        import re
-        safe_title = re.sub(r'[^\w\s-]', '', song.title or 'Song').replace(' ', '_')[:60]
-        filename = f"Edit_History_{safe_title}.pdf"
-
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    if entries:
+        rows = []
+        for e in entries:
+            ts = e.created_at.strftime("%Y-%m-%d %H:%M") if e.created_at else ""
+            old_v = str(e.old_value) if e.old_value is not None else ""
+            new_v = str(e.new_value) if e.new_value is not None else ""
+            rows.append([
+                ts,
+                user_cache.get(e.user_id, ""),
+                e.change_type or "",
+                e.field_name or "",
+                old_v[:80],
+                new_v[:80],
+                (e.notes or "")[:80],
+            ])
+        pdf.table(
+            headers=["Date", "User", "Type", "Field", "Old Value", "New Value", "Notes"],
+            rows=rows,
+            col_widths=[1.1, 0.9, 0.8, 0.9, 1.2, 1.2, 1.4],
+            wrap_cells=True,
         )
-    except ImportError:
-        raise HTTPException(status_code=500, detail="PDF generation not available")
+    else:
+        pdf.text("No edit history found.", style="small")
+
+    pdf_bytes = pdf.build()
+    safe_title = safe_filename_segment(song.title or "Song", "Song")[:60]
+    filename = f"Edit_History_{safe_title}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 @router.get("/{song_id}", response_model=SongDetailResponse, summary="Get song detail", description="Returns the full song record, including credits, splits, contracts, releases, and health score.\n\n**Path parameter:** `song_id`.\n**Auth:** Bearer JWT — caller must be a member of the song's org.\n**Response:** `{ song: {...}, credits: [...], splits: [...], contracts: [...], releases: [...], audio_assets: [...], health: {...} }`.")

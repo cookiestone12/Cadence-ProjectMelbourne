@@ -444,222 +444,97 @@ def export_schedule_a_pdf(
     current_user: User = Depends(get_current_user)
 ):
     """Export Schedule A as branded PDF"""
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter, landscape
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-    import os
-    
+    from ..services.branding import theme_from_org, safe_filename_segment
+    from ..services.pdf_engine import BrandedPDF
+    from ..models import Organization
+
     data = get_schedule_a_data(creator_id, db, current_user)
-    
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, 
-        pagesize=landscape(letter),
-        rightMargin=0.5*inch,
-        leftMargin=0.5*inch,
-        topMargin=0.5*inch,
-        bottomMargin=0.5*inch
+    org = db.query(Organization).filter(Organization.id == data['organization']['id']).first()
+    theme = theme_from_org(org)
+
+    pdf = BrandedPDF(
+        theme,
+        title="Schedule A",
+        subtitle="Catalog of Compositions",
+        landscape_orientation=True,
     )
-    
-    styles = getSampleStyleSheet()
-    
-    # Custom styles
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=24,
-        textColor=colors.HexColor('#9333EA'),
-        alignment=TA_CENTER,
-        spaceAfter=6
+    pdf.cover()
+
+    pdf.text(
+        f"<b>Creator:</b> {data['creator']['display_name']} · "
+        f"<b>Legal Name:</b> {data['creator'].get('legal_name') or 'N/A'} · "
+        f"<b>PRO:</b> {data['creator'].get('primary_pro') or 'N/A'} · "
+        f"<b>IPI:</b> {data['creator'].get('primary_ipi') or 'N/A'}"
     )
-    
-    subtitle_style = ParagraphStyle(
-        'CustomSubtitle',
-        parent=styles['Normal'],
-        fontSize=14,
-        textColor=colors.HexColor('#EC4899'),
-        alignment=TA_CENTER,
-        spaceAfter=12
-    )
-    
-    section_style = ParagraphStyle(
-        'SectionHeader',
-        parent=styles['Heading2'],
-        fontSize=14,
-        textColor=colors.HexColor('#9333EA'),
-        spaceBefore=20,
-        spaceAfter=10
-    )
-    
-    normal_style = ParagraphStyle(
-        'CustomNormal',
-        parent=styles['Normal'],
-        fontSize=10
-    )
-    
-    small_style = ParagraphStyle(
-        'Small',
-        parent=styles['Normal'],
-        fontSize=8,
-        textColor=colors.grey
-    )
-    
-    elements = []
-    
-    # Header with logo
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'cadence-logo.png')
-    if os.path.exists(logo_path):
-        logo = Image(logo_path, width=2.0*inch, height=1.125*inch)
-        logo.hAlign = 'CENTER'
-        elements.append(logo)
-        elements.append(Spacer(1, 6))
-    
-    elements.append(Paragraph("CADENCE CATALOG INTELLIGENCE", title_style))
-    elements.append(Paragraph("Schedule A - Catalog of Compositions", subtitle_style))
-    elements.append(Spacer(1, 12))
-    
-    # Creator info
-    creator_info = f"""
-    <b>Creator:</b> {data['creator']['display_name']}<br/>
-    <b>Legal Name:</b> {data['creator'].get('legal_name') or 'N/A'}<br/>
-    <b>Organization:</b> {data['organization']['name']}<br/>
-    <b>PRO:</b> {data['creator'].get('primary_pro') or 'N/A'} | <b>IPI:</b> {data['creator'].get('primary_ipi') or 'N/A'}<br/>
-    <b>Generated:</b> {datetime.utcnow().strftime('%B %d, %Y')}
-    """
-    elements.append(Paragraph(creator_info, normal_style))
-    elements.append(Spacer(1, 12))
-    
-    # Summary table
-    elements.append(Paragraph("SUMMARY", section_style))
-    
-    summary_data = [
-        ["Total Compositions", str(data['summary']['total_songs']),
-         "Released", str(data['summary']['released_count']),
-         "Pipeline", str(data['summary']['pipeline_count'])],
-        ["Paid Placements", str(data['summary']['paid_count']),
-         "Contracted", str(data['summary']['contracted_count']),
-         "Total Advances", data['summary']['total_advance_display']],
-        ["PRO Registered", str(data['summary']['pro_registered']),
-         "DSP Registered", str(data['summary']['dsp_registered']),
-         "", ""]
-    ]
-    
-    summary_table = Table(summary_data, colWidths=[1.5*inch, 0.8*inch, 1.2*inch, 0.8*inch, 1.2*inch, 1.2*inch])
-    summary_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F3E8FF')),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#581C87')),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 8),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#C084FC'))
-    ]))
-    elements.append(summary_table)
-    elements.append(Spacer(1, 20))
-    
-    # Table headers for songs
+
+    pdf.section("Summary")
+    pdf.kpi_row([
+        {"label": "Total Compositions", "value": str(data['summary']['total_songs'])},
+        {"label": "Released", "value": str(data['summary']['released_count'])},
+        {"label": "Pipeline", "value": str(data['summary']['pipeline_count'])},
+        {"label": "Paid Placements", "value": str(data['summary']['paid_count'])},
+        {"label": "Contracted", "value": str(data['summary']['contracted_count'])},
+        {"label": "Total Advances", "value": data['summary']['total_advance_display']},
+        {"label": "PRO Registered", "value": str(data['summary']['pro_registered'])},
+        {"label": "DSP Registered", "value": str(data['summary']['dsp_registered'])},
+    ])
+
     table_headers = [
-        "Title", "Artist", "Release", "Label", "Pub %", 
+        "Title", "Artist", "Release", "Label", "Pub %",
         "Advance", "Status", "PRO", "DSP", "Contract", "Paid"
     ]
-    
-    # Released catalog
+    col_widths = [1.4, 1.2, 0.7, 0.9, 0.6, 0.8, 0.9, 0.4, 0.4, 0.5, 0.4]
+
+    def _yn(song, field):
+        v = str(song.get(field, "")).upper()
+        if v == "YES":
+            return "Y"
+        if v == "N/A":
+            return "N/A"
+        return "N"
+
+    def _build_rows(songs, default_date):
+        rows = []
+        for song in songs:
+            rows.append([
+                (song['title'] or "")[:40],
+                (song['primary_artist'] or "")[:25],
+                song['release_date'][:10] if song['release_date'] else default_date,
+                (song['label'] or "")[:18],
+                format_percentage(song['publishing_percentage'])[:8] if song['publishing_percentage'] else "-",
+                song['advance_display'],
+                song['status'],
+                "Y" if song['is_registered_with_pro'] else "N",
+                _yn(song, 'is_registered_with_dsp'),
+                "Y" if song['has_contract_executed'] else "N",
+                _yn(song, 'is_paid'),
+            ])
+        return rows
+
     if data['released']:
-        elements.append(Paragraph("RELEASED CATALOG", section_style))
-        
-        table_data = [table_headers]
-        for song in data['released']:
-            table_data.append([
-                Paragraph(song['title'][:30], small_style),
-                Paragraph(song['primary_artist'][:20], small_style),
-                song['release_date'][:10] if song['release_date'] else "",
-                Paragraph((song['label'] or "")[:15], small_style),
-                format_percentage(song['publishing_percentage'])[:8],
-                song['advance_display'],
-                song['status'],
-                "Y" if song['is_registered_with_pro'] else "N",
-                "Y" if str(song.get('is_registered_with_dsp', '')).upper() == 'YES' else ("N/A" if str(song.get('is_registered_with_dsp', '')).upper() == 'N/A' else "N"),
-                "Y" if song['has_contract_executed'] else "N",
-                "Y" if str(song.get('is_paid', '')).upper() == 'YES' else ("N/A" if str(song.get('is_paid', '')).upper() == 'N/A' else "N")
-            ])
-        
-        released_table = Table(table_data, colWidths=[
-            1.4*inch, 1.2*inch, 0.7*inch, 0.9*inch, 0.6*inch,
-            0.8*inch, 0.9*inch, 0.4*inch, 0.4*inch, 0.5*inch, 0.4*inch
-        ])
-        released_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#9333EA')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 8),
-            ('FONTSIZE', (0, 1), (-1, -1), 7),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-            ('TOPPADDING', (0, 0), (-1, -1), 4),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E9D5FF')),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FAF5FF')])
-        ]))
-        elements.append(released_table)
-        elements.append(Spacer(1, 20))
-    
-    # Pipeline
+        pdf.section("Released Catalog")
+        pdf.table(
+            headers=table_headers,
+            rows=_build_rows(data['released'], ""),
+            col_widths=col_widths,
+            wrap_cells=True,
+        )
+
     if data['pipeline']:
-        elements.append(Paragraph("PIPELINE (UNRELEASED)", section_style))
-        
-        table_data = [table_headers]
-        for song in data['pipeline']:
-            table_data.append([
-                Paragraph(song['title'][:30], small_style),
-                Paragraph(song['primary_artist'][:20], small_style),
-                song['release_date'][:10] if song['release_date'] else "TBD",
-                Paragraph((song['label'] or "")[:15], small_style),
-                format_percentage(song['publishing_percentage'])[:8],
-                song['advance_display'],
-                song['status'],
-                "Y" if song['is_registered_with_pro'] else "N",
-                "Y" if str(song.get('is_registered_with_dsp', '')).upper() == 'YES' else ("N/A" if str(song.get('is_registered_with_dsp', '')).upper() == 'N/A' else "N"),
-                "Y" if song['has_contract_executed'] else "N",
-                "Y" if str(song.get('is_paid', '')).upper() == 'YES' else ("N/A" if str(song.get('is_paid', '')).upper() == 'N/A' else "N")
-            ])
-        
-        pipeline_table = Table(table_data, colWidths=[
-            1.4*inch, 1.2*inch, 0.7*inch, 0.9*inch, 0.6*inch,
-            0.8*inch, 0.9*inch, 0.4*inch, 0.4*inch, 0.5*inch, 0.4*inch
-        ])
-        pipeline_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#EC4899')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 8),
-            ('FONTSIZE', (0, 1), (-1, -1), 7),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-            ('TOPPADDING', (0, 0), (-1, -1), 4),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#FBCFE8')),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#FDF2F8')])
-        ]))
-        elements.append(pipeline_table)
-    
-    # Footer
-    elements.append(Spacer(1, 30))
-    footer_text = f"""
-    <i>This Schedule A was generated by Cadence Catalog Intelligence</i><br/>
-    <i>Report Date: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</i>
-    """
-    elements.append(Paragraph(footer_text, small_style))
-    
-    doc.build(elements)
-    
-    buffer.seek(0)
-    
-    filename = f"Catalog_Doc_{data['creator']['display_name'].replace(' ', '_')}_{datetime.utcnow().strftime('%Y-%m-%d')}.pdf"
-    
+        pdf.section("Pipeline (Unreleased)")
+        pdf.table(
+            headers=table_headers,
+            rows=_build_rows(data['pipeline'], "TBD"),
+            col_widths=col_widths,
+            wrap_cells=True,
+        )
+
+    pdf_bytes = pdf.build()
+    safe_name = safe_filename_segment(data['creator']['display_name'], "Creator")
+    filename = f"Catalog_Doc_{safe_name}_{datetime.utcnow().strftime('%Y-%m-%d')}.pdf"
+
     return StreamingResponse(
-        buffer,
+        io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
@@ -672,27 +547,66 @@ def export_simplified_schedule_a_pdf(
     current_user: User = Depends(get_current_user)
 ):
     """Export simplified Schedule A PDF for external sharing"""
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
-    import os
-
-    sage_primary = colors.HexColor('#5B8A72')
-    sage_dark = colors.HexColor('#3D4A44')
-    sage_light = colors.HexColor('#E8F0EC')
-    sage_border = colors.HexColor('#A3C4B5')
+    from ..services.branding import theme_from_org, safe_filename_segment
+    from ..services.pdf_engine import BrandedPDF
+    from ..models import Organization
 
     data = get_schedule_a_data(creator_id, db, current_user)
+    org = db.query(Organization).filter(Organization.id == data['organization']['id']).first()
+    theme = theme_from_org(org)
 
     all_songs = sorted(
         data['released'] + data['pipeline'],
         key=lambda s: (s['title'] or '').lower()
     )
 
-    buffer = io.BytesIO()
+    pdf = BrandedPDF(theme, title="Schedule A", subtitle="Summary catalog of compositions")
+    pdf.cover()
+
+    creator_name = data['creator']['display_name']
+    pdf.text(
+        f"<b>Creator:</b> {creator_name}<br/>"
+        f"<b>Legal Name:</b> {data['creator'].get('legal_name') or 'N/A'}<br/>"
+        f"<b>PRO:</b> {data['creator'].get('primary_pro') or 'N/A'}"
+    )
+    pdf.spacer(8)
+
+    rows = []
+    released_ids = {s['id'] for s in data['released']}
+    for song in all_songs:
+        is_released = "Yes" if song['id'] in released_ids or song.get('release_date') else "No"
+        pub_pct = format_percentage(song['publishing_percentage'])[:8] if song['publishing_percentage'] else "-"
+        rows.append([
+            (song['title'] or "")[:50],
+            (song['primary_artist'] or "")[:30],
+            is_released,
+            (song['label'] or "-")[:25],
+            pub_pct,
+            song['status'],
+        ])
+    pdf.table(
+        headers=["Title", "Artist", "Released", "Label", "Pub %", "Status"],
+        rows=rows,
+        col_widths=[2.0, 1.4, 0.7, 1.2, 0.6, 1.2],
+        wrap_cells=True,
+        align=["LEFT", "LEFT", "CENTER", "LEFT", "CENTER", "LEFT"],
+    )
+
+    pdf_bytes = pdf.build()
+    safe_name = safe_filename_segment(creator_name, "Creator")
+    filename = f"Schedule_A_{safe_name}_{datetime.utcnow().strftime('%Y-%m-%d')}.pdf"
+
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+def _legacy_simplified_schedule_a_unused_block():
+    return None
+    if False:
+        buffer = io.BytesIO()  # noqa: F841
     doc = SimpleDocTemplate(
         buffer,
         pagesize=letter,

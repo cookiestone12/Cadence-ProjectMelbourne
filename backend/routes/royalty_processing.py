@@ -898,6 +898,113 @@ def get_reconciliation_report(
     }
 
 
+@router.get(
+    "/{org_id}/reconciliation/pdf",
+    summary="Org-wide royalty reconciliation report (PDF)",
+)
+def get_reconciliation_pdf(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Render the reconciliation report as a branded PDF."""
+    verify_org_access(current_user, org_id, db)
+    from fastapi import Response
+    from ..services.branding import theme_from_org, safe_filename_segment
+    from ..services.pdf_engine import BrandedPDF
+    from ..services.excel_engine import pdf_response_headers
+
+    summary = get_reconciliation_report(org_id=org_id, db=db, current_user=current_user)
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    theme = theme_from_org(org)
+
+    totals = summary.get("totals", {})
+    rows_data = summary.get("statements", [])
+    dup_groups = summary.get("duplicate_groups", [])
+
+    cents_to_dollars = lambda c: f"${(c or 0) / 100:,.2f}"
+
+    pdf = BrandedPDF(
+        theme,
+        title="Royalty Reconciliation",
+        subtitle=org.name if org else f"Organization #{org_id}",
+        landscape_orientation=True,
+    )
+    pdf.cover()
+
+    pdf.kpi_row([
+        {"label": "Statements", "value": str(totals.get("statement_count", 0))},
+        {"label": "Flagged", "value": str(totals.get("flagged_count", 0))},
+        {"label": "Header Total", "value": cents_to_dollars(totals.get("header_total_cents_net_of_dupes"))},
+        {"label": "Lines Total", "value": cents_to_dollars(totals.get("sum_of_lines_cents_net_of_dupes"))},
+        {"label": "Ledger Total", "value": cents_to_dollars(totals.get("ledger_total_cents_net_of_dupes"))},
+    ])
+
+    pdf.section("Per-Statement Reconciliation")
+    table_rows = []
+    for r in rows_data[:120]:
+        flags = ", ".join(r.get("flags") or []) or "—"
+        table_rows.append([
+            str(r.get("id")),
+            (r.get("file_name") or r.get("source_name") or "—")[:30],
+            r.get("source_type") or "—",
+            r.get("status") or "—",
+            cents_to_dollars(r.get("header_total_cents")),
+            cents_to_dollars(r.get("sum_of_lines_cents")),
+            cents_to_dollars(r.get("ledger_total_cents")),
+            cents_to_dollars(r.get("variance_cents")),
+            flags[:40],
+        ])
+    if table_rows:
+        pdf.table(
+            headers=["ID", "File", "Source", "Status", "Header", "Lines", "Ledger", "Variance", "Flags"],
+            rows=table_rows,
+            col_widths=[0.4, 2.0, 0.7, 0.8, 1.0, 1.0, 1.0, 0.9, 2.2],
+            align=["RIGHT", "LEFT", "LEFT", "LEFT", "RIGHT", "RIGHT", "RIGHT", "RIGHT", "LEFT"],
+            wrap_cells=True,
+        )
+    else:
+        pdf.text("No statements found for this organization.")
+
+    flagged_rows = [r for r in rows_data if r.get("flags")]
+    if flagged_rows:
+        pdf.section(f"Flagged Statements ({len(flagged_rows)})")
+        fr = []
+        for r in flagged_rows[:60]:
+            fr.append([
+                str(r.get("id")),
+                (r.get("file_name") or "—")[:30],
+                ", ".join(r.get("flags") or [])[:80],
+            ])
+        pdf.table(
+            headers=["ID", "File", "Flags"],
+            rows=fr,
+            col_widths=[0.5, 3.0, 6.5],
+            align=["RIGHT", "LEFT", "LEFT"],
+            wrap_cells=True,
+        )
+
+    if dup_groups:
+        pdf.section(f"Duplicate File Groups ({len(dup_groups)})")
+        dr = [[g.get("file_name", "—"), ", ".join(str(i) for i in g.get("statement_ids", []))]
+              for g in dup_groups]
+        pdf.table(headers=["File Name", "Statement IDs"], rows=dr,
+                  col_widths=[5.0, 5.0], align=["LEFT", "LEFT"], wrap_cells=True)
+
+    pdf.section("Methodology")
+    pdf.small(
+        "Reconciliation compares statement-header totals, sum of parsed line items, "
+        "and posted ledger entries. Duplicate-file groups are collapsed in the org-level "
+        "totals (lowest statement ID retained). Flags are surfaced when any of the four "
+        "agree-or-disagree comparisons drift by more than $0.01."
+    )
+
+    safe_org = safe_filename_segment(org.name if org else f"org_{org_id}", "org")
+    filename = f"cadence_reconciliation_{safe_org}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+    return Response(content=pdf.build(), headers=pdf_response_headers(filename))
+
+
 # --- Payees ---
 
 @router.get(

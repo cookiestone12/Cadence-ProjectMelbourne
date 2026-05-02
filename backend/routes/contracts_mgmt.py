@@ -2376,18 +2376,15 @@ def export_split_sheet(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import letter
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image, HRFlowable
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-    import os
+    from ..services.branding import theme_from_org, safe_filename_segment
+    from ..services.pdf_engine import BrandedPDF
 
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
     verify_org_access(current_user, contract.organization_id, db)
+    org = db.query(Organization).filter(Organization.id == contract.organization_id).first()
+    theme = theme_from_org(org)
 
     contract_assets = db.query(ContractAsset).filter(ContractAsset.contract_id == contract.id).all()
 
@@ -2442,82 +2439,43 @@ def export_split_sheet(
             "splits": filtered_splits,
         })
 
-    sage = colors.HexColor("#5B8A72")
-    sage_light = colors.HexColor("#E8F0EB")
-    dark_text = colors.HexColor("#3D4A44")
-    muted = colors.HexColor("#7A8580")
-
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter,
-                            topMargin=0.5*inch, bottomMargin=0.5*inch,
-                            leftMargin=0.6*inch, rightMargin=0.6*inch)
-
-    styles = getSampleStyleSheet()
-    style_title = ParagraphStyle('SSTitle', parent=styles['Title'], fontSize=22, textColor=dark_text, spaceAfter=4)
-    style_subtitle = ParagraphStyle('SSSub', parent=styles['Normal'], fontSize=11, textColor=muted, spaceAfter=12)
-    style_heading = ParagraphStyle('SSHead', parent=styles['Heading2'], fontSize=14, textColor=sage, spaceBefore=16, spaceAfter=8)
-    style_normal = ParagraphStyle('SSNorm', parent=styles['Normal'], fontSize=10, textColor=dark_text, leading=14)
-    style_small = ParagraphStyle('SSSmall', parent=styles['Normal'], fontSize=8, textColor=muted, leading=11)
-    style_center = ParagraphStyle('SSCenter', parent=styles['Normal'], fontSize=8, textColor=muted, alignment=TA_CENTER)
-    style_agreement = ParagraphStyle('SSAgree', parent=styles['Normal'], fontSize=10, textColor=dark_text, leading=14, spaceBefore=16, spaceAfter=12)
-
-    elements = []
-
-    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'cadence-logo.png')
-    if os.path.exists(logo_path):
-        logo = Image(logo_path, width=2.0*inch, height=1.125*inch)
-        logo.hAlign = 'LEFT'
-        elements.append(logo)
-        elements.append(Spacer(1, 6))
-
-    elements.append(Paragraph("SPLIT SHEET", style_title))
     if split_type == "publishing":
         subtitle_text = "Publishing Rights Only"
     elif split_type == "master":
         subtitle_text = "Master Rights Only"
     else:
         subtitle_text = "Publishing & Master Rights"
-    elements.append(Paragraph(subtitle_text, style_subtitle))
 
-    elements.append(HRFlowable(width="100%", thickness=1, color=sage_light, spaceAfter=12))
+    pdf = BrandedPDF(theme, title="Split Sheet", subtitle=subtitle_text)
+    pdf.cover()
+    pdf.hr()
 
-    elements.append(Paragraph("Contract Information", style_heading))
+    pdf.section("Contract Information")
     territory_str = ", ".join(contract.territory) if contract.territory else "—"
-    meta_data = [
-        ["Title", contract.title or "—", "Reference #", contract.reference_number or "—"],
-        ["Type", contract.contract_type or "—", "Status", contract.status or "—"],
-        ["Territory", territory_str, "Start Date", contract.start_date.strftime("%B %d, %Y") if contract.start_date else "—"],
-        ["", "", "End Date", contract.end_date.strftime("%B %d, %Y") if contract.end_date else "—"],
-    ]
-    meta_table = Table(meta_data, colWidths=[1.2*inch, 2.3*inch, 1.2*inch, 2.3*inch])
-    meta_table.setStyle(TableStyle([
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('TEXTCOLOR', (0, 0), (0, -1), muted),
-        ('TEXTCOLOR', (2, 0), (2, -1), muted),
-        ('TEXTCOLOR', (1, 0), (1, -1), dark_text),
-        ('TEXTCOLOR', (3, 0), (3, -1), dark_text),
-        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-        ('FONTNAME', (2, 0), (2, -1), 'Helvetica-Bold'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-    ]))
-    elements.append(meta_table)
-    elements.append(Spacer(1, 8))
+    pdf.table(
+        headers=None,
+        rows=[
+            ["Title", contract.title or "—", "Reference #", contract.reference_number or "—"],
+            ["Type", contract.contract_type or "—", "Status", contract.status or "—"],
+            ["Territory", territory_str,
+             "Start Date", contract.start_date.strftime("%B %d, %Y") if contract.start_date else "—"],
+            ["", "", "End Date", contract.end_date.strftime("%B %d, %Y") if contract.end_date else "—"],
+        ],
+        col_widths=[1.2, 2.3, 1.2, 2.3],
+        wrap_cells=True,
+    )
 
     for asset in assets_data:
-        elements.append(Paragraph(asset["asset_title"], style_heading))
+        pdf.section(asset["asset_title"])
         detail_parts = []
         if asset["asset_isrc"]:
             detail_parts.append(f"ISRC: {asset['asset_isrc']}")
         if asset["asset_artist"]:
             detail_parts.append(f"Artist: {asset['asset_artist']}")
         if detail_parts:
-            elements.append(Paragraph(" · ".join(detail_parts), style_small))
-            elements.append(Spacer(1, 6))
+            pdf.small(" · ".join(detail_parts))
 
-        header_row = ["Rights Holder", "Role", "PRO", "IPI #", "Publisher", "Rights Type", "Share %"]
-        table_data = [header_row]
+        rows = []
         totals_by_type = {}
         for entry in asset["splits"]:
             holder = entry["holder"]
@@ -2529,42 +2487,25 @@ def export_split_sheet(
             ipi = (holder.primary_ipi if holder and holder.primary_ipi else "—")
             publisher = (holder.publisher_name if holder and holder.publisher_name else "—")
             rights_type = s.rights_type
-            share = f"{s.share_percentage}%"
-            table_data.append([holder_name, party_role, pro, ipi, publisher, rights_type, share])
-            if rights_type not in totals_by_type:
-                totals_by_type[rights_type] = 0.0
-            totals_by_type[rights_type] += s.share_percentage
+            rows.append([holder_name, party_role, pro, ipi, publisher, rights_type, f"{s.share_percentage}%"])
+            totals_by_type[rights_type] = totals_by_type.get(rights_type, 0.0) + s.share_percentage
 
         for rt_name, rt_total in totals_by_type.items():
-            table_data.append(["", "", "", "", "Total", rt_name, f"{rt_total}%"])
+            rows.append(["", "", "", "", "Total", rt_name, f"{rt_total}%"])
 
-        col_widths = [1.3*inch, 0.8*inch, 0.7*inch, 0.7*inch, 1.0*inch, 1.0*inch, 0.7*inch]
-        split_table = Table(table_data, colWidths=col_widths)
-        split_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), sage),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('GRID', (0, 0), (-1, -1), 0.5, sage_light),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, sage_light]),
-            ('FONTNAME', (0, -len(totals_by_type)), (-1, -1), 'Helvetica-Bold'),
-            ('BACKGROUND', (0, -len(totals_by_type)), (-1, -1), sage_light),
-            ('TEXTCOLOR', (0, 1), (-1, -1), dark_text),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
-        ]))
-        elements.append(split_table)
-        elements.append(Spacer(1, 12))
+        pdf.table(
+            headers=["Rights Holder", "Role", "PRO", "IPI #", "Publisher", "Rights Type", "Share %"],
+            rows=rows,
+            col_widths=[1.3, 0.8, 0.7, 0.7, 1.0, 1.0, 0.7],
+            wrap_cells=True,
+            align=["LEFT", "LEFT", "LEFT", "LEFT", "LEFT", "LEFT", "RIGHT"],
+        )
 
-    elements.append(HRFlowable(width="100%", thickness=1, color=sage_light, spaceAfter=12))
-    elements.append(Paragraph("Agreement", style_heading))
-    elements.append(Paragraph(
-        "By signing below, all parties acknowledge and agree to the ownership splits documented above.",
-        style_agreement,
-    ))
-    elements.append(Spacer(1, 12))
+    pdf.hr()
+    pdf.section("Agreement")
+    pdf.text(
+        "By signing below, all parties acknowledge and agree to the ownership splits documented above."
+    )
 
     all_external_names = set()
     for asset in assets_data:
@@ -2573,49 +2514,35 @@ def export_split_sheet(
                 all_external_names.add(entry["split"].rights_holder_name)
 
     signer_names = [h.display_name for h in all_holders.values()] + list(all_external_names)
-    sig_rows = []
-    for i in range(0, len(signer_names), 2):
-        row = []
-        for j in range(2):
-            if i + j < len(signer_names):
-                name = signer_names[i + j]
-                sig_block = (
-                    f"<b>{name}</b><br/><br/>"
-                    f"Name: ______________________________<br/><br/>"
-                    f"Signature: __________________________<br/><br/>"
-                    f"Date: ______________________________"
-                )
-                row.append(Paragraph(sig_block, style_normal))
-            else:
-                row.append("")
-        sig_rows.append(row)
+    if signer_names:
+        sig_rows = []
+        for i in range(0, len(signer_names), 2):
+            row = []
+            for j in range(2):
+                if i + j < len(signer_names):
+                    name = signer_names[i + j]
+                    row.append(
+                        f"<b>{name}</b><br/><br/>"
+                        f"Name: ______________________________<br/><br/>"
+                        f"Signature: __________________________<br/><br/>"
+                        f"Date: ______________________________"
+                    )
+                else:
+                    row.append("")
+            sig_rows.append(row)
+        pdf.table(
+            headers=None,
+            rows=sig_rows,
+            col_widths=[3.3, 3.3],
+            wrap_cells=True,
+        )
 
-    if sig_rows:
-        sig_table = Table(sig_rows, colWidths=[3.3*inch, 3.3*inch])
-        sig_table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('TOPPADDING', (0, 0), (-1, -1), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-            ('LEFTPADDING', (0, 0), (-1, -1), 8),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-        ]))
-        elements.append(sig_table)
-
-    elements.append(Spacer(1, 20))
-    elements.append(HRFlowable(width="100%", thickness=0.5, color=sage_light, spaceAfter=8))
-    elements.append(Paragraph(
-        f"Generated by Cadence Catalog Intelligence · {datetime.utcnow().strftime('%B %d, %Y')}",
-        style_center,
-    ))
-
-    doc.build(elements)
-    buffer.seek(0)
-
-    safe_title = "".join(c if c.isalnum() or c in (" ", "-", "_") else "" for c in (contract.title or "Untitled")).strip().replace(" ", "_")
+    pdf_bytes = pdf.build()
+    safe_title = safe_filename_segment(contract.title or "Untitled", "Contract")
     filename = f"Split_Sheet_{safe_title}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
 
     return StreamingResponse(
-        buffer,
+        io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

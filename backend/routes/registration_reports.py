@@ -414,14 +414,16 @@ def export_selected_registration_pdf(
     except ImportError:
         raise HTTPException(status_code=500, detail="PDF generation not available")
 
+    from ..services.branding import theme_from_org
     org = db.query(Organization).filter(Organization.id == org_id).first()
     org_name = org.name if org else "Organization"
+    theme = theme_from_org(org)
 
     items = _build_report_items(db, org_id, request.asset_type, item_ids=request.item_ids or None)
     if not request.item_ids:
         items = [i for i in items if not i.get("is_registered_with_pro")]
 
-    buffer = _generate_pdf(items, request.asset_type, org_name)
+    buffer = _generate_pdf(items, request.asset_type, org_name, theme=theme)
 
     filename = f"Registration_Report_{request.asset_type}_{org_name}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
     return Response(
@@ -548,11 +550,13 @@ def export_registration_pdf_get(
     except ImportError:
         raise HTTPException(status_code=500, detail="PDF generation not available")
 
+    from ..services.branding import theme_from_org
     org = db.query(Organization).filter(Organization.id == org_id).first()
     org_name = org.name if org else "Organization"
+    theme = theme_from_org(org)
 
     items = _build_report_items(db, org_id, asset_type, creator_id=creator_id, status=status)
-    buffer = _generate_pdf(items, asset_type, org_name)
+    buffer = _generate_pdf(items, asset_type, org_name, theme=theme)
     filename = f"Registration_Report_{asset_type}_{org_name}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
     return Response(
         content=buffer,
@@ -615,7 +619,8 @@ def send_registration_report_email(
     if not items:
         raise HTTPException(status_code=400, detail="No items to include in the report")
 
-    pdf_bytes = _generate_pdf(items, request.asset_type, org_name)
+    from ..services.branding import theme_from_org
+    pdf_bytes = _generate_pdf(items, request.asset_type, org_name, theme=theme_from_org(org))
 
     item_count = len(items)
     registered_count = sum(1 for i in items if i.get("is_registered_with_pro"))
@@ -942,11 +947,12 @@ def download_saved_report_pdf(
     if not report_items:
         raise HTTPException(status_code=400, detail="Report has no data")
 
+    from ..services.branding import theme_from_org
     org = db.query(Organization).filter(Organization.id == org_id).first()
     org_name = org.name if org else "Organization"
     asset_type = report.report_type.lower() if report.report_type else "songs"
 
-    buffer = _generate_pdf(report_items, asset_type, org_name)
+    buffer = _generate_pdf(report_items, asset_type, org_name, theme=theme_from_org(org))
     import re
     safe_title = re.sub(r'[^\w\s-]', '', report.title or 'Report').replace(' ', '_')[:80]
     filename = f"Registration_Report_{safe_title}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
@@ -957,111 +963,73 @@ def download_saved_report_pdf(
     )
 
 
-def _generate_pdf(items, asset_type, org_name):
-    from reportlab.lib.pagesizes import letter, landscape
-    from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch
+def _generate_pdf(items, asset_type, org_name, theme=None):
+    from ..services.branding import OrgTheme
+    from ..services.pdf_engine import BrandedPDF
 
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), topMargin=0.5*inch, bottomMargin=0.5*inch)
-    styles = getSampleStyleSheet()
-
-    title_style = ParagraphStyle('CustomTitle', parent=styles['Title'], fontSize=18, textColor=colors.HexColor('#3D4A44'))
-    subtitle_style = ParagraphStyle('Subtitle', parent=styles['Normal'], fontSize=10, textColor=colors.HexColor('#7A8580'))
-    section_style = ParagraphStyle('Section', parent=styles['Heading2'], fontSize=13, textColor=colors.HexColor('#5B8A72'), spaceAfter=6)
-    cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=7, leading=9)
-    header_cell_style = ParagraphStyle('HeaderCell', parent=styles['Normal'], fontSize=7, leading=9, textColor=colors.white)
-
-    elements = []
-    elements.append(Paragraph(f"Bulk Registration — {asset_type.title()}", title_style))
-    elements.append(Paragraph(f"{org_name} | Generated {datetime.utcnow().strftime('%B %d, %Y')}", subtitle_style))
+    if theme is None:
+        theme = OrgTheme(name=org_name, display_name=org_name)
 
     valid_count = sum(1 for item in items if item["is_valid"])
     outstanding_count = sum(1 for item in items if not item.get("is_registered_with_pro", False))
-    elements.append(Spacer(1, 8))
-    elements.append(Paragraph(f"Total: {len(items)} | Ready: {valid_count} | Outstanding: {outstanding_count} | Needs Attention: {len(items) - valid_count}", subtitle_style))
-    elements.append(Spacer(1, 12))
 
-    sage = colors.HexColor('#5B8A72')
-    light_sage = colors.HexColor('#EEF1EC')
+    pdf = BrandedPDF(
+        theme,
+        title=f"Bulk Registration — {asset_type.title()}",
+        subtitle=f"Generated {datetime.utcnow().strftime('%B %d, %Y')}",
+        landscape_orientation=True,
+    )
+    pdf.cover()
+    pdf.kpi_row([
+        {"label": "Total", "value": str(len(items))},
+        {"label": "Ready", "value": str(valid_count)},
+        {"label": "Outstanding", "value": str(outstanding_count)},
+        {"label": "Needs Attention", "value": str(len(items) - valid_count)},
+    ])
+
+    if not items:
+        pdf.text("No items found for this report.", style="small")
+        return pdf.build()
 
     for item in items:
         title = item.get("title", "Untitled")
         identifier = item.get("iswc") or item.get("isrc") or "—"
         reg_status = "Registered" if item.get("is_registered_with_pro") else "Outstanding"
-        reg_color = sage if item.get("is_registered_with_pro") else colors.HexColor('#DC2626')
+        reg_color = theme.primary_color if item.get("is_registered_with_pro") else "#DC2626"
         status = "Ready" if item["is_valid"] else "Needs Attention"
-        status_color = sage if item["is_valid"] else colors.HexColor('#D97706')
+        status_color = theme.primary_color if item["is_valid"] else "#D97706"
 
-        elements.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#E5E7EB')))
-        elements.append(Spacer(1, 4))
-        elements.append(Paragraph(
-            f'<b>{title}</b> <font color="#7A8580">({identifier})</font> — '
+        pdf.hr()
+        pdf.subsection(
+            f'<b>{title}</b> <font color="{theme.muted_color}">({identifier})</font> — '
             f'<font color="{reg_color}">{reg_status}</font> | '
-            f'<font color="{status_color}">{status}</font>',
-            section_style
-        ))
+            f'<font color="{status_color}">{status}</font>'
+        )
 
         if item.get("writers"):
-            header = [
-                Paragraph("<b>Writer</b>", header_cell_style),
-                Paragraph("<b>Legal Name</b>", header_cell_style),
-                Paragraph("<b>Role</b>", header_cell_style),
-                Paragraph("<b>Share %</b>", header_cell_style),
-                Paragraph("<b>PRO</b>", header_cell_style),
-                Paragraph("<b>IPI</b>", header_cell_style),
-                Paragraph("<b>Publisher</b>", header_cell_style),
-                Paragraph("<b>Pub PRO</b>", header_cell_style),
-                Paragraph("<b>Pub IPI</b>", header_cell_style),
-            ]
-            data = [header]
+            rows = []
             for w in item["writers"]:
                 pub = w.get("publisher") or {}
-                row = [
-                    Paragraph(w.get("name") or "", cell_style),
-                    Paragraph(w.get("legal_name") or "", cell_style),
-                    Paragraph(w.get("role") or "", cell_style),
-                    Paragraph(str(w.get("share") or ""), cell_style),
-                    Paragraph(w.get("pro") or "", cell_style),
-                    Paragraph(w.get("ipi") or "", cell_style),
-                    Paragraph(pub.get("name") or "", cell_style),
-                    Paragraph(pub.get("pro") or "", cell_style),
-                    Paragraph(pub.get("ipi") or "", cell_style),
-                ]
-                data.append(row)
-
-            col_widths = [1.3*inch, 1.3*inch, 0.8*inch, 0.6*inch, 0.7*inch, 1.0*inch, 1.3*inch, 0.7*inch, 1.0*inch]
-            table = Table(data, colWidths=col_widths)
-            table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), sage),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                ('FONTSIZE', (0, 0), (-1, -1), 7),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, light_sage]),
-                ('GRID', (0, 0), (-1, -1), 0.3, colors.HexColor('#D1D5DB')),
-                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-                ('TOPPADDING', (0, 0), (-1, -1), 3),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ]))
-            elements.append(table)
+                rows.append([
+                    w.get("name") or "",
+                    w.get("legal_name") or "",
+                    w.get("role") or "",
+                    str(w.get("share") or ""),
+                    w.get("pro") or "",
+                    w.get("ipi") or "",
+                    pub.get("name") or "",
+                    pub.get("pro") or "",
+                    pub.get("ipi") or "",
+                ])
+            pdf.table(
+                headers=["Writer", "Legal Name", "Role", "Share %", "PRO", "IPI", "Publisher", "Pub PRO", "Pub IPI"],
+                rows=rows,
+                col_widths=[1.3, 1.3, 0.8, 0.6, 0.7, 1.0, 1.3, 0.7, 1.0],
+                wrap_cells=True,
+            )
 
         if item.get("validation_issues"):
             issues_text = " | ".join(item["validation_issues"])
-            elements.append(Spacer(1, 2))
-            elements.append(Paragraph(f'<font color="#D97706" size="7">Issues: {issues_text}</font>', styles['Normal']))
+            pdf.small(f'<font color="#D97706">Issues: {issues_text}</font>')
 
-        elements.append(Spacer(1, 8))
-
-    if not items:
-        elements.append(Paragraph("No items found for this report.", subtitle_style))
-
-    elements.append(Spacer(1, 20))
-    elements.append(HRFlowable(width="100%", thickness=1, color=sage))
-    elements.append(Spacer(1, 6))
-    footer_style = ParagraphStyle('Footer', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor('#7A8580'), alignment=1)
-    elements.append(Paragraph("Cadence — Catalog Intelligence | Confidential", footer_style))
-
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer.getvalue()
+    return pdf.build()

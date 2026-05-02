@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
+import BrandingPreview from '../components/BrandingPreview'
 import {
   UsersIcon,
   PlusIcon,
@@ -910,7 +911,7 @@ function BrandingTab({ branding, onSave, onError }) {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-[#3D4A44] mb-3">Preview</h3>
+        <h3 className="text-lg font-semibold text-[#3D4A44] mb-3">Sidebar Preview</h3>
         <div className="border border-[#E5E8E3] rounded-xl p-4 bg-[#FAFBF9]">
           <div className="flex items-center gap-3">
             {logoPreview ? (
@@ -926,6 +927,24 @@ function BrandingTab({ branding, onSave, onError }) {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <div className="flex items-baseline justify-between mb-3">
+          <h3 className="text-lg font-semibold text-[#3D4A44]">Branded Export Preview</h3>
+          <span className="text-[11px] text-[#A0A8A3]">Live preview · updates as you edit</span>
+        </div>
+        <p className="text-xs text-[#7A8580] mb-4">
+          A miniature mock of how your logo and brand color will appear on every PDF and Excel export. The "Powered by Cadence" mark always remains in the footer.
+        </p>
+        <BrandingPreview
+          primaryColor={form.primary_color}
+          logoUrl={logoPreview}
+          logoOrientation={form.logo_orientation}
+          displayName={form.display_name || branding?.name || 'Your Organization'}
+          reportTitle="Catalog Valuation Report"
+          reportSubtitle="Sample export · Q4 2025"
+        />
       </div>
 
       <AccessCodeSection />

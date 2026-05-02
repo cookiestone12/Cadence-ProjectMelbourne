@@ -126,6 +126,107 @@ def audit_summary(
     }
 
 
+@router.get("/{org_id}/audit/report/pdf")
+def audit_report_pdf(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Render the open audit findings as a branded PDF report."""
+    verify_org_access(current_user, org_id, db)
+
+    from fastapi import Response
+    from ..models import Organization, Song
+    from ..services.branding import theme_from_org, safe_filename_segment
+    from ..services.pdf_engine import BrandedPDF
+    from ..services.excel_engine import pdf_response_headers
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    theme = theme_from_org(org)
+
+    findings = db.query(RoyaltyAudit).filter(
+        RoyaltyAudit.organization_id == org_id,
+        RoyaltyAudit.resolved.is_(False),
+    ).order_by(RoyaltyAudit.severity.desc(), RoyaltyAudit.id.desc()).all()
+
+    by_severity: Dict[str, List[RoyaltyAudit]] = {"CRITICAL": [], "HIGH": [], "MEDIUM": [], "LOW": []}
+    for f in findings:
+        sev = (f.severity or "LOW").upper()
+        by_severity.setdefault(sev, []).append(f)
+
+    by_type: Dict[str, int] = {}
+    for f in findings:
+        by_type[f.audit_type] = by_type.get(f.audit_type, 0) + 1
+
+    song_titles: Dict[int, str] = {}
+    song_ids = {f.song_id for f in findings if f.song_id}
+    if song_ids:
+        for s in db.query(Song.id, Song.title).filter(Song.id.in_(song_ids)).all():
+            song_titles[s.id] = s.title
+
+    pdf = BrandedPDF(theme, title="Royalty Audit Report",
+                     subtitle=org.name if org else f"Organization #{org_id}")
+    pdf.cover()
+
+    pdf.kpi_row([
+        {"label": "Open Findings", "value": str(len(findings))},
+        {"label": "Critical", "value": str(len(by_severity.get("CRITICAL", [])))},
+        {"label": "High", "value": str(len(by_severity.get("HIGH", [])))},
+        {"label": "Medium / Low",
+         "value": str(len(by_severity.get("MEDIUM", [])) + len(by_severity.get("LOW", [])))},
+    ])
+
+    if by_type:
+        pdf.section("Findings by Type")
+        type_rows = [[k.replace("_", " ").title(), str(v)] for k, v in sorted(by_type.items())]
+        pdf.table(headers=["Audit Type", "Count"], rows=type_rows,
+                  col_widths=[3.5, 1.0], align=["LEFT", "RIGHT"])
+
+    severity_order = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+    for sev in severity_order:
+        items = by_severity.get(sev, [])
+        if not items:
+            continue
+        pdf.section(f"{sev.title()} Findings ({len(items)})")
+        rows = []
+        for f in items[:120]:
+            song = song_titles.get(f.song_id, "—") if f.song_id else "—"
+            period = ""
+            if f.period_start and f.period_end:
+                period = f"{f.period_start.strftime('%Y-%m')} – {f.period_end.strftime('%Y-%m')}"
+            elif f.period_start:
+                period = f.period_start.strftime("%Y-%m")
+            rows.append([
+                f.audit_type.replace("_", " ").title() if f.audit_type else "—",
+                song[:32],
+                period or "—",
+                f.message or "—",
+            ])
+        pdf.table(
+            headers=["Type", "Song", "Period", "Detail"],
+            rows=rows,
+            col_widths=[1.2, 1.6, 1.0, 3.4],
+            align=["LEFT", "LEFT", "LEFT", "LEFT"],
+            wrap_cells=True,
+        )
+
+    if not findings:
+        pdf.section("No Open Findings")
+        pdf.text("All audit checks passed for this organization. Great work.")
+
+    pdf.section("Methodology")
+    pdf.small(
+        "<b>CROSS_STATEMENT</b> — duplicate song-period payments across statements. "
+        "<b>RATE_CHECK</b> — payment below the configured master rate floor. "
+        "<b>MISSING_PERIOD</b> — gaps in the expected statement cadence. "
+        "<b>DECAY_ANOMALY</b> — period revenue diverging from the song's fitted exponential decay."
+    )
+
+    safe_org = safe_filename_segment(org.name if org else f"org_{org_id}", "org")
+    filename = f"cadence_audit_report_{safe_org}_{datetime.utcnow().strftime('%Y%m%d')}.pdf"
+    return Response(content=pdf.build(), headers=pdf_response_headers(filename))
+
+
 @router.post("/{org_id}/audit/scan")
 def run_scan(
     org_id: int,
