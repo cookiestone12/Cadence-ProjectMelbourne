@@ -199,6 +199,13 @@ def _deferred_startup_tasks():
                         )
         except Exception as e:
             log.warning(f"Luminate column backfill failed: {e}")
+
+        # Task #190 — active-organization pointer on users is now
+        # added & backfilled in db_setup._ensure_active_org_pointer
+        # (runs BEFORE seed_super_admin so the User mapper doesn't
+        # query a column that doesn't exist on disk yet). Keeping the
+        # canonical path in db_setup avoids noisy duplicate ALTERs and
+        # accidental concurrent backfills here.
     except Exception as e:
         log.warning(f"Internal-dev table creation failed: {e}")
 

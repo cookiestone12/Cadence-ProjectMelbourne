@@ -129,10 +129,12 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
     _record_session(db, user.id, access_token, request)
     db.commit()
     
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == user.id
-    ).first()
-    
+    # Task #190: respect the user's active-org pointer so the role
+    # surfaced in the login response matches whatever the rest of the
+    # API will resolve for them.
+    from ..utils.auth import get_active_membership
+    membership = get_active_membership(db, user)
+
     user_data = {
         "id": user.id,
         "username": user.username,

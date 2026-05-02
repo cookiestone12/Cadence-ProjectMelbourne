@@ -57,12 +57,13 @@ class AddTagRequest(BaseModel):
 
 
 def _get_org_id(current_user: User, db: Session) -> int:
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
-    if not membership:
+    # Task #190: respect the user's active-org pointer so multi-org
+    # users see/upload audio in the org they actually picked.
+    from ..utils.auth import resolve_active_org_id
+    active = resolve_active_org_id(db, current_user)
+    if active is None:
         raise HTTPException(status_code=403, detail="No organization membership found")
-    return membership.organization_id
+    return active
 
 
 def _serialize_asset(asset: AudioAsset) -> dict:

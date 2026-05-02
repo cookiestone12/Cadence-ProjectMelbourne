@@ -5,7 +5,7 @@ from typing import Optional
 import threading
 import logging
 from ..models import get_db, SongCredit, SongDSPLink, Song, OrganizationMember, User, ClientShare
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user, get_active_membership
 from .client_sharing import has_shared_access
 from .contracts_mgmt import sync_credit_to_splits
 
@@ -87,9 +87,7 @@ def create_credit(
     ).first()
     
     if not membership:
-        user_membership = db.query(OrganizationMember).filter(
-            OrganizationMember.user_id == current_user.id
-        ).first()
+        user_membership = get_active_membership(db, current_user)
         has_share = False
         if user_membership:
             has_share = db.query(ClientShare).filter(

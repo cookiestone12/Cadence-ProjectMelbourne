@@ -9,7 +9,7 @@ import json
 import logging
 
 from ..models import get_db, User, OrganizationMember
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user, get_active_membership
 from ..services import assistant_tools
 
 logger = logging.getLogger("cadence")
@@ -170,9 +170,7 @@ async def assistant_chat(
     if not api_key:
         raise HTTPException(status_code=503, detail="AI service not configured")
 
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     org_id = membership.organization_id if membership else None
     user_role = membership.role if membership else "MEMBER"
     linked_creator_id = (

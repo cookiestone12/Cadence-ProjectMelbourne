@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from ..models import get_db, User, OrganizationMember, IntegrationAccount
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user, get_active_membership
 from ..services import storage_service
 
 router = APIRouter(prefix="/api/integrations", tags=["Integrations"])
@@ -21,9 +21,7 @@ class DefaultFolderRequest(BaseModel):
 
 
 def _get_org_id(current_user: User, db: Session) -> int:
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=403, detail="No organization membership found")
     return membership.organization_id

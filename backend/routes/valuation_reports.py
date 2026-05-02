@@ -10,7 +10,7 @@ from ..models.models import (
     ValuationCalculation, SongStreamingMetrics, TerritoryRevenue,
     Creator, UnderwritingRun, RoyaltyStatement
 )
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user, get_active_membership
 from ..services.underwriting_engine import run_underwriting
 from ..services.underwriting_controls import run_reconciliation_controls
 from ..services.valuation_engine import (
@@ -96,9 +96,7 @@ def get_catalog_valuation_summary(
     the request is rejected with 404 to avoid cross-org data exposure.
     """
     
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
@@ -332,9 +330,7 @@ def download_catalog_valuation_excel(
     from ..services.branding import theme_from_org, safe_filename_segment
     from ..services.excel_engine import BrandedWorkbook, excel_response_headers
 
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -413,9 +409,7 @@ def trigger_underwriting_run(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -457,9 +451,7 @@ def list_underwriting_runs(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -507,9 +499,7 @@ def get_underwriting_run(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -547,9 +537,7 @@ def get_underwriting_spine(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -573,9 +561,7 @@ def get_underwriting_decay(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -599,9 +585,7 @@ def get_underwriting_concentration(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -625,9 +609,7 @@ def get_latest_underwriting(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -681,9 +663,7 @@ def get_statement_reconciliation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -852,9 +832,7 @@ def run_source_typed_valuation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -892,9 +870,7 @@ def get_source_typed_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -1212,9 +1188,7 @@ def run_full_valuation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
 
@@ -1248,9 +1222,7 @@ def get_full_valuation_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
     if scope_creator_id is not None:
@@ -1279,9 +1251,7 @@ def get_full_valuation_trend(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
     if scope_creator_id is not None:
@@ -1389,9 +1359,7 @@ def download_full_valuation_pdf(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     if not membership:
         raise HTTPException(status_code=404, detail="Organization membership not found")
     if scope_creator_id is not None:

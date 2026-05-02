@@ -102,6 +102,72 @@ def get_current_user(
     return user
 
 
+def resolve_active_org_id(db: Session, user: User) -> Optional[int]:
+    """Task #190: single source of truth for "which org is this user
+    looking at right now".
+
+    Honors ``users.current_organization_id`` when it points at an org
+    the user still belongs to. Otherwise self-heals to the oldest
+    membership (lowest ``organization_members.id``) and persists the
+    pointer so the next call is stable.
+
+    Returns ``None`` only when the user has no memberships at all.
+    Staff / super-admin fallbacks stay in their respective routes so
+    they can preserve existing semantics (404 vs cross-org peek).
+    """
+    from ..models import OrganizationMember
+
+    pointed = getattr(user, "current_organization_id", None)
+    if pointed is not None:
+        valid = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == user.id,
+            OrganizationMember.organization_id == pointed,
+        ).first()
+        if valid is not None:
+            return pointed
+
+    fallback = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == user.id,
+    ).order_by(OrganizationMember.id.asc()).first()
+    if fallback is None:
+        if pointed is not None:
+            try:
+                user.current_organization_id = None
+                db.commit()
+            except Exception:
+                db.rollback()
+        return None
+
+    if pointed != fallback.organization_id:
+        try:
+            user.current_organization_id = fallback.organization_id
+            db.commit()
+        except Exception:
+            db.rollback()
+    return fallback.organization_id
+
+
+def get_active_membership(db: Session, user: User):
+    """Task #190: return the ``OrganizationMember`` row for the user's
+    *active* org (per ``current_organization_id``), self-healing to the
+    oldest membership when the pointer is stale. Returns ``None`` when
+    the user has no memberships at all.
+
+    Replaces the old ``OrganizationMember.filter(user_id=...).first()``
+    pattern at every auto-resolution site so that switching orgs is
+    consistently respected across the API.
+    """
+    from ..models import OrganizationMember
+
+    org_id = resolve_active_org_id(db, user)
+    if org_id is None:
+        return None
+    return db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == user.id,
+        OrganizationMember.organization_id == org_id,
+    ).first()
+
+
 def user_can_read_org(user: User, org_id: int, db: Session) -> bool:
     """Centralized read-access check.
     Read access: master admin OR Cadence staff OR org member.

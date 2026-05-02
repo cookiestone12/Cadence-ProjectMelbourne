@@ -37,18 +37,19 @@ class ActionItemUpdate(BaseModel):
 
 
 def get_user_organization_id(db: Session, user: User) -> int:
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == user.id
-    ).first()
-    if not membership and not user.is_super_admin:
-        raise HTTPException(status_code=403, detail="No organization membership")
-    if not membership and user.is_super_admin:
+    # Task #190: respect the user's active-org pointer instead of the
+    # first .first() row.
+    from ..utils.auth import resolve_active_org_id
+    active = resolve_active_org_id(db, user)
+    if active is not None:
+        return active
+    if user.is_super_admin:
         from ..models import Organization
-        first_org = db.query(Organization).first()
+        first_org = db.query(Organization).order_by(Organization.id).first()
         if first_org:
             return first_org.id
         raise HTTPException(status_code=403, detail="No organizations exist")
-    return membership.organization_id
+    raise HTTPException(status_code=403, detail="No organization membership")
 
 
 def _build_lookup(db, model, ids, name_attr):

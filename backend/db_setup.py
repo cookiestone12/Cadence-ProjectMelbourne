@@ -423,6 +423,40 @@ def _run_alembic_under_lock():
             )
 
 
+def _ensure_active_org_pointer():
+    """Task #190: idempotent ALTER to add ``users.current_organization_id``
+    to existing deployments + backfill it to each user's oldest membership.
+    Runs from ``_run_ddl_backstop`` BEFORE ``seed_super_admin`` so the
+    SQLAlchemy User mapper doesn't blow up querying a column that doesn't
+    exist on disk yet.
+    """
+    from sqlalchemy import inspect, text
+    try:
+        insp = inspect(engine)
+        user_cols = {c["name"] for c in insp.get_columns("users")}
+        if "current_organization_id" not in user_cols:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN current_organization_id "
+                    "INTEGER REFERENCES organizations(id) ON DELETE SET NULL"
+                ))
+            logger.info("Added column users.current_organization_id")
+        with engine.begin() as conn:
+            conn.execute(text(
+                "UPDATE users u SET current_organization_id = sub.org_id "
+                "FROM ("
+                "  SELECT DISTINCT ON (om.user_id) om.user_id, "
+                "         om.organization_id AS org_id "
+                "  FROM organization_members om "
+                "  ORDER BY om.user_id, om.id ASC"
+                ") sub "
+                "WHERE u.id = sub.user_id "
+                "  AND u.current_organization_id IS NULL"
+            ))
+    except Exception as e:
+        logger.warning(f"current_organization_id backfill skipped: {e}")
+
+
 def _run_ddl_backstop():
     """Idempotent DDL backstop — runs OUTSIDE the migration lock per
     Task #73 spec (lock -> alembic -> release -> backstop). Each
@@ -445,6 +479,8 @@ def _run_ddl_backstop():
                     logger.info(f"Created missing table: {table.name}")
                 except Exception as te:
                     logger.warning(f"Failed to create table {table.name}: {te}")
+
+    _ensure_active_org_pointer()
 
     try:
         ensure_schema_updates()

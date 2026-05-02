@@ -11,7 +11,7 @@ from ..models import (
     Song, Work, Release, Creator, OrganizationMember, User, AudioAsset, CreativeContact,
     SongCredit
 )
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user, get_active_membership
 from ..services.contract_parser import parse_contract_document
 from ..services.audit_service import log_action, make_diff
 import logging
@@ -1474,9 +1474,7 @@ async def parse_contract_doc(
     if len(file_bytes) > 20 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large. Maximum size is 20MB.")
 
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     caller_org_id = membership.organization_id if membership else None
 
     result = parse_contract_document(file_bytes, file.filename, org_id=caller_org_id)

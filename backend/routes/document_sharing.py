@@ -40,12 +40,12 @@ class UserSearchResult(BaseModel):
 
 
 def _get_user_org(db: Session, user: User):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == user.id
-    ).first()
-    if not membership:
+    # Task #190: respect the user's active-org pointer.
+    from ..utils.auth import resolve_active_org_id
+    active = resolve_active_org_id(db, user)
+    if active is None:
         raise HTTPException(status_code=403, detail="No organization membership")
-    return membership.organization_id
+    return active
 
 
 def _verify_item_ownership(db: Session, item_type: str, item_id: int, org_id: int):

@@ -7,23 +7,19 @@ import os
 import uuid
 import base64
 from ..models import get_db, User, Organization, OrganizationMember, Creator
-from ..utils.auth import get_current_user, get_password_hash
+from ..utils.auth import get_current_user, get_password_hash, get_active_membership
 
 router = APIRouter(prefix="/api/tenant-admin", tags=["Tenant Admin"])
 
 
 def get_org_admin(db: Session, current_user: User):
     if current_user.is_super_admin:
-        membership = db.query(OrganizationMember).filter(
-            OrganizationMember.user_id == current_user.id
-        ).first()
+        membership = get_active_membership(db, current_user)
         if membership:
             return membership.organization_id, "OWNER"
         raise HTTPException(status_code=404, detail="No organization context")
 
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
 
     if not membership:
         raise HTTPException(status_code=404, detail="Not a member of any organization")
@@ -609,9 +605,7 @@ def get_org_branding(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
 
     if not membership:
         raise HTTPException(status_code=404, detail="Not a member of any organization")

@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from pydantic import BaseModel
 from typing import List, Optional
 from ..models import get_db, Work, WorkFolder, WorkTrack, WorkCredit, Song, Creator, OrganizationMember, User, ActionItem, ClientShare
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user, get_active_membership
 
 logger = logging.getLogger("cadence")
 
@@ -428,9 +428,7 @@ def _is_work_admin(db: Session, current_user: User, work: Work) -> bool:
     if membership and membership.role in ("OWNER", "ADMIN"):
         return True
 
-    user_membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    user_membership = get_active_membership(db, current_user)
     if user_membership and user_membership.role in ("OWNER", "ADMIN"):
         work_creator_ids = [
             wc.creator_id for wc in

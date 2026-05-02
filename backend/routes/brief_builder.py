@@ -30,12 +30,12 @@ class BriefSearchRequest(BaseModel):
 
 
 def _get_org_id(current_user: User, db: Session) -> int:
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
-    if not membership:
+    # Task #190: respect the user's active-org pointer.
+    from ..utils.auth import resolve_active_org_id
+    active = resolve_active_org_id(db, current_user)
+    if active is None:
         raise HTTPException(status_code=403, detail="No organization membership found")
-    return membership.organization_id
+    return active
 
 
 @router.post(

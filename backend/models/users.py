@@ -21,7 +21,17 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, nullable=True)
-    
+    # Task #190: server-side "active organization" pointer for users who
+    # belong to multiple orgs. Validated against OrganizationMember on
+    # every read; if it points at an org the user is no longer in, we
+    # self-heal to the oldest membership. Kept out of the JWT so existing
+    # tokens stay valid across switches.
+    current_organization_id = Column(
+        Integer,
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
     organization_memberships = relationship("OrganizationMember", back_populates="user")
     sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
 

@@ -5,7 +5,7 @@ from sqlalchemy import func
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from ..models import get_db, Creator, CreativeContact, CreatorContact, Organization, OrganizationMember, User, Song, SongCredit, WorkCredit, ClientShare
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user, get_active_membership
 from .client_sharing import has_shared_access
 import os
 import uuid
@@ -132,9 +132,7 @@ def get_organization_creators(
     if not membership:
         # Cadence staff and master admins get cross-org read access (Task #74).
         if not (current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False)):
-            user_membership = db.query(OrganizationMember).filter(
-                OrganizationMember.user_id == current_user.id
-            ).first()
+            user_membership = get_active_membership(db, current_user)
             has_share = False
             if user_membership:
                 has_share = db.query(ClientShare).filter(

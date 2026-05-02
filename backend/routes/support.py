@@ -11,7 +11,7 @@ from ..models import (
     get_db, User, OrganizationMember, Organization,
     SupportTicket, SupportTicketAttachment,
 )
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user, get_active_membership
 
 logger = logging.getLogger("cadence")
 router = APIRouter(prefix="/api/support", tags=["Support"])
@@ -85,9 +85,7 @@ async def create_ticket(
     if len(subject) > 500:
         raise HTTPException(status_code=422, detail="Subject must be 500 characters or less")
 
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == current_user.id
-    ).first()
+    membership = get_active_membership(db, current_user)
     org_id = membership.organization_id if membership else None
 
     ticket = SupportTicket(

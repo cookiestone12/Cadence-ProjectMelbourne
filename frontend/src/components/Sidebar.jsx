@@ -28,6 +28,7 @@ import {
   ChevronRightIcon
 } from '@heroicons/react/24/outline'
 import NotificationBell from './NotificationBell'
+import OrgSwitcher from './OrgSwitcher'
 
 export default function Sidebar({ user, onLogout, isOpen, onClose }) {
   const location = useLocation()
@@ -181,7 +182,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
       `}>
         <div className="p-5 border-b border-am-separator">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 min-w-0">
               {orgBranding?.logo_url ? (
                 <img 
                   src={orgBranding.logo_url} 
@@ -189,11 +190,11 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
                   className="h-10 max-w-[140px] object-contain"
                 />
               ) : (
-                <span className="text-lg font-bold text-[#3D4A44]">
+                <span className="text-lg font-bold text-[#3D4A44] truncate">
                   {orgBranding?.display_name || orgBranding?.name || 'Cadence'}
                 </span>
               )}
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold tracking-wide uppercase bg-[#5B8A72]/10 text-[#5B8A72] rounded-md">Beta</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold tracking-wide uppercase bg-[#5B8A72]/10 text-[#5B8A72] rounded-md flex-shrink-0">Beta</span>
             </div>
             <button
               onClick={onClose}
@@ -202,6 +203,11 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
               <XMarkIcon className="w-5 h-5" />
             </button>
           </div>
+          {!isClient && (
+            <div className="mt-2">
+              <OrgSwitcher activeOrg={orgBranding} />
+            </div>
+          )}
         </div>
       
         <div className="flex-1 overflow-y-auto">
