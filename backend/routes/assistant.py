@@ -2,254 +2,162 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
+from pathlib import Path
 import os
 import json
 import logging
 
 from ..models import get_db, User, OrganizationMember
 from ..utils.auth import get_current_user
+from ..services import assistant_tools
 
 logger = logging.getLogger("cadence")
 router = APIRouter(prefix="/api/assistant", tags=["AI Assistant"])
 
-CADENCE_SYSTEM_PROMPT = """You are Cadence, the built-in AI guide for Cadence — Catalog Intelligence, a music industry platform for managing catalogs, rights, creators, and royalties.
+MAX_TOOL_ITERATIONS = 5
+MODEL_NAME = "gpt-4o-mini"
 
-Your name is Cadence. When users ask who you are, say "I'm Cadence, your guide to the platform." Never call yourself an assistant, bot, or AI — just Cadence.
+# ---------------------------------------------------------------------------
+# Knowledge base — loaded once at module import.
+# ---------------------------------------------------------------------------
 
-You help users navigate the app by telling them exactly where to go and what to click. Be concise, friendly, and specific. Reference actual page names, sidebar items, buttons, and tabs by name. Use bold for UI element names.
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
-IMPORTANT RULES:
-- Only answer questions about using Cadence. Politely decline anything else.
-- Never make up features that don't exist.
-- Give step-by-step instructions with specific UI references.
-- Keep responses short and actionable.
-- If a user is a CLIENT role, they only have access to Client Portal, Support, and Settings.
-- Always refer to yourself as "Cadence" — never "Cadence Assistant" or "the assistant".
 
-## APP NAVIGATION (Sidebar)
-The left sidebar contains all main navigation. On mobile, tap the hamburger menu (three lines) at the top to open it.
+def _read_kb(filename: str) -> str:
+    path = _DATA_DIR / filename
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        logger.error("Assistant KB file missing: %s", path)
+        return ""
 
-### Home (/)
-- Dashboard with customizable widgets: Stats overview, Placement Pipeline, Urgent Actions, Top Creators
-- Drag and drop widgets to reorder them
-- Click the gear icon to toggle which widgets appear
 
-### Search (/search)
-- Global search across songs, creators, works, releases, contracts
-- Type in the search bar to find anything in your catalog
+APP_GUIDE = _read_kb("assistant_app_guide.md")
+INDUSTRY_KB = _read_kb("assistant_industry_knowledge.md")
 
-### Roster (/roster)
-- Grid or list view of all creators (artists, songwriters, producers) in your organization
-- Click **Add Creator** button (top right) to add a new creator
-- Click any creator card to view their full profile
-- Creator profiles have tabs: Overview, Catalog, Credits, Contracts, Royalties, Documents
-- Use **Roster Deck** button to generate PDF one-sheets for selected creators
-- Toggle between grid and list views using the view toggle icons
+BASE_SYSTEM_PROMPT = (
+    APP_GUIDE
+    + "\n\n---\n\n"
+    + INDUSTRY_KB
+    + "\n\n---\n\nWhen tools are available, you may call them to answer "
+      "questions about the user's actual data. Always pass real values from "
+      "the page-context block when relevant. For write actions, propose them "
+      "via the matching tool and explain in the chat what the user is about "
+      "to confirm — do not pretend the action is already done."
+)
 
-### Directory (/directory)
-- Creative Directory for industry contacts and collaborators
-- Click **Add Contact** to create a new contact card
-- Contacts have roles, companies, emails, phone numbers, and social links
-- Share contacts via email or public link using the share buttons
-- Toggle between grid and list views
 
-### Catalog (/catalog)
-- Master table of all songs in your catalog with health scores
-- Click **Add Song** button to add a new song manually
-- Click **Import** to bulk import from CSV or Spotify playlist
-- Click any song row to open the Song Detail modal with tabs: Details, Credits, Rights, Audio, Tags, Contracts, Documents
-- Use column filters and sort to find specific songs
-- **Bulk Edit**: Select multiple songs with checkboxes, then use the bulk action bar
-- **Duplicate**: Click the duplicate icon on any song to create a copy
-- Health score shows completion percentage — hover to see what's missing
-
-### Works (/works)
-- Musical works (publishing/composition side) organized in folders
-- Create folders to organize works hierarchically
-- Click **New Work** to create a work
-- Link works to songs, attach contracts and documents
-
-### Artist Releases (/releases)
-- Commercial releases (albums, EPs, singles)
-- Click **New Release** to create a release
-- Add tracks, cover art, and distribution metadata
-- **Distribution Readiness** checks validate all required fields before delivery
-
-### Contracts (/contracts)
-- All deal-level contracts with parties, territories, and terms
-- Click **New Contract** to create a contract manually
-- Use **AI Contract Parsing** — upload a PDF/DOCX and AI extracts key terms automatically
-- Each contract shows parties, assets, territories, advance amounts, and dates
-- Attach documents to contracts
-
-### Actions (/actions)
-- Task list with deadlines and priorities
-- Auto-generated action items based on catalog gaps (missing metadata, expiring contracts, etc.)
-- Mark items complete, set priority, assign deadlines
-- Filter by priority, status, or type
-
-### Royalties (/royalties)
-- Revenue processing and earnings analytics
-- **Upload Statement** button to ingest royalty statements (PDF, CSV, Excel)
-- Multi-step process: Upload → Preview → Column Mapping → Process
-- View earnings by song, creator, period, and source
-- **Expenses** tab for tracking costs
-- **Payables** section shows what's owed to creators
-- Charts show revenue trends over time
-
-### Sync HQ (/placements)
-- Sync licensing and placement pipeline
-- Click **New Placement** to create a placement
-- Pipeline stages: PITCHED → APPROVED → LICENSED → AIRED → INVOICED → PAID
-- Track fees, license types, media details
-- **Reports** tab for sync activity reporting with PDF/CSV export
-- Drag placements between pipeline stages
-
-### Brief Builder (/brief-builder)
-- AI-powered sync brief matching tool
-- Type a natural language description like "upbeat 120 BPM pop track with female vocals"
-- AI parses your query and searches your catalog for matching songs
-- Results ranked by relevance with match explanations
-
-### Credits (/credits)
-- Streaming credits intelligence (Muso.ai-inspired)
-- View chart performance and streaming data
-- Creator Credits profiles with cross-platform stream estimates
-- **Download for Social** generates PNG images for sharing
-- Shareable public credits pages
-- Toggle between grid and list views
-
-### Storage Scan (/storage-scan)
-- Cloud storage integration (Dropbox, Google Drive)
-- Connect your Dropbox account in **Settings → Integrations**
-- Scan cloud folders to find and link audio files to catalog songs
-- Auto-matching uses fuzzy matching on filenames
-- Coverage dashboard shows linked vs unlinked songs
-
-### Bulk Registration (/registration-reports)
-- PRO registration workflow for batch submissions
-- Generate branded PDF registration reports
-- Track submission history (sent dates and recipients)
-
-### Reports (/reports)
-- Analytics dashboard with charts
-- Revenue breakdown, catalog growth, placement activity
-- Export reports as PDF or CSV
-
-### Valuation (/valuation)
-- Catalog financial valuation tool
-- Methods: Streaming Multiple, Revenue Multiple, Market Comparables, Black Box Algorithm
-- Weighted average across methods
-- **Underwriting Engine** for institutional-grade statement-driven valuations
-- DCF projections, concentration metrics, decay analytics
-
-### Shared With Me (/shared-with-me)
-- Items shared with you by other Cadence users
-- View shared documents, songs, contacts, contracts, audio files, and statements
-- Import shared items into your own organization
-
-### Support (/support)
-- Submit bug reports, feature requests, or general support tickets
-- Attach screenshots and annotate them with circles, arrows, or freehand drawing
-- Track ticket status: Open → In Progress → Resolved → Closed
-
-## SETTINGS & ADMIN
-
-### Settings (gear icon in sidebar or /settings)
-- **Profile**: Update username, email, password
-- **Notifications**: Toggle in-app, email, and push notifications per category
-- **Integrations**: Connect Dropbox, Spotify, and other services
-- **Organization**: Manage org-level preferences
-
-### Org Admin (/org-admin) — for org admins
-- **Members** tab: Invite users, manage roles (Admin, Member)
-- **Branding** tab: Customize organization logo and colors
-- **Audit Log** tab: View all critical actions taken in your organization
-- **Client Access** tab: Create client portal accounts for creators
-
-### Master Admin (/admin) — for super admins only
-- **Overview**: Platform-wide statistics
-- **Users**: Manage all platform users
-- **Organizations**: Manage all organizations
-- **Merge Requests**: Approve/reject client account merges
-- **API Config**: Integration status and configuration
-- **Costs**: Infrastructure cost tracking, AI usage logs, downloadable cost report PDF
-- **Support**: View and manage all support tickets, update status, add admin notes
-- **Leads**: View all inbound leads — Waitlist signups, Demo requests, Investor inquiries, and Intern applications. Filter by type. Download resumes attached to intern applications.
-
-## CLIENT PORTAL (/client-portal)
-Client users have a simplified view:
-- View their own catalog (songs linked to them)
-- Add/edit songs, upload documents
-- Create contracts with AI parsing
-- Upload royalty statements
-- View royalties and earnings
-- Access Support page
-
-## COMMON WORKFLOWS
-
-### "How do I add a song?"
-Go to **Catalog** in the sidebar → Click **Add Song** (top right) → Fill in title, artist, and metadata → Click **Save**
-
-### "How do I upload a royalty statement?"
-Go to **Royalties** in the sidebar → Click **Upload Statement** → Select your file (PDF/CSV/Excel) → Follow the preview and column mapping steps → Click **Process**
-
-### "How do I connect Dropbox?"
-Go to **Settings** (gear icon at bottom of sidebar) → Click **Integrations** tab → Click **Connect** next to Dropbox → Authorize in the popup
-
-### "How do I create a placement?"
-Go to **Sync HQ** in the sidebar → Click **New Placement** → Fill in the placement details (song, licensee, fee, media type) → Click **Save**
-
-### "How do I share a contact?"
-Go to **Directory** in the sidebar → Find the contact → Click the **share** icon on the contact card → Choose email sharing or copy the public link
-
-### "How do I generate a roster deck?"
-Go to **Roster** in the sidebar → Select creators using checkboxes → Click **Roster Deck** button → Configure which fields to include per creator → Click **Generate PDF**
-
-### "How do I invite team members?"
-Go to **Org Admin** (building icon in sidebar) → **Members** tab → Click **Invite User** → Enter their email and select a role
-
-### "How do I see my catalog value?"
-Go to **Valuation** in the sidebar → View the weighted valuation summary → Adjust method weights as needed → Use the Underwriting Engine for detailed analysis
-
-### "How do I use AI contract parsing?"
-Go to **Contracts** in the sidebar → Click **New Contract** → Click **Upload Contract** → Select a PDF or DOCX file → AI extracts key terms → Review and save
-
-### "How do I submit a support ticket?"
-Go to **Support** in the sidebar → Click **New Ticket** → Select a category → Write subject and description → Optionally attach and annotate screenshots → Click **Submit**
-
-## PUBLIC PAGES (no login required)
-
-### Landing Page (/)
-- Public homepage with product overview, waitlist signup, and demo request forms
-- Navigation links to Careers and Investors pages
-
-### Careers (/careers)
-- 2026 Internship Program page with 4 open roles: Software Engineering, Product/UX Design, Marketing & Content, Business Development & Sales
-- Each role card expands to show responsibilities and qualifications
-- Click **Apply Now** or **Apply for this role** to open the in-app application form
-- Application form accepts name, email, role, location, LinkedIn, portfolio, experience, why Cadence, and an optional resume upload (PDF or Word, max 10MB)
-
-### Investors (/investors)
-- Investor relations page with market stats and company overview
-- Inquiry form for potential investors to get in touch
-"""
-
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
 
 class ChatMessage(BaseModel):
     role: str
     content: str
 
 
+class PageContext(BaseModel):
+    page: Optional[str] = None
+    path: Optional[str] = None
+    song_id: Optional[int] = None
+    creator_id: Optional[int] = None
+    placement_id: Optional[int] = None
+    contract_id: Optional[int] = None
+    work_id: Optional[int] = None
+    release_id: Optional[int] = None
+
+
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
+    context: Optional[PageContext] = None
 
+
+class ConfirmActionResponse(BaseModel):
+    success: bool
+    kind: str
+    entity_type: str
+    entity_id: int
+    entity_name: Optional[str] = None
+    result: dict
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _build_role_context(current_user: User, membership) -> str:
+    user_role = membership.role if membership else "MEMBER"
+    if user_role == "CLIENT":
+        return ("\n\nThis user is a CLIENT. They can only access: Client "
+                "Portal, Support, and Settings. Do not reference other pages "
+                "they cannot access. Most write tools are still allowed but "
+                "scope every result to their own catalog.")
+    if getattr(current_user, "is_super_admin", False):
+        return ("\n\nThis user is a Super Admin. They have access to all "
+                "features including the Master Admin dashboard.")
+    return ""
+
+
+def _build_page_context_block(ctx: Optional[PageContext]) -> str:
+    if ctx is None:
+        return ""
+    bits = []
+    if ctx.page:
+        bits.append(f"page={ctx.page}")
+    if ctx.path:
+        bits.append(f"path={ctx.path}")
+    if ctx.song_id is not None:
+        bits.append(f"song_id={ctx.song_id}")
+    if ctx.creator_id is not None:
+        bits.append(f"creator_id={ctx.creator_id}")
+    if ctx.placement_id is not None:
+        bits.append(f"placement_id={ctx.placement_id}")
+    if ctx.contract_id is not None:
+        bits.append(f"contract_id={ctx.contract_id}")
+    if ctx.work_id is not None:
+        bits.append(f"work_id={ctx.work_id}")
+    if ctx.release_id is not None:
+        bits.append(f"release_id={ctx.release_id}")
+    if not bits:
+        return ""
+    return ("\n\nCURRENT PAGE CONTEXT (the user is currently looking at this; "
+            "use these ids when relevant):\n  " + ", ".join(bits))
+
+
+def _sse(payload: dict) -> str:
+    return f"data: {json.dumps(payload, default=str)}\n\n"
+
+
+def _sum_usage(running: dict, usage_obj) -> None:
+    if not usage_obj:
+        return
+    try:
+        running["input"] += int(getattr(usage_obj, "prompt_tokens", 0) or 0)
+        running["output"] += int(getattr(usage_obj, "completion_tokens", 0) or 0)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Chat endpoint
+# ---------------------------------------------------------------------------
 
 @router.post(
     "/chat",
-    summary='Send a message to the AI assistant',
-    description="Sends a chat turn to the in-app assistant (OpenAI-backed) with the calling user's org context. Returns the assistant reply and any tool calls made in the process.\n\n**Body:** `{ messages: [{role, content}], context?: {org_id?, creator_id?, page?}, stream?: bool }`.\n**Auth:** Bearer JWT.\n**Response:** `{ reply, tool_calls?: [...], usage: {prompt_tokens, completion_tokens} }`.",
+    summary="Send a message to the AI assistant",
+    description=(
+        "Sends a chat turn to the in-app assistant (OpenAI-backed) with the "
+        "calling user's org context, plus an optional page-context block. "
+        "Streams SSE events: `tool_running` (a tool is executing), "
+        "`tool_result` (a small summary), `proposed_action` (a write tool "
+        "produced an unconfirmed mutation), `content` (chunks of the final "
+        "reply), `error`, and `done`.\n\n"
+        "**Body:** `{ messages: [{role, content}], context?: {page?, path?, "
+        "song_id?, creator_id?, placement_id?, contract_id?} }`.\n"
+        "**Auth:** Bearer JWT."
+    ),
 )
 async def assistant_chat(
     request: ChatRequest,
@@ -267,83 +175,216 @@ async def assistant_chat(
     ).first()
     org_id = membership.organization_id if membership else None
 
-    user_role = membership.role if membership else "MEMBER"
-    role_context = ""
-    if user_role == "CLIENT":
-        role_context = "\n\nThis user is a CLIENT. They can only access: Client Portal, Support, and Settings. Do not reference other pages they cannot access."
-    elif current_user.is_super_admin:
-        role_context = "\n\nThis user is a Super Admin. They have access to all features including the Master Admin dashboard."
+    system_prompt = (
+        BASE_SYSTEM_PROMPT
+        + _build_role_context(current_user, membership)
+        + _build_page_context_block(request.context)
+    )
 
-    system_prompt = CADENCE_SYSTEM_PROMPT + role_context
-
-    conversation = [{"role": "system", "content": system_prompt}]
-
+    conversation: list[dict] = [{"role": "system", "content": system_prompt}]
     for msg in request.messages[-20:]:
         if msg.role in ("user", "assistant"):
             conversation.append({"role": msg.role, "content": msg.content})
 
+    # Snapshot user/org so the streaming generator doesn't keep stale ORM
+    # references after the request scope.
+    user_id = current_user.id
+
     try:
         from openai import OpenAI
         client = OpenAI(api_key=api_key, base_url=base_url)
+    except Exception as e:
+        logger.error(f"Assistant client init error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to initialise AI client")
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=conversation,
-            temperature=0.3,
-            max_tokens=800,
-            stream=True,
-            stream_options={"include_usage": True},
-        )
+    async def generate():
+        usage_running = {"input": 0, "output": 0}
+        try:
+            iterations = 0
+            while iterations < MAX_TOOL_ITERATIONS:
+                iterations += 1
+                # Step 1 — model decides whether to call a tool. Non-stream
+                # so we get tool_calls in one piece.
+                resp = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=conversation,
+                    tools=assistant_tools.TOOL_SCHEMAS,
+                    tool_choice="auto",
+                    temperature=0.3,
+                    max_tokens=600,
+                )
+                _sum_usage(usage_running, getattr(resp, "usage", None))
+                msg = resp.choices[0].message
+                tool_calls = msg.tool_calls or []
 
-        async def generate():
-            total_content = ""
-            input_tokens = 0
-            output_tokens = 0
+                if not tool_calls:
+                    # Final text answer — stream it as content chunks.
+                    final_text = msg.content or ""
+                    if final_text:
+                        # Chunk by ~24 chars to simulate streaming output;
+                        # one round-trip would also be fine but the chunked
+                        # version lets the UI grow the bubble incrementally.
+                        chunk = 24
+                        for i in range(0, len(final_text), chunk):
+                            yield _sse({"content": final_text[i:i + chunk]})
+                    break
 
+                # Append the assistant's tool_call message back into the conv
+                conversation.append({
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            },
+                        }
+                        for tc in tool_calls
+                    ],
+                })
+
+                for tc in tool_calls:
+                    name = tc.function.name
+                    try:
+                        args = json.loads(tc.function.arguments or "{}")
+                    except json.JSONDecodeError:
+                        args = {}
+
+                    yield _sse({"tool_running": {"name": name}})
+
+                    result = assistant_tools.dispatch_tool(
+                        name, args,
+                        db=db, org_id=org_id, user_id=user_id,
+                    )
+
+                    # Surface a compact tool_result event for the UI
+                    if "proposed_action" in result:
+                        yield _sse({
+                            "proposed_action": result["proposed_action"],
+                        })
+                    else:
+                        # Trim large arrays before sending to the UI; the
+                        # full result still goes back to the model below.
+                        ui_result = result
+                        if isinstance(result, dict) and "results" in result:
+                            ui_result = {
+                                "count": result.get("count"),
+                                "preview": (result.get("results") or [])[:3],
+                            }
+                        yield _sse({
+                            "tool_result": {"name": name, "data": ui_result},
+                        })
+
+                    conversation.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": json.dumps(result, default=str),
+                    })
+                # loop again so the model can use the tool output
+            else:
+                yield _sse({
+                    "content": (
+                        "\n\n(I hit the tool-call limit while working on this. "
+                        "Please rephrase or break the request into smaller "
+                        "steps.)"
+                    )
+                })
+
+            # Log usage once at the end
             try:
-                for chunk in response:
-                    if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                        content = chunk.choices[0].delta.content
-                        total_content += content
-                        yield f"data: {json.dumps({'content': content})}\n\n"
-
-                    if hasattr(chunk, 'usage') and chunk.usage:
-                        input_tokens = chunk.usage.prompt_tokens or 0
-                        output_tokens = chunk.usage.completion_tokens or 0
-
-                if not input_tokens:
-                    input_tokens = len(system_prompt) // 4 + sum(len(m.content) // 4 for m in request.messages[-20:])
-                    output_tokens = len(total_content) // 4
-
-                try:
+                if usage_running["input"] or usage_running["output"]:
                     from ..services.ai_usage import log_ai_usage
                     log_ai_usage(
                         db=db,
                         feature="assistant_chat",
-                        model="gpt-4o-mini",
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
+                        model=MODEL_NAME,
+                        input_tokens=usage_running["input"],
+                        output_tokens=usage_running["output"],
                         org_id=org_id,
                     )
-                except Exception as e:
-                    logger.warning(f"Failed to log assistant AI usage: {e}")
-
-                yield f"data: {json.dumps({'done': True})}\n\n"
-
             except Exception as e:
-                logger.error(f"Assistant streaming error: {e}")
-                yield f"data: {json.dumps({'error': 'Something went wrong. Please try again.'})}\n\n"
+                logger.warning(f"Failed to log assistant AI usage: {e}")
 
-        return StreamingResponse(
-            generate(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no",
-            },
+            yield _sse({"done": True})
+
+        except Exception as e:
+            logger.exception("Assistant streaming error: %s", e)
+            yield _sse({"error": "Something went wrong. Please try again."})
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Confirm / cancel proposed actions
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/actions/{action_id}/confirm",
+    response_model=ConfirmActionResponse,
+    summary="Confirm a proposed assistant action",
+    description=(
+        "Executes a write action that the assistant previously proposed via "
+        "a tool call. The action_id is the uuid the assistant returned in a "
+        "`proposed_action` SSE event. Mutations and an audit-log entry "
+        "(tagged `source=\"assistant\"`) are written in a single transaction. "
+        "Proposed actions expire after 10 minutes."
+    ),
+)
+def confirm_action(
+    action_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        result = assistant_tools.execute_proposed_action(
+            action_id, db=db, user=current_user,
         )
-
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
-        logger.error(f"Assistant chat error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to process chat request")
+        logger.exception("Assistant confirm failed: %s", e)
+        raise HTTPException(status_code=500,
+                            detail="Failed to execute the proposed action.")
+
+    return ConfirmActionResponse(
+        success=True,
+        kind=result["kind"],
+        entity_type=result["entity_type"],
+        entity_id=result["entity_id"],
+        entity_name=result.get("entity_name"),
+        result=result["result"],
+    )
+
+
+@router.delete(
+    "/actions/{action_id}",
+    summary="Cancel a proposed assistant action",
+    description=(
+        "Drops a proposed action from the in-memory store without executing "
+        "it. Always returns 200 — cancelling a missing or expired action is "
+        "a no-op."
+    ),
+)
+def cancel_action(
+    action_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    pa = assistant_tools.get_proposed_action(action_id)
+    if pa and pa.user_id != current_user.id and not getattr(current_user, "is_super_admin", False):
+        raise HTTPException(status_code=403,
+                            detail="This action belongs to a different user.")
+    assistant_tools.remove_proposed_action(action_id)
+    return {"success": True}

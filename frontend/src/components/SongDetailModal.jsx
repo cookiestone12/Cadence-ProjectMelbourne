@@ -12,6 +12,7 @@ import {
 
 import ShareModal from './ShareModal'
 import useBodyScrollLock from '../hooks/useBodyScrollLock'
+import { setAssistantContext, clearAssistantContext } from '../lib/assistantContext'
 
 export default function SongDetailModal({ song, onClose, onSongUpdated }) {
   useBodyScrollLock(!!song)
@@ -100,6 +101,14 @@ export default function SongDetailModal({ song, onClose, onSongUpdated }) {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (!song?.id) return
+    setAssistantContext({ song_id: song.id, song_title: song.title })
+    return () => {
+      clearAssistantContext(['song_id', 'song_title'])
+    }
+  }, [song?.id, song?.title])
 
   useEffect(() => {
     if (activeTab === 'audio') {
