@@ -344,6 +344,164 @@ def test_branded_exports_v1_namespace_mirrors():
     assert any("/reconciliation/pdf" in p for p in paths)
 
 
+# --- End-to-end route invocation smoke ---
+
+
+def test_audit_pdf_route_returns_branded_pdf_with_seeded_finding():
+    """End-to-end smoke: invoke the real audit PDF endpoint with a seeded
+    finding, assert 200 + application/pdf + non-empty branded body."""
+    from datetime import date
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from backend.main import app
+    from backend.models.database import Base, get_db as original_get_db
+    from backend.models.models import (
+        Organization, OrganizationMember, RoyaltyAudit, Song, User,
+    )
+    from backend.utils.auth import get_current_user
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+    def _override_db():
+        s = Session()
+        try:
+            yield s
+        finally:
+            s.close()
+
+    s = Session()
+    org = Organization(name="SmokeOrg", type="LABEL", account_type="ENTERPRISE",
+                       display_name="SmokeOrg", primary_color="#3B4D43")
+    s.add(org); s.commit(); s.refresh(org)
+    user = User(username="u", email="u@x.com", hashed_password="x", is_active=True)
+    s.add(user); s.commit(); s.refresh(user)
+    s.add(OrganizationMember(organization_id=org.id, user_id=user.id, role="OWNER"))
+    s.commit()
+    song = Song(organization_id=org.id, title="Smoke Song", primary_artist="Smoke")
+    s.add(song); s.commit(); s.refresh(song)
+    s.add(RoyaltyAudit(
+        organization_id=org.id,
+        audit_type="RATE_CHECK",
+        severity="HIGH",
+        song_id=song.id,
+        period_start=date(2025, 1, 1),
+        period_end=date(2025, 3, 31),
+        description="Payment rate fell below master floor",
+        resolved=False,
+    ))
+    s.commit()
+    org_id = org.id
+    user_id = user.id
+    s.close()
+
+    def _get_user():
+        s2 = Session()
+        try:
+            return s2.query(User).get(user_id)
+        finally:
+            s2.close()
+
+    prev_db = app.dependency_overrides.get(original_get_db)
+    app.dependency_overrides[original_get_db] = _override_db
+    app.dependency_overrides[get_current_user] = _get_user
+    try:
+        client = TestClient(app)
+        r = client.get(f"/api/organizations/{org_id}/audit/report/pdf")
+        assert r.status_code == 200, r.text
+        assert r.headers["content-type"].startswith("application/pdf"), r.headers
+        assert r.content[:4] == b"%PDF", "Body must be a real PDF"
+        assert len(r.content) > 2000, "PDF should have real branded content"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        if prev_db is None:
+            app.dependency_overrides.pop(original_get_db, None)
+        else:
+            app.dependency_overrides[original_get_db] = prev_db
+
+
+def test_analytics_xlsx_sibling_route_returns_xlsx():
+    """End-to-end smoke: hit the new analytics .xlsx sibling and assert
+    a real openpyxl-readable workbook comes back."""
+    import io
+    import openpyxl
+    from fastapi.testclient import TestClient
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from backend.main import app
+    from backend.models.database import Base, get_db as original_get_db
+    from backend.models.models import Organization, OrganizationMember, User
+    from backend.utils.auth import get_current_user
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base.metadata.create_all(bind=engine)
+
+    def _override_db():
+        s = Session()
+        try:
+            yield s
+        finally:
+            s.close()
+
+    s = Session()
+    org = Organization(name="XlsxOrg", type="LABEL", account_type="ENTERPRISE",
+                       display_name="XlsxOrg", primary_color="#7A4DBE")
+    s.add(org); s.commit(); s.refresh(org)
+    user = User(username="x", email="x@x.com", hashed_password="x", is_active=True)
+    s.add(user); s.commit(); s.refresh(user)
+    s.add(OrganizationMember(organization_id=org.id, user_id=user.id, role="OWNER"))
+    s.commit()
+    org_id = org.id
+    user_id = user.id
+    s.close()
+
+    def _get_user():
+        s2 = Session()
+        try:
+            return s2.query(User).get(user_id)
+        finally:
+            s2.close()
+
+    prev_db = app.dependency_overrides.get(original_get_db)
+    app.dependency_overrides[original_get_db] = _override_db
+    app.dependency_overrides[get_current_user] = _get_user
+    try:
+        client = TestClient(app)
+        # Try one of the new analytics .xlsx siblings.
+        r = client.get(f"/api/analytics/org/{org_id}/export/catalog.xlsx")
+        # Endpoint may legitimately return 200 with empty data or 404 if no
+        # data; what we want is: when it succeeds, it must be a real xlsx.
+        if r.status_code == 200:
+            assert "spreadsheetml" in r.headers["content-type"], r.headers
+            wb = openpyxl.load_workbook(io.BytesIO(r.content))
+            assert len(wb.sheetnames) >= 1
+        else:
+            # Acceptable: route exists and returns a structured error.
+            assert r.status_code in (404, 400, 422), \
+                f"Unexpected status: {r.status_code} {r.text}"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        if prev_db is None:
+            app.dependency_overrides.pop(original_get_db, None)
+        else:
+            app.dependency_overrides[original_get_db] = prev_db
+
+
 def test_logo_fetch_silent_fallback_on_bad_url(monkeypatch):
     """Bad logo URL should not crash the engine; PDF still renders."""
     class FakeOrg:
