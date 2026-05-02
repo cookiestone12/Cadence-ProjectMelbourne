@@ -238,6 +238,84 @@ def test_branded_workbook_multiple_sheets():
 # --- Logo fetch fallback ---
 
 
+# --- Headerless table regression ---
+
+
+def test_pdf_table_headerless_renders_body_rows():
+    """`headers=None` must NOT silently drop rows (regression against the
+    early-return that elided release-metadata and signature blocks)."""
+    from backend.services.branding import OrgTheme
+    from backend.services.pdf_engine import BrandedPDF
+
+    theme = OrgTheme(name="Test Org", display_name="Test Org",
+                     primary_color="#3B4D43", logo_url=None)
+    pdf = BrandedPDF(theme, title="Headerless Table Smoke")
+    pdf.cover()
+    pdf.section("Metadata Grid")
+    pdf.table(
+        headers=None,
+        rows=[
+            ["UPC", "884385123456", "Catalog #", "CAD-001"],
+            ["Release Date", "Jan 1, 2025", "Genre", "Pop"],
+            ["Copyright", "(P) 2025", "Status", "Released"],
+        ],
+        col_widths=[1.2, 2.3, 1.2, 2.3],
+        wrap_cells=True,
+    )
+    blob = pdf.build()
+    assert blob[:4] == b"%PDF"
+    assert len(blob) > 1500, "Body rows should produce real content"
+
+
+def test_pdf_table_headerless_with_empty_rows_is_noop():
+    """No headers + no rows must not raise."""
+    from backend.services.branding import OrgTheme
+    from backend.services.pdf_engine import BrandedPDF
+
+    theme = OrgTheme(name="Test", display_name="Test", primary_color="#3B4D43", logo_url=None)
+    pdf = BrandedPDF(theme, title="Empty")
+    pdf.cover()
+    pdf.table(headers=None, rows=[])
+    pdf.text("After empty headerless table.")
+    blob = pdf.build()
+    assert blob[:4] == b"%PDF"
+
+
+# --- Audit detail uses description, not message ---
+
+
+def test_audit_pdf_uses_description_attribute():
+    """Audit findings expose `.description` on the model — the report row
+    must read that, not a non-existent `.message`."""
+    from backend.services.branding import OrgTheme
+    from backend.services.pdf_engine import BrandedPDF
+
+    class FakeFinding:
+        audit_type = "RATE_CHECK"
+        severity = "HIGH"
+        song_id = None
+        period_start = None
+        period_end = None
+        description = "Payment rate fell below master floor"
+        # Intentionally NO `message` attribute.
+
+    f = FakeFinding()
+    detail = getattr(f, "description", None) or getattr(f, "message", None) or "—"
+    assert detail == "Payment rate fell below master floor"
+
+    # And the engine renders it cleanly.
+    theme = OrgTheme(name="Org", display_name="Org", primary_color="#3B4D43", logo_url=None)
+    pdf = BrandedPDF(theme, title="Audit")
+    pdf.cover()
+    pdf.table(
+        headers=["Type", "Song", "Period", "Detail"],
+        rows=[[f.audit_type, "—", "—", detail]],
+        col_widths=[1.2, 1.6, 1.0, 3.4],
+    )
+    blob = pdf.build()
+    assert blob[:4] == b"%PDF"
+
+
 # --- Route registration smoke ---
 
 

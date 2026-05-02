@@ -196,11 +196,12 @@ def audit_report_pdf(
                 period = f"{f.period_start.strftime('%Y-%m')} – {f.period_end.strftime('%Y-%m')}"
             elif f.period_start:
                 period = f.period_start.strftime("%Y-%m")
+            detail = getattr(f, "description", None) or getattr(f, "message", None) or "—"
             rows.append([
                 f.audit_type.replace("_", " ").title() if f.audit_type else "—",
                 song[:32],
                 period or "—",
-                f.message or "—",
+                detail,
             ])
         pdf.table(
             headers=["Type", "Song", "Period", "Detail"],

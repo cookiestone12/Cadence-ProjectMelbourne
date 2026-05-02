@@ -359,7 +359,7 @@ class BrandedPDF:
 
     def table(
         self,
-        headers: Sequence[str],
+        headers: Optional[Sequence[str]],
         rows: Sequence[Sequence[Any]],
         col_widths: Optional[Sequence[float]] = None,
         align: Optional[Sequence[str]] = None,
@@ -368,12 +368,29 @@ class BrandedPDF:
     ) -> "BrandedPDF":
         """Render a branded data table.
 
+        Pass ``headers=None`` (or an empty list) for a headerless layout —
+        useful for label/value metadata grids and signature blocks. The
+        body is still themed (zebra, ink, divider) but no header band is
+        rendered.
         ``align`` is an optional list (one per column) of ``"LEFT" | "RIGHT" | "CENTER"``.
         ``wrap_cells`` re-renders every cell as a Paragraph so long strings wrap;
         leave ``False`` for compact tabular numeric data.
         """
-        if not headers:
+        has_header = bool(headers)
+        if not rows and not has_header:
             return self
+        # Determine column count: from headers, then col_widths, then first row.
+        if has_header:
+            num_cols = len(headers)
+        elif col_widths:
+            num_cols = len(col_widths)
+        elif rows:
+            num_cols = max((len(r) for r in rows), default=0)
+        else:
+            num_cols = 0
+        if num_cols == 0:
+            return self
+
         primary = _hex(self.theme.primary_color)
         zebra_color = _hex(self.theme.zebra_color)
         ink = _hex(self.theme.text_color)
@@ -381,7 +398,7 @@ class BrandedPDF:
 
         header_style = self._styles["table_header"]
         cell_style = self._styles["table_cell"]
-        header_row = [Paragraph(str(h), header_style) for h in headers]
+        header_row = [Paragraph(str(h), header_style) for h in headers] if has_header else None
 
         body_rows = []
         for r in rows:
@@ -396,42 +413,47 @@ class BrandedPDF:
                 else:
                     row.append(val)
             # Pad short rows
-            while len(row) < len(headers):
+            while len(row) < num_cols:
                 row.append("")
             body_rows.append(row)
 
         page_w = self.page_size[0] - self.margins[0] - self.margins[1]
         if col_widths is None:
-            col_widths = [page_w / len(headers)] * len(headers)
+            col_widths = [page_w / num_cols] * num_cols
         else:
             # Scale to fit page width if caller passed relative weights
             total = sum(col_widths)
             if total > 0 and abs(total - page_w) > 1.0:
                 col_widths = [w * page_w / total for w in col_widths]
 
-        data = [header_row] + body_rows
-        tbl = Table(data, colWidths=col_widths, repeatRows=1)
+        data = ([header_row] + body_rows) if has_header else body_rows
+        repeat = 1 if has_header else 0
+        tbl = Table(data, colWidths=col_widths, repeatRows=repeat)
+        body_start = 1 if has_header else 0
         ts = [
-            ("BACKGROUND", (0, 0), (-1, 0), primary),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-            ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-            ("TEXTCOLOR", (0, 1), (-1, -1), ink),
+            ("FONTNAME", (0, body_start), (-1, -1), "Helvetica"),
+            ("TEXTCOLOR", (0, body_start), (-1, -1), ink),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("ALIGN", (0, 0), (-1, 0), "LEFT"),
             ("LEFTPADDING", (0, 0), (-1, -1), 6),
             ("RIGHTPADDING", (0, 0), (-1, -1), 6),
             ("TOPPADDING", (0, 0), (-1, -1), 5),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
             ("GRID", (0, 0), (-1, -1), 0.4, divider),
         ]
+        if has_header:
+            ts.extend([
+                ("BACKGROUND", (0, 0), (-1, 0), primary),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ALIGN", (0, 0), (-1, 0), "LEFT"),
+            ])
         if align:
             for col_idx, a in enumerate(align):
                 if a:
-                    ts.append(("ALIGN", (col_idx, 1), (col_idx, -1), a.upper()))
+                    ts.append(("ALIGN", (col_idx, body_start), (col_idx, -1), a.upper()))
         if zebra and len(body_rows) > 1:
-            ts.append(("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, zebra_color]))
+            ts.append(("ROWBACKGROUNDS", (0, body_start), (-1, -1), [colors.white, zebra_color]))
         tbl.setStyle(TableStyle(ts))
         self._story.append(tbl)
         self._story.append(Spacer(1, 10))
