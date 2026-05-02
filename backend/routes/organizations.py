@@ -175,7 +175,11 @@ def switch_current_organization(
         OrganizationMember.organization_id == request.organization_id,
     ).first()
 
-    if not membership and not current_user.is_super_admin:
+    # Cadence staff and master admins can switch into any org for
+    # cross-tenant impersonation, mirroring the read access semantics
+    # of `GET /api/organizations/{org_id}`.
+    is_staff = current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False)
+    if not membership and not is_staff:
         raise HTTPException(
             status_code=403,
             detail="You are not a member of that organization",
