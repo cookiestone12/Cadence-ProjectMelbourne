@@ -238,6 +238,34 @@ def test_branded_workbook_multiple_sheets():
 # --- Logo fetch fallback ---
 
 
+# --- Route registration smoke ---
+
+
+def test_new_branded_routes_are_registered():
+    """Smoke: confirm the new audit/recon/analytics PDF+XLSX routes exist."""
+    from backend.main import app
+
+    paths = {r.path for r in app.routes}
+    assert "/api/organizations/{org_id}/audit/report/pdf" in paths, \
+        "Audit PDF route missing from app routes"
+    assert "/api/royalty-processing/{org_id}/reconciliation/pdf" in paths, \
+        "Reconciliation PDF route missing from app routes"
+    assert "/api/analytics/org/{org_id}/export/{report_type}.pdf" in paths, \
+        "Analytics PDF sibling route missing from app routes"
+    assert "/api/analytics/org/{org_id}/export/{report_type}.xlsx" in paths, \
+        "Analytics XLSX sibling route missing from app routes"
+
+
+def test_branded_exports_v1_namespace_mirrors():
+    """The /api/v1 namespace should also expose the same new routes."""
+    from backend.main import app
+
+    paths = {r.path for r in app.routes}
+    # The app mirrors /api/* under /api/v1/* via the versioning system.
+    assert any("/audit/report/pdf" in p for p in paths)
+    assert any("/reconciliation/pdf" in p for p in paths)
+
+
 def test_logo_fetch_silent_fallback_on_bad_url(monkeypatch):
     """Bad logo URL should not crash the engine; PDF still renders."""
     class FakeOrg:

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import axios from 'axios'
+import ExportButton from '../components/ExportButton'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from 'recharts'
 import {
   CurrencyDollarIcon,
@@ -420,19 +421,35 @@ export default function ValuationPage() {
             <SparklesIcon className="w-4 h-4" />
             <span>Underwriting</span>
           </button>
-          <button
-            onClick={handleDownloadPdf}
-            disabled={pdfDownloading || !fullVal || (fullVal?.song_count || 0) === 0}
-            className="flex items-center space-x-2 px-4 py-2.5 border border-[rgba(59,77,67,0.15)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] transition-all text-sm disabled:opacity-50"
-            title={fullVal && (fullVal.song_count || 0) > 0 ? 'Download a PDF valuation report' : 'Run Full Valuation first to enable PDF export'}
-          >
-            {pdfDownloading ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <ArrowDownTrayIcon className="w-4 h-4" />}
-            <span>{pdfDownloading ? 'Generating…' : 'PDF Report'}</span>
-          </button>
-          <button onClick={handleDownloadReport} className="flex items-center space-x-2 px-4 py-2.5 border border-[rgba(59,77,67,0.15)] text-[#3D4A44] rounded-lg hover:bg-[#EEF1EC] transition-all text-sm">
-            <ArrowDownTrayIcon className="w-4 h-4" />
-            <span>Excel</span>
-          </button>
+          {orgId && fullVal && (fullVal?.song_count || 0) > 0 ? (
+            <ExportButton
+              baseUrl={
+                scopeCreatorId
+                  ? `/api/v1/organizations/${orgId}/valuation/report/pdf?creator_id=${scopeCreatorId}`
+                  : `/api/v1/organizations/${orgId}/valuation/report/pdf`
+              }
+              filename={`cadence_valuation_${scopeCreatorId ? `creator_${scopeCreatorId}` : 'catalog'}_${new Date().toISOString().slice(0, 10)}`}
+              formats={['pdf', 'xlsx']}
+              formatStrategy={(fmt) =>
+                fmt === 'pdf'
+                  ? (scopeCreatorId
+                      ? `/api/v1/organizations/${orgId}/valuation/report/pdf?creator_id=${scopeCreatorId}`
+                      : `/api/v1/organizations/${orgId}/valuation/report/pdf`)
+                  : '/api/valuation/catalog/download/excel'
+              }
+              variant="secondary"
+              label="Export"
+            />
+          ) : (
+            <button
+              disabled
+              className="flex items-center space-x-2 px-4 py-2.5 border border-[rgba(59,77,67,0.15)] text-[#3D4A44] rounded-lg opacity-50 text-sm"
+              title="Run Full Valuation first to enable export"
+            >
+              <ArrowDownTrayIcon className="w-4 h-4" />
+              <span>Export</span>
+            </button>
+          )}
         </div>
       </div>
 
