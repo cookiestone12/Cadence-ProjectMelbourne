@@ -751,10 +751,19 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
     if (fn) fn(choice)
   }
 
-  const handleBulkProcess = async () => {
-    if (bulkRows.length === 0) return
-    // Block when any row still needs review and isn't reviewed.
-    const needsReview = bulkRows.find(r => r.status === 'needs_review' || (r.mappingConfident === false && !r.mappingReviewed))
+  // Task #192 — When `rowIdsToProcess` is provided, only those rows are
+  // (re-)processed; otherwise the full batch runs. This powers the
+  // "Retry failed" button on step 3 without re-uploading the rows that
+  // already finished successfully.
+  const handleBulkProcess = async (rowIdsToProcess = null) => {
+    // Guard against accidental event-object args (e.g. raw onClick
+    // bindings) — only honour an explicit array of row IDs.
+    const targetRows = Array.isArray(rowIdsToProcess)
+      ? bulkRows.filter(r => rowIdsToProcess.includes(r.id))
+      : bulkRows
+    if (targetRows.length === 0) return
+    // Block when any target row still needs review and isn't reviewed.
+    const needsReview = targetRows.find(r => r.status === 'needs_review' || (r.mappingConfident === false && !r.mappingReviewed))
     if (needsReview) {
       alert(`"${needsReview.file.name}" has a low-confidence column mapping. Please review it before continuing.`)
       return
@@ -764,10 +773,11 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
     setBulkStep(2)
     setBulkProcessing(true)
 
-    for (let i = 0; i < bulkRows.length; i++) {
+    for (let i = 0; i < targetRows.length; i++) {
       if (bulkCancelRef.current) break
-      const row = bulkRows[i]
-      setBulkCurrentIndex(i)
+      const row = targetRows[i]
+      const overallIndex = bulkRows.findIndex(r => r.id === row.id)
+      setBulkCurrentIndex(overallIndex >= 0 ? overallIndex : i)
       // Reset duplicate metadata on a fresh attempt so the row's
       // status pill flips back from any prior `duplicate_pending`.
       updateBulkRow(row.id, { status: 'uploading', error: null, duplicate: null })
@@ -875,6 +885,17 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
     setBulkCurrentIndex(-1)
     setBulkStep(3)
     loadStatements()
+  }
+
+  // Task #192 — Re-run handleBulkProcess against just the rows that
+  // ended in `error` status, preserving each row's per-file overrides
+  // and reviewed mapping (already in component state). Successful
+  // retries flip the row to `done`/`overwritten` without disturbing
+  // rows that already finished.
+  const handleRetryFailed = () => {
+    const failedIds = bulkRows.filter(r => r.status === 'error').map(r => r.id)
+    if (failedIds.length === 0) return
+    handleBulkProcess(failedIds)
   }
 
   if (loading) return <LoadingSpinner message="Loading statements..." />
@@ -1377,7 +1398,7 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                       {bulkRows.length} file{bulkRows.length === 1 ? '' : 's'} ready
                     </p>
                     <button
-                      onClick={handleBulkProcess}
+                      onClick={() => handleBulkProcess()}
                       disabled={bulkRows.length === 0 || bulkRows.some(r => r.previewLoading) || bulkRows.some(r => r.status === 'needs_review' || (r.mappingConfident === false && !r.mappingReviewed))}
                       className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium disabled:opacity-50"
                     >
@@ -1503,9 +1524,20 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                         ))}
                       </div>
                     )}
-                    <button onClick={resetBulkUpload} className="mt-2 px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
-                      Done
-                    </button>
+                    <div className="flex items-center justify-center gap-2 mt-2">
+                      {failed > 0 && (
+                        <button
+                          onClick={handleRetryFailed}
+                          disabled={bulkProcessing}
+                          className="inline-flex items-center gap-1 px-5 py-2.5 border border-[#5B8A72] text-[#5B8A72] rounded-xl hover:bg-[rgba(91,138,114,0.06)] transition-all text-sm font-medium disabled:opacity-50"
+                        >
+                          <ArrowPathIcon className="w-4 h-4" /> Retry failed ({failed})
+                        </button>
+                      )}
+                      <button onClick={resetBulkUpload} className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
+                        Done
+                      </button>
+                    </div>
                   </div>
                 )
               })()}
