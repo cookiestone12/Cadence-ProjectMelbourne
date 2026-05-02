@@ -38,6 +38,38 @@ depends_on = None
 
 def upgrade():
     bind = op.get_bind()
+    insp = sa.inspect(bind)
+
+    # ---------------------------------------------------------------
+    # 0. Idempotency guard.
+    #
+    # When a fresh database is built from the current SQLAlchemy
+    # models via ``Base.metadata.create_all()`` (e.g. the post-merge
+    # ``scripts/check_schema_parity.py`` run, or the boot-time
+    # ``create_all`` fallback), the ``advances`` table is created
+    # directly in its post-rename v2 shape (``org_id``, ``payee_id``,
+    # ``principal_amount_cents`` …) and there is no ``advance_pools``
+    # table at all. In that situation this migration has nothing to do
+    # — the schema is already in the consolidated state — and trying
+    # to ``SELECT organization_id FROM advances`` would fail with
+    # ``UndefinedColumn`` (the v1 column does not exist).
+    #
+    # If neither the legacy v1 columns nor an ``advance_pools`` table
+    # are present we early-return. Otherwise we run the historical
+    # consolidation, gating each individual step on whether its source
+    # state is actually present so this stays safe in mixed
+    # environments.
+    # ---------------------------------------------------------------
+    table_names = set(insp.get_table_names())
+    advances_cols = (
+        {c["name"] for c in insp.get_columns("advances")}
+        if "advances" in table_names else set()
+    )
+    has_legacy_v1_advances = "organization_id" in advances_cols
+    has_advance_pools = "advance_pools" in table_names
+
+    if not has_legacy_v1_advances and not has_advance_pools:
+        return
 
     # ---------------------------------------------------------------
     # 1. Copy any rows from legacy `advances` into `advance_pools`,
@@ -50,7 +82,7 @@ def upgrade():
                created_at, updated_at
         FROM advances
         ORDER BY id
-    """)).mappings().all()
+    """)).mappings().all() if has_legacy_v1_advances else []
 
     for row in legacy_rows:
         # Find or create a Payee for this (org, creator).
@@ -115,51 +147,59 @@ def upgrade():
     )
 
     # ---------------------------------------------------------------
-    # 3. Drop the legacy `advances` table.
+    # 3. Drop the legacy `advances` table — only if it actually has
+    #    the v1 shape. (Skipped when ``advances`` is already the
+    #    renamed v2 table from a prior consolidation or a fresh
+    #    create_all.)
     # ---------------------------------------------------------------
-    op.drop_index('ix_advances_creator_id', table_name='advances', if_exists=True)
-    op.drop_index('ix_advances_id', table_name='advances', if_exists=True)
-    op.drop_index('ix_advances_org_id', table_name='advances', if_exists=True)
-    op.drop_table('advances')
+    if has_legacy_v1_advances:
+        op.drop_index('ix_advances_creator_id', table_name='advances', if_exists=True)
+        op.drop_index('ix_advances_id', table_name='advances', if_exists=True)
+        op.drop_index('ix_advances_org_id', table_name='advances', if_exists=True)
+        op.drop_table('advances')
 
     # ---------------------------------------------------------------
     # 4. Rename advance_pools → advances (and sequence / PK / indexes / FKs).
+    #    Only runs when ``advance_pools`` is actually present.
     # ---------------------------------------------------------------
-    op.rename_table('advance_pools', 'advances')
-    op.execute("ALTER SEQUENCE advance_pools_id_seq RENAME TO advances_id_seq")
-    op.execute("ALTER INDEX advance_pools_pkey RENAME TO advances_pkey")
-    op.execute("ALTER INDEX ix_advance_pools_id RENAME TO ix_advances_id")
-    op.execute("ALTER INDEX ix_adv2_org_payee RENAME TO ix_advances_org_payee")
-    op.execute("ALTER INDEX ix_adv2_org_contract RENAME TO ix_advances_org_contract")
+    if has_advance_pools:
+        op.rename_table('advance_pools', 'advances')
+        op.execute("ALTER SEQUENCE advance_pools_id_seq RENAME TO advances_id_seq")
+        op.execute("ALTER INDEX advance_pools_pkey RENAME TO advances_pkey")
+        op.execute("ALTER INDEX ix_advance_pools_id RENAME TO ix_advances_id")
+        op.execute("ALTER INDEX ix_adv2_org_payee RENAME TO ix_advances_org_payee")
+        op.execute("ALTER INDEX ix_adv2_org_contract RENAME TO ix_advances_org_contract")
 
-    # Rename FK constraint names to match the new table.
-    op.execute(
-        "ALTER TABLE advances RENAME CONSTRAINT advance_pools_contract_id_fkey "
-        "TO advances_contract_id_fkey"
-    )
-    op.execute(
-        "ALTER TABLE advances RENAME CONSTRAINT advance_pools_payee_id_fkey "
-        "TO advances_payee_id_fkey"
-    )
-    op.execute(
-        "ALTER TABLE advances RENAME CONSTRAINT advance_pools_org_id_fkey "
-        "TO advances_org_id_fkey"
-    )
-    op.execute(
-        "ALTER TABLE advances RENAME CONSTRAINT advance_pools_created_by_user_id_fkey "
-        "TO advances_created_by_user_id_fkey"
-    )
+        # Rename FK constraint names to match the new table.
+        op.execute(
+            "ALTER TABLE advances RENAME CONSTRAINT advance_pools_contract_id_fkey "
+            "TO advances_contract_id_fkey"
+        )
+        op.execute(
+            "ALTER TABLE advances RENAME CONSTRAINT advance_pools_payee_id_fkey "
+            "TO advances_payee_id_fkey"
+        )
+        op.execute(
+            "ALTER TABLE advances RENAME CONSTRAINT advance_pools_org_id_fkey "
+            "TO advances_org_id_fkey"
+        )
+        op.execute(
+            "ALTER TABLE advances RENAME CONSTRAINT advance_pools_created_by_user_id_fkey "
+            "TO advances_created_by_user_id_fkey"
+        )
 
     # ---------------------------------------------------------------
     # 5. Re-add FK from royalty_ledger_entries.advance_id → advances.id
+    #    (skipped on schemas that already have the FK from create_all).
     # ---------------------------------------------------------------
-    op.create_foreign_key(
-        'royalty_ledger_entries_advance_id_fkey',
-        'royalty_ledger_entries',
-        'advances',
-        ['advance_id'],
-        ['id'],
-    )
+    if has_legacy_v1_advances or has_advance_pools:
+        op.create_foreign_key(
+            'royalty_ledger_entries_advance_id_fkey',
+            'royalty_ledger_entries',
+            'advances',
+            ['advance_id'],
+            ['id'],
+        )
 
 
 def downgrade():
