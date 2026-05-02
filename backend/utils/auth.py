@@ -111,11 +111,16 @@ def resolve_active_org_id(db: Session, user: User) -> Optional[int]:
     membership (lowest ``organization_members.id``) and persists the
     pointer so the next call is stable.
 
-    Returns ``None`` only when the user has no memberships at all.
-    Staff / super-admin fallbacks stay in their respective routes so
-    they can preserve existing semantics (404 vs cross-org peek).
+    Returns ``None`` only when the user has no memberships at all
+    (and is not staff/super-admin). Staff / super-admin can have
+    their pointer point at any existing org for cross-tenant
+    impersonation (mirrors `PATCH /api/organizations/current` and
+    `GET /api/organizations/{org_id}` semantics) — the pointer is
+    only invalidated if the org row itself is gone.
     """
-    from ..models import OrganizationMember
+    from ..models import OrganizationMember, Organization
+
+    is_staff = getattr(user, "is_super_admin", False) or getattr(user, "is_cadence_staff", False)
 
     pointed = getattr(user, "current_organization_id", None)
     if pointed is not None:
@@ -125,6 +130,15 @@ def resolve_active_org_id(db: Session, user: User) -> Optional[int]:
         ).first()
         if valid is not None:
             return pointed
+        # Staff impersonation: a non-member pointer is still honored
+        # as long as the org exists, so the durable PATCH /current
+        # contract holds for is_super_admin / is_cadence_staff.
+        if is_staff:
+            org_exists = db.query(Organization.id).filter(
+                Organization.id == pointed,
+            ).first()
+            if org_exists is not None:
+                return pointed
 
     fallback = db.query(OrganizationMember).filter(
         OrganizationMember.user_id == user.id,

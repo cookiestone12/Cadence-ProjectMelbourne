@@ -216,7 +216,10 @@ def test_patch_current_rejects_non_member_with_403(client):
 
 def test_patch_current_allows_cadence_staff_to_switch_to_any_org(client):
     """Cadence staff can switch into any org for cross-tenant support work,
-    mirroring the read access semantics of GET /api/organizations/{org_id}."""
+    mirroring the read access semantics of GET /api/organizations/{org_id}.
+    The switch must be DURABLE — subsequent /current reads must keep
+    returning the impersonated org, otherwise the pointer would self-heal
+    away on the very next request and break staff workflows."""
     db, c = client
     org_a = _make_org(db, "AAA")
     org_b = _make_org(db, "BBB")  # staff is NOT a member here
@@ -227,6 +230,40 @@ def test_patch_current_allows_cadence_staff_to_switch_to_any_org(client):
     r = c.patch("/api/organizations/current", json={"organization_id": org_b.id})
     assert r.status_code == 200, r.text
     assert r.json()["id"] == org_b.id
+
+    # Durability: /current must still resolve to org_b after the PATCH,
+    # not self-heal back to the staff member's only real membership (org_a).
+    r = c.get("/api/organizations/current")
+    assert r.status_code == 200, r.text
+    assert r.json()["id"] == org_b.id
+
+    db.refresh(staff)
+    assert staff.current_organization_id == org_b.id
+
+    # And resolve_active_org_id directly returns the impersonated org
+    assert resolve_active_org_id(db, staff) == org_b.id
+
+
+def test_resolve_active_org_id_falls_back_when_impersonated_org_deleted(client):
+    """If a staff member's pointer references an org that has since been
+    deleted entirely, resolve_active_org_id should fall back to the
+    staff member's own membership rather than returning a dangling id."""
+    db, c = client
+    org_a = _make_org(db, "AAA")
+    org_b = _make_org(db, "BBB")  # will be deleted
+    staff = _make_user(db, "staff2", is_cadence_staff=True)
+    _join(db, org_a, staff)
+    staff.current_organization_id = org_b.id
+    db.commit()
+
+    # Delete the impersonated org; FK is ON DELETE SET NULL on the
+    # column, so the pointer becomes None on commit. Even if a future
+    # schema variant kept a dangling id, the org-existence guard in
+    # resolve_active_org_id should still send us back to org_a.
+    db.delete(org_b); db.commit()
+    db.refresh(staff)
+
+    assert resolve_active_org_id(db, staff) == org_a.id
 
 
 # ----------------------------------------------------- POST / auto-activation
