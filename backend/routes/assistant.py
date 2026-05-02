@@ -190,14 +190,13 @@ def _filter_tools_for_org(db: Session, org_id: Optional[int],
         org = db.query(Organization).filter(Organization.id == org_id).first()
         write_enabled = bool(getattr(org, "assistant_write_enabled", False))
     if not write_enabled:
-        if (user_role or "").upper() == "CLIENT":
-            allowed = assistant_tools.CLIENT_ALLOWED_WRITE_TOOLS
-        else:
-            allowed = set()
+        # Toggle OFF = read-only assistant for this org. Every write tool
+        # is removed from the schema list, including any that were
+        # historically allow-listed for CLIENT users. The toggle is the
+        # single source of truth.
         schemas = [
             s for s in schemas
             if s.get("function", {}).get("name") not in assistant_tools.WRITE_TOOL_NAMES
-            or s.get("function", {}).get("name") in allowed
         ]
     return schemas
 
@@ -423,6 +422,8 @@ def confirm_action(
         raise HTTPException(status_code=403, detail=str(e))
     except assistant_tools.RateLimitExceeded as e:
         raise HTTPException(status_code=429, detail=str(e))
+    except assistant_tools.BlockedPayloadField as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.exception("Assistant confirm failed: %s", e)
         raise HTTPException(status_code=500,

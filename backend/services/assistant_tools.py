@@ -124,32 +124,58 @@ class RateLimitExceeded(Exception):
     429 with a retry-after-style message."""
 
 
-def _check_and_record_write(user_id: int) -> None:
+class BlockedPayloadField(Exception):
+    """Raised when a ProposedAction.payload contains a field on the
+    BLOCKED_PAYLOAD_FIELDS deny-list. The mutation is aborted before any
+    DB write happens — the platform refuses to silently sanitise."""
+
+
+def _check_rate_limit(user_id: int) -> None:
+    """Inspect the per-user counter — RAISE if the user is at the cap,
+    but do **not** record this attempt. Recording happens post-commit
+    via :func:`_record_successful_write` so failed confirms don't burn
+    quota."""
     now = datetime.utcnow()
     cutoff = now - timedelta(seconds=WRITE_RATE_WINDOW_SECONDS)
     with _RATE_LOCK:
         bucket = _RATE_LOG.get(user_id) or []
         bucket = [t for t in bucket if t > cutoff]
+        _RATE_LOG[user_id] = bucket
         if len(bucket) >= WRITE_RATE_LIMIT:
             oldest = bucket[0]
             retry_in = WRITE_RATE_WINDOW_SECONDS - int(
                 (now - oldest).total_seconds()
             )
             retry_in = max(retry_in, 1)
-            _RATE_LOG[user_id] = bucket
             raise RateLimitExceeded(
                 f"You've confirmed {WRITE_RATE_LIMIT} assistant write actions "
                 f"in the last hour. Please wait about {retry_in // 60 + 1} "
                 "minute(s) before confirming another."
             )
+
+
+def _record_successful_write(user_id: int) -> None:
+    """Append `now` to the user's bucket. Called only after the executor
+    + commit succeed, so the 20/hr cap counts *confirmed* writes only."""
+    now = datetime.utcnow()
+    cutoff = now - timedelta(seconds=WRITE_RATE_WINDOW_SECONDS)
+    with _RATE_LOCK:
+        bucket = _RATE_LOG.get(user_id) or []
+        bucket = [t for t in bucket if t > cutoff]
         bucket.append(now)
         _RATE_LOG[user_id] = bucket
 
 
-def _strip_blocked_fields(payload: dict | None) -> dict:
+def _assert_no_blocked_fields(payload: dict | None) -> None:
     if not payload:
-        return {}
-    return {k: v for k, v in payload.items() if k not in BLOCKED_PAYLOAD_FIELDS}
+        return
+    offenders = sorted(set(payload.keys()) & BLOCKED_PAYLOAD_FIELDS)
+    if offenders:
+        raise BlockedPayloadField(
+            "Refusing to execute this action — the proposed payload contains "
+            f"protected field(s): {', '.join(offenders)}. The assistant is "
+            "not permitted to set these directly."
+        )
 
 
 # ----------------------------------------------------------------------
@@ -1881,7 +1907,8 @@ _EXECUTORS: dict[str, Callable[[ProposedAction, Session, User], dict]] = {
     "assign_action_item": _exec_assign_action_item,
     "add_song_credit": _exec_add_song_credit,
     "record_payment": _exec_record_payment,
-    # Phase 3B additions
+    # Phase 3B additions — v2 placement alias reuses the existing executor
+    "update_placement_status_v2": _exec_update_placement_status,
     "mark_song_registered": _exec_mark_song_registered,
     "add_fee_to_song": _exec_add_fee_to_song,
     "update_song_status": _exec_update_song_status,
@@ -1910,14 +1937,14 @@ def execute_proposed_action(action_id: str, db: Session, user: User) -> dict:
     if not membership and not getattr(user, "is_super_admin", False):
         raise PermissionError("Not authorized to act in that organization.")
 
-    # Phase 4 — rate limit (20 writes / rolling hour, per user).
-    _check_and_record_write(user.id)
+    # Phase 4 — rate-limit gate. Read-only check; the counter is bumped
+    # only after the executor + commit succeed (failed confirms must not
+    # burn quota).
+    _check_rate_limit(user.id)
 
-    # Phase 4 — strip dangerous fields the model could have hand-rolled
-    # into a payload (org_id spoofing, super-admin escalation, computed
-    # totals, Stripe ids). No current tool builds these, but the chokepoint
-    # is here so future tools can't regress the guarantee.
-    pa.payload = _strip_blocked_fields(pa.payload)
+    # Phase 4 — hard reject (do NOT silently strip) any payload that
+    # contains a deny-listed field. Aborts before any DB write happens.
+    _assert_no_blocked_fields(pa.payload)
 
     fn = _EXECUTORS.get(pa.kind)
     if fn is None:
@@ -1940,6 +1967,9 @@ def execute_proposed_action(action_id: str, db: Session, user: User) -> dict:
     except Exception:
         db.rollback()
         raise
+    # Phase 4 — only confirmed, fully-committed writes count toward the
+    # per-user 20/hr cap.
+    _record_successful_write(user.id)
     return result
 
 
@@ -2312,6 +2342,32 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "update_placement_status_v2",
+            "description": (
+                "Move a sync placement through the pipeline. Functionally "
+                "identical to update_placement_status — kept as an explicit "
+                "v2 entry so the assistant always sees the current full "
+                "enum (PITCHED / IN_REVIEW / IN_NEGOTIATION / SECURED / "
+                "DELIVERED / AIRED / PAID / DECLINED / CANCELLED)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "placement_id": {"type": "integer"},
+                    "new_status": {
+                        "type": "string",
+                        "enum": ["PITCHED", "IN_REVIEW", "IN_NEGOTIATION",
+                                 "SECURED", "DELIVERED", "AIRED", "PAID",
+                                 "DECLINED", "CANCELLED"],
+                    },
+                },
+                "required": ["placement_id", "new_status"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "mark_song_registered",
             "description": (
                 "Propose marking a song as registered (or any other "
@@ -2522,6 +2578,7 @@ _HANDLERS: dict[str, Callable[..., dict]] = {
     "add_song_credit": _write_add_song_credit,
     "record_payment": _write_record_payment,
     # Phase 3B additions
+    "update_placement_status_v2": _write_update_placement_status,
     "mark_song_registered": _write_mark_song_registered,
     "add_fee_to_song": _write_add_fee_to_song,
     "update_song_status": _write_update_song_status,
@@ -2538,6 +2595,7 @@ WRITE_TOOL_NAMES = {
     "mark_song_released", "update_song_metadata", "assign_action_item",
     "add_song_credit", "record_payment",
     # Phase 3B additions
+    "update_placement_status_v2",
     "mark_song_registered", "add_fee_to_song",
     "update_song_status", "update_creator_pro",
     "update_release_status", "update_release_type",
