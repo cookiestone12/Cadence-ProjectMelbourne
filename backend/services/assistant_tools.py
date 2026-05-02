@@ -357,13 +357,82 @@ def _read_list_expiring_contracts(db: Session, org_id: int, user_id: int,
     }
 
 
+_PERIOD_SHORTCUTS = {
+    "last_30d", "last_30_days",
+    "last_90d", "last_90_days",
+    "last_quarter", "last_q", "qtd",
+    "ytd", "year_to_date",
+    "last_year", "prior_year",
+    "all_time", "all",
+}
+
+
+def _resolve_period(period: str | None,
+                    period_start: str | None,
+                    period_end: str | None) -> tuple[date | None, date | None, str]:
+    """Return (start, end, label). Explicit start/end win over the shortcut.
+    Falls back to (None, None, 'all_time') if nothing was passed.
+    """
+    def _parse(d: str | None) -> date | None:
+        if not d:
+            return None
+        try:
+            return datetime.fromisoformat(str(d).replace("Z", "")).date()
+        except Exception:
+            try:
+                return date.fromisoformat(str(d)[:10])
+            except Exception:
+                return None
+
+    s = _parse(period_start)
+    e = _parse(period_end)
+    if s or e:
+        label = f"{s.isoformat() if s else '...'} → {e.isoformat() if e else '...'}"
+        return s, e, label
+
+    today = date.today()
+    key = (period or "").strip().lower()
+    if key in {"last_30d", "last_30_days"}:
+        return today - timedelta(days=30), today, "last 30 days"
+    if key in {"last_90d", "last_90_days"}:
+        return today - timedelta(days=90), today, "last 90 days"
+    if key in {"last_quarter", "last_q", "qtd"}:
+        # The full prior calendar quarter, e.g. May → Jan-Mar.
+        q = (today.month - 1) // 3  # 0..3 for current quarter
+        if q == 0:
+            start = date(today.year - 1, 10, 1)
+            end = date(today.year - 1, 12, 31)
+        else:
+            start_month = (q - 1) * 3 + 1
+            start = date(today.year, start_month, 1)
+            # last day of month start_month+2
+            end_month = start_month + 2
+            if end_month == 12:
+                end = date(today.year, 12, 31)
+            else:
+                end = date(today.year, end_month + 1, 1) - timedelta(days=1)
+        return start, end, "last quarter"
+    if key in {"ytd", "year_to_date"}:
+        return date(today.year, 1, 1), today, "year to date"
+    if key in {"last_year", "prior_year"}:
+        return (date(today.year - 1, 1, 1),
+                date(today.year - 1, 12, 31),
+                f"{today.year - 1}")
+    return None, None, "all time"
+
+
 def _read_get_royalty_summary_for_song(db: Session, org_id: int, user_id: int,
-                                       song_id: int) -> dict:
+                                       song_id: int,
+                                       period: str | None = None,
+                                       period_start: str | None = None,
+                                       period_end: str | None = None) -> dict:
     song = db.query(Song).filter(
         Song.id == song_id, Song.organization_id == org_id
     ).first()
     if not song:
         return {"error": "Song not found in your organization."}
+
+    p_start, p_end, p_label = _resolve_period(period, period_start, period_end)
 
     total_streams = db.query(
         func.coalesce(func.sum(SongStreamingMetrics.total_streams), 0)
@@ -378,14 +447,28 @@ def _read_get_royalty_summary_for_song(db: Session, org_id: int, user_id: int,
               RoyaltyStatement.id == RoyaltyStatementLine.statement_id)
         .filter(
             RoyaltyStatement.organization_id == org_id,
-            RoyaltyStatementLine.song_id == song.id,
+            RoyaltyStatementLine.matched_song_id == song.id,
         )
     )
+    if p_start is not None:
+        # Period overlap: statement.period_end >= window.start
+        line_q = line_q.filter(or_(
+            RoyaltyStatement.period_end.is_(None),
+            RoyaltyStatement.period_end >= p_start,
+        ))
+    if p_end is not None:
+        line_q = line_q.filter(or_(
+            RoyaltyStatement.period_start.is_(None),
+            RoyaltyStatement.period_start <= p_end,
+        ))
     net_amount, line_count = line_q.first() or (0.0, 0)
 
     return {
         "song_id": song.id,
         "song_title": song.title,
+        "period": p_label,
+        "period_start": p_start.isoformat() if p_start else None,
+        "period_end": p_end.isoformat() if p_end else None,
         "total_streams": int(total_streams or 0),
         "matched_statement_lines": int(line_count or 0),
         "net_royalties": round(float(net_amount or 0.0), 2),
@@ -892,10 +975,31 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_royalty_summary_for_song",
-            "description": "Total streams + matched-statement net royalties for a song.",
+            "description": (
+                "Total streams + matched-statement net royalties for a song. "
+                "Optionally pass a `period` shortcut (last_30d, last_90d, "
+                "last_quarter, ytd, last_year) or explicit `period_start` / "
+                "`period_end` ISO dates (YYYY-MM-DD) to scope earnings to a "
+                "window. Omit period args for all-time."
+            ),
             "parameters": {
                 "type": "object",
-                "properties": {"song_id": {"type": "integer"}},
+                "properties": {
+                    "song_id": {"type": "integer"},
+                    "period": {
+                        "type": "string",
+                        "enum": ["last_30d", "last_90d", "last_quarter",
+                                 "ytd", "last_year", "all_time"],
+                    },
+                    "period_start": {
+                        "type": "string",
+                        "description": "ISO date YYYY-MM-DD (inclusive).",
+                    },
+                    "period_end": {
+                        "type": "string",
+                        "description": "ISO date YYYY-MM-DD (inclusive).",
+                    },
+                },
                 "required": ["song_id"],
             },
         },
@@ -1050,14 +1154,143 @@ WRITE_TOOL_NAMES = {
     "create_action_item", "create_contract_stub",
 }
 
+# Write tools that are still safe for CLIENT users — they're proposing
+# self-tasks, not mutating other people's catalog data.
+CLIENT_ALLOWED_WRITE_TOOLS = {"create_action_item"}
+
+
+def _client_song_ids(db: Session, org_id: int,
+                     linked_creator_id: int) -> set[int]:
+    """Songs in this org that are credited to the client's linked creator."""
+    rows = db.query(SongCredit.song_id).join(
+        Song, Song.id == SongCredit.song_id
+    ).filter(
+        Song.organization_id == org_id,
+        SongCredit.creator_id == linked_creator_id,
+    ).distinct().all()
+    return {sid for (sid,) in rows}
+
+
+def _client_contract_ids(db: Session, org_id: int,
+                         linked_creator_id: int) -> set[int]:
+    """Contracts where the client's creator is a party or owns the contract."""
+    direct = db.query(Contract.id).filter(
+        Contract.organization_id == org_id,
+        Contract.creator_id == linked_creator_id,
+    ).all()
+    party = db.query(ContractParty.contract_id).join(
+        Contract, Contract.id == ContractParty.contract_id
+    ).filter(
+        Contract.organization_id == org_id,
+        ContractParty.creator_id == linked_creator_id,
+    ).all()
+    return {cid for (cid,) in (direct + party)}
+
+
+def _check_client_id_scope(name: str, args: dict, *, db: Session,
+                           org_id: int, linked_creator_id: int | None) -> str | None:
+    """For CLIENT users, validate that any explicit entity-id args refer
+    to a resource the client is allowed to see/touch. Returns an error
+    string when the request must be refused, or None when it's OK.
+    """
+    if not linked_creator_id:
+        return ("This account is set up as a Client but isn't linked to a "
+                "creator yet, so I can't pull data for you. Ask your admin "
+                "to link your creator profile.")
+
+    if name == "get_creator_summary":
+        cid = args.get("creator_id")
+        if cid and int(cid) != int(linked_creator_id):
+            return "As a Client you can only view your own creator profile."
+
+    if name in {"get_song_health", "get_royalty_summary_for_song"}:
+        sid = args.get("song_id")
+        if sid:
+            allowed = _client_song_ids(db, org_id, linked_creator_id)
+            if int(sid) not in allowed:
+                return "That song isn't part of your catalog."
+
+    if name == "create_action_item":
+        cid = args.get("creator_id")
+        if cid and int(cid) != int(linked_creator_id):
+            return "Action items you create can only be tied to your own creator profile."
+        sid = args.get("song_id")
+        if sid:
+            allowed = _client_song_ids(db, org_id, linked_creator_id)
+            if int(sid) not in allowed:
+                return "That song isn't part of your catalog."
+    return None
+
+
+def _client_filter_action_items(db: Session, rows: list[dict], *,
+                                org_id: int,
+                                linked_creator_id: int,
+                                user_id: int) -> list[dict]:
+    """Keep only items that are (a) explicitly assigned to the client user,
+    (b) tied to the client's own creator profile, or (c) tied to a song in
+    the client's catalog. Drops org-wide unassigned tasks that would leak
+    other creators' work to a CLIENT account.
+    """
+    if not rows:
+        return rows
+    allowed_songs = _client_song_ids(db, org_id, linked_creator_id)
+    filtered: list[dict] = []
+    for r in rows:
+        item_id = r.get("id")
+        if item_id is None:
+            continue
+        item = db.query(ActionItem).filter(
+            ActionItem.id == item_id,
+            ActionItem.organization_id == org_id,
+        ).first()
+        if not item:
+            continue
+        is_self = item.assigned_to_user_id == user_id
+        is_own_creator = item.creator_id == linked_creator_id
+        is_own_song = item.song_id is not None and item.song_id in allowed_songs
+        if is_self or is_own_creator or is_own_song:
+            filtered.append(r)
+    return filtered
+
+
+def _client_post_filter(name: str, result: dict, *, db: Session,
+                        org_id: int, linked_creator_id: int) -> dict:
+    """Trim list-style read results to entities the CLIENT may see."""
+    if not isinstance(result, dict) or "results" not in result:
+        return result
+    rows = result.get("results") or []
+    if not rows:
+        return result
+
+    if name == "search_songs":
+        allowed = _client_song_ids(db, org_id, linked_creator_id)
+        rows = [r for r in rows if r.get("id") in allowed]
+    elif name == "search_creators":
+        rows = [r for r in rows if r.get("id") == linked_creator_id]
+    elif name in {"search_contracts", "list_expiring_contracts"}:
+        allowed = _client_contract_ids(db, org_id, linked_creator_id)
+        rows = [r for r in rows if r.get("id") in allowed]
+    # action items / royalty summary already user/song-scoped
+
+    result = dict(result)
+    result["results"] = rows
+    result["count"] = len(rows)
+    return result
+
 
 def dispatch_tool(name: str, args: dict, *,
                   db: Session, org_id: int | None,
-                  user_id: int) -> dict:
+                  user_id: int,
+                  user_role: str = "MEMBER",
+                  linked_creator_id: int | None = None) -> dict:
     """Run a tool by name. Always returns a JSON-serialisable dict.
 
     Errors are returned as ``{"error": "..."}`` so the LLM sees them
     in the tool message and can react (rather than 500-ing the route).
+
+    ``user_role`` and ``linked_creator_id`` are used to gate CLIENT
+    accounts: writes are blocked (other than self-task creation) and
+    reads are clamped to the client's own catalog / contracts.
     """
     if not org_id:
         return {"error": "You don't have an organization yet — assistant tools "
@@ -1066,10 +1299,44 @@ def dispatch_tool(name: str, args: dict, *,
     if fn is None:
         return {"error": f"Unknown tool: {name}"}
     args = args or {}
+
+    role = (user_role or "MEMBER").upper()
+    if role == "CLIENT":
+        if name in WRITE_TOOL_NAMES and name not in CLIENT_ALLOWED_WRITE_TOOLS:
+            return {"error": (
+                "As a Client account you can't create or modify catalog data "
+                "through chat. Ask your label / administrator to make this "
+                "change for you."
+            )}
+        scope_err = _check_client_id_scope(
+            name, args,
+            db=db, org_id=org_id, linked_creator_id=linked_creator_id,
+        )
+        if scope_err:
+            return {"error": scope_err}
+
     try:
-        return fn(db=db, org_id=org_id, user_id=user_id, **args)
+        result = fn(db=db, org_id=org_id, user_id=user_id, **args)
     except TypeError as e:
         return {"error": f"Invalid arguments for {name}: {e}"}
     except Exception as e:  # pragma: no cover — last-resort guard
         logger.exception("assistant tool %s crashed", name)
         return {"error": f"{name} failed: {e}"}
+
+    if role == "CLIENT" and linked_creator_id:
+        result = _client_post_filter(
+            name, result,
+            db=db, org_id=org_id, linked_creator_id=linked_creator_id,
+        )
+        if name == "list_action_items_for_user" and isinstance(result, dict):
+            rows = result.get("results") or []
+            rows = _client_filter_action_items(
+                db, rows,
+                org_id=org_id,
+                linked_creator_id=linked_creator_id,
+                user_id=user_id,
+            )
+            result = dict(result)
+            result["results"] = rows
+            result["count"] = len(rows)
+    return result

@@ -99,6 +99,124 @@ function ToolChip({ name, completed }) {
   )
 }
 
+function _deepLinkFor(name, row) {
+  if (!row?.id) return null
+  if (name === 'search_songs') return `/catalog?songId=${row.id}`
+  if (name === 'search_creators') return `/creators/${row.id}`
+  if (name === 'search_contracts' || name === 'list_expiring_contracts')
+    return `/contracts/${row.id}`
+  if (name === 'list_action_items_for_user') return `/actions`
+  return null
+}
+
+function _rowLabel(name, row) {
+  if (row?.title) return row.title
+  if (row?.name) return row.name
+  if (row?.song_title) return row.song_title
+  if (row?.id) return `#${row.id}`
+  return 'Item'
+}
+
+function _rowSubtitle(name, row) {
+  if (name === 'search_songs')
+    return [row?.primary_artist, row?.isrc, row?.is_released ? 'Released' : 'Unreleased']
+      .filter(Boolean).join(' · ')
+  if (name === 'search_creators') return row?.email || row?.creator_type || ''
+  if (name === 'search_contracts' || name === 'list_expiring_contracts')
+    return [row?.contract_type, row?.status, row?.end_date && `ends ${row.end_date}`]
+      .filter(Boolean).join(' · ')
+  if (name === 'list_action_items_for_user')
+    return [row?.priority_label, row?.deadline].filter(Boolean).join(' · ')
+  return ''
+}
+
+function _summaryLine(name, data) {
+  if (!data || typeof data !== 'object') return null
+  if (name === 'get_song_health') {
+    const gaps = (data.gaps || []).length
+    return `${data.title || 'Song'} · health ${data.health_score ?? '–'} · ${gaps} gap${gaps === 1 ? '' : 's'}`
+  }
+  if (name === 'get_creator_summary') {
+    return `${data.name || 'Creator'} · ${data.song_count ?? 0} songs · ${data.contract_count ?? 0} contracts · ${data.open_action_items ?? 0} open tasks`
+  }
+  if (name === 'get_royalty_summary_for_song') {
+    const period = data.period || 'all time'
+    const cur = data.currency || 'USD'
+    return `${data.song_title || 'Song'} (${period}) · ${cur} ${(data.net_royalties ?? 0).toFixed(2)} · ${data.total_streams ?? 0} streams`
+  }
+  return null
+}
+
+function ToolResultCard({ name, data }) {
+  if (!data || data.error) {
+    if (data?.error) {
+      return (
+        <div className="mt-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-[12px] text-amber-800">
+          {data.error}
+        </div>
+      )
+    }
+    return null
+  }
+
+  // Single-entity get_* result
+  const summary = _summaryLine(name, data)
+  if (summary) {
+    return (
+      <div className="mt-2 px-3 py-2 bg-[#F5F7F4] border border-[rgba(91,138,114,0.18)] rounded-lg">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-[#7A8580] mb-0.5">
+          {TOOL_LABELS[name] || name}
+        </div>
+        <div className="text-[12.5px] text-[#3D4A44] leading-snug">{summary}</div>
+      </div>
+    )
+  }
+
+  // List-style result with preview rows
+  const rows = data.preview || data.results || []
+  const count = data.count ?? rows.length
+  if (!rows.length && typeof count !== 'number') return null
+  return (
+    <div className="mt-2 border border-[rgba(91,138,114,0.18)] rounded-lg bg-white overflow-hidden">
+      <div className="px-3 py-1.5 bg-[#F5F7F4] flex items-center justify-between">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-[#7A8580]">
+          {TOOL_LABELS[name] || name}
+        </span>
+        <span className="text-[10px] text-[#7A8580]">
+          {count} result{count === 1 ? '' : 's'}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <div className="px-3 py-2 text-[12px] text-[#7A8580] italic">No matches.</div>
+      ) : (
+        <ul className="divide-y divide-[rgba(91,138,114,0.10)]">
+          {rows.slice(0, 3).map((row, i) => {
+            const link = _deepLinkFor(name, row)
+            const label = _rowLabel(name, row)
+            const sub = _rowSubtitle(name, row)
+            return (
+              <li key={i} className="px-3 py-1.5 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[12.5px] text-[#3D4A44] font-medium truncate">{label}</div>
+                  {sub && <div className="text-[11px] text-[#7A8580] truncate">{sub}</div>}
+                </div>
+                {link && (
+                  <a
+                    href={link}
+                    className="text-[11px] font-semibold text-[#5B8A72] hover:underline flex-shrink-0"
+                  >
+                    Open
+                  </a>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 function ProposedActionCard({ action, onConfirm, onCancel, status, error }) {
   const expired = status === 'expired'
   const done = status === 'confirmed'
@@ -217,7 +335,7 @@ export default function AssistantChat({ user }) {
     setInput('')
     setStreaming(true)
 
-    const assistantMsg = { role: 'assistant', content: '', toolRuns: [], proposedActions: [] }
+    const assistantMsg = { role: 'assistant', content: '', toolRuns: [], toolResults: [], proposedActions: [] }
     setMessages(prev => [...prev, assistantMsg])
 
     try {
@@ -280,7 +398,7 @@ export default function AssistantChat({ user }) {
             }))
           }
           if (data.tool_result) {
-            const name = data.tool_result.name
+            const { name, data: payload } = data.tool_result
             updateAssistantBubble(m => {
               const tr = [...(m.toolRuns || [])]
               for (let i = tr.length - 1; i >= 0; i--) {
@@ -289,7 +407,14 @@ export default function AssistantChat({ user }) {
                   break
                 }
               }
-              return { ...m, toolRuns: tr }
+              return {
+                ...m,
+                toolRuns: tr,
+                toolResults: [
+                  ...(m.toolResults || []),
+                  { name, data: payload },
+                ],
+              }
             })
           }
           if (data.proposed_action) {
@@ -494,6 +619,9 @@ export default function AssistantChat({ user }) {
                     <p>{msg.content}</p>
                   )}
                 </div>
+                {(msg.toolResults || []).map((r, k) => (
+                  <ToolResultCard key={`tr-${k}`} name={r.name} data={r.data} />
+                ))}
                 {hasActions && msg.proposedActions.map(a => (
                   <ProposedActionCard
                     key={a.id}

@@ -174,6 +174,10 @@ async def assistant_chat(
         OrganizationMember.user_id == current_user.id
     ).first()
     org_id = membership.organization_id if membership else None
+    user_role = membership.role if membership else "MEMBER"
+    linked_creator_id = (
+        getattr(membership, "linked_creator_id", None) if membership else None
+    )
 
     system_prompt = (
         BASE_SYSTEM_PROMPT
@@ -258,6 +262,8 @@ async def assistant_chat(
                     result = assistant_tools.dispatch_tool(
                         name, args,
                         db=db, org_id=org_id, user_id=user_id,
+                        user_role=user_role,
+                        linked_creator_id=linked_creator_id,
                     )
 
                     # Surface a compact tool_result event for the UI

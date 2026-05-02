@@ -17,7 +17,8 @@ from sqlalchemy.orm import sessionmaker, Session
 from backend.models.database import Base
 from backend.models.models import (
     User, Organization, OrganizationMember,
-    Song, Creator, Placement, ActionItem, Contract, AuditLog,
+    Song, SongCredit, Creator, Placement, ActionItem, Contract, AuditLog,
+    RoyaltyStatement, RoyaltyStatementLine,
 )
 from backend.services import assistant_tools
 from backend.routes.assistant import (
@@ -319,6 +320,247 @@ class TestConfirmFlow:
         )
         db.refresh(seeded["placement_a"])
         assert seeded["placement_a"].status == "IN_REVIEW"
+
+
+# ---------------------------------------------------------------------------
+# CLIENT role enforcement
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def client_seed(db: Session, seeded):
+    """Add a CLIENT user in org_a linked to a creator who owns song_a."""
+    creator_mine = Creator(
+        organization_id=seeded["org_a"].id,
+        display_name="Mine",
+    )
+    creator_other = Creator(
+        organization_id=seeded["org_a"].id,
+        display_name="Other",
+    )
+    db.add_all([creator_mine, creator_other])
+    db.flush()
+
+    other_song = Song(organization_id=seeded["org_a"].id, title="A-Other",
+                      primary_artist="Other-Artist")
+    db.add(other_song)
+    db.flush()
+    db.add_all([
+        SongCredit(song_id=seeded["song_a"].id, creator_id=creator_mine.id,
+                   role="WRITER"),
+        SongCredit(song_id=other_song.id, creator_id=creator_other.id,
+                   role="WRITER"),
+    ])
+
+    client_user = User(username="client", email="c@x.io", hashed_password="x",
+                       is_active=True)
+    db.add(client_user)
+    db.flush()
+    db.add(OrganizationMember(
+        organization_id=seeded["org_a"].id,
+        user_id=client_user.id,
+        role="CLIENT",
+        linked_creator_id=creator_mine.id,
+    ))
+    db.commit()
+    return {
+        "client_user": client_user,
+        "creator_mine": creator_mine,
+        "creator_other": creator_other,
+        "other_song": other_song,
+    }
+
+
+class TestClientRoleEnforcement:
+
+    def test_client_search_songs_only_returns_own_catalog(
+        self, db, seeded, client_seed,
+    ):
+        out = assistant_tools.dispatch_tool(
+            "search_songs", {"query": ""},
+            db=db, org_id=seeded["org_a"].id,
+            user_id=client_seed["client_user"].id,
+            user_role="CLIENT",
+            linked_creator_id=client_seed["creator_mine"].id,
+        )
+        ids = [r["id"] for r in out["results"]]
+        assert seeded["song_a"].id in ids
+        assert client_seed["other_song"].id not in ids
+
+    def test_client_cannot_view_other_creator_summary(
+        self, db, seeded, client_seed,
+    ):
+        out = assistant_tools.dispatch_tool(
+            "get_creator_summary",
+            {"creator_id": client_seed["creator_other"].id},
+            db=db, org_id=seeded["org_a"].id,
+            user_id=client_seed["client_user"].id,
+            user_role="CLIENT",
+            linked_creator_id=client_seed["creator_mine"].id,
+        )
+        assert "error" in out
+
+    def test_client_cannot_get_other_song_health(
+        self, db, seeded, client_seed,
+    ):
+        out = assistant_tools.dispatch_tool(
+            "get_song_health",
+            {"song_id": client_seed["other_song"].id},
+            db=db, org_id=seeded["org_a"].id,
+            user_id=client_seed["client_user"].id,
+            user_role="CLIENT",
+            linked_creator_id=client_seed["creator_mine"].id,
+        )
+        assert "error" in out
+
+    def test_client_blocked_from_create_song(self, db, seeded, client_seed):
+        out = assistant_tools.dispatch_tool(
+            "create_song", {"title": "Forbidden"},
+            db=db, org_id=seeded["org_a"].id,
+            user_id=client_seed["client_user"].id,
+            user_role="CLIENT",
+            linked_creator_id=client_seed["creator_mine"].id,
+        )
+        assert "error" in out
+        assert db.query(Song).filter(
+            Song.organization_id == seeded["org_a"].id,
+            Song.title == "Forbidden",
+        ).count() == 0
+
+    def test_client_can_create_action_item_for_self(
+        self, db, seeded, client_seed,
+    ):
+        out = assistant_tools.dispatch_tool(
+            "create_action_item",
+            {"title": "Self-task", "creator_id": client_seed["creator_mine"].id},
+            db=db, org_id=seeded["org_a"].id,
+            user_id=client_seed["client_user"].id,
+            user_role="CLIENT",
+            linked_creator_id=client_seed["creator_mine"].id,
+        )
+        assert "proposed_action" in out
+
+    def test_client_action_item_for_other_creator_rejected(
+        self, db, seeded, client_seed,
+    ):
+        out = assistant_tools.dispatch_tool(
+            "create_action_item",
+            {"title": "Steal",
+             "creator_id": client_seed["creator_other"].id},
+            db=db, org_id=seeded["org_a"].id,
+            user_id=client_seed["client_user"].id,
+            user_role="CLIENT",
+            linked_creator_id=client_seed["creator_mine"].id,
+        )
+        assert "error" in out
+
+    def test_client_list_action_items_excludes_other_creators(
+        self, db, seeded, client_seed,
+    ):
+        # Three action items in OrgA:
+        #   - assigned to nobody, tied to "creator_other"  -> MUST be hidden
+        #   - assigned to nobody, tied to "creator_mine"   -> visible (own creator)
+        #   - assigned directly to the client user         -> visible (own assignment)
+        leak = ActionItem(
+            organization_id=seeded["org_a"].id,
+            creator_id=client_seed["creator_other"].id,
+            action_type="REVIEW", title="Other creator task",
+            status="PENDING",
+        )
+        own_creator = ActionItem(
+            organization_id=seeded["org_a"].id,
+            creator_id=client_seed["creator_mine"].id,
+            action_type="REVIEW", title="My creator task",
+            status="PENDING",
+        )
+        direct = ActionItem(
+            organization_id=seeded["org_a"].id,
+            assigned_to_user_id=client_seed["client_user"].id,
+            action_type="REVIEW", title="Assigned to me",
+            status="PENDING",
+        )
+        db.add_all([leak, own_creator, direct])
+        db.commit()
+
+        out = assistant_tools.dispatch_tool(
+            "list_action_items_for_user", {},
+            db=db, org_id=seeded["org_a"].id,
+            user_id=client_seed["client_user"].id,
+            user_role="CLIENT",
+            linked_creator_id=client_seed["creator_mine"].id,
+        )
+        titles = {r.get("title") for r in out["results"]}
+        assert "Other creator task" not in titles
+        assert "My creator task" in titles
+        assert "Assigned to me" in titles
+
+
+# ---------------------------------------------------------------------------
+# Royalty period filter
+# ---------------------------------------------------------------------------
+
+class TestRoyaltyPeriodFilter:
+
+    def test_period_filter_clamps_to_window(self, db, seeded):
+        # Two statements: one in Q1 of last year, one in current quarter.
+        today = date.today()
+        last_year = today.year - 1
+        stmt_old = RoyaltyStatement(
+            organization_id=seeded["org_a"].id,
+            source_name="DSP-Old", source_type="DSP",
+            period_start=date(last_year, 1, 1),
+            period_end=date(last_year, 3, 31),
+            total_revenue_cents=10000,
+        )
+        stmt_new = RoyaltyStatement(
+            organization_id=seeded["org_a"].id,
+            source_name="DSP-New", source_type="DSP",
+            period_start=date(today.year, today.month, 1),
+            period_end=today,
+            total_revenue_cents=20000,
+        )
+        db.add_all([stmt_old, stmt_new])
+        db.flush()
+        db.add_all([
+            RoyaltyStatementLine(
+                org_id=seeded["org_a"].id, statement_id=stmt_old.id,
+                matched_song_id=seeded["song_a"].id, net_amount=100.0,
+            ),
+            RoyaltyStatementLine(
+                org_id=seeded["org_a"].id, statement_id=stmt_new.id,
+                matched_song_id=seeded["song_a"].id, net_amount=50.0,
+            ),
+        ])
+        db.commit()
+
+        # All-time
+        out = assistant_tools.dispatch_tool(
+            "get_royalty_summary_for_song",
+            {"song_id": seeded["song_a"].id},
+            db=db, org_id=seeded["org_a"].id, user_id=seeded["user_a"].id,
+        )
+        assert out["matched_statement_lines"] == 2
+        assert round(out["net_royalties"], 2) == 150.0
+
+        # last_year — only the older statement
+        out = assistant_tools.dispatch_tool(
+            "get_royalty_summary_for_song",
+            {"song_id": seeded["song_a"].id, "period": "last_year"},
+            db=db, org_id=seeded["org_a"].id, user_id=seeded["user_a"].id,
+        )
+        assert out["matched_statement_lines"] == 1
+        assert round(out["net_royalties"], 2) == 100.0
+        assert str(last_year) in out["period"]
+
+        # Explicit window covering only the current statement
+        out = assistant_tools.dispatch_tool(
+            "get_royalty_summary_for_song",
+            {"song_id": seeded["song_a"].id,
+             "period_start": date(today.year, 1, 1).isoformat(),
+             "period_end": today.isoformat()},
+            db=db, org_id=seeded["org_a"].id, user_id=seeded["user_a"].id,
+        )
+        assert out["matched_statement_lines"] == 1
+        assert round(out["net_royalties"], 2) == 50.0
 
 
 # ---------------------------------------------------------------------------
