@@ -627,6 +627,38 @@ async def preview_statement(
             mapping = suggest_column_mapping(headers, source_name or "")
             confident = False
     preview = rows[:10]
+
+    # Task #191 — also surface the detected reporting period so the
+    # bulk-upload UI can pre-fill per-file period_start/period_end at
+    # the same time we pre-fill the column mapping. Single-flow upload
+    # already runs both detectors at commit time; mirroring them here
+    # closes the bulk parity gap (no more silent date-field defaults
+    # bleeding across a mixed batch).
+    detected_period_start = None
+    detected_period_end = None
+    file_name = file.filename or ""
+    if file_name.lower().endswith(".pdf"):
+        try:
+            from ..utils.pdf_statement_parser import parse_period_from_pdf
+            ps, pe = parse_period_from_pdf(content, file_name=file_name)
+            if ps:
+                detected_period_start = ps.isoformat()
+            if pe:
+                detected_period_end = pe.isoformat()
+        except Exception as e:
+            logger.warning(f"preview_statement: PDF period parse failed: {e}")
+    if detected_period_start is None or detected_period_end is None:
+        try:
+            from ..services.statement_parser import infer_period_from_filename
+            inferred = infer_period_from_filename(file_name, source_type=detected_source)
+            if inferred:
+                if detected_period_start is None and inferred.get("period_start"):
+                    detected_period_start = inferred["period_start"].isoformat()
+                if detected_period_end is None and inferred.get("period_end"):
+                    detected_period_end = inferred["period_end"].isoformat()
+        except Exception as e:
+            logger.warning(f"preview_statement: filename period inference failed: {e}")
+
     return {
         "headers": headers,
         "columns": headers,
@@ -634,6 +666,8 @@ async def preview_statement(
         "preview_rows": preview,
         "row_count": len(rows),
         "detected_source_type": detected_source,
+        "detected_period_start": detected_period_start,
+        "detected_period_end": detected_period_end,
         "mapping_confidence": confidence,
         "mapping_confident": confident,
         "unmapped_headers": unmapped,

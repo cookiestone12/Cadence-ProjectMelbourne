@@ -1897,6 +1897,32 @@ async def upload_and_parse_statement(
     except Exception:
         pass
 
+    # Audit log: mirror the legacy /api/royalties/.../upload endpoint
+    # so the bulk loop (which now routes here) lands the same UPLOAD
+    # STATEMENT row in the audit feed it would have via the legacy
+    # path. Task #191 — bulk parity with single-flow Enhanced Upload.
+    try:
+        from ..services.audit_service import log_action
+        log_action(
+            db,
+            org_id,
+            current_user.id,
+            "UPLOAD",
+            "STATEMENT",
+            statement.id,
+            source_name,
+            details={
+                "file_name": file.filename,
+                "source_type": source_type,
+                "currency": currency,
+                "total_lines": line_count,
+                "creator_id": creator_id,
+                "force": bool(force),
+            },
+        )
+    except Exception as e:
+        logger.warning(f"upload_and_parse_statement: audit log failed: {e}")
+
     db.commit()
     db.refresh(statement)
 

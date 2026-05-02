@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
 import {
   BanknotesIcon,
@@ -323,16 +323,27 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
   const txPerPage = 50
 
   const [showBulkUpload, setShowBulkUpload] = useState(false)
-  const [bulkFiles, setBulkFiles] = useState([])
+  // Task #191 — per-file rows with overrides + per-file preview/mapping.
+  // Each row: { id, file, source_type, source_name, period_start,
+  // period_end, creator_id, preview, previewLoading, previewError,
+  // mapping (canonical_field -> header), unmappedHeaders, mappingConfident,
+  // mappingReviewed, status, error, result, duplicate }
+  const [bulkRows, setBulkRows] = useState([])
   const [bulkSource, setBulkSource] = useState('')
   const [bulkSourceType, setBulkSourceType] = useState('')
   const [bulkPeriodStart, setBulkPeriodStart] = useState('')
   const [bulkPeriodEnd, setBulkPeriodEnd] = useState('')
   const [bulkCurrency, setBulkCurrency] = useState('USD')
+  const [bulkCreatorId, setBulkCreatorId] = useState('')
+  const [bulkCreatorOptions, setBulkCreatorOptions] = useState([])
   const [bulkStep, setBulkStep] = useState(1)
   const [bulkProcessing, setBulkProcessing] = useState(false)
   const [bulkCurrentIndex, setBulkCurrentIndex] = useState(-1)
-  const [bulkResults, setBulkResults] = useState([])
+  const [bulkMappingReviewIdx, setBulkMappingReviewIdx] = useState(-1)
+  const [bulkDuplicatePrompt, setBulkDuplicatePrompt] = useState(null)
+  const bulkDuplicateResolver = useRef(null)
+  const bulkApplyChoiceRef = useRef(null) // 'skip' | 'overwrite' | null
+  const bulkCancelRef = useRef(false)
 
   const [editStmt, setEditStmt] = useState(null)
   const [editForm, setEditForm] = useState({ source_name: '', source_type: '', period_start: '', period_end: '', currency: 'USD', creator_id: '' })
@@ -607,66 +618,259 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
   const resetBulkUpload = () => {
     setShowBulkUpload(false)
     setBulkStep(1)
-    setBulkFiles([])
+    setBulkRows([])
     setBulkSource('')
     setBulkSourceType('')
     setBulkPeriodStart('')
     setBulkPeriodEnd('')
     setBulkCurrency('USD')
+    setBulkCreatorId('')
     setBulkProcessing(false)
     setBulkCurrentIndex(-1)
-    setBulkResults([])
+    setBulkMappingReviewIdx(-1)
+    setBulkDuplicatePrompt(null)
+    bulkDuplicateResolver.current = null
+    bulkApplyChoiceRef.current = null
+    bulkCancelRef.current = false
+  }
+
+  // Task #191 — fetch preview for a single bulk row so we can pre-fill
+  // detected source type / source name / mapping confidence without making
+  // the user babysit each file. Mirrors the single-flow handlePreview but
+  // writes its results into a single row of bulkRows.
+  const previewBulkRow = useCallback(async (rowId, file, sourceName) => {
+    setBulkRows(prev => prev.map(r => r.id === rowId ? { ...r, previewLoading: true, previewError: null } : r))
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      if (sourceName) fd.append('source_name', sourceName)
+      const res = await axios.post(`/api/royalties/statements/${orgId}/preview`, fd, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      const data = res.data || {}
+      // Backend returns mapping as {canonical_field: header}
+      const mapping = data.mapping || data.suggested_mappings || data.mappings || {}
+      const filtered = {}
+      Object.entries(mapping).forEach(([field, header]) => { if (header) filtered[field] = header })
+      const detected = data.detected_source_type || null
+      const confident = data.mapping_confident !== false  // treat undefined as confident
+      const unmapped = Array.isArray(data.unmapped_headers) ? data.unmapped_headers : []
+      const detectedStart = data.detected_period_start || ''
+      const detectedEnd = data.detected_period_end || ''
+      setBulkRows(prev => prev.map(r => {
+        if (r.id !== rowId) return r
+        return {
+          ...r,
+          previewLoading: false,
+          preview: data,
+          mapping: filtered,
+          mappingConfident: confident,
+          unmappedHeaders: unmapped,
+          // Pre-fill source_type / period from detector when the row hasn't set it.
+          // Period precedence: row override (operator typed) > PDF/filename detected
+          // > batch default. Mirrors how the single-flow upload prefills the
+          // operator's editable period field.
+          source_type: r.source_type || detected || '',
+          source_name: r.source_name || detected || sourceName || '',
+          period_start: r.period_start || detectedStart || '',
+          period_end: r.period_end || detectedEnd || '',
+          // Reflect the new mapping confidence in the row's progress
+          // status so the UI can render an explicit `needs_review` chip
+          // before the operator hits Upload (vs. silently auto-confirming).
+          status: confident ? (r.status === 'needs_review' ? 'pending' : r.status) : 'needs_review',
+        }
+      }))
+    } catch (err) {
+      setBulkRows(prev => prev.map(r => r.id === rowId
+        ? { ...r, previewLoading: false, previewError: err.response?.data?.detail || err.message || 'Preview failed' }
+        : r))
+    }
+  }, [orgId])
+
+  // Add files to the row table and kick off previews in parallel.
+  const handleBulkFilesChange = (files) => {
+    const arr = Array.from(files || [])
+    if (arr.length === 0) return
+    const next = arr.map((file, idx) => ({
+      id: `${Date.now()}_${idx}_${file.name}`,
+      file,
+      source_type: bulkSourceType || '',
+      source_name: bulkSource || '',
+      period_start: bulkPeriodStart || '',
+      period_end: bulkPeriodEnd || '',
+      creator_id: bulkCreatorId || '',
+      preview: null,
+      previewLoading: false,
+      previewError: null,
+      mapping: null,
+      unmappedHeaders: [],
+      mappingConfident: true,
+      mappingReviewed: false,
+      status: 'pending',
+      error: null,
+      result: null,
+      duplicate: null,
+    }))
+    setBulkRows(prev => [...prev, ...next])
+    next.forEach(row => previewBulkRow(row.id, row.file, row.source_name || row.source_type || bulkSource || bulkSourceType))
+  }
+
+  const removeBulkRow = (rowId) => {
+    setBulkRows(prev => prev.filter(r => r.id !== rowId))
+  }
+
+  const updateBulkRow = (rowId, patch) => {
+    setBulkRows(prev => prev.map(r => r.id === rowId ? { ...r, ...patch } : r))
+  }
+
+  // Lazy-load creator options for the bulk creator dropdown.
+  useEffect(() => {
+    if (!showBulkUpload || !orgId || bulkCreatorOptions.length > 0) return
+    axios.get(`/api/creators/org/${orgId}`)
+      .then(res => setBulkCreatorOptions(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setBulkCreatorOptions([]))
+  }, [showBulkUpload, orgId, bulkCreatorOptions.length])
+
+  // Wait for the user to choose Skip / Overwrite / Cancel on a duplicate.
+  // Marks the row as `duplicate_pending` for the progress list so the
+  // operator can see at a glance which file is blocking the batch.
+  const promptDuplicate = (rowIndex, info) => new Promise(resolve => {
+    bulkDuplicateResolver.current = resolve
+    if (info.rowId) updateBulkRow(info.rowId, { status: 'duplicate_pending', duplicate: { existing_statement_id: info.existing_statement_id, existing_status: info.existing_status } })
+    setBulkDuplicatePrompt({ rowIndex, ...info })
+  })
+
+  const resolveDuplicatePrompt = (choice, applyToAll) => {
+    if (applyToAll && (choice === 'skip' || choice === 'overwrite')) {
+      bulkApplyChoiceRef.current = choice
+    }
+    if (choice === 'cancel') bulkCancelRef.current = true
+    const fn = bulkDuplicateResolver.current
+    bulkDuplicateResolver.current = null
+    setBulkDuplicatePrompt(null)
+    if (fn) fn(choice)
   }
 
   const handleBulkProcess = async () => {
-    const sourceName = bulkSource || bulkSourceType
-    if (!sourceName) {
-      alert('Please enter a source name.')
+    if (bulkRows.length === 0) return
+    // Block when any row still needs review and isn't reviewed.
+    const needsReview = bulkRows.find(r => r.status === 'needs_review' || (r.mappingConfident === false && !r.mappingReviewed))
+    if (needsReview) {
+      alert(`"${needsReview.file.name}" has a low-confidence column mapping. Please review it before continuing.`)
       return
     }
+    bulkApplyChoiceRef.current = null
+    bulkCancelRef.current = false
     setBulkStep(2)
     setBulkProcessing(true)
-    const results = []
-    for (let i = 0; i < bulkFiles.length; i++) {
+
+    for (let i = 0; i < bulkRows.length; i++) {
+      if (bulkCancelRef.current) break
+      const row = bulkRows[i]
       setBulkCurrentIndex(i)
-      const file = bulkFiles[i]
-      const result = { fileName: file.name, status: 'uploading', transactions: 0, matched: 0, unmatched: 0, error: null }
-      results.push(result)
-      setBulkResults([...results])
-      try {
-        const previewForm = new FormData()
-        previewForm.append('file', file)
-        previewForm.append('source_name', sourceName)
-        const previewRes = await axios.post(`/api/royalties/statements/${orgId}/preview`, previewForm, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        })
-        const rawMapping = previewRes.data.mapping || previewRes.data.suggested_mappings || previewRes.data.mappings || {}
-        const detected = previewRes.data.detected_source_type || null
-        const backendMapping = {}
-        Object.entries(rawMapping).forEach(([field, header]) => {
-          if (header) backendMapping[field] = header
-        })
-        const uploadForm = new FormData()
-        uploadForm.append('file', file)
-        uploadForm.append('source_name', sourceName)
-        uploadForm.append('source_type', detected || bulkSourceType || '')
-        uploadForm.append('period_start', bulkPeriodStart)
-        uploadForm.append('period_end', bulkPeriodEnd)
-        uploadForm.append('currency', bulkCurrency)
-        uploadForm.append('column_mapping', JSON.stringify(backendMapping))
-        const uploadRes = await axios.post(`/api/royalties/statements/${orgId}/upload`, uploadForm, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        })
-        result.status = 'done'
-        result.transactions = uploadRes.data?.total_transactions ?? uploadRes.data?.transactions_count ?? uploadRes.data?.rows_imported ?? 0
-        result.matched = uploadRes.data?.matched_transactions ?? uploadRes.data?.matched_count ?? 0
-        result.unmatched = uploadRes.data?.unmatched_transactions ?? uploadRes.data?.unmatched_count ?? 0
-      } catch (err) {
-        result.status = 'error'
-        result.error = err.response?.data?.detail || err.message || 'Upload failed'
+      // Reset duplicate metadata on a fresh attempt so the row's
+      // status pill flips back from any prior `duplicate_pending`.
+      updateBulkRow(row.id, { status: 'uploading', error: null, duplicate: null })
+
+      const sourceName = row.source_name || row.source_type || bulkSource || bulkSourceType || ''
+      const sourceType = row.source_type || bulkSourceType || ''
+
+      // Convert mapping {canonical_field: header} → JSON form param.
+      const mappingPayload = {}
+      Object.entries(row.mapping || {}).forEach(([field, header]) => {
+        if (header) mappingPayload[field] = header
+      })
+
+      let force = false
+      let attemptResult = null
+      let attemptError = null
+      // up to one re-attempt with force=true after a 409 prompt
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const fd = new FormData()
+        fd.append('file', row.file)
+        fd.append('source_name', sourceName)
+        if (sourceType) fd.append('source_type', sourceType)
+        if (row.period_start) fd.append('period_start', row.period_start)
+        if (row.period_end) fd.append('period_end', row.period_end)
+        fd.append('currency', bulkCurrency)
+        if (row.creator_id) fd.append('creator_id', String(row.creator_id))
+        if (Object.keys(mappingPayload).length > 0) {
+          fd.append('column_mapping', JSON.stringify(mappingPayload))
+        }
+        if (force) fd.append('force', 'true')
+        try {
+          const res = await axios.post(
+            `/api/royalty-processing/${orgId}/statements/upload`,
+            fd,
+            { headers: { 'Content-Type': 'multipart/form-data' } }
+          )
+          attemptResult = res.data
+          break
+        } catch (err) {
+          const status = err.response?.status
+          const detail = err.response?.data?.detail
+          if (status === 409 && detail && typeof detail === 'object' && detail.error === 'duplicate_statement') {
+            // Decide what to do — Skip / Overwrite / Cancel.
+            let choice = bulkApplyChoiceRef.current
+            if (choice) {
+              // Apply-to-all in effect — mirror the duplicate metadata
+              // onto the row so the progress list can still show what
+              // it collided with, even without a per-row prompt.
+              updateBulkRow(row.id, { duplicate: { existing_statement_id: detail.existing_statement_id, existing_status: detail.existing_status } })
+            } else {
+              choice = await promptDuplicate(i, {
+                rowId: row.id,
+                fileName: row.file.name,
+                existing_statement_id: detail.existing_statement_id,
+                existing_status: detail.existing_status,
+              })
+            }
+            if (choice === 'cancel') {
+              bulkCancelRef.current = true
+              attemptError = 'Batch cancelled.'
+              break
+            }
+            if (choice === 'skip') {
+              updateBulkRow(row.id, {
+                status: 'skipped',
+                duplicate: { existing_statement_id: detail.existing_statement_id, existing_status: detail.existing_status },
+              })
+              attemptError = null
+              attemptResult = null
+              break
+            }
+            if (choice === 'overwrite') {
+              force = true
+              continue
+            }
+          }
+          attemptError = (typeof detail === 'string' ? detail : null) || err.message || 'Upload failed'
+          break
+        }
       }
-      setBulkResults([...results])
+
+      if (bulkCancelRef.current && !attemptResult && !attemptError) break
+
+      if (attemptResult) {
+        const matchStats = attemptResult.match_stats || {}
+        updateBulkRow(row.id, {
+          status: force ? 'overwritten' : 'done',
+          result: {
+            id: attemptResult.id,
+            total_lines: attemptResult.total_lines || 0,
+            matched: matchStats.matched_count || 0,
+            unmatched: matchStats.unmatched_count || 0,
+            review_required: matchStats.review_required_count || 0,
+            statement_status: attemptResult.status,
+          },
+        })
+      } else if (attemptError) {
+        updateBulkRow(row.id, { status: 'error', error: attemptError })
+      } else {
+        // skipped (already updated above) — nothing to do
+      }
     }
+
     setBulkProcessing(false)
     setBulkCurrentIndex(-1)
     setBulkStep(3)
@@ -1011,7 +1215,7 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
 
       {showBulkUpload && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-[rgba(59,77,67,0.08)]">
               <h3 className="text-lg font-semibold text-[#3D4A44]">
                 {bulkStep === 1 && 'Bulk Upload Statements'}
@@ -1026,81 +1230,158 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
             <div className="p-6">
               {bulkStep === 1 && (
                 <div className="space-y-4">
+                  <p className="text-xs text-[#7A8580]">
+                    Bulk uploads run through the same Enhanced pipeline as a single upload — auto-detected source type, full match status, and audit log on every file. Adjust per-file overrides in the table below.
+                  </p>
                   <div>
-                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Select Files (CSV/Excel/PDF)</label>
+                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Add Files (CSV/Excel/PDF)</label>
                     <input
                       type="file"
                       multiple
                       accept=".csv,.xlsx,.xls,.pdf,application/pdf,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                      onChange={e => setBulkFiles(Array.from(e.target.files || []))}
+                      onChange={e => { handleBulkFilesChange(e.target.files); e.target.value = '' }}
                       className="w-full text-sm text-[#3D4A44] file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-[rgba(91,138,114,0.1)] file:text-[#5B8A72] hover:file:bg-[rgba(91,138,114,0.2)]"
                     />
-                    {bulkFiles.length > 0 && (
-                      <p className="text-xs text-[#7A8580] mt-1">{bulkFiles.length} file{bulkFiles.length !== 1 ? 's' : ''} selected</p>
-                    )}
                   </div>
-                  {bulkFiles.length > 0 && (
-                    <div className="bg-[#F5F7F4] rounded-xl p-3 space-y-1 max-h-32 overflow-y-auto">
-                      {bulkFiles.map((f, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm text-[#3D4A44]">
-                          <DocumentTextIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
-                          <span className="truncate">{f.name}</span>
-                          <span className="text-xs text-[#7A8580] flex-shrink-0">({(f.size / 1024).toFixed(0)} KB)</span>
-                        </div>
-                      ))}
+                  <div className="grid grid-cols-2 md:grid-cols-6 gap-3 p-3 bg-[#F5F7F4] rounded-xl">
+                    <div className="col-span-2 md:col-span-6 text-xs font-medium text-[#7A8580]">Batch defaults (applied to new rows you add — per-row values from PDF auto-detection still take precedence):</div>
+                    <div>
+                      <label className="block text-xs text-[#7A8580] mb-1">Source type</label>
+                      <select value={bulkSourceType} onChange={e => setBulkSourceType(e.target.value)} className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg text-xs bg-white">
+                        {SOURCE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.value || 'Auto'}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#7A8580] mb-1">Source name</label>
+                      <input type="text" value={bulkSource} onChange={e => setBulkSource(e.target.value)} placeholder="(optional)" className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg text-xs bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#7A8580] mb-1">Period start</label>
+                      <input type="date" value={bulkPeriodStart} onChange={e => setBulkPeriodStart(e.target.value)} className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg text-xs bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#7A8580] mb-1">Period end</label>
+                      <input type="date" value={bulkPeriodEnd} onChange={e => setBulkPeriodEnd(e.target.value)} className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg text-xs bg-white" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#7A8580] mb-1">Currency</label>
+                      <select value={bulkCurrency} onChange={e => setBulkCurrency(e.target.value)} className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg text-xs bg-white">
+                        {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-[#7A8580] mb-1">Creator (optional)</label>
+                      <select value={bulkCreatorId} onChange={e => setBulkCreatorId(e.target.value)} className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg text-xs bg-white">
+                        <option value="">— None —</option>
+                        {bulkCreatorOptions.map(c => <option key={c.id} value={c.id}>{c.display_name || c.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {bulkRows.length === 0 ? (
+                    <div className="text-center py-8 text-sm text-[#7A8580]">
+                      Pick one or more statement files above. Each file gets its own row you can edit.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto border border-[rgba(59,77,67,0.08)] rounded-xl">
+                      <table className="w-full text-xs">
+                        <thead className="bg-[#EEF1EC] text-[#7A8580]">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-medium min-w-[200px]">File</th>
+                            <th className="px-2 py-2 text-left font-medium">Source type</th>
+                            <th className="px-2 py-2 text-left font-medium">Source name</th>
+                            <th className="px-2 py-2 text-left font-medium">Period start</th>
+                            <th className="px-2 py-2 text-left font-medium">Period end</th>
+                            <th className="px-2 py-2 text-left font-medium">Creator</th>
+                            <th className="px-2 py-2 text-left font-medium">Mapping</th>
+                            <th className="px-2 py-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bulkRows.map((row) => {
+                            const needsReview = row.mappingConfident === false && !row.mappingReviewed
+                            return (
+                              <tr key={row.id} className="border-t border-[rgba(59,77,67,0.06)]">
+                                <td className="px-3 py-2 align-top">
+                                  <div className="flex items-center gap-2">
+                                    <DocumentTextIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                                    <div className="min-w-0">
+                                      <p className="text-[#3D4A44] truncate" title={row.file.name}>{row.file.name}</p>
+                                      <p className="text-[10px] text-[#7A8580]">{(row.file.size / 1024).toFixed(0)} KB</p>
+                                      {row.previewLoading && <p className="text-[10px] text-blue-600">Detecting…</p>}
+                                      {row.previewError && <p className="text-[10px] text-red-600 truncate" title={row.previewError}>Preview error</p>}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-2 py-2 align-top">
+                                  <select value={row.source_type} onChange={e => updateBulkRow(row.id, { source_type: e.target.value })} className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg bg-white">
+                                    {SOURCE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.value || 'Auto'}</option>)}
+                                  </select>
+                                </td>
+                                <td className="px-2 py-2 align-top">
+                                  <input type="text" value={row.source_name} onChange={e => updateBulkRow(row.id, { source_name: e.target.value })} placeholder="(detected)" className="w-32 px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg bg-white" />
+                                </td>
+                                <td className="px-2 py-2 align-top">
+                                  <input type="date" value={row.period_start} onChange={e => updateBulkRow(row.id, { period_start: e.target.value })} className="w-32 px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg bg-white" />
+                                </td>
+                                <td className="px-2 py-2 align-top">
+                                  <input type="date" value={row.period_end} onChange={e => updateBulkRow(row.id, { period_end: e.target.value })} className="w-32 px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg bg-white" />
+                                </td>
+                                <td className="px-2 py-2 align-top">
+                                  <select value={row.creator_id} onChange={e => updateBulkRow(row.id, { creator_id: e.target.value })} className="w-full px-2 py-1.5 border border-[rgba(59,77,67,0.15)] rounded-lg bg-white">
+                                    <option value="">—</option>
+                                    {bulkCreatorOptions.map(c => <option key={c.id} value={c.id}>{c.display_name || c.name}</option>)}
+                                  </select>
+                                </td>
+                                <td className="px-2 py-2 align-top">
+                                  {row.previewLoading ? (
+                                    <span className="text-[#7A8580]">…</span>
+                                  ) : needsReview ? (
+                                    <button onClick={() => setBulkMappingReviewIdx(bulkRows.findIndex(r => r.id === row.id))} className="inline-flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-700 rounded-lg font-medium hover:bg-amber-200">
+                                      <ExclamationCircleIcon className="w-3.5 h-3.5" /> Review
+                                    </button>
+                                  ) : row.mappingReviewed ? (
+                                    <button onClick={() => setBulkMappingReviewIdx(bulkRows.findIndex(r => r.id === row.id))} className="inline-flex items-center gap-1 px-2 py-1 bg-[rgba(91,138,114,0.1)] text-[#5B8A72] rounded-lg font-medium hover:bg-[rgba(91,138,114,0.2)]">
+                                      <CheckCircleIcon className="w-3.5 h-3.5" /> Reviewed
+                                    </button>
+                                  ) : (
+                                    <button onClick={() => setBulkMappingReviewIdx(bulkRows.findIndex(r => r.id === row.id))} className="inline-flex items-center gap-1 px-2 py-1 text-[#5B8A72] hover:underline">
+                                      View
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="px-2 py-2 align-top text-right">
+                                  <button onClick={() => removeBulkRow(row.id)} className="p-1 text-[#7A8580] hover:text-red-500" title="Remove">
+                                    <TrashIcon className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   )}
-                  <div>
-                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Statement Source</label>
-                    <select
-                      value={bulkSourceType}
-                      onChange={e => {
-                        setBulkSourceType(e.target.value)
-                        if (e.target.value && e.target.value !== 'DSP') setBulkSource(e.target.value)
-                      }}
-                      className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
-                    >
-                      {SOURCE_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Source Name</label>
-                    <input
-                      type="text"
-                      value={bulkSource}
-                      onChange={e => setBulkSource(e.target.value)}
-                      placeholder={bulkSourceType === 'DSP' ? 'e.g. Spotify, Apple Music' : bulkSourceType ? `e.g. ${bulkSourceType} Q4 2025` : 'e.g. Spotify, BMI, ASCAP'}
-                      className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-xs text-[#7A8580] mb-2">
-                      Statement period is auto-detected from each PDF — leave blank unless you want to force the same range on every file. You can fix the period later from the row actions.
-                    </p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period Start (optional override)</label>
-                        <input type="date" value={bulkPeriodStart} onChange={e => setBulkPeriodStart(e.target.value)} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-[#3D4A44] mb-1">Period End (optional override)</label>
-                        <input type="date" value={bulkPeriodEnd} onChange={e => setBulkPeriodEnd(e.target.value)} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none" />
-                      </div>
+
+                  {bulkRows.some(r => r.status === 'needs_review' || (r.mappingConfident === false && !r.mappingReviewed)) && (
+                    <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
+                      <ExclamationCircleIcon className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-[#3D4A44]">
+                        One or more files have low-confidence column mappings. Click <span className="font-medium">Review</span> on each before uploading.
+                      </p>
                     </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-[#3D4A44] mb-1">Currency</label>
-                    <select value={bulkCurrency} onChange={e => setBulkCurrency(e.target.value)} className="w-full px-4 py-2.5 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm text-[#3D4A44] bg-white focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent outline-none">
-                      {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div className="flex justify-end pt-2">
+                  )}
+
+                  <div className="flex justify-between pt-2">
+                    <p className="text-xs text-[#7A8580] self-center">
+                      {bulkRows.length} file{bulkRows.length === 1 ? '' : 's'} ready
+                    </p>
                     <button
                       onClick={handleBulkProcess}
-                      disabled={bulkFiles.length === 0 || (!bulkSource && !bulkSourceType)}
+                      disabled={bulkRows.length === 0 || bulkRows.some(r => r.previewLoading) || bulkRows.some(r => r.status === 'needs_review' || (r.mappingConfident === false && !r.mappingReviewed))}
                       className="px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium disabled:opacity-50"
                     >
-                      Upload {bulkFiles.length} File{bulkFiles.length !== 1 ? 's' : ''}
+                      Upload {bulkRows.length} File{bulkRows.length === 1 ? '' : 's'}
                     </button>
                   </div>
                 </div>
@@ -1108,48 +1389,65 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
 
               {bulkStep === 2 && (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-full bg-[#EEF1EC] rounded-full h-2">
-                      <div
-                        className="bg-gradient-to-r from-[#5B8A72] to-[#7BA594] h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${bulkResults.length > 0 ? (bulkResults.filter(r => r.status !== 'uploading').length / bulkFiles.length) * 100 : 0}%` }}
-                      />
-                    </div>
-                    <span className="text-sm text-[#7A8580] flex-shrink-0 min-w-[60px] text-right">
-                      {bulkResults.filter(r => r.status !== 'uploading').length}/{bulkFiles.length}
-                    </span>
-                  </div>
-                  {bulkFiles.map((file, i) => {
-                    const result = bulkResults[i]
+                  {(() => {
+                    const total = bulkRows.length
+                    const finished = bulkRows.filter(r => r.status !== 'pending' && r.status !== 'uploading').length
                     return (
-                      <div key={i} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
-                        !result ? 'border-[rgba(59,77,67,0.08)] bg-[#F5F7F4]' :
-                        result.status === 'uploading' ? 'border-blue-200 bg-blue-50' :
-                        result.status === 'done' ? 'border-green-200 bg-green-50' :
-                        'border-red-200 bg-red-50'
-                      }`}>
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="w-full bg-[#EEF1EC] rounded-full h-2">
+                          <div
+                            className="bg-gradient-to-r from-[#5B8A72] to-[#7BA594] h-2 rounded-full transition-all duration-500"
+                            style={{ width: `${total > 0 ? (finished / total) * 100 : 0}%` }}
+                          />
+                        </div>
+                        <span className="text-sm text-[#7A8580] flex-shrink-0 min-w-[60px] text-right">{finished}/{total}</span>
+                      </div>
+                    )
+                  })()}
+                  {bulkRows.map(row => {
+                    const tone =
+                      row.status === 'uploading' ? 'border-blue-200 bg-blue-50' :
+                      row.status === 'done' ? 'border-green-200 bg-green-50' :
+                      row.status === 'overwritten' ? 'border-green-200 bg-green-50' :
+                      row.status === 'skipped' ? 'border-[rgba(59,77,67,0.15)] bg-[#F5F7F4]' :
+                      row.status === 'error' ? 'border-red-200 bg-red-50' :
+                      row.status === 'needs_review' ? 'border-amber-200 bg-amber-50' :
+                      row.status === 'duplicate_pending' ? 'border-amber-200 bg-amber-50' :
+                      'border-[rgba(59,77,67,0.08)] bg-[#F5F7F4]'
+                    return (
+                      <div key={row.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${tone}`}>
                         <div className="flex-shrink-0">
-                          {!result ? (
-                            <ClockIcon className="w-5 h-5 text-[#7A8580]" />
-                          ) : result.status === 'uploading' ? (
-                            <ArrowPathIcon className="w-5 h-5 text-blue-500 animate-spin" />
-                          ) : result.status === 'done' ? (
-                            <CheckCircleSolid className="w-5 h-5 text-green-600" />
-                          ) : (
-                            <ExclamationCircleIcon className="w-5 h-5 text-red-500" />
-                          )}
+                          {row.status === 'uploading' ? <ArrowPathIcon className="w-5 h-5 text-blue-500 animate-spin" /> :
+                           row.status === 'done' || row.status === 'overwritten' ? <CheckCircleSolid className="w-5 h-5 text-green-600" /> :
+                           row.status === 'skipped' ? <XMarkIcon className="w-5 h-5 text-[#7A8580]" /> :
+                           row.status === 'error' ? <ExclamationCircleIcon className="w-5 h-5 text-red-500" /> :
+                           row.status === 'needs_review' ? <ExclamationCircleIcon className="w-5 h-5 text-amber-600" /> :
+                           row.status === 'duplicate_pending' ? <ExclamationCircleIcon className="w-5 h-5 text-amber-600" /> :
+                           <ClockIcon className="w-5 h-5 text-[#7A8580]" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-[#3D4A44] truncate">{file.name}</p>
-                          {result?.status === 'done' && (
-                            <p className="text-xs text-[#7A8580]">{result.transactions} transactions, {result.matched} matched</p>
+                          <p className="text-sm font-medium text-[#3D4A44] truncate">{row.file.name}</p>
+                          {row.status === 'done' && row.result && (
+                            <p className="text-xs text-[#7A8580]">
+                              {row.result.total_lines} lines · {row.result.matched} matched · {row.result.unmatched} unmatched · status {row.result.statement_status}
+                            </p>
                           )}
-                          {result?.status === 'error' && (
-                            <p className="text-xs text-red-600 truncate">{result.error}</p>
+                          {row.status === 'overwritten' && row.result && (
+                            <p className="text-xs text-[#5B8A72]">Overwrote duplicate · {row.result.total_lines} lines · status {row.result.statement_status}</p>
                           )}
-                          {result?.status === 'uploading' && (
-                            <p className="text-xs text-blue-600">Processing...</p>
+                          {row.status === 'skipped' && (
+                            <p className="text-xs text-[#7A8580]">Skipped — duplicate of statement #{row.duplicate?.existing_statement_id}</p>
                           )}
+                          {row.status === 'needs_review' && (
+                            <p className="text-xs text-amber-700">Needs mapping review (low confidence)</p>
+                          )}
+                          {row.status === 'duplicate_pending' && (
+                            <p className="text-xs text-amber-700">
+                              Duplicate of statement #{row.duplicate?.existing_statement_id} — awaiting your choice
+                            </p>
+                          )}
+                          {row.status === 'error' && <p className="text-xs text-red-600 truncate">{row.error}</p>}
+                          {row.status === 'uploading' && <p className="text-xs text-blue-600">Processing…</p>}
                         </div>
                       </div>
                     )
@@ -1157,41 +1455,169 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                 </div>
               )}
 
-              {bulkStep === 3 && (
-                <div className="text-center py-6">
-                  <CheckCircleSolid className="w-16 h-16 text-[#5B8A72] mx-auto mb-4" />
-                  <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Bulk Upload Complete</h4>
-                  <div className="flex items-center justify-center gap-6 mb-4">
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-[#5B8A72]">{bulkResults.filter(r => r.status === 'done').length}</p>
-                      <p className="text-xs text-[#7A8580]">Succeeded</p>
-                    </div>
-                    {bulkResults.some(r => r.status === 'error') && (
+              {bulkStep === 3 && (() => {
+                const succeeded = bulkRows.filter(r => r.status === 'done' || r.status === 'overwritten').length
+                const failed = bulkRows.filter(r => r.status === 'error').length
+                const skipped = bulkRows.filter(r => r.status === 'skipped').length
+                const overwritten = bulkRows.filter(r => r.status === 'overwritten').length
+                const totalLines = bulkRows.reduce((s, r) => s + (r.result?.total_lines || 0), 0)
+                return (
+                  <div className="text-center py-6">
+                    <CheckCircleSolid className="w-16 h-16 text-[#5B8A72] mx-auto mb-4" />
+                    <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Bulk Upload Complete</h4>
+                    <div className="flex flex-wrap items-center justify-center gap-6 mb-4">
                       <div className="text-center">
-                        <p className="text-2xl font-bold text-red-500">{bulkResults.filter(r => r.status === 'error').length}</p>
-                        <p className="text-xs text-[#7A8580]">Failed</p>
+                        <p className="text-2xl font-bold text-[#5B8A72]">{succeeded}</p>
+                        <p className="text-xs text-[#7A8580]">Succeeded</p>
+                      </div>
+                      {overwritten > 0 && (
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-[#5B8A72]">{overwritten}</p>
+                          <p className="text-xs text-[#7A8580]">Overwritten</p>
+                        </div>
+                      )}
+                      {skipped > 0 && (
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-[#7A8580]">{skipped}</p>
+                          <p className="text-xs text-[#7A8580]">Skipped (duplicate)</p>
+                        </div>
+                      )}
+                      {failed > 0 && (
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-red-500">{failed}</p>
+                          <p className="text-xs text-[#7A8580]">Failed</p>
+                        </div>
+                      )}
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-[#3D4A44]">{totalLines}</p>
+                        <p className="text-xs text-[#7A8580]">Total Lines</p>
+                      </div>
+                    </div>
+                    {failed > 0 && (
+                      <div className="mb-4 max-h-32 overflow-y-auto text-left">
+                        {bulkRows.filter(r => r.status === 'error').map((r) => (
+                          <div key={r.id} className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-lg mb-1">
+                            <ExclamationCircleIcon className="w-4 h-4 text-red-500 flex-shrink-0" />
+                            <span className="text-xs text-red-700 truncate">{r.file.name}: {r.error}</span>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-[#3D4A44]">{bulkResults.reduce((sum, r) => sum + (r.transactions || 0), 0)}</p>
-                      <p className="text-xs text-[#7A8580]">Total Transactions</p>
-                    </div>
+                    <button onClick={resetBulkUpload} className="mt-2 px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
+                      Done
+                    </button>
                   </div>
-                  {bulkResults.some(r => r.status === 'error') && (
-                    <div className="mb-4 max-h-32 overflow-y-auto text-left">
-                      {bulkResults.filter(r => r.status === 'error').map((r, i) => (
-                        <div key={i} className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-lg mb-1">
-                          <ExclamationCircleIcon className="w-4 h-4 text-red-500 flex-shrink-0" />
-                          <span className="text-xs text-red-700 truncate">{r.fileName}: {r.error}</span>
-                        </div>
-                      ))}
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkMappingReviewIdx >= 0 && bulkRows[bulkMappingReviewIdx] && (() => {
+        const row = bulkRows[bulkMappingReviewIdx]
+        const columns = row.preview?.columns || []
+        // Display: header → canonical_field. Mapping is stored canonical→header.
+        const headerToField = {}
+        Object.entries(row.mapping || {}).forEach(([field, header]) => { if (header) headerToField[header] = field })
+        const setHeader = (header, field) => {
+          const next = { ...(row.mapping || {}) }
+          // Drop any existing field that mapped to this header
+          Object.entries(next).forEach(([f, h]) => { if (h === header) delete next[f] })
+          if (field) next[field] = header
+          updateBulkRow(row.id, { mapping: next })
+        }
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-5 border-b border-[rgba(59,77,67,0.08)]">
+                <h3 className="text-base font-semibold text-[#3D4A44]">Review column mapping — {row.file.name}</h3>
+                <button onClick={() => setBulkMappingReviewIdx(-1)} className="p-2 hover:bg-[rgba(59,77,67,0.06)] rounded-full">
+                  <XMarkIcon className="w-5 h-5 text-[#7A8580]" />
+                </button>
+              </div>
+              <div className="p-5 space-y-3">
+                {row.preview?.detected_source_type && (
+                  <div className="text-xs text-[#7A8580]">
+                    Detected as <span className="font-semibold text-[#3D4A44]">{row.preview.detected_source_type}</span>
+                    {typeof row.preview.mapping_confidence === 'number' && (
+                      <> · mapping confidence <span className="font-semibold text-[#3D4A44]">{Math.round(row.preview.mapping_confidence * 100)}%</span></>
+                    )}
+                  </div>
+                )}
+                {row.unmappedHeaders && row.unmappedHeaders.length > 0 && (
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Unmatched headers: <span className="font-mono">{row.unmappedHeaders.join(', ')}</span>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {columns.map(col => (
+                    <div key={col} className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-[#3D4A44] w-40 truncate" title={col}>{col}</span>
+                      <ChevronRightIcon className="w-4 h-4 text-[#7A8580] flex-shrink-0" />
+                      <select
+                        value={headerToField[col] || ''}
+                        onChange={e => setHeader(col, e.target.value)}
+                        className="flex-1 px-3 py-2 border border-[rgba(59,77,67,0.15)] rounded-xl text-sm bg-white"
+                      >
+                        {TARGET_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                      </select>
                     </div>
-                  )}
-                  <button onClick={resetBulkUpload} className="mt-2 px-5 py-2.5 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all text-sm font-medium">
-                    Done
+                  ))}
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <button onClick={() => setBulkMappingReviewIdx(-1)} className="px-4 py-2 text-sm text-[#7A8580] hover:text-[#3D4A44]">Cancel</button>
+                  <button
+                    onClick={() => {
+                      // Reviewing a low-confidence mapping clears the
+                      // needs_review block so the row joins the rest of
+                      // the batch as `pending`.
+                      updateBulkRow(row.id, {
+                        mappingReviewed: true,
+                        status: row.status === 'needs_review' ? 'pending' : row.status,
+                      })
+                      setBulkMappingReviewIdx(-1)
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl text-sm font-medium"
+                  >
+                    Save mapping
                   </button>
                 </div>
-              )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {bulkDuplicatePrompt && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-[18px] shadow-2xl w-full max-w-md">
+            <div className="p-5 border-b border-[rgba(59,77,67,0.08)]">
+              <h3 className="text-base font-semibold text-[#3D4A44]">Duplicate statement detected</h3>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-sm text-[#3D4A44]">
+                <span className="font-semibold">{bulkDuplicatePrompt.fileName}</span> looks like a duplicate of an existing statement
+                {bulkDuplicatePrompt.existing_statement_id ? <> (#{bulkDuplicatePrompt.existing_statement_id}, status {bulkDuplicatePrompt.existing_status})</> : ''}.
+              </p>
+              <p className="text-xs text-[#7A8580]">
+                <span className="font-medium">Skip</span> — keep the existing statement and move on.
+                <br />
+                <span className="font-medium">Overwrite</span> — force a fresh import alongside the existing statement (the old one stays and can be deleted from the Statements page; this is not a destructive in-place replace).
+                <br />
+                <span className="font-medium">Cancel batch</span> — stop the bulk upload here.
+              </p>
+              <div className="flex flex-col gap-2 pt-2">
+                <div className="flex gap-2">
+                  <button onClick={() => resolveDuplicatePrompt('skip', false)} className="flex-1 px-3 py-2 bg-[#F5F7F4] text-[#3D4A44] rounded-xl text-sm font-medium hover:bg-[#EEF1EC]">Skip</button>
+                  <button onClick={() => resolveDuplicatePrompt('overwrite', false)} className="flex-1 px-3 py-2 bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-xl text-sm font-medium">Overwrite</button>
+                  <button onClick={() => resolveDuplicatePrompt('cancel', false)} className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-xl text-sm font-medium hover:bg-red-100">Cancel batch</button>
+                </div>
+                <div className="flex gap-2 text-xs">
+                  <button onClick={() => resolveDuplicatePrompt('skip', true)} className="flex-1 px-2 py-1.5 text-[#7A8580] hover:text-[#3D4A44] underline">Apply skip to all</button>
+                  <button onClick={() => resolveDuplicatePrompt('overwrite', true)} className="flex-1 px-2 py-1.5 text-[#7A8580] hover:text-[#3D4A44] underline">Apply overwrite to all</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
