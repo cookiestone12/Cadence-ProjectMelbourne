@@ -493,8 +493,9 @@ def check_decay_anomaly(db: Session, org_id: int) -> List[RoyaltyAudit]:
             rate = _get_catalog_rate()
             if rate is None:
                 continue
-            prev = float(series[-2].get("net_total") or 0)
-            obs = float(series[-1].get("net_total") or 0)
+            # build_time_series(granularity="quarter") emits {period, net, gross, lines}
+            prev = float(series[-2].get("net") or 0)
+            obs = float(series[-1].get("net") or 0)
             fitted_proj = prev * (1.0 + float(rate))
             if fitted_proj <= 0:
                 continue
@@ -509,6 +510,12 @@ def check_decay_anomaly(db: Session, org_id: int) -> List[RoyaltyAudit]:
                 "observed": observed,
                 "fitted": fitted,
             }
+            fit_meta = {
+                "decay_quality": "catalog_fallback",
+                "catalog_decay_rate": float(rate),
+                "half_life_periods": None,
+                "r2_log": None,
+            }
         else:
             observed_fitted = fit.get("observed_vs_fitted") or []
             if not observed_fitted:
@@ -522,6 +529,11 @@ def check_decay_anomaly(db: Session, org_id: int) -> List[RoyaltyAudit]:
             pct = abs(delta) / fitted * 100
             if pct < 40:
                 continue
+            fit_meta = {
+                "decay_quality": fit.get("decay_quality"),
+                "half_life_periods": fit.get("half_life_periods"),
+                "r2_log": fit.get("r2_log"),
+            }
         severity = _severity_from_pct(pct)
         direction = "below" if delta < 0 else "above"
         # Task #173 — derive concrete period_start/period_end from the
@@ -553,7 +565,7 @@ def check_decay_anomaly(db: Session, org_id: int) -> List[RoyaltyAudit]:
             description=(
                 f"Song {song_id} {last.get('period')}: observed "
                 f"${observed:.2f} is {pct:.0f}% {direction} fitted decay "
-                f"${fitted:.2f} (R²={fit.get('r2_log')})"
+                f"${fitted:.2f} ({fit_meta.get('decay_quality')})"
             ),
             song_id=song_id,
             period_start=decay_ps,
@@ -563,9 +575,7 @@ def check_decay_anomaly(db: Session, org_id: int) -> List[RoyaltyAudit]:
             discrepancy_cents=int(round(delta * 100)),
             details={
                 "period": last.get("period"),
-                "half_life_periods": fit.get("half_life_periods"),
-                "r2_log": fit.get("r2_log"),
-                "decay_quality": fit.get("decay_quality"),
+                **fit_meta,
             },
         )
         findings.append(finding)

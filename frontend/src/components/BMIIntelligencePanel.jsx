@@ -78,6 +78,67 @@ export default function BMIIntelligencePanel({ orgId, statementId }) {
               </div>
             </div>
           </div>
+
+          {validation.parser === 'bmi_quarterly_v2' && (
+            <div className="mt-5 grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <div className="text-gray-500">US total</div>
+                <div className="font-semibold text-gray-900">{fmtCents(validation.us_total_cents)}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">Admin total</div>
+                <div className="font-semibold text-gray-900">{fmtCents(validation.admin_total_cents)}</div>
+              </div>
+              <div>
+                <div className="text-gray-500">International total</div>
+                <div className="font-semibold text-gray-900">{fmtCents(validation.intl_total_cents)}</div>
+              </div>
+            </div>
+          )}
+
+          {validation.section_totals_cents && Object.keys(validation.section_totals_cents).length > 0 && (
+            <div className="mt-5">
+              <div className="text-sm font-medium text-gray-700 mb-2">Per-section subtotals</div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b border-gray-200">
+                      <th className="py-2 pr-4">Section</th>
+                      <th className="py-2 pr-4 text-right">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(validation.section_totals_cents).map(([section, cents]) => (
+                      <tr key={section} className="border-b border-gray-100">
+                        <td className="py-2 pr-4 font-medium text-gray-900">{section}</td>
+                        <td className="py-2 pr-4 text-right">{fmtCents(cents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {(validation.unparsed_lines_count > 0 || (validation.parse_warnings && validation.parse_warnings.length > 0)) && (
+            <div className="mt-5 rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-800">
+              {validation.unparsed_lines_count > 0 && (
+                <div className="font-medium">
+                  {validation.unparsed_lines_count} unparsed line{validation.unparsed_lines_count === 1 ? '' : 's'} skipped during ingestion.
+                </div>
+              )}
+              {validation.parse_warnings && validation.parse_warnings.length > 0 && (
+                <ul className="mt-2 list-disc pl-5 space-y-1">
+                  {validation.parse_warnings.slice(0, 8).map((w, i) => (
+                    <li key={i}>{w}</li>
+                  ))}
+                  {validation.parse_warnings.length > 8 && (
+                    <li className="text-amber-700">… and {validation.parse_warnings.length - 8} more</li>
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       )}
 

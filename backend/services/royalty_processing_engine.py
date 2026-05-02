@@ -270,6 +270,26 @@ def parse_statement_to_lines(
             count += 1
 
         statement.total_transactions = count
+        # Task #199 — persist BMI parser metadata so the
+        # /royalty-intelligence validation endpoint can surface
+        # per-section subtotals, parse warnings, and the unparsed-
+        # line count without re-running the parser.
+        if pdf_metadata and pdf_metadata.get("parser") == "bmi_quarterly_v2":
+            existing_recon = dict(statement.reconciliation_details or {})
+            existing_recon["bmi_parser"] = {
+                "parser": pdf_metadata.get("parser"),
+                "parse_quality": pdf_metadata.get("parse_quality"),
+                "section_totals": pdf_metadata.get("section_totals") or {},
+                "parse_warnings": pdf_metadata.get("parse_warnings") or [],
+                "unparsed_lines_count": pdf_metadata.get("unparsed_lines_count") or 0,
+                "us_total": pdf_metadata.get("us_total"),
+                "admin_total": pdf_metadata.get("admin_total"),
+                "intl_total": pdf_metadata.get("intl_total"),
+                "grand_total_net": pdf_metadata.get("grand_total_net"),
+                "computed_total_net": pdf_metadata.get("computed_total_net"),
+                "validation_delta": pdf_metadata.get("validation_delta"),
+            }
+            statement.reconciliation_details = existing_recon
         grand_total_net = (pdf_metadata or {}).get("grand_total_net")
         if grand_total_net is not None:
             statement.total_revenue_cents = int(round(grand_total_net * 100))

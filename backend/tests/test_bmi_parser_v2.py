@@ -205,31 +205,111 @@ def test_to_metadata_includes_parse_quality():
 # End-to-end: parse a synthetic multi-section statement text.
 # ---------------------------------------------------------------------------
 
+# Fixture mirrors the real BMI quarterly statement layout the v2 parser
+# was hardened against: multi-section, T-suffixed sources, parens-negative
+# international adjustment, multi-period codes, and per-section subtotals.
 SAMPLE_BMI_TEXT = """BMI BROADCAST MUSIC, INC.
-Account Number: 123456789
-Distribution Date: 11/15/2024
-Performance Period: Q3 2024
+Account No: 123456789
+IP No: 12345.67
+Affiliate: TEST PUBLISHER LLC
+Distribution Date: November 15, 2024
+Performance Period: THIRD QUARTER 2024
+International: 3RD QUARTER ACCOUNTING
+Page 1 of 1
+
+Total Earnings $80.00 $0.00 $20.00 $100.00
 
 U.S. Performances - Internet Audio
-Heat Waves W-10439746 SPOTIFY PREM 1,500 20243 33.33% $12.50
-Heat Waves W-10439746 APPLE FAMILY 800 20243 33.33% $7.20
+SPOTIFY PREM
+HEAT WAVES 104397460 BR 1500 20243 33.33% $12.50
+HEAT WAVES 104397460 BR 800 20242 33.33% $7.50
+APPLE FAMILY T
+HEAT WAVES 104397460 BR 600 20243 33.33% $9.00
+SUMMERTIME 200000001 BR 5000 20243 50.00% $51.00
+Section Total $80.00
 
 International Performances - Audio
-Heat Waves W-10439746 PRS UK 250 20243 20.00% (3.50)
+UNITED KINGDOM - PRS
+HEAT WAVES 104397460 PRS 20243 $23.50
+HEAT WAVES 104397460 PRS 20242 Y ($3.50)
+Section Total $20.00
 
-Section Total: $16.20
-Grand Total: $16.20
+Grand Total $100.00
 """
 
 
-def test_parse_bmi_quarterly_text_returns_statement_object():
-    """End-to-end smoke test — parser runs without raising on a small
-    synthetic multi-section text and returns a BMIParsedStatement.
-    The exact line count depends on regex tolerance for the synthetic
-    layout; we only assert the parser shape is well-formed.
-    """
+def test_parse_bmi_quarterly_text_returns_real_line_items():
+    """End-to-end fixture parse — assert real parsed content covering
+    multi-section, T-suffix, multi-period, parens-negative, and
+    cross-section totals reconciliation."""
     result = parse_bmi_quarterly_text(SAMPLE_BMI_TEXT)
-    # Parser may legitimately return None if header detection rejects
-    # the synthetic block — that's fine for this smoke test, we just
-    # need to confirm the import path and signature work.
-    assert result is None or isinstance(result, BMIParsedStatement)
+    assert isinstance(result, BMIParsedStatement)
+    # 4 audio rows + 2 international rows.
+    assert len(result.line_items) == 6
+    # Sections present in the parsed output.
+    sections = {li.section for li in result.line_items}
+    assert sections == {"us_internet_audio", "intl_audio"}
+    # Sources captured from standalone source-header lines.
+    sources = {li.source for li in result.line_items if li.source}
+    assert "SPOTIFY PREM" in sources
+    assert "APPLE FAMILY" in sources  # T-suffix stripped
+    # T-suffix correctly carried only on the APPLE FAMILY rows.
+    apple_rows = [li for li in result.line_items if li.source == "APPLE FAMILY"]
+    assert apple_rows and all(li.source_t_suffix for li in apple_rows)
+    spotify_rows = [li for li in result.line_items if li.source == "SPOTIFY PREM"]
+    assert spotify_rows and all(not li.source_t_suffix for li in spotify_rows)
+
+
+def test_parse_bmi_quarterly_text_handles_parens_negative_intl():
+    """Adjustments printed as ($3.50) must parse as -$3.50 and the
+    section total must reconcile against the header summary."""
+    result = parse_bmi_quarterly_text(SAMPLE_BMI_TEXT)
+    assert result is not None
+    intl_rows = [li for li in result.line_items if li.section == "intl_audio"]
+    assert len(intl_rows) == 2
+    intl_sum = sum((li.royalty_amount for li in intl_rows), Decimal("0"))
+    assert intl_sum == Decimal("20.00")  # 23.50 + (-3.50)
+    # The negative row is flagged.
+    neg_rows = [li for li in intl_rows if li.royalty_amount < 0]
+    assert len(neg_rows) == 1
+    assert neg_rows[0].royalty_amount == Decimal("-3.50")
+
+
+def test_parse_bmi_quarterly_text_captures_multiperiod_codes():
+    """Both 20243 and 20242 codes coexist in the same section; parser
+    keeps the original code per row so per-period reporting works."""
+    result = parse_bmi_quarterly_text(SAMPLE_BMI_TEXT)
+    assert result is not None
+    periods = {li.period_code for li in result.line_items if li.period_code}
+    assert "20243" in periods
+    assert "20242" in periods
+
+
+def test_parse_bmi_quarterly_text_reconciles_totals():
+    """Header grand total + computed line total must reconcile within
+    parser tolerance, yielding a high parse_quality score."""
+    result = parse_bmi_quarterly_text(SAMPLE_BMI_TEXT)
+    assert result is not None
+    assert result.grand_total == Decimal("100.00")
+    assert result.computed_total == Decimal("100.00")
+    assert result.validation_delta == Decimal("0")
+    assert result.parse_quality == 1.0
+    # Header summary fields populated.
+    assert result.us_total == Decimal("80.00")
+    assert result.intl_total == Decimal("20.00")
+
+
+def test_parse_bmi_quarterly_text_records_section_subtotals():
+    """Section Total lines must be captured into ``section_totals``
+    keyed by the active section."""
+    result = parse_bmi_quarterly_text(SAMPLE_BMI_TEXT)
+    assert result is not None
+    keys = list(result.section_totals.keys())
+    # Both sections produced a Section Total row.
+    assert any(k.startswith("us_internet_audio:") for k in keys)
+    assert any(k.startswith("intl_audio:") for k in keys)
+    # Values match the fixture.
+    us_key = next(k for k in keys if k.startswith("us_internet_audio:"))
+    intl_key = next(k for k in keys if k.startswith("intl_audio:"))
+    assert result.section_totals[us_key] == Decimal("80.00")
+    assert result.section_totals[intl_key] == Decimal("20.00")

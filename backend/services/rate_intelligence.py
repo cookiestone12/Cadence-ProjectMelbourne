@@ -202,6 +202,21 @@ def compute_statement_validation(
 
     stated = stmt.total_revenue_cents or 0
     delta = summed_cents - stated
+
+    # Task #199 — pull the per-section subtotals, parse warnings, and
+    # unparsed-line count out of reconciliation_details where the
+    # BMI v2 ingestion path stores them.
+    bmi_meta = {}
+    recon = stmt.reconciliation_details or {}
+    if isinstance(recon, dict):
+        bmi_meta = recon.get("bmi_parser") or {}
+
+    section_totals_dollars = bmi_meta.get("section_totals") or {}
+    section_totals_cents = {
+        str(k): int(round(float(v) * 100))
+        for k, v in section_totals_dollars.items()
+    }
+
     return {
         "statement_id": statement_id,
         "stated_total_cents": stated,
@@ -211,4 +226,20 @@ def compute_statement_validation(
             abs(delta) / stated if stated else 0.0
         ),
         "parse_quality": float(quality[0]) if quality and quality[0] is not None else None,
+        "parser": bmi_meta.get("parser"),
+        "section_totals_cents": section_totals_cents,
+        "parse_warnings": bmi_meta.get("parse_warnings") or [],
+        "unparsed_lines_count": int(bmi_meta.get("unparsed_lines_count") or 0),
+        "us_total_cents": (
+            int(round(float(bmi_meta["us_total"]) * 100))
+            if bmi_meta.get("us_total") is not None else None
+        ),
+        "admin_total_cents": (
+            int(round(float(bmi_meta["admin_total"]) * 100))
+            if bmi_meta.get("admin_total") is not None else None
+        ),
+        "intl_total_cents": (
+            int(round(float(bmi_meta["intl_total"]) * 100))
+            if bmi_meta.get("intl_total") is not None else None
+        ),
     }
