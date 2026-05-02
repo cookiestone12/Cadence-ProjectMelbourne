@@ -6,3 +6,9 @@ id = "Ktveq3H2EI6ntn-dQgmXa"
 uri = "file://attached_assets/cadence-platform-overview.pptx"
 type = "slides"
 title = "Cadence — Platform Overview (15 slides)"
+
+[[outputs]]
+id = "XNcAiKOUxzXjMH4NLnIbJ"
+uri = "file://exports/cadence_sample_assets.zip"
+type = "unspecified"
+title = "Cadence — Sample Asset Bundle (10 live exports + manifest + README)"
