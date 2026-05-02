@@ -291,7 +291,7 @@ function DashboardTab({ orgId, creatorId }) {
   )
 }
 
-function StatementsTab({ orgId, songs, selectedCreatorId }) {
+function StatementsTab({ orgId, songs, selectedCreatorId, onOpenInProcessing }) {
   const [statements, setStatements] = useState([])
   const [loading, setLoading] = useState(true)
   const [showUpload, setShowUpload] = useState(false)
@@ -898,6 +898,38 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
     handleBulkProcess(failedIds)
   }
 
+  // Task #193 — open a statement's detail view from inside the bulk
+  // upload step-3 summary. We close the bulk modal first so the
+  // detail view actually mounts (it's gated on selectedStatement),
+  // then look the statement up in the freshly-reloaded list to keep
+  // its full metadata. Falls back to a minimal {id} stub if the
+  // reload hasn't returned yet.
+  const openStatementFromBulk = (statementId) => {
+    if (statementId == null) return
+    // Normalize id comparison — backend payloads may be number while
+    // some duplicate-row metadata flows through as string.
+    const stmt = statements.find(s => String(s.id) === String(statementId)) || { id: statementId }
+    resetBulkUpload()
+    setSelectedStatement(stmt)
+  }
+
+  // Task #193 — jump from the bulk modal into the Processing tab and
+  // land on the Processing Inbox view with the REVIEW_REQUIRED filter
+  // applied + the target statement's row highlighted/scrolled into
+  // view. We deliberately do NOT auto-open the detail view here —
+  // the point is to surface the action item in inbox context so the
+  // user can decide how to resolve it.
+  const resolveInInboxFromBulk = (statementId, statementStatus) => {
+    if (statementId == null) return
+    resetBulkUpload()
+    if (typeof onOpenInProcessing === 'function') {
+      onOpenInProcessing({
+        focusStatementId: statementId,
+        statusFilter: statementStatus === 'PARTIALLY_MATCHED' ? 'PARTIALLY_MATCHED' : 'REVIEW_REQUIRED',
+      })
+    }
+  }
+
   if (loading) return <LoadingSpinner message="Loading statements..." />
 
   if (selectedStatement) {
@@ -1482,10 +1514,21 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                 const skipped = bulkRows.filter(r => r.status === 'skipped').length
                 const overwritten = bulkRows.filter(r => r.status === 'overwritten').length
                 const totalLines = bulkRows.reduce((s, r) => s + (r.result?.total_lines || 0), 0)
+                // Task #193 — surface every processed row with a deep
+                // link so users can act on results without leaving the
+                // modal. Done/overwritten rows open the statement
+                // detail; REVIEW_REQUIRED rows offer a Resolve in
+                // Inbox shortcut; skipped rows link to the existing
+                // statement they collided with.
+                const actionableRows = bulkRows.filter(r =>
+                  r.status === 'done' || r.status === 'overwritten' || r.status === 'skipped'
+                )
                 return (
-                  <div className="text-center py-6">
-                    <CheckCircleSolid className="w-16 h-16 text-[#5B8A72] mx-auto mb-4" />
-                    <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Bulk Upload Complete</h4>
+                  <div className="py-2">
+                    <div className="text-center mb-4">
+                      <CheckCircleSolid className="w-14 h-14 text-[#5B8A72] mx-auto mb-3" />
+                      <h4 className="text-lg font-semibold text-[#3D4A44] mb-2">Bulk Upload Complete</h4>
+                    </div>
                     <div className="flex flex-wrap items-center justify-center gap-6 mb-4">
                       <div className="text-center">
                         <p className="text-2xl font-bold text-[#5B8A72]">{succeeded}</p>
@@ -1514,6 +1557,71 @@ function StatementsTab({ orgId, songs, selectedCreatorId }) {
                         <p className="text-xs text-[#7A8580]">Total Lines</p>
                       </div>
                     </div>
+
+                    {actionableRows.length > 0 && (
+                      <div className="mb-4 max-h-72 overflow-y-auto space-y-2 text-left">
+                        {actionableRows.map(r => {
+                          const stmtId = r.status === 'skipped'
+                            ? r.duplicate?.existing_statement_id
+                            : r.result?.id
+                          const statementStatus = r.status === 'skipped'
+                            ? r.duplicate?.existing_status
+                            : r.result?.statement_status
+                          const needsReview = statementStatus === 'REVIEW_REQUIRED' || statementStatus === 'PARTIALLY_MATCHED'
+                          const tone =
+                            r.status === 'skipped' ? 'border-[rgba(59,77,67,0.15)] bg-[#F5F7F4]' :
+                            needsReview ? 'border-orange-200 bg-orange-50' :
+                            'border-green-200 bg-green-50'
+                          const Icon =
+                            r.status === 'skipped' ? XMarkIcon :
+                            needsReview ? EyeIcon :
+                            CheckCircleSolid
+                          const iconColor =
+                            r.status === 'skipped' ? 'text-[#7A8580]' :
+                            needsReview ? 'text-orange-600' :
+                            'text-green-600'
+                          return (
+                            <div key={r.id} className={`flex items-center gap-3 px-3 py-2 rounded-xl border ${tone}`}>
+                              <Icon className={`w-5 h-5 flex-shrink-0 ${iconColor}`} />
+                              <div className="flex-1 min-w-0">
+                                {stmtId ? (
+                                  <button
+                                    onClick={() => openStatementFromBulk(stmtId)}
+                                    className="text-sm font-medium text-[#3D4A44] hover:text-[#5B8A72] hover:underline truncate text-left block w-full"
+                                    title={`Open statement #${stmtId}`}
+                                  >
+                                    {r.file.name}
+                                  </button>
+                                ) : (
+                                  <p className="text-sm font-medium text-[#3D4A44] truncate">{r.file.name}</p>
+                                )}
+                                <p className="text-xs text-[#7A8580] truncate">
+                                  {r.status === 'skipped' && stmtId && (
+                                    <>Skipped — duplicate of statement #{stmtId}{r.duplicate?.existing_status ? ` (${r.duplicate.existing_status})` : ''}</>
+                                  )}
+                                  {r.status === 'done' && r.result && (
+                                    <>{r.result.total_lines} lines · {r.result.matched} matched · {r.result.unmatched} unmatched · {r.result.statement_status}</>
+                                  )}
+                                  {r.status === 'overwritten' && r.result && (
+                                    <>Overwrote duplicate · {r.result.total_lines} lines · {r.result.statement_status}</>
+                                  )}
+                                </p>
+                              </div>
+                              {needsReview && stmtId && (
+                                <button
+                                  onClick={() => resolveInInboxFromBulk(stmtId, statementStatus)}
+                                  className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 bg-orange-100 text-orange-700 rounded-lg text-xs font-medium hover:bg-orange-200 transition-colors"
+                                  title="Show this statement in the Processing Inbox"
+                                >
+                                  <EyeIcon className="w-3.5 h-3.5" /> Resolve in Inbox
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
                     {failed > 0 && (
                       <div className="mb-4 max-h-32 overflow-y-auto text-left">
                         {bulkRows.filter(r => r.status === 'error').map((r) => (
@@ -2900,7 +3008,7 @@ function FeesAdvancesTab({ orgId, creators }) {
   )
 }
 
-function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
+function ProcessingTab({ orgId, creators = [], selectedCreatorId, processingNav = null }) {
   const [selectedStatementId, setSelectedStatementId] = useState(null)
   const [statements, setStatements] = useState([])
   const [statementsLoading, setStatementsLoading] = useState(true)
@@ -2909,6 +3017,40 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [statementsPage, setStatementsPage] = useState(1)
+  // Task #193 — when a "Resolve in Inbox" deep-link arrives we keep
+  // the user in the Processing Inbox view (status cards + recent
+  // statements list) and just highlight + scroll to the targeted
+  // statement row. The highlight auto-clears after a few seconds.
+  const [focusedStatementId, setFocusedStatementId] = useState(null)
+  const focusedRowRef = useRef(null)
+
+  // Task #193 — apply cross-tab navigation requests from the bulk
+  // upload step-3 summary. The `ts` field forces this effect to fire
+  // even when the same payload is requested twice. `statementId`
+  // opens StatementDetailView directly; `focusStatementId` keeps the
+  // user in inbox context with that row highlighted.
+  useEffect(() => {
+    if (!processingNav) return
+    if (typeof processingNav.statusFilter === 'string') {
+      setStatusFilter(processingNav.statusFilter)
+    }
+    if (processingNav.statementId != null) {
+      setSelectedStatementId(processingNav.statementId)
+      setFocusedStatementId(null)
+    } else if (processingNav.focusStatementId != null) {
+      // Stay in inbox view — clear any prior detail-view selection.
+      setSelectedStatementId(null)
+      setFocusedStatementId(processingNav.focusStatementId)
+    }
+  }, [processingNav])
+
+  // Auto-clear the highlight after a short delay so the cue doesn't
+  // linger past its usefulness.
+  useEffect(() => {
+    if (focusedStatementId == null) return
+    const t = setTimeout(() => setFocusedStatementId(null), 6000)
+    return () => clearTimeout(t)
+  }, [focusedStatementId])
   const STATEMENTS_PAGE_SIZE = 20
   const [uploading, setUploading] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
@@ -2980,11 +3122,42 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
   useEffect(() => { setStatementsPage(1) }, [statusFilter])
 
   const totalPages = Math.max(1, Math.ceil(filteredStatements.length / STATEMENTS_PAGE_SIZE))
+
+  // Task #193 — when a focusStatementId arrives via processingNav,
+  // jump to whichever page contains that row so the highlight is
+  // actually visible. Re-evaluates whenever the filtered list or
+  // focused id changes (e.g. after loadStatements completes post
+  // bulk-upload).
+  useEffect(() => {
+    if (focusedStatementId == null) return
+    const idx = filteredStatements.findIndex(s => String(s.id) === String(focusedStatementId))
+    if (idx < 0) return
+    const targetPage = Math.floor(idx / STATEMENTS_PAGE_SIZE) + 1
+    setStatementsPage(targetPage)
+  }, [focusedStatementId, filteredStatements])
+
   const safePage = Math.min(statementsPage, totalPages)
   const pagedStatements = filteredStatements.slice(
     (safePage - 1) * STATEMENTS_PAGE_SIZE,
     safePage * STATEMENTS_PAGE_SIZE,
   )
+
+  // Task #193 — once the focused row is rendered, scroll it into
+  // view smoothly. Runs after pagedStatements settles on the right
+  // page.
+  useEffect(() => {
+    if (focusedStatementId == null) return
+    if (!focusedRowRef.current) return
+    try {
+      focusedRowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    } catch {
+      focusedRowRef.current.scrollIntoView()
+    }
+  }, [focusedStatementId, pagedStatements])
+
+  const focusedStatement = focusedStatementId != null
+    ? statements.find(s => String(s.id) === String(focusedStatementId)) || null
+    : null
   const visibleProcessingIds = pagedStatements.map(s => s.id)
   const allVisibleSelected = visibleProcessingIds.length > 0 && visibleProcessingIds.every(id => selectedIds.has(id))
   const someVisibleSelected = visibleProcessingIds.some(id => selectedIds.has(id)) && !allVisibleSelected
@@ -3038,6 +3211,36 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
 
   return (
     <div className="space-y-6">
+      {focusedStatementId != null && (
+        <div className="flex items-start gap-3 p-4 bg-orange-50 border border-orange-200 rounded-[14px]">
+          <EyeIcon className="w-5 h-5 text-orange-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-[#3D4A44]">
+              Resolving statement #{focusedStatementId}
+              {focusedStatement?.source_name ? ` — ${focusedStatement.source_name}` : ''}
+              {focusedStatement?.status ? ` (${focusedStatement.status})` : ''}
+            </p>
+            <p className="text-xs text-[#7A8580] mt-0.5">
+              From your bulk upload. Highlighted below — open it to review and resolve the matches.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => { setSelectedStatementId(focusedStatementId); setFocusedStatementId(null) }}
+              className="inline-flex items-center gap-1 px-3 py-1.5 bg-[#5B8A72] text-white rounded-lg text-xs font-medium hover:bg-[#4d7a63] transition-colors"
+            >
+              <EyeIcon className="w-3.5 h-3.5" /> Open statement
+            </button>
+            <button
+              onClick={() => setFocusedStatementId(null)}
+              className="p-1.5 text-[#7A8580] hover:bg-orange-100 rounded-lg transition-colors"
+              aria-label="Dismiss"
+            >
+              <XMarkIcon className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
       <ProcessingInboxPanel orgId={orgId} onSelectStatement={(status) => setStatusFilter(status)} />
 
       <div className="bg-white/80 backdrop-blur-xl rounded-[18px] shadow-am p-6 border border-[rgba(59,77,67,0.08)]">
@@ -3163,10 +3366,16 @@ function ProcessingTab({ orgId, creators = [], selectedCreatorId }) {
           <div className="divide-y divide-[rgba(59,77,67,0.05)]">
             {pagedStatements.map(stmt => {
               const colors = STATEMENT_STATUS_COLORS[stmt.status] || { bg: 'bg-gray-100', text: 'text-gray-700' }
+              const isFocused = focusedStatementId != null && String(focusedStatementId) === String(stmt.id)
               return (
                 <div
                   key={stmt.id}
-                  className="w-full px-6 py-4 hover:bg-[rgba(91,138,114,0.04)] transition-colors flex items-center justify-between gap-3"
+                  ref={isFocused ? focusedRowRef : null}
+                  className={`w-full px-6 py-4 transition-colors flex items-center justify-between gap-3 ${
+                    isFocused
+                      ? 'bg-orange-50 ring-2 ring-orange-300 ring-inset animate-pulse'
+                      : 'hover:bg-[rgba(91,138,114,0.04)]'
+                  }`}
                 >
                   <input
                     type="checkbox"
@@ -3421,6 +3630,16 @@ export default function RoyaltiesPage() {
   const [contracts, setContracts] = useState([])
   const [selectedCreatorId, setSelectedCreatorId] = useState(null)
   const [selectedCreatorName, setSelectedCreatorName] = useState('')
+  // Task #193 — cross-tab navigation target so the bulk-upload step-3
+  // summary in StatementsTab can deep-link a row into ProcessingTab
+  // (either a specific statement or a status filter). The timestamp
+  // makes the same {statementId, statusFilter} fire ProcessingTab's
+  // useEffect even when a user re-clicks the same link.
+  const [processingNav, setProcessingNav] = useState(null)
+  const openInProcessing = useCallback((opts = {}) => {
+    setProcessingNav({ ...opts, ts: Date.now() })
+    setActiveTab('processing')
+  }, [])
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -3541,8 +3760,8 @@ export default function RoyaltiesPage() {
         </div>
 
         {activeTab === 'dashboard' && <DashboardTab orgId={orgId} creatorId={selectedCreatorId} />}
-        {activeTab === 'processing' && <ProcessingTab orgId={orgId} creators={creators} selectedCreatorId={selectedCreatorId} />}
-        {activeTab === 'statements' && <StatementsTab orgId={orgId} songs={songs} selectedCreatorId={selectedCreatorId} />}
+        {activeTab === 'processing' && <ProcessingTab orgId={orgId} creators={creators} selectedCreatorId={selectedCreatorId} processingNav={processingNav} />}
+        {activeTab === 'statements' && <StatementsTab orgId={orgId} songs={songs} selectedCreatorId={selectedCreatorId} onOpenInProcessing={openInProcessing} />}
         {activeTab === 'earnings' && <EarningsTab orgId={orgId} selectedCreatorId={selectedCreatorId} />}
         {activeTab === 'analytics' && <RoyaltyAnalyticsDashboard orgId={orgId} />}
         {activeTab === 'money_out' && <MoneyOutTab orgId={orgId} creators={creators} contracts={contracts} />}
