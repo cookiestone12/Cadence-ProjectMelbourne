@@ -326,6 +326,8 @@ def _bulk_lines_by_song(
             RoyaltyStatementLine.canonical_right_category,
             RoyaltyStatementLine.net_amount_statement_currency,
             RoyaltyStatementLine.net_amount,
+            RoyaltyStatementLine.platform_source,
+            RoyaltyStatementLine.society,
             RoyaltyStatement.id.label("stmt_id"),
             RoyaltyStatement.source_type,
         )
@@ -387,6 +389,9 @@ def _compute_song_breakdown_from_data(
     """
     factor_by_stmt: Dict[int, float] = {}
     bucket_revenue_dollars: Dict[str, float] = defaultdict(float)
+    # International value is computed at line-level because the
+    # multiplier is society-specific (per INTERNATIONAL_MULTIPLIERS).
+    international_value_dollars: float = 0.0
     statements_seen: set = set()
 
     for row in lines:
@@ -406,16 +411,49 @@ def _compute_song_breakdown_from_data(
             amount = float(amount)
         except (TypeError, ValueError):
             amount = 0.0
-        bucket = _bucket_for(row.canonical_right_category, row.source_type)
-        bucket_revenue_dollars[bucket] += amount * factor
+        annualized = amount * factor
+
+        # Task #200 — BMI source-typed routing. When a line carries a
+        # ``society`` it represents foreign PRO performance income and
+        # routes to the ``international`` bucket with a society-specific
+        # multiplier. Otherwise, BMI lines with a ``platform_source``
+        # are classified into streaming / sync_adjacent / performance
+        # via ``classify_bmi_source``. Everything else falls back to
+        # the canonical-right-category / source_type mapping.
+        # Treat whitespace-only values as empty so dirty input doesn't
+        # accidentally route a line into the international / sync_adjacent
+        # bucket.
+        society_raw = getattr(row, "society", None)
+        society = society_raw.strip() if isinstance(society_raw, str) and society_raw.strip() else None
+        ps_raw = getattr(row, "platform_source", None)
+        platform_source = ps_raw.strip() if isinstance(ps_raw, str) and ps_raw.strip() else None
+        source_type = row.source_type
+        is_bmi = bool(source_type) and source_type.strip().upper() == "BMI"
+
+        if is_bmi and society:
+            bucket = "international"
+            international_value_dollars += annualized * international_multiplier(society)
+            bucket_revenue_dollars[bucket] += annualized
+        elif is_bmi and platform_source:
+            bucket = classify_bmi_source(platform_source)
+            bucket_revenue_dollars[bucket] += annualized
+        else:
+            bucket = _bucket_for(row.canonical_right_category, source_type)
+            bucket_revenue_dollars[bucket] += annualized
 
     bucket_revenue_cents: Dict[str, int] = {}
-    for b in ("performance", "mechanical", "sync", "streaming", "other"):
+    for b in (
+        "performance", "mechanical", "sync", "streaming",
+        "sync_adjacent", "international", "other",
+    ):
         bucket_revenue_cents[b] = int(round(bucket_revenue_dollars.get(b, 0.0) * 100))
 
     bucket_value_cents: Dict[str, int] = {}
     for b, mult in _BUCKET_MULTIPLIERS.items():
-        bucket_value_cents[b] = int(round(bucket_revenue_cents[b] * mult))
+        if b == "international":
+            bucket_value_cents[b] = int(round(international_value_dollars * 100))
+        else:
+            bucket_value_cents[b] = int(round(bucket_revenue_cents[b] * mult))
 
     total_value_cents = sum(bucket_value_cents.values())
     total_annual_revenue_cents = sum(bucket_revenue_cents.values())
@@ -585,6 +623,12 @@ def compute_source_typed_valuation(
                     "engine": "source_typed_v1",
                     "line_count": breakdown["line_count"],
                     "statement_count": breakdown["statement_count"],
+                    # Task #200 — surface BMI source-typed buckets that
+                    # don't have dedicated columns on ValuationCalculation.
+                    "revenue_sync_adjacent_cents": breakdown["bucket_revenue_cents"]["sync_adjacent"],
+                    "revenue_international_cents": breakdown["bucket_revenue_cents"]["international"],
+                    "value_sync_adjacent_cents": breakdown["bucket_value_cents"]["sync_adjacent"],
+                    "value_international_cents": breakdown["bucket_value_cents"]["international"],
                 },
             )
             db.add(row)
@@ -601,9 +645,20 @@ def compute_source_typed_valuation(
     )
 
     by_bucket: Dict[str, Dict[str, Any]] = {}
-    for b in ("performance", "mechanical", "sync", "streaming", "other"):
+    for b in (
+        "performance", "mechanical", "sync", "streaming",
+        "sync_adjacent", "international", "other",
+    ):
         by_bucket[b] = {
             "revenue_cents": int(aggregate_revenue.get(b, 0)),
+            # NOTE for API consumers: for the ``international`` bucket,
+            # ``multiplier`` is only the *base* rate from
+            # _BUCKET_MULTIPLIERS (8.0). The actual ``value_cents`` is
+            # computed line-by-line using society-specific multipliers
+            # from INTERNATIONAL_MULTIPLIERS (e.g. PRS=9.5, GEMA=9.0,
+            # SADAIC=6.0), so ``value_cents != revenue_cents * multiplier``
+            # is expected for international. All other buckets satisfy
+            # that identity.
             "multiplier": _BUCKET_MULTIPLIERS.get(b),  # None for 'other'
             "value_cents": int(aggregate_value.get(b, 0)),
         }
