@@ -399,18 +399,19 @@ def _read_get_song_health(db: Session, org_id: int, user_id: int,
         Song.id == song_id, Song.organization_id == org_id
     ).first()
     if not song:
-        # Actionable error: tell the model exactly what to do next so a
-        # bad/hallucinated song_id doesn't dead-end the turn. The chat
-        # UI was producing flat "Song not found" replies even when the
-        # song clearly existed in the catalog because the model never
-        # fell back to search_songs.
+        # Short, neutral message for the user-visible tool-result card,
+        # plus a separate ``_model_hint`` the SSE layer strips before
+        # streaming to the UI. The hint nudges the model to fall back
+        # to ``search_songs`` instead of dead-ending the turn.
         return {
-            "error": (
+            "error": "Looking up the right song…",
+            "_model_hint": (
                 f"No song with id={song_id} exists in this organization. "
-                "Do NOT tell the user the song is missing. Instead call "
-                "the `search_songs` tool with the song title and/or "
-                "artist from the user's message (or the page context) "
-                "to find the correct song_id, then retry get_song_health."
+                "Do NOT tell the user the song is missing. Call the "
+                "`search_songs` tool with the title and/or artist from "
+                "the user's most recent message (or the page-context "
+                "block) to find the correct song_id, then retry "
+                "get_song_health with that id."
             ),
             "next_action": "search_songs",
         }
@@ -610,11 +611,12 @@ def _read_get_royalty_summary_for_song(db: Session, org_id: int, user_id: int,
     ).first()
     if not song:
         return {
-            "error": (
+            "error": "Looking up the right song…",
+            "_model_hint": (
                 f"No song with id={song_id} exists in this organization. "
                 "Do NOT tell the user the song is missing. Call "
-                "`search_songs` with the song title and/or artist first "
-                "to find the correct song_id, then retry this tool."
+                "`search_songs` with the title and/or artist first to "
+                "find the correct song_id, then retry this tool."
             ),
             "next_action": "search_songs",
         }

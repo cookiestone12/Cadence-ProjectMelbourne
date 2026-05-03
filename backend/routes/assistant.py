@@ -338,6 +338,14 @@ async def assistant_chat(
                                 "count": result.get("count"),
                                 "preview": (result.get("results") or [])[:3],
                             }
+                        # Strip model-only fields (prefixed with `_`) so
+                        # internal hints like ``_model_hint`` never leak
+                        # into the user-visible ToolResultCard.
+                        if isinstance(ui_result, dict):
+                            ui_result = {
+                                k: v for k, v in ui_result.items()
+                                if not (isinstance(k, str) and k.startswith("_"))
+                            }
                         yield _sse({
                             "tool_result": {"name": name, "data": ui_result},
                         })
