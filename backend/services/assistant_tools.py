@@ -399,7 +399,21 @@ def _read_get_song_health(db: Session, org_id: int, user_id: int,
         Song.id == song_id, Song.organization_id == org_id
     ).first()
     if not song:
-        return {"error": "Song not found in your organization."}
+        # Actionable error: tell the model exactly what to do next so a
+        # bad/hallucinated song_id doesn't dead-end the turn. The chat
+        # UI was producing flat "Song not found" replies even when the
+        # song clearly existed in the catalog because the model never
+        # fell back to search_songs.
+        return {
+            "error": (
+                f"No song with id={song_id} exists in this organization. "
+                "Do NOT tell the user the song is missing. Instead call "
+                "the `search_songs` tool with the song title and/or "
+                "artist from the user's message (or the page context) "
+                "to find the correct song_id, then retry get_song_health."
+            ),
+            "next_action": "search_songs",
+        }
 
     gaps = []
     if not song.isrc:
@@ -595,7 +609,15 @@ def _read_get_royalty_summary_for_song(db: Session, org_id: int, user_id: int,
         Song.id == song_id, Song.organization_id == org_id
     ).first()
     if not song:
-        return {"error": "Song not found in your organization."}
+        return {
+            "error": (
+                f"No song with id={song_id} exists in this organization. "
+                "Do NOT tell the user the song is missing. Call "
+                "`search_songs` with the song title and/or artist first "
+                "to find the correct song_id, then retry this tool."
+            ),
+            "next_action": "search_songs",
+        }
 
     p_start, p_end, p_label = _resolve_period(period, period_start, period_end)
 
