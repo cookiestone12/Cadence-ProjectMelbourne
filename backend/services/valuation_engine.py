@@ -18,11 +18,15 @@ Two surfaces live here:
 """
 from __future__ import annotations
 
+import logging
+import time
 from collections import defaultdict
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from ..config.statement_formats import get_format_spec
 from ..models.models import (
@@ -252,6 +256,35 @@ def _resolve_song_ids(
     return [sid for (sid,) in base_q.all()]
 
 
+def _normalize_splits(rows: Iterable[Tuple[Any, Any]]) -> Tuple[float, float]:
+    """Reduce a list of ``(rights_type, share_percentage)`` rows into
+    ``(artist_pct, publisher_pct)`` using the same fallback rules as
+    the legacy per-song path.
+    """
+    rows = list(rows)
+    if not rows:
+        return (50.0, 50.0)
+
+    artist = 0.0
+    publisher = 0.0
+    for rt, pct in rows:
+        v = float(pct or 0.0)
+        rt_norm = (rt or "").strip().upper()
+        if rt_norm == "MASTER":
+            artist += v
+        elif rt_norm == "PUBLISHING":
+            publisher += v
+
+    if artist == 0.0 and publisher == 0.0:
+        return (50.0, 50.0)
+    if artist == 0.0 and 0.0 < publisher <= 100.0:
+        artist = max(0.0, 100.0 - publisher)
+    if publisher == 0.0 and 0.0 < artist <= 100.0:
+        publisher = max(0.0, 100.0 - artist)
+
+    return (artist, publisher)
+
+
 def _splits_for_song(db: Session, song_id: int) -> Tuple[float, float]:
     """Derive (artist_pct, publisher_pct) from RightsSplit rows on
     the song's contract assets.
@@ -272,46 +305,24 @@ def _splits_for_song(db: Session, song_id: int) -> Tuple[float, float]:
         )
         .all()
     )
-
-    if not rows:
-        return (50.0, 50.0)
-
-    artist = 0.0
-    publisher = 0.0
-    for rt, pct in rows:
-        v = float(pct or 0.0)
-        rt_norm = (rt or "").strip().upper()
-        if rt_norm == "MASTER":
-            artist += v
-        elif rt_norm == "PUBLISHING":
-            publisher += v
-
-    # If only one side has data, treat the other side as the complement
-    # only when the present side is well-formed (<= 100). If both are
-    # zero (e.g. exotic rights_type values), fall back to 50/50 so the
-    # downstream UI still shows a split rather than $0/$0.
-    if artist == 0.0 and publisher == 0.0:
-        return (50.0, 50.0)
-    if artist == 0.0 and 0.0 < publisher <= 100.0:
-        artist = max(0.0, 100.0 - publisher)
-    if publisher == 0.0 and 0.0 < artist <= 100.0:
-        publisher = max(0.0, 100.0 - artist)
-
-    return (artist, publisher)
+    return _normalize_splits(rows)
 
 
-def _compute_song_breakdown(
-    db: Session,
-    song_id: int,
-) -> Dict[str, Any]:
-    """Compute one song's source-typed annualized revenue + valuation.
-
-    Returns a dict with bucket revenues (cents), bucket multipliers,
-    artist/publisher split %, artist/publisher dollar values, total
-    valuation cents, and the line / statement counts that fed it.
+def _bulk_lines_by_song(
+    db: Session, song_ids: List[int]
+) -> Dict[int, List[Any]]:
+    """Fetch all matched royalty statement lines for ``song_ids`` in
+    one query, grouped by ``matched_song_id``. Each row carries the
+    columns the breakdown computation needs plus the parent statement's
+    id and source_type so we don't have to re-join per song.
     """
-    lines = (
+    grouped: Dict[int, List[Any]] = {sid: [] for sid in song_ids}
+    if not song_ids:
+        return grouped
+
+    rows = (
         db.query(
+            RoyaltyStatementLine.matched_song_id.label("song_id"),
             RoyaltyStatementLine.canonical_right_category,
             RoyaltyStatementLine.net_amount_statement_currency,
             RoyaltyStatementLine.net_amount,
@@ -322,12 +333,58 @@ def _compute_song_breakdown(
             RoyaltyStatement,
             RoyaltyStatement.id == RoyaltyStatementLine.statement_id,
         )
-        .filter(RoyaltyStatementLine.matched_song_id == song_id)
+        .filter(RoyaltyStatementLine.matched_song_id.in_(song_ids))
+        .all()
+    )
+    for r in rows:
+        grouped.setdefault(r.song_id, []).append(r)
+    return grouped
+
+
+def _bulk_splits_by_song(
+    db: Session, song_ids: List[int]
+) -> Dict[int, Tuple[float, float]]:
+    """Fetch RightsSplit rows for every song in ``song_ids`` via one
+    query joined through ContractAsset and reduce them to
+    ``{song_id: (artist_pct, publisher_pct)}``. Songs with no rows are
+    omitted; callers should fall back to the 50/50 default.
+    """
+    if not song_ids:
+        return {}
+
+    rows = (
+        db.query(
+            ContractAsset.asset_id.label("song_id"),
+            RightsSplit.rights_type,
+            RightsSplit.share_percentage,
+        )
+        .join(ContractAsset, RightsSplit.contract_asset_id == ContractAsset.id)
+        .filter(
+            ContractAsset.asset_type == "SONG",
+            ContractAsset.asset_id.in_(song_ids),
+        )
         .all()
     )
 
-    # Cache annualization factor per statement so we don't re-resolve
-    # the registry per line.
+    by_song: Dict[int, List[Tuple[Any, Any]]] = defaultdict(list)
+    for r in rows:
+        by_song[r.song_id].append((r.rights_type, r.share_percentage))
+
+    return {
+        sid: _normalize_splits(pairs) for sid, pairs in by_song.items()
+    }
+
+
+def _compute_song_breakdown_from_data(
+    song_id: int,
+    lines: List[Any],
+    artist_pct: float,
+    publisher_pct: float,
+) -> Dict[str, Any]:
+    """Pure-Python breakdown computation that consumes prefetched
+    line rows (from ``_bulk_lines_by_song``) and split percentages
+    (from ``_bulk_splits_by_song``). Issues no DB queries.
+    """
     factor_by_stmt: Dict[int, float] = {}
     bucket_revenue_dollars: Dict[str, float] = defaultdict(float)
     statements_seen: set = set()
@@ -335,8 +392,6 @@ def _compute_song_breakdown(
     for row in lines:
         stmt_id = row.stmt_id
         if stmt_id not in factor_by_stmt:
-            # Build a tiny shim with only the source_type attribute
-            # _annualization_factor needs.
             class _Shim:
                 pass
             shim = _Shim()
@@ -354,8 +409,6 @@ def _compute_song_breakdown(
         bucket = _bucket_for(row.canonical_right_category, row.source_type)
         bucket_revenue_dollars[bucket] += amount * factor
 
-    # Convert dollars -> cents, ensure all buckets present (zero if
-    # missing), apply multipliers (excluding 'other').
     bucket_revenue_cents: Dict[str, int] = {}
     for b in ("performance", "mechanical", "sync", "streaming", "other"):
         bucket_revenue_cents[b] = int(round(bucket_revenue_dollars.get(b, 0.0) * 100))
@@ -367,7 +420,6 @@ def _compute_song_breakdown(
     total_value_cents = sum(bucket_value_cents.values())
     total_annual_revenue_cents = sum(bucket_revenue_cents.values())
 
-    artist_pct, publisher_pct = _splits_for_song(db, song_id)
     pct_total = artist_pct + publisher_pct
     if pct_total > 0:
         artist_share = artist_pct / pct_total
@@ -393,6 +445,28 @@ def _compute_song_breakdown(
         "line_count": len(lines),
         "statement_count": len(statements_seen),
     }
+
+
+def _compute_song_breakdown(
+    db: Session,
+    song_id: int,
+) -> Dict[str, Any]:
+    """Compute one song's source-typed annualized revenue + valuation.
+
+    Thin wrapper around the bulk helpers so single-song callers
+    (``full_valuation``, tests) get the same behaviour while the
+    catalog-wide path in :func:`compute_source_typed_valuation`
+    avoids per-song queries.
+    """
+    lines_by_song = _bulk_lines_by_song(db, [song_id])
+    splits_by_song = _bulk_splits_by_song(db, [song_id])
+    artist_pct, publisher_pct = splits_by_song.get(song_id, (50.0, 50.0))
+    return _compute_song_breakdown_from_data(
+        song_id,
+        lines_by_song.get(song_id, []),
+        artist_pct,
+        publisher_pct,
+    )
 
 
 def compute_source_typed_valuation(
@@ -446,8 +520,23 @@ def compute_source_typed_valuation(
 
     now = datetime.utcnow()
 
+    # Bulk-fetch lines + rights splits for the entire scope up-front so
+    # we issue exactly two queries instead of two per song. For orgs
+    # with 500+ songs this is the dominant speedup.
+    t0 = time.perf_counter()
+    lines_by_song = _bulk_lines_by_song(db, song_ids)
+    splits_by_song = _bulk_splits_by_song(db, song_ids)
+    t_fetch = time.perf_counter() - t0
+
+    t1 = time.perf_counter()
     for sid in song_ids:
-        breakdown = _compute_song_breakdown(db, sid)
+        artist_pct, publisher_pct = splits_by_song.get(sid, (50.0, 50.0))
+        breakdown = _compute_song_breakdown_from_data(
+            sid,
+            lines_by_song.get(sid, []),
+            artist_pct,
+            publisher_pct,
+        )
         for b, cents in breakdown["bucket_revenue_cents"].items():
             aggregate_revenue[b] += cents
         for b, cents in breakdown["bucket_value_cents"].items():
@@ -499,6 +588,17 @@ def compute_source_typed_valuation(
                 },
             )
             db.add(row)
+
+    t_compute = time.perf_counter() - t1
+    logger.info(
+        "compute_source_typed_valuation org=%s songs=%d lines=%d "
+        "fetch=%.3fs compute=%.3fs",
+        org_id,
+        len(song_ids),
+        sum(len(v) for v in lines_by_song.values()),
+        t_fetch,
+        t_compute,
+    )
 
     by_bucket: Dict[str, Dict[str, Any]] = {}
     for b in ("performance", "mechanical", "sync", "streaming", "other"):
