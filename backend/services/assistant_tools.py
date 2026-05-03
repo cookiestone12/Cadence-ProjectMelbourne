@@ -36,6 +36,7 @@ The assistant is a single-step admin helper, not a batch processor.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from datetime import datetime, timedelta, date
 from typing import Any, Callable
@@ -338,19 +339,57 @@ def _placement_brief(p: Placement) -> dict:
 # READ TOOLS
 # ----------------------------------------------------------------------
 
+_SONG_SEARCH_STOPWORDS = {
+    "by", "feat", "feat.", "ft", "ft.", "featuring", "with",
+    "the", "a", "an", "and", "&", "song", "track",
+}
+
+
 def _read_search_songs(db: Session, org_id: int, user_id: int,
                        query: str | None = None, limit: int = 10) -> dict:
     limit = max(1, min(int(limit or 10), 25))
     q = db.query(Song).filter(Song.organization_id == org_id)
-    if query:
-        like = f"%{query.strip()}%"
-        q = q.filter(or_(
-            Song.title.ilike(like),
-            Song.primary_artist.ilike(like),
-            Song.isrc.ilike(like),
-            Song.iswc.ilike(like),
-        ))
-    rows = q.order_by(desc(Song.updated_at)).limit(limit).all()
+    if query and query.strip():
+        # Tokenize on whitespace + common punctuation so a query like
+        # "Down by T-Pain feat. T.I." matches a row whose title is
+        # "Down" and artist is "T-Pain feat. T.I." (the tokens live in
+        # different columns). Each non-stopword token must match at
+        # least one searchable field; tokens are AND-ed together.
+        raw = query.strip()
+        tokens = [
+            t for t in re.split(r"[\s,;/]+", raw) if t
+        ]
+        meaningful = [
+            t for t in tokens if t.lower() not in _SONG_SEARCH_STOPWORDS
+        ] or tokens  # fall back to the raw tokens if all were stopwords
+        for tok in meaningful:
+            like = f"%{tok}%"
+            q = q.filter(or_(
+                Song.title.ilike(like),
+                Song.primary_artist.ilike(like),
+                Song.isrc.ilike(like),
+                Song.iswc.ilike(like),
+            ))
+        # Also try the original full phrase as a single ILIKE — if a
+        # title literally contains "Down by T-Pain", surface it first.
+        rows = q.order_by(desc(Song.updated_at)).limit(limit).all()
+        if not rows:
+            like = f"%{raw}%"
+            rows = (
+                db.query(Song)
+                .filter(Song.organization_id == org_id)
+                .filter(or_(
+                    Song.title.ilike(like),
+                    Song.primary_artist.ilike(like),
+                    Song.isrc.ilike(like),
+                    Song.iswc.ilike(like),
+                ))
+                .order_by(desc(Song.updated_at))
+                .limit(limit)
+                .all()
+            )
+    else:
+        rows = q.order_by(desc(Song.updated_at)).limit(limit).all()
     return {"count": len(rows), "results": [_song_brief(s) for s in rows]}
 
 
