@@ -1261,6 +1261,20 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
             raise last_error
         if isinstance(last_error, SpotifyForbiddenError):
             raise last_error
+        # If the circuit breaker tripped during the lookup, the bare 429
+        # was swallowed inside `_spotify_get` (returns None) and the
+        # outer loop just sees "no data". Surface the real cause so the
+        # user doesn't think their URL is bad.
+        if is_spotify_throttled():
+            seconds_left = max(0, int(spotify_throttled_until() - time.time()))
+            mins = max(1, seconds_left // 60)
+            raise SpotifyForbiddenError(
+                f"Spotify's daily API quota for this project is exhausted "
+                f"(rate-limited for ~{mins} more minutes). The track URL is fine — "
+                f"Spotify is temporarily refusing all lookups. Try again later, or "
+                f"request Extended Quota Mode for your Spotify Developer app at "
+                f"developer.spotify.com to raise the limit."
+            )
         raise SpotifyNotFoundError("Could not find this track on Spotify. Please check the URL and try again.")
 
     logger.info(f"Spotify: Detected URL type '{url_type}' with ID '{resource_id}' from: {playlist_url}")
