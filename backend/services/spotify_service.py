@@ -1191,7 +1191,27 @@ def get_playlist_tracks(playlist_url: str) -> List[Dict[str, Any]]:
         last_error = None
         for token_name, token in tokens:
             try:
-                track_data = _spotify_get(f"tracks/{resource_id}", token)
+                # Some Spotify tracks are "relinked" or region-restricted
+                # and Spotify returns 404 unless we pass a `market`
+                # parameter. Try the bare lookup first (cheapest path),
+                # then retry with `market=US` and finally `market=GB` so
+                # share links from other regions still resolve.
+                track_data = None
+                attempts: list[dict | None] = [None, {"market": "US"}, {"market": "GB"}]
+                for params in attempts:
+                    try:
+                        track_data = _spotify_get(
+                            f"tracks/{resource_id}", token, params
+                        )
+                    except SpotifyNotFoundError:
+                        track_data = None
+                    if track_data:
+                        if params:
+                            logger.info(
+                                f"Spotify: relinked-track resolved via "
+                                f"{params} for {resource_id}"
+                            )
+                        break
                 if track_data:
                     artists = [a.get("name") for a in track_data.get("artists", [])]
                     album = track_data.get("album", {})
