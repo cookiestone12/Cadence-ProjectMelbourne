@@ -73,7 +73,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#FAFBF9] overflow-x-hidden">
       <SEO
         path="/"
-        description="Cadence Catalog Intelligence is the SaaS platform for music publishers and rights holders. Track catalog performance, model valuations, manage rights, and optimize royalty revenue."
+        description="Cadence Catalog Intelligence is the SaaS platform for music publishers and rights holders. Track catalog performance, model valuations, manage rights, and optimize royalty revenue. (Cadence Catalog Intelligence — not affiliated with Cadence Design Systems.)"
       />
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#FAFBF9]/80 backdrop-blur-xl border-b border-[rgba(59,77,67,0.06)]">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
