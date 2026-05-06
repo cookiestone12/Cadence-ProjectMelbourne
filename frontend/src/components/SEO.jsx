@@ -12,7 +12,7 @@ export default function SEO({
   noindex = false,
 }) {
   const fullTitle = title
-    ? `${title} | Cadence Catalog Intelligence`
+    ? `Cadence Catalog Intelligence — ${title}`
     : 'Cadence Catalog Intelligence — Music Catalog Valuation, Rights & Revenue Platform'
   const url = `${SITE_URL}${path}`
 

@@ -1,5 +1,6 @@
 import React from 'react'
 import PublicPageLayout from '../components/PublicPageLayout'
+import SEO from '../components/SEO'
 
 export default function TermsPage() {
   const sectionClass = "mb-8"
@@ -9,6 +10,11 @@ export default function TermsPage() {
 
   return (
     <PublicPageLayout>
+      <SEO
+        path="/terms"
+        title="Terms & Conditions"
+        description="Cadence Catalog Intelligence Terms & Conditions governing use of the Cadence music catalog management and royalty intelligence platform."
+      />
       <h1 className="text-[32px] sm:text-[40px] font-bold text-[#3D4A44] mb-2">Terms & Conditions</h1>
       <p className="text-[14px] text-[#7A8580] mb-10">Last Updated: April 14, 2026</p>
 

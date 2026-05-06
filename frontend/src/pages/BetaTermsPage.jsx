@@ -1,5 +1,6 @@
 import React from 'react'
 import PublicPageLayout from '../components/PublicPageLayout'
+import SEO from '../components/SEO'
 
 export default function BetaTermsPage() {
   const sectionClass = "mb-8"
@@ -9,6 +10,11 @@ export default function BetaTermsPage() {
 
   return (
     <PublicPageLayout>
+      <SEO
+        path="/beta-terms"
+        title="Beta Terms & Conditions"
+        description="Beta Terms & Conditions governing participation in the Cadence Catalog Intelligence pre-release Beta Program."
+      />
       <h1 className="text-[32px] sm:text-[40px] font-bold text-[#3D4A44] mb-2">Beta Terms & Conditions</h1>
       <p className="text-[14px] text-[#7A8580] mb-4">Last Updated: April 14, 2026</p>
       <p className={pClass}>

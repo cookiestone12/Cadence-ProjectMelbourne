@@ -1,5 +1,6 @@
 import React from 'react'
 import PublicPageLayout from '../components/PublicPageLayout'
+import SEO from '../components/SEO'
 
 export default function PrivacyPolicyPage() {
   const sectionClass = "mb-8"
@@ -9,6 +10,11 @@ export default function PrivacyPolicyPage() {
 
   return (
     <PublicPageLayout>
+      <SEO
+        path="/privacy"
+        title="Privacy Policy"
+        description="How Cadence Catalog Intelligence collects, uses, shares, and protects information from music publishers, rights holders, and creators using the Cadence platform."
+      />
       <h1 className="text-[32px] sm:text-[40px] font-bold text-[#3D4A44] mb-2">Privacy Policy</h1>
       <p className="text-[14px] text-[#7A8580] mb-4">Last Updated: April 14, 2026</p>
       <p className={pClass}>
