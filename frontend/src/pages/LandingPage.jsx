@@ -356,8 +356,8 @@ export default function LandingPage() {
           </div>
 
           <FadeIn delay={480}>
-            <p className="text-[14px] text-[#7A8580] text-center max-w-2xl mx-auto mt-10 leading-relaxed">
-              Cadence Catalog Intelligence Co. is a Delaware C-Corporation headquartered in Atlanta, Georgia, building software for the modern music industry. Your catalog is a financial asset. Treat it like one.
+            <p className="text-[14px] text-[#7A8580] text-center max-w-3xl mx-auto mt-10 leading-relaxed">
+              Cadence is music catalog management software, a publisher analytics platform, and a rights management for music solution rolled into one. Built by Cadence Catalog Intelligence Co. — a Delaware C-Corporation headquartered in Atlanta, Georgia — for the modern music industry. Your catalog is a financial asset. Treat it like one.
             </p>
           </FadeIn>
         </div>
