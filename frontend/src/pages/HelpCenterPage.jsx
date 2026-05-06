@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import PublicPageLayout from '../components/PublicPageLayout'
+import SEO from '../components/SEO'
 
 const sections = [
   {
@@ -195,6 +196,11 @@ export default function HelpCenterPage() {
 
   return (
     <PublicPageLayout>
+      <SEO
+        path="/help"
+        title="Help Center"
+        description="Everything you need to get the most out of Cadence — from setting up your first client to processing your first royalty statement, valuing your catalog, and using the AI-powered Brief Builder."
+      />
       <div className="text-center mb-12">
         <h1 className="text-[32px] sm:text-[40px] font-bold text-[#3D4A44] mb-3">Help Center</h1>
         <p className="text-[16px] text-[#7A8580] max-w-xl mx-auto leading-relaxed">

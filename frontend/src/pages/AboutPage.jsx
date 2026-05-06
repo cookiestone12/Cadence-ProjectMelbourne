@@ -1,9 +1,15 @@
 import React from 'react'
 import PublicPageLayout from '../components/PublicPageLayout'
+import SEO from '../components/SEO'
 
 export default function AboutPage() {
   return (
     <PublicPageLayout>
+      <SEO
+        path="/about"
+        title="About"
+        description="Cadence is the operating system for modern music catalogs — built for labels, publishers, managers, and rights holders tired of running a multi-million-dollar business on spreadsheets."
+      />
       <div className="space-y-10">
         <div className="text-center mb-12">
           <h1 className="text-[32px] sm:text-[44px] font-bold text-[#3D4A44] leading-tight mb-4">

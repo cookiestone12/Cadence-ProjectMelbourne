@@ -50,6 +50,7 @@ The frontend features an Apple Music-style aesthetic with a collapsible sidebar,
 - **Performance Sweep**: Added composite indexes and fixed N+1 query issues.
 - **Active-Org Pointer & Org Switcher**: Enhanced user experience for multi-organization users with a robust active organization management system and secure switching.
 - **Bulk Royalty Upload — Inline Mapping Review & Retry**: Multi-file royalty statement uploads run as a single batch with per-row status (uploading / done / overwritten / needs review / error). Users can fix individual file mappings inline before processing and re-run only the failed rows via a "Retry failed" button without rebuilding the batch or re-uploading successful files.
+- **SEO & AI Search Visibility**: `frontend/index.html` carries the canonical title ("Cadence Catalog Intelligence — …"), description, OG/Twitter tags, and two JSON-LD blocks (Organization + SoftwareApplication with Basic/Pro/Enterprise offers). `frontend/public/sitemap.xml` + `robots.txt` + `og-image.png` (1200×630) ship as static assets. Per-route `<SEO>` component (`frontend/src/components/SEO.jsx`) backed by `react-helmet-async` (wired via `HelmetProvider` in `main.jsx`) overrides title/description/canonical on `/about`, `/careers`, `/investors`, `/help`. The landing page includes a 600-word keyword-rich descriptive section disambiguating Cadence Catalog Intelligence from Cadence Design Systems.
 
 ## External Dependencies
 - PostgreSQL

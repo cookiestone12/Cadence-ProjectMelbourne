@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import PublicFooter from '../components/PublicFooter'
+import SEO from '../components/SEO'
 
 function useInView(ref, threshold = 0.15) {
   const [inView, setInView] = useState(false)
@@ -165,6 +166,11 @@ export default function CareersPage() {
 
   return (
     <div className="min-h-screen bg-[#FAFBF9] overflow-x-hidden">
+      <SEO
+        path="/careers"
+        title="Careers"
+        description="Join the founding team at Cadence Catalog Intelligence and help reshape how the music industry thinks about catalog data, royalties, and rights. 2026 internship program now open."
+      />
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#FAFBF9]/80 backdrop-blur-xl border-b border-[rgba(59,77,67,0.06)]">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center cursor-pointer" onClick={() => navigate('/')}>

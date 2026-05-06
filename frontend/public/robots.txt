@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+
+# Disallow authenticated app surfaces — these require login and shouldn't be indexed.
+Disallow: /dashboard
+Disallow: /catalog
+Disallow: /roster
+Disallow: /releases
+Disallow: /contracts
+Disallow: /actions
+Disallow: /reports
+Disallow: /settings
+Disallow: /client-portal
+Disallow: /internal
+Disallow: /admin
+
+Sitemap: https://cadence-ci.com/sitemap.xml
