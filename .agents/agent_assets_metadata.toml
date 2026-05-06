@@ -12,3 +12,9 @@ id = "XNcAiKOUxzXjMH4NLnIbJ"
 uri = "file://exports/cadence_sample_assets.zip"
 type = "unspecified"
 title = "Cadence — Sample Asset Bundle (10 live exports + manifest + README)"
+
+[[outputs]]
+id = "XwPzjr6DD_IK3AtRj7X2t"
+uri = "file://docs/seo-launch-plan.pdf"
+type = "pdf"
+title = "Cadence — SEO & AI Search Launch Plan"
