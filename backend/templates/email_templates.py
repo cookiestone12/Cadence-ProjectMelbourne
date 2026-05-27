@@ -417,6 +417,7 @@ def app_invite(
     inviter_name: str = "",
     role: str = "",
     platform_url: str = "",
+    invite_token: str = "",
 ) -> str:
     invited_by = f"<strong>{inviter_name}</strong> has invited you" if inviter_name else "You&#39;ve been invited"
     content = heading(f"You&#39;re Invited to Cadence!")
@@ -434,8 +435,14 @@ def app_invite(
         "Manage your catalog, track royalties, handle contracts, and collaborate with your team."
     )
 
-    if platform_url:
-        content += button("Accept Invitation &rarr;", f"{platform_url}/login")
+    accept_url = ""
+    if invite_token and platform_url:
+        accept_url = f"{platform_url}/accept-invite?token={invite_token}"
+    elif platform_url:
+        accept_url = f"{platform_url}/login"
+
+    if accept_url:
+        content += button("Accept Invitation &rarr;", accept_url)
     else:
         content += paragraph(
             "Cadence is currently in early access. We&#39;ll send you a link to log in when your account is ready."

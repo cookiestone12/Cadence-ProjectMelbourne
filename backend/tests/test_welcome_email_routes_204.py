@@ -219,3 +219,120 @@ def test_welcome_email_settings_non_member_forbidden(ctx):
     _login(db, outsider)
     r = client.get(f"/api/organizations/{org.id}/welcome-email-settings")
     assert r.status_code == 403
+
+
+# ----------------------------------------------------------------------
+# /api/auth/accept-invite (tokenised invite acceptance)
+# ----------------------------------------------------------------------
+
+def _seed_invite(db, org, email, role, token="tok-abc", expired=False, accepted=False):
+    from backend.models.organizations import OrganizationInvite
+    from datetime import datetime, timedelta
+    inv = OrganizationInvite(
+        organization_id=org.id,
+        email=email.lower(),
+        role=role,
+        token=token,
+        expires_at=datetime.utcnow() + (timedelta(days=-1) if expired else timedelta(days=7)),
+        accepted_at=datetime.utcnow() if accepted else None,
+    )
+    db.add(inv); db.commit(); db.refresh(inv)
+    return inv
+
+
+def test_accept_invite_creates_user_membership_and_sends_admin_welcome(ctx):
+    db, client = ctx
+    org = _mk_org(db, "Acme")
+    _seed_invite(db, org, "newadmin@x.com", "ADMIN", token="tok-admin")
+
+    fake = MagicMock()
+    fake.send_email.return_value = True
+    with patch("backend.services.email_provider.get_email_provider", return_value=fake):
+        r = client.post("/api/auth/accept-invite", json={
+            "token": "tok-admin",
+            "username": "newadmin",
+            "password": "MyPw!23",
+        })
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["user"]["email"] == "newadmin@x.com"
+
+    # User + membership were created with the invite role
+    u = db.query(User).filter(User.username == "newadmin").first()
+    assert u is not None
+    mem = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == u.id
+    ).first()
+    assert mem is not None
+    assert mem.role == "ADMIN"
+    assert mem.organization_id == org.id
+
+    # Welcome email fired with admin-onboarding section, no temp password
+    assert fake.send_email.called
+    html = fake.send_email.call_args.kwargs["html_body"]
+    assert "Acme" in html
+    assert "MyPw!23" not in html
+    assert "here&#39;s how to bring your team in" in html  # ADMIN section
+
+
+def test_accept_invite_member_role_omits_admin_section(ctx):
+    db, client = ctx
+    org = _mk_org(db, "Acme")
+    _seed_invite(db, org, "plain@x.com", "MEMBER", token="tok-member")
+
+    fake = MagicMock()
+    fake.send_email.return_value = True
+    with patch("backend.services.email_provider.get_email_provider", return_value=fake):
+        r = client.post("/api/auth/accept-invite", json={
+            "token": "tok-member",
+            "username": "plain",
+            "password": "MyPw!23",
+        })
+    assert r.status_code == 200
+    html = fake.send_email.call_args.kwargs["html_body"]
+    assert "here&#39;s how to bring your team in" not in html
+
+
+def test_accept_invite_suppresses_welcome_when_org_toggle_off(ctx):
+    db, client = ctx
+    org = _mk_org(db, "QuietCo", welcome_enabled=False)
+    _seed_invite(db, org, "shh@x.com", "MEMBER", token="tok-quiet")
+
+    fake = MagicMock()
+    fake.send_email.return_value = True
+    with patch("backend.services.email_provider.get_email_provider", return_value=fake):
+        r = client.post("/api/auth/accept-invite", json={
+            "token": "tok-quiet",
+            "username": "shh",
+            "password": "MyPw!23",
+        })
+    assert r.status_code == 200
+    assert not fake.send_email.called
+    # but the user + membership were still created
+    u = db.query(User).filter(User.username == "shh").first()
+    assert u is not None
+    assert db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == u.id
+    ).first() is not None
+
+
+def test_accept_invite_rejects_expired_and_used_tokens(ctx):
+    db, client = ctx
+    org = _mk_org(db, "Acme")
+    _seed_invite(db, org, "exp@x.com", "MEMBER", token="tok-expired", expired=True)
+    _seed_invite(db, org, "used@x.com", "MEMBER", token="tok-used", accepted=True)
+
+    r = client.post("/api/auth/accept-invite", json={
+        "token": "tok-expired", "username": "exp", "password": "MyPw!23",
+    })
+    assert r.status_code == 400
+
+    r = client.post("/api/auth/accept-invite", json={
+        "token": "tok-used", "username": "used", "password": "MyPw!23",
+    })
+    assert r.status_code == 400
+
+    r = client.post("/api/auth/accept-invite", json={
+        "token": "tok-missing", "username": "x", "password": "MyPw!23",
+    })
+    assert r.status_code == 404

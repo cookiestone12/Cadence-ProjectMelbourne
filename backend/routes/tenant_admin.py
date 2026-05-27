@@ -769,9 +769,32 @@ def invite_user(
 
     from ..templates.email_templates import app_invite
     from ..services.email_provider import get_email_provider
+    from ..models.organizations import OrganizationInvite
+    from datetime import datetime, timedelta
+    import secrets, os
 
     inviter_name = getattr(current_user, 'full_name', None) or current_user.username
     recipient_name = request.name or request.email.split("@")[0]
+
+    # Task #204 — persist a tokenised invite so /api/auth/accept-invite
+    # can bind the new user to the right org + role at registration time.
+    token = secrets.token_urlsafe(32)
+    invite = OrganizationInvite(
+        organization_id=org.id,
+        email=request.email.lower(),
+        role=request.role or "MEMBER",
+        token=token,
+        invited_by_user_id=current_user.id,
+        expires_at=datetime.utcnow() + timedelta(days=14),
+    )
+    db.add(invite)
+    db.commit()
+
+    platform_url = (
+        os.getenv("FRONTEND_URL")
+        or os.getenv("PLATFORM_URL")
+        or "https://cadence-ci.com"
+    ).rstrip("/")
 
     html_body = app_invite(
         recipient_name=recipient_name,
@@ -779,6 +802,8 @@ def invite_user(
         org_name=org.display_name or org.name,
         inviter_name=inviter_name,
         role=request.role,
+        platform_url=platform_url,
+        invite_token=token,
     )
 
     email_subject = request.subject or f"Invitation to join {org.display_name or org.name} on Cadence"

@@ -67,6 +67,12 @@ class TokenResponse(BaseModel):
     token_type: str
     user: dict
 
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+    username: str
+    password: str
+
 @router.post("/register", response_model=TokenResponse, summary="Register new user", description='Creates a new user account. The very first user in a fresh deployment is automatically promoted to admin. Returns a Bearer JWT plus the user payload so the client can sign the user in immediately.\n\n**Body:** `{ email, password, full_name?, organization_name? }`.\n**Auth:** None — public sign-up.\n**Response:** `{ access_token, token_type: "bearer", user: {id, email, full_name, role, organization_id} }`.')
 def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
     # Check if user exists
@@ -171,6 +177,118 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
             "is_admin": user.is_admin
         }
     }
+
+@router.post(
+    "/accept-invite",
+    response_model=TokenResponse,
+    summary="Accept an org invite and create your Cadence account",
+    description=(
+        "Consumes a tokenised invite issued by `POST /api/tenant/org/{org_id}/invite`. "
+        "Atomically creates the User row, adds an OrganizationMember row with the "
+        "role recorded on the invite, marks the invite accepted, issues a JWT, "
+        "and fires the welcome email (gated on the target org's "
+        "`welcome_email_enabled`).\n\n"
+        "**Auth:** None — bearer of the invite token authenticates the call.\n"
+        "**Body:** `{ token, username, password }`.\n"
+        "**Response:** `{ access_token, token_type, user }`."
+    ),
+)
+def accept_invite(
+    payload: AcceptInviteRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    from ..models.organizations import OrganizationInvite, Organization
+    from ..templates.email_templates import welcome_email
+    from ..services.email_provider import get_email_provider
+    import os, logging
+
+    log = logging.getLogger("cadence")
+
+    invite = db.query(OrganizationInvite).filter(
+        OrganizationInvite.token == payload.token
+    ).first()
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invalid or unknown invite token")
+    if invite.accepted_at is not None:
+        raise HTTPException(status_code=400, detail="This invite has already been used")
+    if invite.expires_at and invite.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="This invite has expired")
+
+    if db.query(User).filter(func.lower(User.username) == payload.username.lower()).first():
+        raise HTTPException(status_code=400, detail="Username already registered")
+    if db.query(User).filter(func.lower(User.email) == invite.email.lower()).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    org = db.query(Organization).filter(Organization.id == invite.organization_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Inviting organization no longer exists")
+
+    user = User(
+        username=payload.username,
+        email=invite.email,
+        hashed_password=get_password_hash(payload.password),
+        is_admin=False,
+    )
+    db.add(user)
+    db.flush()
+
+    db.add(OrganizationMember(
+        organization_id=org.id,
+        user_id=user.id,
+        role=invite.role or "MEMBER",
+    ))
+    invite.accepted_at = datetime.utcnow()
+    db.flush()
+
+    access_token = create_access_token(data={"sub": user.username})
+    _record_session(db, user.id, access_token, request)
+    db.commit()
+    db.refresh(user)
+
+    # Task #204 — fire welcome email with the real org name + invite role.
+    try:
+        if bool(getattr(org, "welcome_email_enabled", True)):
+            platform_url = (
+                os.getenv("FRONTEND_URL")
+                or os.getenv("PLATFORM_URL")
+                or "https://cadence-ci.com"
+            ).rstrip("/")
+            html_body = welcome_email(
+                recipient_name=user.username,
+                recipient_username=user.username,
+                recipient_email=user.email,
+                org_name=org.display_name or org.name or "",
+                org_role=invite.role or "MEMBER",
+                platform_url=platform_url,
+            )
+            ok = get_email_provider().send_email(
+                to=user.email,
+                subject=f"Welcome to Cadence, {user.username}",
+                html_body=html_body,
+            )
+            if not ok:
+                log.warning(
+                    "welcome_email send returned False for user_id=%s", user.id
+                )
+    except Exception as e:
+        log.warning(
+            "welcome_email dispatch failed for user_id=%s: %s", user.id, e
+        )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_admin": user.is_admin,
+        },
+    }
+
 
 @router.post("/login", response_model=TokenResponse, summary="Log in (username + password)", description='Username login is case-insensitive. Returns a Bearer JWT plus the user payload. Use the token in the `Authorization: Bearer ...` header on subsequent calls. Supports OAuth2 password-flow form encoding for the OpenAPI playground.\n\n**Body (form-encoded):** `username, password`.\n**Auth:** None.\n**Response:** `{ access_token, token_type: "bearer", user: {id, email, full_name, role, organization_id} }`. Returns 401 on bad credentials.')
 def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):

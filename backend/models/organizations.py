@@ -85,3 +85,24 @@ class OrganizationMember(Base):
         Index("ix_org_members_org_id", "organization_id"),
         Index("ix_org_members_user_id", "user_id"),
     )
+
+
+class OrganizationInvite(Base):
+    """Task #204 — tokenised invite record. Created when an org admin
+    invites a teammate; consumed by POST /api/auth/accept-invite to
+    create the user + membership atomically and fire the welcome email
+    with the correct org_name and role.
+    """
+    __tablename__ = "organization_invites"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+    email = Column(String, nullable=False, index=True)
+    role = Column(String, nullable=False, default="MEMBER")
+    token = Column(String, nullable=False, unique=True, index=True)
+    invited_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    accepted_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    organization = relationship("Organization")
