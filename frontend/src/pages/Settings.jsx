@@ -25,6 +25,8 @@ export default function Settings() {
   const [isOrgAdmin, setIsOrgAdmin] = useState(false)
   const [assistantWriteEnabled, setAssistantWriteEnabled] = useState(false)
   const [assistantToggleSaving, setAssistantToggleSaving] = useState(false)
+  const [welcomeEmailEnabled, setWelcomeEmailEnabled] = useState(true)
+  const [welcomeEmailSaving, setWelcomeEmailSaving] = useState(false)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -132,6 +134,13 @@ export default function Settings() {
         setAssistantWriteEnabled(!!aRes.data?.assistant_write_enabled)
       } catch (e) {
         console.error('Failed to load assistant settings', e)
+      }
+
+      try {
+        const wRes = await axios.get(`/api/organizations/${orgId}/welcome-email-settings`)
+        setWelcomeEmailEnabled(wRes.data?.welcome_email_enabled !== false)
+      } catch (e) {
+        console.error('Failed to load welcome-email settings', e)
       }
     } catch (error) {
       console.error('Error fetching org data:', error)
@@ -1238,6 +1247,48 @@ export default function Settings() {
                   >
                     <span className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
                       assistantWriteEnabled ? 'left-6' : 'left-1'
+                    }`} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] p-6">
+              <h2 className="text-[22px] font-medium text-[#3D4A44] mb-2">Welcome Emails</h2>
+              <p className="text-[15px] text-[#7A8580] mb-6">
+                When a new user is added to your organization, Cadence can automatically send them a polished welcome email with their sign-in details, a link to log in, and instructions for changing their password. Admin recipients also get a short guide on how to invite their own teammates.
+              </p>
+              <div className="p-4 bg-[#FAFBF9] rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 pr-4">
+                    <div className="text-[15px] font-medium text-[#3D4A44]">Send welcome email to new users</div>
+                    <div className="text-[13px] text-[#7A8580]">On = Cadence sends the email automatically. Off = you onboard new users manually.</div>
+                  </div>
+                  <button
+                    disabled={welcomeEmailSaving || !organizationId}
+                    onClick={async () => {
+                      if (!organizationId) return
+                      setWelcomeEmailSaving(true)
+                      const next = !welcomeEmailEnabled
+                      try {
+                        const res = await axios.put(
+                          `/api/organizations/${organizationId}/welcome-email-settings`,
+                          { welcome_email_enabled: next }
+                        )
+                        setWelcomeEmailEnabled(res.data?.welcome_email_enabled !== false)
+                      } catch (err) {
+                        console.error('Failed to update welcome-email settings', err)
+                        alert(err.response?.data?.detail || 'Could not update welcome-email setting.')
+                      } finally {
+                        setWelcomeEmailSaving(false)
+                      }
+                    }}
+                    className={`w-12 h-7 rounded-full transition-colors relative ${
+                      welcomeEmailEnabled ? 'bg-[#5B8A72]' : 'bg-[#D1D5DB]'
+                    } ${welcomeEmailSaving ? 'opacity-60 cursor-wait' : ''}`}
+                  >
+                    <span className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                      welcomeEmailEnabled ? 'left-6' : 'left-1'
                     }`} />
                   </button>
                 </div>

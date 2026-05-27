@@ -529,3 +529,102 @@ def update_assistant_settings(
     return AssistantSettingsResponse(
         assistant_write_enabled=bool(org.assistant_write_enabled),
     )
+
+
+# ---------------------------------------------------------------------------
+# Welcome-email settings (Task #204)
+# ---------------------------------------------------------------------------
+
+class WelcomeEmailSettingsResponse(BaseModel):
+    welcome_email_enabled: bool
+
+
+class WelcomeEmailSettingsRequest(BaseModel):
+    welcome_email_enabled: bool
+
+
+@router.get(
+    "/{org_id}/welcome-email-settings",
+    response_model=WelcomeEmailSettingsResponse,
+    summary="Get this org's welcome-email setting",
+    description=(
+        "Returns whether Cadence automatically sends a welcome email to "
+        "newly provisioned users in this organization.\n\n"
+        "**Auth:** Bearer JWT — caller must be a member of the org.\n"
+        "**Response:** `{ welcome_email_enabled: bool }`."
+    ),
+)
+def get_welcome_email_settings(
+    org_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id,
+    ).first()
+    if not membership and not getattr(current_user, "is_super_admin", False):
+        raise HTTPException(status_code=403,
+                            detail="Not authorized to access this organization")
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    return WelcomeEmailSettingsResponse(
+        welcome_email_enabled=bool(getattr(org, "welcome_email_enabled", True)),
+    )
+
+
+@router.put(
+    "/{org_id}/welcome-email-settings",
+    response_model=WelcomeEmailSettingsResponse,
+    summary="Update this org's welcome-email setting (admin only)",
+    description=(
+        "Flips the org-level `welcome_email_enabled` toggle. When ON "
+        "(the default), Cadence sends a polished welcome email with "
+        "sign-in details to every new user added to this org. When OFF, "
+        "no welcome email is sent — you onboard users manually.\n\n"
+        "**Auth:** Bearer JWT — caller must be OWNER or ADMIN of the org.\n"
+        "**Body:** `{ welcome_email_enabled: bool }`.\n"
+        "**Response:** the updated setting."
+    ),
+)
+def update_welcome_email_settings(
+    org_id: int,
+    payload: WelcomeEmailSettingsRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = db.query(OrganizationMember).filter(
+        OrganizationMember.user_id == current_user.id,
+        OrganizationMember.organization_id == org_id,
+    ).first()
+    is_super = getattr(current_user, "is_super_admin", False)
+    if not is_super and (not membership or membership.role not in ("OWNER", "ADMIN")):
+        raise HTTPException(status_code=403,
+                            detail="Only org Owners or Admins can change welcome-email settings.")
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    org.welcome_email_enabled = bool(payload.welcome_email_enabled)
+    db.commit()
+    db.refresh(org)
+
+    try:
+        from ..services.audit_service import log_action
+        log_action(
+            db=db,
+            organization_id=org_id,
+            user_id=current_user.id,
+            action="ORG_WELCOME_EMAIL_TOGGLE",
+            entity_type="ORGANIZATION",
+            entity_id=org_id,
+            entity_name=org.name,
+            details={"welcome_email_enabled": org.welcome_email_enabled},
+        )
+        db.commit()
+    except Exception:
+        pass
+
+    return WelcomeEmailSettingsResponse(
+        welcome_email_enabled=bool(org.welcome_email_enabled),
+    )

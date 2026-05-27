@@ -166,17 +166,62 @@ def create_user(
     db.commit()
     db.refresh(user)
     
+    org_for_welcome = None
     if request.organization_id:
-        org = db.query(Organization).filter(Organization.id == request.organization_id).first()
-        if org:
+        org_for_welcome = db.query(Organization).filter(Organization.id == request.organization_id).first()
+        if org_for_welcome:
             membership = OrganizationMember(
-                organization_id=org.id,
+                organization_id=org_for_welcome.id,
                 user_id=user.id,
                 role=request.organization_role
             )
             db.add(membership)
             db.commit()
-    
+
+    # Task #204 — fire welcome email with the admin-provided temporary
+    # password. Wrapped so a send failure logs but does NOT 500 the
+    # provisioning call — the user row is already committed.
+    try:
+        from ..templates.email_templates import welcome_email
+        from ..services.email_provider import get_email_provider
+        import os, logging
+
+        send_it = True
+        if org_for_welcome is not None:
+            send_it = bool(getattr(org_for_welcome, "welcome_email_enabled", True))
+
+        if send_it:
+            platform_url = (
+                os.getenv("FRONTEND_URL")
+                or os.getenv("PLATFORM_URL")
+                or "https://cadence-ci.com"
+            ).rstrip("/")
+            html_body = welcome_email(
+                recipient_name=user.username,
+                recipient_username=user.username,
+                recipient_email=user.email,
+                org_name=(org_for_welcome.display_name or org_for_welcome.name)
+                    if org_for_welcome else "",
+                org_role=request.organization_role if org_for_welcome else "",
+                temporary_password=request.password,
+                platform_url=platform_url,
+            )
+            provider = get_email_provider()
+            ok = provider.send_email(
+                to=user.email,
+                subject=f"Welcome to Cadence, {user.username}",
+                html_body=html_body,
+            )
+            if not ok:
+                logging.getLogger("cadence").warning(
+                    "welcome_email send returned False for user_id=%s", user.id
+                )
+    except Exception as e:
+        import logging
+        logging.getLogger("cadence").warning(
+            "welcome_email dispatch failed for user_id=%s: %s", user.id, e
+        )
+
     orgs = []
     for membership in user.organization_memberships:
         orgs.append({

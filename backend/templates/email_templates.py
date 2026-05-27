@@ -20,6 +20,124 @@ from backend.templates.email_base import (
 )
 
 
+def welcome_email(
+    recipient_name: str,
+    recipient_username: str,
+    recipient_email: str,
+    org_name: str = "",
+    org_role: str = "",
+    temporary_password: str = "",
+    platform_url: str = "",
+) -> str:
+    """Sent when a new user account is provisioned. If `temporary_password`
+    is supplied, the email surfaces it (admin-created flow). If omitted,
+    the email assumes the user just chose their own password (self-signup
+    or invite-acceptance flow). The admin-onboarding section appears when
+    `org_role` is OWNER or ADMIN.
+    """
+    is_admin = (org_role or "").upper() in ("OWNER", "ADMIN")
+
+    content = heading(f"Welcome to Cadence, {recipient_name}.")
+    content += paragraph(
+        "You&#39;ve just joined the catalog intelligence platform trusted by "
+        "publishers, labels, and managers to bring order, accuracy, and "
+        "real-time insight to the music business. Smart move &mdash; we&#39;re "
+        "glad you&#39;re here."
+    )
+
+    if org_name:
+        content += paragraph(
+            f"Your account is set up inside <strong>{org_name}</strong>. "
+            "Everything you need &mdash; catalog, royalties, contracts, "
+            "valuations, action items &mdash; is already wired up and waiting."
+        )
+
+    content += divider()
+    content += subheading("Your sign-in details")
+
+    rows = [
+        ("Username", f"<strong>{recipient_username}</strong>"),
+        ("Email", recipient_email),
+    ]
+    if org_name:
+        rows.append(("Organization", org_name))
+    if org_role:
+        rows.append(("Role", org_role))
+    if temporary_password:
+        rows.append((
+            "Temporary password",
+            f'<span style="font-family:monospace;background:{SAGE_GREEN_BG};'
+            f'padding:3px 8px;border-radius:4px;color:{TEXT_DARK};">'
+            f'{temporary_password}</span>'
+        ))
+    content += key_value_table(rows)
+
+    login_url = f"{platform_url}/login" if platform_url else ""
+    if login_url:
+        content += button("Sign in to Cadence &rarr;", login_url)
+
+    if temporary_password:
+        content += divider()
+        content += subheading("First thing: change your password")
+        content += paragraph(
+            "Your temporary password works for sign-in only. Please rotate it "
+            "the moment you&#39;re in:"
+        )
+        content += paragraph(
+            "1. Sign in using the credentials above.<br>"
+            "2. Open <strong>Settings</strong> from the left sidebar.<br>"
+            "3. Choose the <strong>Account</strong> tab.<br>"
+            "4. Click <strong>Change Password</strong>, enter the temporary "
+            "password as your current password, then set a new one (minimum "
+            "6 characters)."
+        )
+    else:
+        content += divider()
+        content += subheading("Changing your password later")
+        content += paragraph(
+            "You can rotate your password any time from <strong>Settings &rarr; "
+            "Account &rarr; Change Password</strong>."
+        )
+
+    if is_admin:
+        content += divider()
+        content += subheading("You&#39;re an admin &mdash; here&#39;s how to bring your team in")
+        content += paragraph(
+            "As an org admin you can invite teammates and assign their role "
+            "directly from Cadence:"
+        )
+        content += paragraph(
+            "1. Open <strong>Settings</strong> from the left sidebar.<br>"
+            "2. Go to the <strong>Team</strong> (or <strong>Members</strong>) tab.<br>"
+            "3. Click <strong>Invite User</strong>, enter their email, and "
+            "choose a role &mdash; <em>Owner</em>, <em>Admin</em>, or "
+            "<em>Member</em>.<br>"
+            "4. They&#39;ll get an invitation email with a one-click sign-up "
+            "link. Once they accept, they appear in your roster instantly."
+        )
+        content += muted_text(
+            "Tip: Admins and Owners can also manage billing, branding, "
+            "notifications, and the AI assistant&#39;s write permissions from "
+            "the same Settings area."
+        )
+
+    content += divider()
+    content += paragraph(
+        "Need a hand getting oriented? Just reply to this email and a real "
+        "person on the Cadence team will get back to you."
+    )
+    content += muted_text(
+        "If you didn&#39;t expect this account to be created, please reply "
+        "to this email so we can investigate."
+    )
+
+    subject = f"Welcome to Cadence, {recipient_name}"
+    preheader = (
+        f"Your Cadence account is ready{(' at ' + org_name) if org_name else ''}."
+    )
+    return wrap_email(content, subject=subject, preheader=preheader, platform_url=platform_url)
+
+
 def welcome_invite(
     recipient_name: str,
     org_name: str,

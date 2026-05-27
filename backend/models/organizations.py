@@ -46,6 +46,13 @@ class Organization(Base):
         Boolean, default=False, nullable=False, server_default="false"
     )
 
+    # Task #204 — when True (default), Cadence sends a welcome email to
+    # newly provisioned users belonging to this org. Admins can flip OFF
+    # from Settings if they prefer to onboard users manually.
+    welcome_email_enabled = Column(
+        Boolean, default=True, nullable=False, server_default="true"
+    )
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

@@ -95,7 +95,37 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
     _record_session(db, user.id, access_token, request)
     db.commit()
     db.refresh(user)
-    
+
+    # Task #204 — welcome the new self-signup. No temporary password is
+    # surfaced because the user just chose their own. Failures are logged
+    # but never break signup.
+    try:
+        from ..templates.email_templates import welcome_email
+        from ..services.email_provider import get_email_provider
+        import os, logging
+        platform_url = (
+            os.getenv("FRONTEND_URL")
+            or os.getenv("PLATFORM_URL")
+            or "https://cadence-ci.com"
+        ).rstrip("/")
+        html_body = welcome_email(
+            recipient_name=user.username,
+            recipient_username=user.username,
+            recipient_email=user.email,
+            org_role="OWNER" if user.is_admin else "",
+            platform_url=platform_url,
+        )
+        get_email_provider().send_email(
+            to=user.email,
+            subject=f"Welcome to Cadence, {user.username}",
+            html_body=html_body,
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger("cadence").warning(
+            "welcome_email dispatch failed for user_id=%s: %s", user.id, e
+        )
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
