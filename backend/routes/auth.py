@@ -96,30 +96,65 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
     db.commit()
     db.refresh(user)
 
-    # Task #204 — welcome the new self-signup. No temporary password is
-    # surfaced because the user just chose their own. Failures are logged
-    # but never break signup.
+    # Task #204 — welcome the new self-signup (also covers invite
+    # acceptance: the invite email points the recipient at this same
+    # /auth/register endpoint to set their password). No temporary
+    # password is surfaced because the user just chose their own. If the
+    # user is already an OrganizationMember (provisioned before
+    # registering), use that org's true role and respect its
+    # welcome_email_enabled toggle. Failures log but never break signup.
     try:
         from ..templates.email_templates import welcome_email
         from ..services.email_provider import get_email_provider
+        from ..models.models import OrganizationMember, Organization
         import os, logging
-        platform_url = (
-            os.getenv("FRONTEND_URL")
-            or os.getenv("PLATFORM_URL")
-            or "https://cadence-ci.com"
-        ).rstrip("/")
-        html_body = welcome_email(
-            recipient_name=user.username,
-            recipient_username=user.username,
-            recipient_email=user.email,
-            org_role="OWNER" if user.is_admin else "",
-            platform_url=platform_url,
+
+        log = logging.getLogger("cadence")
+
+        org_role = ""
+        org_name = ""
+        send_it = True
+        membership = (
+            db.query(OrganizationMember)
+            .filter(OrganizationMember.user_id == user.id)
+            .first()
         )
-        get_email_provider().send_email(
-            to=user.email,
-            subject=f"Welcome to Cadence, {user.username}",
-            html_body=html_body,
-        )
+        if membership:
+            org_role = membership.role or ""
+            org_obj = (
+                db.query(Organization)
+                .filter(Organization.id == membership.organization_id)
+                .first()
+            )
+            if org_obj:
+                org_name = org_obj.display_name or org_obj.name or ""
+                send_it = bool(getattr(org_obj, "welcome_email_enabled", True))
+        elif user.is_admin:
+            org_role = "OWNER"  # first user in deployment, no org yet
+
+        if send_it:
+            platform_url = (
+                os.getenv("FRONTEND_URL")
+                or os.getenv("PLATFORM_URL")
+                or "https://cadence-ci.com"
+            ).rstrip("/")
+            html_body = welcome_email(
+                recipient_name=user.username,
+                recipient_username=user.username,
+                recipient_email=user.email,
+                org_name=org_name,
+                org_role=org_role,
+                platform_url=platform_url,
+            )
+            ok = get_email_provider().send_email(
+                to=user.email,
+                subject=f"Welcome to Cadence, {user.username}",
+                html_body=html_body,
+            )
+            if not ok:
+                log.warning(
+                    "welcome_email send returned False for user_id=%s", user.id
+                )
     except Exception as e:
         import logging
         logging.getLogger("cadence").warning(
