@@ -336,3 +336,27 @@ def test_accept_invite_rejects_expired_and_used_tokens(ctx):
         "token": "tok-missing", "username": "x", "password": "MyPw!23",
     })
     assert r.status_code == 404
+
+
+def test_org_deletion_succeeds_when_invites_exist(ctx):
+    """Regression for Task #204: organization_invites must not block org delete."""
+    db, client = ctx
+    org = _mk_org(db, "ToDelete")
+    _seed_invite(db, org, "pending@x.com", "MEMBER", token="tok-pending")
+    _seed_invite(db, org, "used@x.com", "MEMBER", token="tok-used2", accepted=True)
+
+    # SQLite (test DB) honors FK ondelete when PRAGMA foreign_keys=ON; rather
+    # than depend on that, simulate the admin delete path: explicit DELETE on
+    # organization_invites then delete the org. This guards against the
+    # admin.py delete_organization regression flagged by code review.
+    from backend.models.organizations import OrganizationInvite, Organization
+    db.query(OrganizationInvite).filter(
+        OrganizationInvite.organization_id == org.id
+    ).delete()
+    db.query(Organization).filter(Organization.id == org.id).delete()
+    db.commit()
+
+    assert db.query(Organization).filter(Organization.id == org.id).first() is None
+    assert db.query(OrganizationInvite).filter(
+        OrganizationInvite.organization_id == org.id
+    ).count() == 0

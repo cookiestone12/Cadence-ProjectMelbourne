@@ -599,6 +599,7 @@ def delete_organization(
         "works",
         "songs",
         "creators",
+        "organization_invites",
         "organization_members",
     ]
 
