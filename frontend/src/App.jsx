@@ -88,6 +88,7 @@ import ContentPolicyPage from './pages/ContentPolicyPage'
 import BetaTermsPage from './pages/BetaTermsPage'
 import HelpCenterPage from './pages/HelpCenterPage'
 import WhatIsCadencePage from './pages/WhatIsCadencePage'
+import AcceptInvitePage from './pages/AcceptInvitePage'
 import InternalLayout from './internal/InternalLayout'
 import InternalLogin from './internal/InternalLogin'
 import InternalDashboard from './internal/Dashboard'
@@ -220,6 +221,7 @@ function App() {
           <Route path="/help" element={<HelpCenterPage />} />
           <Route path="/what-is-cadence" element={<WhatIsCadencePage />} />
           <Route path="/login" element={<Login onLogin={handleLogin} />} />
+          <Route path="/accept-invite" element={<AcceptInvitePage onLogin={handleLogin} />} />
           <Route path="/guide" element={<UserGuidePage />} />
           <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
           <Route path="/shared/credits/:token" element={<SharedCreditsPage />} />
