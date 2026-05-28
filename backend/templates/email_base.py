@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 
@@ -10,12 +11,40 @@ TEXT_FAINT = "#a8b2ad"
 BORDER_COLOR = "#d4ddd8"
 WHITE = "#ffffff"
 
-LOGO_URL = "https://cadence-catalog-intelligence.replit.app/cadence-logo.png"
 PLATFORM_NAME = "Cadence"
+
+# Canonical production host serving the static logo asset
+# (`frontend/public/cadence-logo.png` ships at the site root).
+# Resolved at call time so dev/preview environments can override
+# via FRONTEND_URL / PLATFORM_URL without redeploying.
+_DEFAULT_PLATFORM_HOST = "https://cadence-ci.com"
+
+
+def _platform_host() -> str:
+    raw = (
+        os.getenv("FRONTEND_URL")
+        or os.getenv("PLATFORM_URL")
+        or _DEFAULT_PLATFORM_HOST
+    )
+    return raw.rstrip("/")
+
+
+def get_logo_url() -> str:
+    """Resolve the email logo URL from env, with the production
+    host as the safe default. Centralised so every transactional
+    template renders the same asset and so dev overrides apply
+    uniformly."""
+    return f"{_platform_host()}/cadence-logo.png"
+
+
+# Module-level convenience for templates that read it eagerly.
+# Kept in sync with `get_logo_url()` for backwards compatibility.
+LOGO_URL = get_logo_url()
 
 
 def wrap_email(content_html: str, subject: str = "", preheader: str = "", platform_url: str = "") -> str:
     year = datetime.utcnow().year
+    logo_url = get_logo_url()
 
     preheader_html = ""
     if preheader:
@@ -50,7 +79,7 @@ def wrap_email(content_html: str, subject: str = "", preheader: str = "", platfo
 
                     <tr>
                         <td align="center" style="padding:30px 0 20px 0;">
-                            <img src="{LOGO_URL}" alt="{PLATFORM_NAME}" style="height:50px;display:block;margin:0 auto;" />
+                            <img src="{logo_url}" alt="{PLATFORM_NAME}" style="height:50px;display:block;margin:0 auto;" />
                         </td>
                     </tr>
 
@@ -71,7 +100,7 @@ def wrap_email(content_html: str, subject: str = "", preheader: str = "", platfo
                             <table width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid {BORDER_COLOR};">
                                 <tr>
                                     <td align="center" style="padding:20px 0 0 0;">
-                                        <img src="{LOGO_URL}" alt="{PLATFORM_NAME}" style="height:30px;display:block;margin:0 auto;" />
+                                        <img src="{logo_url}" alt="{PLATFORM_NAME}" style="height:30px;display:block;margin:0 auto;" />
                                     </td>
                                 </tr>
                                 <tr>
