@@ -56,6 +56,7 @@ import ReportsPage from './pages/ReportsPage'
 import ValuationPage from './pages/ValuationPage'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
+import ForcedChangePassword from './pages/ForcedChangePassword'
 import AdminDashboard from './pages/AdminDashboard'
 import WorksPage from './pages/WorksPage'
 import ReleasesPage from './pages/ReleasesPage'
@@ -202,6 +203,26 @@ function App() {
           </Route>
         </Routes>
       </Router>
+    )
+  }
+
+  // Task #207 — accounts provisioned by an admin land with a temporary
+  // password and must_change_password=true. Trap them on the forced
+  // change-password screen until they rotate the credential. Runs even
+  // for super-admins / internal-looking users since they're outside the
+  // /internal portal here.
+  if (isAuthenticated && user?.must_change_password) {
+    const handlePasswordChanged = () => {
+      const updated = { ...user, must_change_password: false }
+      localStorage.setItem('user', JSON.stringify(updated))
+      setUser(updated)
+    }
+    return (
+      <ForcedChangePassword
+        user={user}
+        onPasswordChanged={handlePasswordChanged}
+        onLogout={handleLogout}
+      />
     )
   }
 

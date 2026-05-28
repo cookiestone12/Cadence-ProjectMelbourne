@@ -326,6 +326,10 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         "is_super_admin": getattr(user, 'is_super_admin', False),
         "role": membership.role if membership else None,
         "linked_creator_id": getattr(membership, 'linked_creator_id', None) if membership else None,
+        # Task #207 — frontend uses this flag to trap the user on the
+        # forced change-password screen until they rotate the temporary
+        # credential issued by an admin.
+        "must_change_password": bool(getattr(user, 'must_change_password', False)),
     }
     
     return {
@@ -352,8 +356,22 @@ def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password must be at least 6 characters"
         )
-    
+
+    # Task #207 — block no-op rotations server-side. Without this, a
+    # user flagged with must_change_password could submit the same
+    # temporary password as the "new" one, clear the flag, and keep
+    # using the credential that was emailed to them in plaintext.
+    if verify_password(request.new_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from the current password"
+        )
+
     current_user.hashed_password = get_password_hash(request.new_password)
+    # Task #207 — successful rotation clears the forced-change flag so the
+    # user can leave the change-password screen.
+    if getattr(current_user, 'must_change_password', False):
+        current_user.must_change_password = False
     db.commit()
-    
-    return {"message": "Password changed successfully"}
+
+    return {"message": "Password changed successfully", "must_change_password": False}

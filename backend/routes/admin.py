@@ -160,7 +160,10 @@ def create_user(
         hashed_password=get_password_hash(request.password),
         is_admin=request.is_admin,
         is_super_admin=False,
-        is_active=True
+        is_active=True,
+        # Task #207 — admin-provisioned accounts get a temporary password
+        # that the user must rotate on first login.
+        must_change_password=True,
     )
     db.add(user)
     db.commit()

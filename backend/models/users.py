@@ -19,6 +19,13 @@ class User(Base):
     is_super_admin = Column(Boolean, default=False)
     is_cadence_staff = Column(Boolean, default=False, nullable=False, server_default="false")
     is_active = Column(Boolean, default=True)
+    # Task #207 — set to true when an admin provisions the account with a
+    # temporary password. Login surfaces the flag; the frontend traps the
+    # user on the forced change-password screen until rotated. Cleared by
+    # /api/auth/change-password on a successful rotation.
+    must_change_password = Column(
+        Boolean, default=False, nullable=False, server_default="false"
+    )
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, nullable=True)
     # Task #190: server-side "active organization" pointer for users who
