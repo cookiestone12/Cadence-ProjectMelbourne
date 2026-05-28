@@ -286,6 +286,9 @@ def accept_invite(
             "username": user.username,
             "email": user.email,
             "is_admin": user.is_admin,
+            # Task #206 — freshly invited users have never seen the
+            # onboarding tour; null tells the frontend to show it.
+            "onboarding_completed_at": None,
         },
     }
 
@@ -330,12 +333,42 @@ def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)
         # forced change-password screen until they rotate the temporary
         # credential issued by an admin.
         "must_change_password": bool(getattr(user, 'must_change_password', False)),
+        # Task #206 — frontend uses this to decide whether to show the
+        # post-login OnboardingTour overlay. Null = never seen the tour.
+        "onboarding_completed_at": (
+            user.onboarding_completed_at.isoformat()
+            if getattr(user, 'onboarding_completed_at', None) else None
+        ),
     }
     
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user": user_data
+    }
+
+
+@router.post(
+    "/onboarding-complete",
+    summary="Mark the post-login onboarding tour as completed",
+    description=(
+        "Task #206. Stamps `users.onboarding_completed_at` so the in-app "
+        "onboarding tour does not reappear for this user on future logins. "
+        "Idempotent — subsequent calls keep the original timestamp.\n\n"
+        "**Auth:** Bearer JWT.\n"
+        "**Response:** `{ onboarding_completed_at: ISO-8601 }`."
+    ),
+)
+def mark_onboarding_complete(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not getattr(current_user, 'onboarding_completed_at', None):
+        current_user.onboarding_completed_at = datetime.utcnow()
+        db.commit()
+        db.refresh(current_user)
+    return {
+        "onboarding_completed_at": current_user.onboarding_completed_at.isoformat()
     }
 
 

@@ -28,6 +28,10 @@ class User(Base):
     )
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, nullable=True)
+    # Task #206 — set when the user finishes (or dismisses) the post-login
+    # onboarding tour. Null means they have not seen the tour yet; the
+    # frontend triggers the OnboardingTour overlay only while this is null.
+    onboarding_completed_at = Column(DateTime, nullable=True)
     # Task #190: server-side "active organization" pointer for users who
     # belong to multiple orgs. Validated against OrganizationMember on
     # every read; if it points at an org the user is no longer in, we

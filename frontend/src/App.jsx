@@ -102,6 +102,7 @@ import InternalConfig from './internal/Config'
 import InternalOnboarding from './internal/Onboarding'
 import Sidebar from './components/Sidebar'
 import AssistantChat from './components/AssistantChat'
+import OnboardingTour from './components/OnboardingTour'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -109,6 +110,22 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  // Task #206 — show the one-time post-login onboarding tour for any
+  // authenticated user whose `onboarding_completed_at` is still null.
+  // Client-portal users get a stripped-down app surface, so we skip the
+  // tour for them (it talks about Catalog/Royalties they don't see).
+  const showOnboarding =
+    isAuthenticated &&
+    user &&
+    !user.must_change_password &&
+    !user.onboarding_completed_at &&
+    user.role !== 'CLIENT'
+
+  const handleOnboardingDismiss = () => {
+    const updated = { ...user, onboarding_completed_at: new Date().toISOString() }
+    localStorage.setItem('user', JSON.stringify(updated))
+    setUser(updated)
+  }
 
   useEffect(() => {
     const token = localStorage.getItem('token')
@@ -351,6 +368,9 @@ function App() {
           </div>
         </main>
         <AssistantChat user={user} />
+        {showOnboarding && (
+          <OnboardingTour user={user} onDismiss={handleOnboardingDismiss} />
+        )}
       </div>
     </Router>
   )

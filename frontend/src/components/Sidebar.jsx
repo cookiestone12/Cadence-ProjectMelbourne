@@ -238,7 +238,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
             {!isClient && sections.map((sec) => {
               const isOpen = !!openSections[sec.key]
               return (
-                <div key={sec.key} className="pt-3">
+                <div key={sec.key} className="pt-3" data-tour={sec.key}>
                   <button
                     type="button"
                     onClick={() => toggleSection(sec.key)}
