@@ -15,6 +15,7 @@ export default function AntiFraudPage() {
         path="/anti-fraud"
         title="Anti-Fraud Policy"
         description="Cadence Catalog Intelligence's anti-fraud policy covering streaming fraud, royalty fraud, identity misrepresentation, and platform abuse."
+        image="https://cadence-ci.com/anti-fraud-og.png"
       />
       <h1 className="text-[32px] sm:text-[40px] font-bold text-[#3D4A44] mb-2">Anti-Fraud Policy</h1>
       <p className="text-[14px] text-[#7A8580] mb-4">Last Updated: April 14, 2026</p>

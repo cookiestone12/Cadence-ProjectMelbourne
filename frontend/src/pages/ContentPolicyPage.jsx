@@ -15,6 +15,7 @@ export default function ContentPolicyPage() {
         path="/content-policy"
         title="Content Policy"
         description="Cadence Catalog Intelligence's content policy describing acceptable use of the platform for music catalog management, rights administration, and royalty processing."
+        image="https://cadence-ci.com/content-policy-og.png"
       />
       <h1 className="text-[32px] sm:text-[40px] font-bold text-[#3D4A44] mb-2">Content Policy</h1>
       <p className="text-[14px] text-[#7A8580] mb-4">Last Updated: April 14, 2026</p>

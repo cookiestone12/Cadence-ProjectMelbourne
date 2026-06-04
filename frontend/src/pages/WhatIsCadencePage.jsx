@@ -10,6 +10,7 @@ export default function WhatIsCadencePage() {
         path="/what-is-cadence"
         title="What Is Cadence Catalog Intelligence"
         description="Cadence Catalog Intelligence is the SaaS platform for music publishers, labels, managers, and rights holders. End-to-end music catalog management software, defensible catalog valuation, royalty processing, rights administration, sync placements, creator portals, and streaming intelligence — purpose-built as a publisher analytics platform and rights management for music solution. Not affiliated with Cadence Design Systems."
+        image="https://cadence-ci.com/what-is-cadence-og.png"
       />
       <PublicNav />
       <main className="flex-1 pt-28 pb-16 px-6">

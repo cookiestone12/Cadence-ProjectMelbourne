@@ -14,6 +14,7 @@ export default function BetaTermsPage() {
         path="/beta-terms"
         title="Beta Terms & Conditions"
         description="Beta Terms & Conditions governing participation in the Cadence Catalog Intelligence pre-release Beta Program."
+        image="https://cadence-ci.com/beta-terms-og.png"
       />
       <h1 className="text-[32px] sm:text-[40px] font-bold text-[#3D4A44] mb-2">Beta Terms & Conditions</h1>
       <p className="text-[14px] text-[#7A8580] mb-4">Last Updated: April 14, 2026</p>

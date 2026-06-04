@@ -170,6 +170,7 @@ export default function CareersPage() {
         path="/careers"
         title="Careers"
         description="Join the founding team at Cadence Catalog Intelligence and help reshape how the music industry thinks about catalog data, royalties, and rights. 2026 internship program now open."
+        image="https://cadence-ci.com/careers-og.png"
       />
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#FAFBF9]/80 backdrop-blur-xl border-b border-[rgba(59,77,67,0.06)]">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">

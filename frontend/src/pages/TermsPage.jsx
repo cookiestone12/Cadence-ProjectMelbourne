@@ -14,6 +14,7 @@ export default function TermsPage() {
         path="/terms"
         title="Terms & Conditions"
         description="Cadence Catalog Intelligence Terms & Conditions governing use of the Cadence music catalog management and royalty intelligence platform."
+        image="https://cadence-ci.com/terms-og.png"
       />
       <h1 className="text-[32px] sm:text-[40px] font-bold text-[#3D4A44] mb-2">Terms & Conditions</h1>
       <p className="text-[14px] text-[#7A8580] mb-10">Last Updated: April 14, 2026</p>

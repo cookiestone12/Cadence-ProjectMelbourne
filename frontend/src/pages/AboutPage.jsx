@@ -9,6 +9,7 @@ export default function AboutPage() {
         path="/about"
         title="About"
         description="Cadence Catalog Intelligence is the operating system for modern music catalogs — built for labels, publishers, managers, and rights holders tired of running a multi-million-dollar business on spreadsheets."
+        image="https://cadence-ci.com/about-og.png"
       />
       <div className="space-y-10">
         <div className="text-center mb-12">

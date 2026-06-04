@@ -59,6 +59,7 @@ export default function InvestorsPage() {
         path="/investors"
         title="Investors"
         description="Cadence Catalog Intelligence is building the operating system for music rights and royalties. Pre-seed B2B SaaS targeting the $43B+ global music rights market."
+        image="https://cadence-ci.com/investors-og.png"
       />
       <nav className="fixed top-0 left-0 right-0 z-50 bg-[#FAFBF9]/80 backdrop-blur-xl border-b border-[rgba(59,77,67,0.06)]">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
