@@ -76,6 +76,7 @@ class Lead(Base):
     resume_mime = Column(String, nullable=True)
     status = Column(String, nullable=False, default="new", server_default=text("'new'"))
     contacted_at = Column(DateTime, nullable=True)
+    contacted_email_type = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

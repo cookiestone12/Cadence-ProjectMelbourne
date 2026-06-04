@@ -449,6 +449,7 @@ def contact_lead(
 
     lead.status = "contacted"
     lead.contacted_at = datetime.utcnow()
+    lead.contacted_email_type = request.email_type
     db.commit()
 
     return {
@@ -457,6 +458,7 @@ def contact_lead(
         "email_type": request.email_type,
         "status": lead.status,
         "contacted_at": lead.contacted_at.isoformat() if lead.contacted_at else None,
+        "contacted_email_type": lead.contacted_email_type,
     }
 
 
@@ -490,6 +492,7 @@ def list_leads(
                     getattr(l, "contacted_at", None).isoformat()
                     if getattr(l, "contacted_at", None) else None
                 ),
+                "contacted_email_type": getattr(l, "contacted_email_type", None),
                 "created_at": l.created_at.isoformat() if l.created_at else None,
             }
             for l in leads

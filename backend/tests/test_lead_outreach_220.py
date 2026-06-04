@@ -116,6 +116,7 @@ def test_contact_waitlist_sends_qualify_and_marks_contacted(ctx):
     assert body["success"] is True
     assert body["status"] == "contacted"
     assert body["contacted_at"]
+    assert body["contacted_email_type"] == "qualify"
 
     assert fake.send_email.called
     kwargs = fake.send_email.call_args.kwargs
@@ -125,6 +126,7 @@ def test_contact_waitlist_sends_qualify_and_marks_contacted(ctx):
     db.refresh(lead)
     assert lead.status == "contacted"
     assert lead.contacted_at is not None
+    assert lead.contacted_email_type == "qualify"
 
 
 def test_contact_demo_sends_demo_schedule(ctx):
@@ -257,3 +259,4 @@ def test_list_leads_exposes_status_and_contacted_at(ctx):
     row = next(x for x in rows if x["id"] == lead.id)
     assert row["status"] == "contacted"
     assert row["contacted_at"] is not None
+    assert row["contacted_email_type"] == "qualify"

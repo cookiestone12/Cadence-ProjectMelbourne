@@ -23,8 +23,24 @@ const TABS = [
   { key: 'other', label: 'Other' },
 ]
 
+const STATUS_TABS = [
+  { key: 'all', label: 'All' },
+  { key: 'new', label: 'New' },
+  { key: 'contacted', label: 'Contacted' },
+]
+
+const EMAIL_TYPE_LABELS = {
+  qualify: 'Qualifier email',
+  demo_schedule: 'Demo scheduling email',
+}
+
 function typeLabel(t) {
   return TYPE_LABELS[t] || t || 'Unknown'
+}
+
+function emailTypeLabel(t) {
+  if (!t) return 'Outreach email'
+  return EMAIL_TYPE_LABELS[t] || t
 }
 
 function formatDate(iso) {
@@ -51,6 +67,7 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('all')
+  const [statusTab, setStatusTab] = useState('all')
   const [sendingId, setSendingId] = useState(null)
   const [actionError, setActionError] = useState(null)
 
@@ -81,15 +98,31 @@ export default function LeadsPage() {
     return c
   }, [leads])
 
+  const statusCounts = useMemo(() => {
+    const c = { all: leads.length, new: 0, contacted: 0 }
+    for (const l of leads) {
+      if (l.status === 'contacted') c.contacted += 1
+      else c.new += 1
+    }
+    return c
+  }, [leads])
+
   const visibleLeads = useMemo(() => {
-    if (activeTab === 'all') return leads
+    let rows = leads
     if (activeTab === 'other') {
-      return leads.filter(
+      rows = rows.filter(
         (l) => l.lead_type !== 'WAITLIST' && l.lead_type !== 'DEMO_REQUEST'
       )
+    } else if (activeTab !== 'all') {
+      rows = rows.filter((l) => l.lead_type === activeTab)
     }
-    return leads.filter((l) => l.lead_type === activeTab)
-  }, [leads, activeTab])
+    if (statusTab === 'contacted') {
+      rows = rows.filter((l) => l.status === 'contacted')
+    } else if (statusTab === 'new') {
+      rows = rows.filter((l) => l.status !== 'contacted')
+    }
+    return rows
+  }, [leads, activeTab, statusTab])
 
   const handleContact = async (lead) => {
     const emailType = emailTypeForLead(lead)
@@ -101,10 +134,16 @@ export default function LeadsPage() {
         email_type: emailType,
       })
       const contactedAt = res?.data?.contacted_at || new Date().toISOString()
+      const contactedType = res?.data?.contacted_email_type || emailType
       setLeads((prev) =>
         prev.map((l) =>
           l.id === lead.id
-            ? { ...l, status: 'contacted', contacted_at: contactedAt }
+            ? {
+                ...l,
+                status: 'contacted',
+                contacted_at: contactedAt,
+                contacted_email_type: contactedType,
+              }
             : l
         )
       )
@@ -162,6 +201,33 @@ export default function LeadsPage() {
           })}
         </div>
 
+        <div className="flex flex-wrap items-center gap-2 mb-5">
+          <span className="text-xs font-medium text-[#7A8580] mr-1">Status</span>
+          {STATUS_TABS.map((tab) => {
+            const isActive = statusTab === tab.key
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setStatusTab(tab.key)}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  isActive
+                    ? 'bg-[#3D4A44] text-white'
+                    : 'bg-white text-[#3D4A44] border border-[#E2E8E3] hover:bg-[#EAF1EC]'
+                }`}
+              >
+                {tab.label}
+                <span
+                  className={`text-xs px-2 py-0.5 rounded-full ${
+                    isActive ? 'bg-white/25 text-white' : 'bg-[#F5F7F4] text-[#7A8580]'
+                  }`}
+                >
+                  {statusCounts[tab.key]}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
         {actionError && (
           <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 text-red-700 text-sm">
             {actionError}
@@ -195,7 +261,8 @@ export default function LeadsPage() {
                     <th className="px-4 py-3 font-medium">Company</th>
                     <th className="px-4 py-3 font-medium">Type</th>
                     <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Date</th>
+                    <th className="px-4 py-3 font-medium">Received</th>
+                    <th className="px-4 py-3 font-medium">Outreach</th>
                     <th className="px-4 py-3 font-medium text-right">Action</th>
                   </tr>
                 </thead>
@@ -239,6 +306,20 @@ export default function LeadsPage() {
                         </td>
                         <td className="px-4 py-3 text-[#7A8580]">
                           {formatDate(lead.created_at)}
+                        </td>
+                        <td className="px-4 py-3 text-[#7A8580]">
+                          {isContacted ? (
+                            <div className="leading-tight">
+                              <div className="text-[#3D4A44]">
+                                {emailTypeLabel(lead.contacted_email_type)}
+                              </div>
+                              <div className="text-xs text-[#7A8580]">
+                                Sent {formatDate(lead.contacted_at)}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-[#A6AFA9]">Not contacted</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right">
                           {emailType ? (
