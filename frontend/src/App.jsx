@@ -59,6 +59,8 @@ import Login from './pages/Login'
 import ForcedChangePassword from './pages/ForcedChangePassword'
 import AdminDashboard from './pages/AdminDashboard'
 import LeadsPage from './pages/LeadsPage'
+import QualifyPage from './pages/QualifyPage'
+import QualificationsAdminPage from './pages/QualificationsAdminPage'
 import WorksPage from './pages/WorksPage'
 import ReleasesPage from './pages/ReleasesPage'
 import ContractsPage from './pages/ContractsPage'
@@ -264,6 +266,7 @@ function App() {
           <Route path="/guide" element={<UserGuidePage />} />
           <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
           <Route path="/shared/credits/:token" element={<SharedCreditsPage />} />
+          <Route path="/qualify" element={<QualifyPage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Router>
@@ -360,6 +363,9 @@ function App() {
                 )}
                 {user?.is_super_admin && (
                   <Route path="/admin/leads" element={<LeadsPage />} />
+                )}
+                {user?.is_super_admin && (
+                  <Route path="/admin/qualifications" element={<QualificationsAdminPage />} />
                 )}
                 <Route path="*" element={<Navigate to="/" />} />
               </>

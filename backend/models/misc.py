@@ -259,3 +259,26 @@ class QueryHistoryEntry(Base):
     error = Column(Text, nullable=True)
 
     owner = relationship("User")
+
+
+class DemoQualification(Base):
+    """Stores inbound demo-qualification form submissions from /qualify."""
+    __tablename__ = "demo_qualifications"
+    __table_args__ = (
+        Index('ix_demo_qualifications_created_at', 'created_at'),
+        Index('ix_demo_qualifications_work_email', 'work_email'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String, nullable=False)
+    work_email = Column(String, nullable=False)
+    company = Column(String, nullable=False)
+    role = Column(String, nullable=False)
+    catalog_coverage = Column(JSON, nullable=True)
+    catalog_size = Column(String, nullable=True)
+    current_management = Column(String, nullable=True)
+    goals = Column(JSON, nullable=True)
+    reason_now = Column(Text, nullable=True)
+    timeline = Column(String, nullable=True)
+    demo_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
