@@ -178,32 +178,36 @@ def create_share(
         raise HTTPException(status_code=404, detail="Creator not found in your organization")
 
     # Task #213 — directional sharing rule. A Professional org may only share
-    # its catalog OUT to an Enterprise account. Best-effort early check: if we
-    # can resolve the recipient's current org and it isn't Enterprise, reject
-    # now for clear feedback. The hard guarantee is enforced again at accept
-    # time (a Professional org can never receive a share).
+    # its catalog OUT to an Enterprise account, enforced at both share-creation
+    # (here) and share-acceptance (a Professional org can never receive).
     sender_org = db.query(Organization).filter(
         Organization.id == membership.organization_id
     ).first()
     if sender_org and is_professional(sender_org):
+        # Deterministic rule: a Professional sender may only target a
+        # recipient we can positively verify is an Enterprise account. If the
+        # recipient can't be resolved to an Enterprise org, reject outright
+        # rather than creating an invitation that can never be accepted.
         recipient_user = db.query(User).filter(
             User.email == req.recipient_email.lower()
         ).first()
-        if recipient_user:
-            recipient_membership = db.query(OrganizationMember).filter(
+        recipient_membership = (
+            db.query(OrganizationMember).filter(
                 OrganizationMember.user_id == recipient_user.id
             ).first()
-            recipient_org = (
-                db.query(Organization).filter(
-                    Organization.id == recipient_membership.organization_id
-                ).first()
-                if recipient_membership else None
+            if recipient_user else None
+        )
+        recipient_org = (
+            db.query(Organization).filter(
+                Organization.id == recipient_membership.organization_id
+            ).first()
+            if recipient_membership else None
+        )
+        if not (recipient_org and is_enterprise(recipient_org)):
+            raise HTTPException(
+                status_code=403,
+                detail="Professional accounts can only share their catalog with verified Enterprise accounts.",
             )
-            if recipient_org and not is_enterprise(recipient_org):
-                raise HTTPException(
-                    status_code=403,
-                    detail="Professional accounts can only share their catalog with Enterprise accounts.",
-                )
 
     valid_roles = ["COPRIMARY", "SECONDARY", "READER"]
     if req.role.upper() not in valid_roles:

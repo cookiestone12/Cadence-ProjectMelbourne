@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from ..models import get_db, Organization, OrganizationMember, User, Creator, Song
 from ..utils.auth import get_current_user, resolve_active_org_id
-from ..services.plan_entitlements import get_entitlements
+from ..services.plan_entitlements import get_entitlements, count_catalogs
 
 
 def _generate_access_code():
@@ -36,6 +36,9 @@ class OrganizationResponse(BaseModel):
     roster_enabled: Optional[bool] = None
     can_receive_shares: Optional[bool] = None
     add_on_packs: Optional[int] = None
+    # Managed catalogs in use = owned creators + accepted incoming shares.
+    # This (not creator_count) is what's measured against catalog_limit.
+    catalog_count: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -97,6 +100,7 @@ def get_current_organization(
         "logo_orientation": org.logo_orientation or "square",
         "primary_color": org.primary_color,
         "account_type": org.account_type,
+        "catalog_count": count_catalogs(db, org.id),
         **get_entitlements(org),
     }
 
@@ -246,6 +250,7 @@ def switch_current_organization(
         "logo_orientation": org.logo_orientation or "square",
         "primary_color": org.primary_color,
         "account_type": org.account_type,
+        "catalog_count": count_catalogs(db, org.id),
         **get_entitlements(org),
     }
 

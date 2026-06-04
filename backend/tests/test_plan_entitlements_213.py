@@ -218,6 +218,34 @@ def test_professional_cannot_share_to_non_enterprise(db, client):
         app.dependency_overrides.pop(get_current_user, None)
 
 
+def test_professional_share_rejected_when_recipient_unknown(db, client):
+    """A Professional sender targeting an unverifiable recipient (no user/org)
+    must be rejected at share creation, not left as a dead invitation."""
+    sender = _org(db, account_type="INDIVIDUAL", name="ProSender")
+    sender_user = _owner(db, sender, email="prosender@x.com")
+    creator = Creator(organization_id=sender.id, display_name="MyCatalog")
+    db.add(creator); db.commit(); db.refresh(creator)
+
+    app.dependency_overrides[get_current_user] = lambda: sender_user
+    try:
+        r = client.post(
+            "/api/client-sharing/share",
+            json={
+                "creator_id": creator.id,
+                "recipient_email": "nobody@nowhere.com",
+                "recipient_org_name": "Unknown",
+                "role": "READER",
+                "passcode": "123456",
+            },
+        )
+        assert r.status_code == 403, f"got {r.status_code}: {r.text[:200]}"
+        assert "enterprise" in r.text.lower()
+        # no dead invitation should have been persisted
+        assert db.query(ClientShare).filter(ClientShare.creator_id == creator.id).count() == 0
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_professional_can_share_to_enterprise(db, client):
     sender = _org(db, account_type="INDIVIDUAL", name="ProSender")
     sender_user = _owner(db, sender, email="prosender@x.com")
@@ -306,5 +334,36 @@ def test_current_org_response_includes_entitlements(db, client):
         assert body["roster_enabled"] is True
         assert body["can_receive_shares"] is True
         assert body["add_on_packs"] == 1
+        assert body["catalog_count"] == 0
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_current_org_catalog_count_includes_accepted_shares(db, client):
+    """The usage field on /current must reflect managed catalogs = owned
+    creators + accepted incoming shares (what's measured against the limit)."""
+    org = _org(db, account_type="ENTERPRISE", name="Mixed")
+    user = _owner(db, org, email="mixed@x.com")
+    db.add(Creator(organization_id=org.id, display_name="Owned")); db.commit()
+
+    sender = _org(db, account_type="ENTERPRISE", name="ShareSrc")
+    sender_user = _owner(db, sender, email="src@x.com")
+    shared = Creator(organization_id=sender.id, display_name="Incoming")
+    db.add(shared); db.commit(); db.refresh(shared)
+    db.add(ClientShare(
+        creator_id=shared.id, primary_org_id=sender.id,
+        recipient_org_id=org.id, recipient_user_email="mixed@x.com",
+        passcode="123456", role="READER", status="ACCEPTED",
+        shared_by_user_id=sender_user.id,
+    ))
+    db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        r = client.get("/api/organizations/current")
+        assert r.status_code == 200, f"got {r.status_code}: {r.text[:200]}"
+        body = r.json()
+        assert body["catalog_count"] == 2  # 1 owned + 1 accepted share
+        assert body["creator_count"] == 1  # owned only
     finally:
         app.dependency_overrides.pop(get_current_user, None)
