@@ -4,7 +4,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel
 from typing import List, Optional, Dict
-from ..models import get_db, Creator, CreativeContact, CreatorContact, Organization, OrganizationMember, User, Song, SongCredit, WorkCredit, ClientShare
+from ..models import (
+    get_db, Creator, CreativeContact, CreatorContact, Organization, OrganizationMember,
+    User, Song, SongCredit, WorkCredit, ClientShare,
+    RightsSplit, Contract, ContractParty, RoyaltyStatement, RoyaltyAllocation,
+    Payment, Fee, Payee, CreatorStorageLink,
+)
 from ..utils.auth import get_current_user, get_active_membership
 from .client_sharing import has_shared_access
 import os
@@ -574,13 +579,47 @@ def delete_creator(
     if not check_roster_permission(membership):
         raise HTTPException(status_code=403, detail="You do not have permission to manage the roster")
 
+    # ── credits / contacts (already handled) ─────────────────────────────
     db.query(SongCredit).filter(SongCredit.creator_id == creator_id).delete()
     db.query(WorkCredit).filter(WorkCredit.creator_id == creator_id).delete()
-
     db.query(CreativeContact).filter(
         CreativeContact.creator_id == creator_id,
         CreativeContact.organization_id == creator.organization_id
     ).delete()
+
+    # ── nullify nullable FK references ────────────────────────────────────
+    # rights_splits.rights_holder_id  (nullable=True)
+    db.query(RightsSplit).filter(RightsSplit.rights_holder_id == creator_id).update(
+        {RightsSplit.rights_holder_id: None}, synchronize_session=False
+    )
+    # contracts.creator_id  (nullable=True)
+    db.query(Contract).filter(Contract.creator_id == creator_id).update(
+        {Contract.creator_id: None}, synchronize_session=False
+    )
+    # contract_parties.creator_id  (nullable=True)
+    db.query(ContractParty).filter(ContractParty.creator_id == creator_id).update(
+        {ContractParty.creator_id: None}, synchronize_session=False
+    )
+    # royalty_statements.creator_id  (nullable=True)
+    db.query(RoyaltyStatement).filter(RoyaltyStatement.creator_id == creator_id).update(
+        {RoyaltyStatement.creator_id: None}, synchronize_session=False
+    )
+    # payees.creator_id  (nullable=True)
+    db.query(Payee).filter(Payee.creator_id == creator_id).update(
+        {Payee.creator_id: None}, synchronize_session=False
+    )
+
+    # ── delete rows with NOT NULL FK references ───────────────────────────
+    # royalty_allocations.rights_holder_id  (NOT NULL)
+    db.query(RoyaltyAllocation).filter(RoyaltyAllocation.rights_holder_id == creator_id).delete()
+    # payments.payee_id  (NOT NULL)
+    db.query(Payment).filter(Payment.payee_id == creator_id).delete()
+    # fees.creator_id  (NOT NULL)
+    db.query(Fee).filter(Fee.creator_id == creator_id).delete()
+    # client_shares.creator_id  (NOT NULL)
+    db.query(ClientShare).filter(ClientShare.creator_id == creator_id).delete()
+    # creator_storage_links.creator_id  (NOT NULL)
+    db.query(CreatorStorageLink).filter(CreatorStorageLink.creator_id == creator_id).delete()
 
     from ..services.audit_service import log_action
     log_action(db, creator.organization_id, current_user.id, "DELETE", "CREATOR", creator.id, creator.display_name)
