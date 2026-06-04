@@ -849,3 +849,117 @@ def list_org_creators(
         }
         for c in creators
     ]
+
+
+class PlanUpdateRequest(BaseModel):
+    # Task #214 — admin-settable plan. account_type drives the tier
+    # (ENTERPRISE = Enterprise, INDIVIDUAL = Professional); catalog_addon_packs
+    # scales the Enterprise catalog capacity (+5 per pack). No payments.
+    account_type: Optional[str] = None
+    catalog_addon_packs: Optional[int] = None
+
+
+@router.get(
+    "/plan",
+    summary="Get the caller's organization plan + usage",
+    description=(
+        "Returns the org's plan entitlements (tier, catalog limit, roster / "
+        "share capabilities, add-on packs) alongside current usage "
+        "(`catalog_count` = owned creators + accepted incoming shares).\n\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** `{ account_type, catalog_count, ...entitlements }`."
+    ),
+)
+def get_org_plan(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from ..services.plan_entitlements import get_entitlements, count_catalogs
+
+    org_id, _ = get_org_admin(db, current_user)
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    return {
+        "account_type": org.account_type,
+        "catalog_count": count_catalogs(db, org_id),
+        **get_entitlements(org),
+    }
+
+
+@router.patch(
+    "/plan",
+    summary="Set the caller's organization plan + add-on packs",
+    description=(
+        "Updates the org's tier (`account_type`: `ENTERPRISE` = Enterprise, "
+        "`INDIVIDUAL` = Professional) and/or `catalog_addon_packs` (Enterprise "
+        "capacity = 10 + 5×packs). Server is the source of truth and re-derives "
+        "entitlements. Downgrading to Professional is blocked when the org "
+        "already manages more catalogs than the Professional limit.\n\n"
+        "**Body:** `{ account_type?, catalog_addon_packs? }`.\n"
+        "**Auth:** Bearer JWT. Caller must be OWNER, ADMIN, or super-admin.\n\n"
+        "**Response:** `{ account_type, catalog_count, ...entitlements }`."
+    ),
+)
+def update_org_plan(
+    request: PlanUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from ..services.plan_entitlements import (
+        get_entitlements,
+        count_catalogs,
+        catalog_limit,
+        ENTERPRISE,
+        PROFESSIONAL,
+    )
+
+    org_id, _ = get_org_admin(db, current_user)
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    if request.account_type is not None:
+        at = request.account_type.strip().upper()
+        if at not in (ENTERPRISE, PROFESSIONAL):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid account_type. Must be one of: {ENTERPRISE}, {PROFESSIONAL}.",
+            )
+        # Downgrade safety guard: switching to Professional caps the org at the
+        # Professional catalog limit. Block the change if it would leave the org
+        # already over that limit rather than silently stranding catalogs.
+        if at == PROFESSIONAL:
+            managed = count_catalogs(db, org_id)
+            class _Pro:
+                account_type = PROFESSIONAL
+                catalog_addon_packs = 0
+            pro_limit = catalog_limit(_Pro())
+            if managed > pro_limit:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Can't downgrade to Professional: this organization manages "
+                        f"{managed} catalogs but the Professional plan allows only {pro_limit}. "
+                        f"Remove or transfer catalogs first."
+                    ),
+                )
+        org.account_type = at
+
+    if request.catalog_addon_packs is not None:
+        if request.catalog_addon_packs < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="catalog_addon_packs cannot be negative.",
+            )
+        org.catalog_addon_packs = request.catalog_addon_packs
+
+    db.commit()
+    db.refresh(org)
+
+    return {
+        "account_type": org.account_type,
+        "catalog_count": count_catalogs(db, org_id),
+        **get_entitlements(org),
+    }

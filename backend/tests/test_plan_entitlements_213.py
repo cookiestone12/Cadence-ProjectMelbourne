@@ -381,6 +381,148 @@ def test_current_org_catalog_count_includes_accepted_shares(db, client):
         app.dependency_overrides.pop(get_current_user, None)
 
 
+# ---- Task #214 — admin sets plan + add-on packs from Settings ----------------
+
+def _activate(db, user, org):
+    user.current_organization_id = org.id
+    db.commit()
+
+
+def test_admin_get_plan_returns_entitlements_and_usage(db, client):
+    org = _org(db, account_type="ENTERPRISE", packs=1, name="GetPlan")
+    user = _owner(db, org, email="getplan@x.com")
+    _activate(db, user, org)
+    db.add(Creator(organization_id=org.id, display_name="One")); db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: db.query(User).get(user.id)
+    try:
+        r = client.get("/api/tenant-admin/plan")
+        assert r.status_code == 200, f"got {r.status_code}: {r.text[:200]}"
+        body = r.json()
+        assert body["account_type"] == "ENTERPRISE"
+        assert body["plan_label"] == "Enterprise"
+        assert body["catalog_limit"] == 15
+        assert body["add_on_packs"] == 1
+        assert body["catalog_count"] == 1
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_admin_can_set_packs_and_upgrade_plan(db, client):
+    org = _org(db, account_type="INDIVIDUAL", name="Upgrade")
+    user = _owner(db, org, email="upgrade@x.com")
+    _activate(db, user, org)
+
+    app.dependency_overrides[get_current_user] = lambda: db.query(User).get(user.id)
+    try:
+        r = client.patch(
+            "/api/tenant-admin/plan",
+            json={"account_type": "ENTERPRISE", "catalog_addon_packs": 2},
+        )
+        assert r.status_code == 200, f"got {r.status_code}: {r.text[:200]}"
+        body = r.json()
+        assert body["account_type"] == "ENTERPRISE"
+        assert body["add_on_packs"] == 2
+        assert body["catalog_limit"] == 20  # 10 + 2*5
+        db.refresh(org)
+        assert org.account_type == "ENTERPRISE"
+        assert org.catalog_addon_packs == 2
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_admin_invalid_account_type_rejected(db, client):
+    org = _org(db, account_type="ENTERPRISE", name="BadType")
+    user = _owner(db, org, email="badtype@x.com")
+    _activate(db, user, org)
+
+    app.dependency_overrides[get_current_user] = lambda: db.query(User).get(user.id)
+    try:
+        r = client.patch("/api/tenant-admin/plan", json={"account_type": "PLATINUM"})
+        assert r.status_code == 400, f"got {r.status_code}: {r.text[:200]}"
+        r2 = client.patch("/api/tenant-admin/plan", json={"catalog_addon_packs": -1})
+        assert r2.status_code == 400, f"got {r2.status_code}: {r2.text[:200]}"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_admin_downgrade_blocked_when_over_professional_limit(db, client):
+    org = _org(db, account_type="ENTERPRISE", name="Downgrade")
+    user = _owner(db, org, email="downgrade@x.com")
+    _activate(db, user, org)
+    for i in range(3):
+        db.add(Creator(organization_id=org.id, display_name=f"C{i}"))
+    db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: db.query(User).get(user.id)
+    try:
+        r = client.patch("/api/tenant-admin/plan", json={"account_type": "INDIVIDUAL"})
+        assert r.status_code == 409, f"got {r.status_code}: {r.text[:200]}"
+        assert "downgrade" in r.text.lower()
+        db.refresh(org)
+        assert org.account_type == "ENTERPRISE"  # unchanged
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_admin_downgrade_allowed_within_professional_limit(db, client):
+    org = _org(db, account_type="ENTERPRISE", packs=2, name="DowngradeOK")
+    user = _owner(db, org, email="downok@x.com")
+    _activate(db, user, org)
+    db.add(Creator(organization_id=org.id, display_name="Only")); db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: db.query(User).get(user.id)
+    try:
+        r = client.patch("/api/tenant-admin/plan", json={"account_type": "INDIVIDUAL"})
+        assert r.status_code == 200, f"got {r.status_code}: {r.text[:200]}"
+        body = r.json()
+        assert body["account_type"] == "INDIVIDUAL"
+        assert body["catalog_limit"] == 1
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_admin_mixed_payload_downgrade_blocked_atomically(db, client):
+    """A single PATCH that both downgrades to Professional AND changes packs must
+    be rejected as a unit when over-limit — no partial pack write should leak."""
+    org = _org(db, account_type="ENTERPRISE", packs=1, name="MixedGuard")
+    user = _owner(db, org, email="mixedguard@x.com")
+    _activate(db, user, org)
+    for i in range(3):
+        db.add(Creator(organization_id=org.id, display_name=f"C{i}"))
+    db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: db.query(User).get(user.id)
+    try:
+        r = client.patch(
+            "/api/tenant-admin/plan",
+            json={"account_type": "INDIVIDUAL", "catalog_addon_packs": 5},
+        )
+        assert r.status_code == 409, f"got {r.status_code}: {r.text[:200]}"
+        db.refresh(org)
+        assert org.account_type == "ENTERPRISE"  # unchanged
+        assert org.catalog_addon_packs == 1  # pack change did not leak
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_non_admin_cannot_change_plan(db, client):
+    org = _org(db, account_type="ENTERPRISE", name="MemberOrg")
+    owner = _owner(db, org, email="owner_member@x.com")
+    member = User(username="member@x.com", email="member@x.com", hashed_password="x", is_active=True)
+    db.add(member); db.commit(); db.refresh(member)
+    db.add(OrganizationMember(organization_id=org.id, user_id=member.id, role="MEMBER"))
+    member.current_organization_id = org.id
+    db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: db.query(User).get(member.id)
+    try:
+        r = client.patch("/api/tenant-admin/plan", json={"account_type": "INDIVIDUAL"})
+        assert r.status_code == 403, f"got {r.status_code}: {r.text[:200]}"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 # ---- Task #216 — deterministic org resolution for multi-org users ------------
 
 def test_multi_org_accept_follows_active_org_pointer(db, client):
