@@ -123,6 +123,16 @@ export default function ValuationPage() {
     } catch {}
   }, [scopeCreatorId])
 
+  // Underwriting-only tabs disappear when there's no underwriting payload
+  // (e.g. after a scope switch with no run). Fall back to a tab that is
+  // always available so the page never renders an empty main panel.
+  useEffect(() => {
+    const alwaysAvailable = ['overview', 'earnings']
+    if (!uwData && !alwaysAvailable.includes(activeTab)) {
+      setActiveTab('overview')
+    }
+  }, [uwData, activeTab])
+
   const loadAll = async (creatorId = null) => {
     setLoading(true)
     try {
@@ -385,16 +395,6 @@ export default function ValuationPage() {
   }
 
   const hasUW = !!uwData
-
-  // Underwriting-only tabs disappear when there's no underwriting payload
-  // (e.g. after a scope switch with no run). Fall back to a tab that is
-  // always available so the page never renders an empty main panel.
-  useEffect(() => {
-    const alwaysAvailable = ['overview', 'earnings']
-    if (!hasUW && !alwaysAvailable.includes(activeTab)) {
-      setActiveTab('overview')
-    }
-  }, [hasUW, activeTab])
 
   return (
     <div className="p-4 sm:p-8">
