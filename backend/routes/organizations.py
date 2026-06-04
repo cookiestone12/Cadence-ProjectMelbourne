@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from ..models import get_db, Organization, OrganizationMember, User, Creator, Song
 from ..utils.auth import get_current_user, resolve_active_org_id
+from ..services.plan_entitlements import get_entitlements
 
 
 def _generate_access_code():
@@ -27,7 +28,15 @@ class OrganizationResponse(BaseModel):
     logo_orientation: str = "square"
     primary_color: Optional[str] = None
     account_type: Optional[str] = None
-    
+    # Task #213 — plan entitlements surfaced for frontend gating (the server
+    # remains the source of truth; these fields are convenience only).
+    plan: Optional[str] = None
+    plan_label: Optional[str] = None
+    catalog_limit: Optional[int] = None
+    roster_enabled: Optional[bool] = None
+    can_receive_shares: Optional[bool] = None
+    add_on_packs: Optional[int] = None
+
     class Config:
         from_attributes = True
 
@@ -88,6 +97,7 @@ def get_current_organization(
         "logo_orientation": org.logo_orientation or "square",
         "primary_color": org.primary_color,
         "account_type": org.account_type,
+        **get_entitlements(org),
     }
 
 @router.get("/current/membership", summary="Get current user's role in their org", description='Returns the role of the current user inside their current organization (`OWNER` / `ADMIN` / `MEMBER`).\n\n**Auth:** Bearer JWT.\n**Response:** `{ org_id, role, joined_at }`.')
@@ -236,6 +246,7 @@ def switch_current_organization(
         "logo_orientation": org.logo_orientation or "square",
         "primary_color": org.primary_color,
         "account_type": org.account_type,
+        **get_entitlements(org),
     }
 
 @router.get("/{org_id}", response_model=OrganizationResponse, summary="Get organization by id", description='Fetches an organization the caller is a member of. Master admin and `is_cadence_staff` users have cross-org read.\n\n**Path parameter:** `org_id`.\n**Auth:** Bearer JWT — caller must be a member, or a Cadence staff/admin.\n**Response:** `{ id, name, plan, account_type, created_at, member_count }`.')

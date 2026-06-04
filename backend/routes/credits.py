@@ -110,6 +110,8 @@ def create_credit(
             )
     elif request.new_creator_name and request.new_creator_name.strip():
         cleaned_name = request.new_creator_name.strip()
+        from ..services.plan_entitlements import enforce_catalog_capacity
+        enforce_catalog_capacity(db, song.organization_id)
         creator = Creator(
             organization_id=song.organization_id,
             display_name=cleaned_name,
@@ -376,6 +378,8 @@ def resolve_credit(
             raise HTTPException(status_code=404, detail="Creator not found in this organization")
         credit.creator_id = creator.id
     elif request.new_creator_name:
+        from ..services.plan_entitlements import enforce_catalog_capacity
+        enforce_catalog_capacity(db, song.organization_id)
         new_creator = Creator(
             organization_id=song.organization_id,
             display_name=request.new_creator_name,

@@ -236,6 +236,8 @@ def ingest_schedule_a(
         ).first()
         
         if not creator:
+            from .plan_entitlements import enforce_catalog_capacity
+            enforce_catalog_capacity(db, organization.id)
             creator = Creator(
                 organization_id=organization.id,
                 display_name=creator_name,

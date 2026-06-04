@@ -53,6 +53,13 @@ class Organization(Base):
         Boolean, default=True, nullable=False, server_default="true"
     )
 
+    # Task #213 — Enterprise catalog capacity scales in add-on packs of 5 above
+    # a base of 10 (10 -> 15 -> 20 ...). Professional plan ignores this and is
+    # hard-capped at 1 catalog. Admin-settable data only; no payment flow.
+    catalog_addon_packs = Column(
+        Integer, default=0, nullable=False, server_default="0"
+    )
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

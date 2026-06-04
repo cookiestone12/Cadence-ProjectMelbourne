@@ -403,6 +403,8 @@ async def import_csv(
     
     creator = None
     if request.create_new_creator and request.new_creator_name:
+        from ..services.plan_entitlements import enforce_catalog_capacity
+        enforce_catalog_capacity(db, org_id)
         creator = Creator(
             organization_id=org_id,
             display_name=request.new_creator_name,

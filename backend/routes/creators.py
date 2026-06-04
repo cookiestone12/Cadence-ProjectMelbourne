@@ -251,6 +251,8 @@ def check_roster_permission(membership):
         return True
     return getattr(membership, 'can_manage_roster', False) or False
 
+from ..services.plan_entitlements import enforce_catalog_capacity
+
 @router.post("/org/{org_id}", response_model=CreatorResponse, summary="Create a creator", description='Creates a new Creator (writer / artist / producer / etc.) under the organization.\n\n**Path parameter:** `org_id`.\n**Body:** `{ display_name, type, status?, ipi?, pro_society?, bio?, primary_email?, photo_url? }`.\n**Auth:** Bearer JWT — caller must be a member of the org.\n**Response:** the created Creator.')
 def create_creator(
     org_id: int,
@@ -268,7 +270,10 @@ def create_creator(
 
     if not check_roster_permission(membership):
         raise HTTPException(status_code=403, detail="You do not have permission to manage the roster")
-    
+
+    # Task #213 — enforce the org's plan catalog limit before creating.
+    enforce_catalog_capacity(db, org_id)
+
     creator = Creator(
         organization_id=org_id,
         display_name=request.display_name,

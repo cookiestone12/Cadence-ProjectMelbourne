@@ -36,6 +36,8 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
   const [isOrgAdmin, setIsOrgAdmin] = useState(false)
   const [canManageRoster, setCanManageRoster] = useState(false)
   const [isClient, setIsClient] = useState(false)
+  const [rosterEnabled, setRosterEnabled] = useState(true)
+  const [canReceiveShares, setCanReceiveShares] = useState(true)
 
   useEffect(() => {
     const fetchOrgData = async () => {
@@ -45,6 +47,9 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
           axios.get('/api/organizations/current/membership')
         ])
         setOrgBranding(orgRes.data)
+        // Task #213 — Professional plan has no roster and can't receive shares.
+        if (orgRes.data?.roster_enabled !== undefined) setRosterEnabled(orgRes.data.roster_enabled)
+        if (orgRes.data?.can_receive_shares !== undefined) setCanReceiveShares(orgRes.data.can_receive_shares)
         const role = memberRes.data.role
         setIsClient(role === 'CLIENT')
         setIsOrgAdmin(role === 'OWNER' || role === 'ADMIN')
@@ -115,7 +120,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
       items: [
         { path: '/roster', label: 'Roster', icon: UsersIcon, requiresRoster: true },
         { path: '/directory', label: 'Directory', icon: UserGroupIcon },
-        { path: '/shared-with-me', label: 'Shared With Me', icon: ShareIcon },
+        { path: '/shared-with-me', label: 'Shared With Me', icon: ShareIcon, requiresReceiveShares: true },
         { path: '/support', label: 'Support', icon: LifebuoyIcon },
       ],
     },
@@ -130,7 +135,9 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
   ]
 
   const filterItem = (item) => {
-    if (item.requiresRoster) return canManageRoster
+    // Task #213 — Professional plan: no roster, can't receive shared catalogs.
+    if (item.requiresRoster) return canManageRoster && rosterEnabled
+    if (item.requiresReceiveShares) return canReceiveShares
     return true
   }
 

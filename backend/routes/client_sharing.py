@@ -7,6 +7,12 @@ import logging
 from ..models import get_db, User, Organization, OrganizationMember, Creator, ClientShare, Song, SongCredit
 from ..utils.auth import get_current_user
 from ..services.audit_service import log_action, make_diff
+from ..services.plan_entitlements import (
+    is_professional,
+    is_enterprise,
+    catalog_limit,
+    count_catalogs,
+)
 from .notifications import create_notification
 
 
@@ -171,6 +177,34 @@ def create_share(
     if not creator:
         raise HTTPException(status_code=404, detail="Creator not found in your organization")
 
+    # Task #213 — directional sharing rule. A Professional org may only share
+    # its catalog OUT to an Enterprise account. Best-effort early check: if we
+    # can resolve the recipient's current org and it isn't Enterprise, reject
+    # now for clear feedback. The hard guarantee is enforced again at accept
+    # time (a Professional org can never receive a share).
+    sender_org = db.query(Organization).filter(
+        Organization.id == membership.organization_id
+    ).first()
+    if sender_org and is_professional(sender_org):
+        recipient_user = db.query(User).filter(
+            User.email == req.recipient_email.lower()
+        ).first()
+        if recipient_user:
+            recipient_membership = db.query(OrganizationMember).filter(
+                OrganizationMember.user_id == recipient_user.id
+            ).first()
+            recipient_org = (
+                db.query(Organization).filter(
+                    Organization.id == recipient_membership.organization_id
+                ).first()
+                if recipient_membership else None
+            )
+            if recipient_org and not is_enterprise(recipient_org):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Professional accounts can only share their catalog with Enterprise accounts.",
+                )
+
     valid_roles = ["COPRIMARY", "SECONDARY", "READER"]
     if req.role.upper() not in valid_roles:
         raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {', '.join(valid_roles)}")
@@ -324,6 +358,26 @@ def accept_share(
             raise HTTPException(status_code=400, detail="Organization name does not match")
 
     membership = get_user_org(db, current_user)
+
+    # Task #213 — recipient-side plan enforcement (the hard guarantee).
+    recipient_org = db.query(Organization).filter(
+        Organization.id == membership.organization_id
+    ).first()
+    if recipient_org and is_professional(recipient_org):
+        raise HTTPException(
+            status_code=403,
+            detail="Your Professional plan can't receive shared catalogs. Upgrade to Enterprise to manage shared client catalogs.",
+        )
+    # An accepted share occupies a catalog slot in the recipient's roster, so
+    # respect the recipient Enterprise org's remaining capacity.
+    if recipient_org:
+        limit = catalog_limit(recipient_org)
+        current = count_catalogs(db, recipient_org.id)
+        if current + 1 > limit:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Accepting this share would exceed your plan's limit of {limit} client catalogs.",
+            )
 
     before = _share_snapshot(share)
     share.status = "ACCEPTED"
