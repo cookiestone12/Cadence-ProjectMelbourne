@@ -70,7 +70,7 @@ from .sharing import (
     ClientShareStatus, ClientShareRole, SharedItemType, SharedItemStatus,
 )
 from .misc import (
-    AIUsageLog, SupportTicket, SupportTicketAttachment, Lead,
+    AIUsageLog, SupportTicket, SupportTicketAttachment, Lead, EmailTemplate,
     ScheduleAImport, RuntimeConfig, DeployEvent, SavedQuery, QueryHistoryEntry,
     TicketCategory, TicketStatus, LeadType,
 )

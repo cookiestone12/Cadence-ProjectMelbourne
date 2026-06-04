@@ -80,6 +80,33 @@ class Lead(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class EmailTemplate(Base):
+    """Admin-editable outreach email templates.
+
+    Stores the subject line, header (gradient banner title), and body for the
+    outbound lead-outreach emails so platform admins can adjust wording from
+    the admin UI without a code change. `template_key` is the stable identifier
+    used by the contact endpoint (e.g. "qualify", "demo_schedule"); `lead_type`
+    maps the template to the Lead type it is valid for so the right email is
+    offered for each lead. Bodies are plain text with blank-line paragraph
+    breaks and a `{first_name}` placeholder; rendering wraps them in the
+    standard branded HTML shell.
+    """
+    __tablename__ = "email_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_key = Column(String, nullable=False, unique=True, index=True)
+    lead_type = Column(String, nullable=True)
+    name = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    header = Column(String, nullable=False)
+    body = Column(Text, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, server_default=text("true"))
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class SupportTicket(Base):
     __tablename__ = "support_tickets"
     __table_args__ = (

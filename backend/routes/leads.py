@@ -319,80 +319,40 @@ async def submit_intern_application(
 
 
 class ContactLeadRequest(BaseModel):
-    email_type: str  # "qualify" or "demo_schedule"
+    email_type: str  # template_key, e.g. "qualify" or "demo_schedule"
 
 
-_EMAIL_FOOTER = (
-    '<p style="color: #9CA3A0; font-size: 12px; margin: 24px 0 0; '
-    'text-align: center;">Cadence Catalog Intelligence Co. | '
-    'communication@cadence-ci.com</p>'
-)
+class EmailTemplateUpdate(BaseModel):
+    subject: str
+    header: str
+    body: str
+    name: Optional[str] = None
+    lead_type: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
-def _first_name(lead: Lead) -> str:
-    name = (lead.name or "").strip()
-    if name:
-        return html_escape(name.split()[0])
-    return "there"
+class EmailTemplateCreate(BaseModel):
+    template_key: str
+    name: str
+    subject: str
+    header: str
+    body: str
+    lead_type: Optional[str] = None
+    is_active: bool = True
 
 
-def _build_qualify_email(lead: Lead):
-    first = _first_name(lead)
-    subject = "You're on the Cadence waitlist"
-    html = f"""
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #5B8A72, #7BA594); padding: 30px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">You're on the list</h1>
-        </div>
-        <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 12px 12px;">
-            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px;">Hi {first},</p>
-            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Thank you for joining the Cadence waitlist. We are glad you are here.</p>
-            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Cadence is a catalog management and royalty intelligence platform built for music companies that are serious about their rights data. We help labels, publishers, and creators keep their catalog, royalties, and rights organized and working harder.</p>
-            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Before we reach out to schedule a call, we want to make sure Cadence is the right fit for you. Two quick questions:</p>
-            <ol style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6; padding-left: 20px;">
-                <li style="margin-bottom: 8px;">What best describes your organization (label, publisher, production company, independent artist, or other)?</li>
-                <li>Roughly how many songs or works are in your active catalog?</li>
-            </ol>
-            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Hit reply and let us know. We read every response.</p>
-            <p style="color: #3D4A44; font-size: 16px; margin: 0;">The Cadence Team</p>
-            {_EMAIL_FOOTER}
-        </div>
-    </div>
-    """
-    return subject, html
-
-
-def _build_demo_schedule_email(lead: Lead):
-    first = _first_name(lead)
-    subject = "We received your Cadence demo request"
-    html = f"""
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: linear-gradient(135deg, #5B8A72, #7BA594); padding: 30px; border-radius: 12px 12px 0 0;">
-            <h1 style="color: white; margin: 0; font-size: 24px;">Your demo request is in</h1>
-        </div>
-        <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 12px 12px;">
-            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px;">Hi {first},</p>
-            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Thank you for requesting a demo of Cadence. We have your information and you are next on the list.</p>
-            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Expect an email from our team shortly with a link to book your walkthrough. The session runs about 30 minutes and covers catalog management, royalty processing, and rights administration, tailored to your organization type.</p>
-            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">If you have any questions in the meantime, just reply to this email.</p>
-            <p style="color: #3D4A44; font-size: 16px; margin: 0;">The Cadence Team</p>
-            {_EMAIL_FOOTER}
-        </div>
-    </div>
-    """
-    return subject, html
-
-
-_EMAIL_BUILDERS = {
-    "qualify": _build_qualify_email,
-    "demo_schedule": _build_demo_schedule_email,
-}
-
-# Each outreach template is only valid for a specific lead type.
-_EMAIL_TYPE_FOR_LEAD = {
-    "WAITLIST": "qualify",
-    "DEMO_REQUEST": "demo_schedule",
-}
+def _template_payload(t):
+    return {
+        "id": t.id,
+        "template_key": t.template_key,
+        "lead_type": t.lead_type,
+        "name": t.name,
+        "subject": t.subject,
+        "header": t.header,
+        "body": t.body,
+        "is_active": t.is_active,
+        "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+    }
 
 
 @admin_router.post(
@@ -406,31 +366,29 @@ def contact_lead(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_super_admin),
 ):
-    builder = _EMAIL_BUILDERS.get(request.email_type)
-    if builder is None:
-        raise HTTPException(
-            status_code=400,
-            detail="email_type must be 'qualify' or 'demo_schedule'.",
-        )
+    from ..services import email_templates as email_tpl
+
+    email_tpl.ensure_seeded(db)
 
     lead = db.query(Lead).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found.")
 
-    expected = _EMAIL_TYPE_FOR_LEAD.get(lead.lead_type)
-    if expected is None:
+    template = email_tpl.get_template(db, request.email_type)
+    if template is None or not template.is_active:
         raise HTTPException(
             status_code=400,
-            detail="This lead type does not support outreach emails.",
+            detail=f"No active email template found for '{request.email_type}'.",
         )
-    if expected != request.email_type:
+
+    if template.lead_type and template.lead_type != lead.lead_type:
         raise HTTPException(
             status_code=400,
             detail=f"email_type '{request.email_type}' is not valid for a "
             f"{lead.lead_type} lead.",
         )
 
-    subject, html = builder(lead)
+    subject, html = email_tpl.render_template(template, lead)
 
     from ..services.email_provider import get_email_provider
     try:
@@ -460,6 +418,120 @@ def contact_lead(
         "contacted_at": lead.contacted_at.isoformat() if lead.contacted_at else None,
         "contacted_email_type": lead.contacted_email_type,
     }
+
+
+@admin_router.get(
+    "/email-templates",
+    summary="List editable outreach email templates",
+    description='Returns every outreach email template (subject, header, body, lead-type mapping) for the admin template editor.\n\n**Auth:** Bearer JWT — platform super-admin only.\n**Response:** `{ templates: [{id, template_key, lead_type, name, subject, header, body, is_active, updated_at}] }`.',
+)
+def list_email_templates(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+):
+    from ..services import email_templates as email_tpl
+
+    email_tpl.ensure_seeded(db)
+    from ..models import EmailTemplate
+    templates = (
+        db.query(EmailTemplate)
+        .order_by(EmailTemplate.template_key.asc())
+        .all()
+    )
+    return {"templates": [_template_payload(t) for t in templates]}
+
+
+@admin_router.put(
+    "/email-templates/{template_key}",
+    summary="Update an outreach email template",
+    description='Saves the subject, header, and body (plus optional name / lead-type mapping / active flag) for an outreach email template.\n\n**Path parameter:** `template_key`.\n**Body:** `{ subject, header, body, name?, lead_type?, is_active? }`. Bodies are plain text — blank lines separate paragraphs and `{first_name}` is replaced with the lead\'s first name.\n**Auth:** Bearer JWT — platform super-admin only.\n**Response:** the updated template.',
+)
+def update_email_template(
+    template_key: str,
+    request: EmailTemplateUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+):
+    from ..services import email_templates as email_tpl
+
+    email_tpl.ensure_seeded(db)
+    template = email_tpl.get_template(db, template_key)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Email template not found.")
+
+    subject = (request.subject or "").strip()
+    header = (request.header or "").strip()
+    body = (request.body or "").strip()
+    if not subject:
+        raise HTTPException(status_code=400, detail="Subject is required.")
+    if not header:
+        raise HTTPException(status_code=400, detail="Header is required.")
+    if not body:
+        raise HTTPException(status_code=400, detail="Body is required.")
+
+    template.subject = subject
+    template.header = header
+    template.body = body
+    if request.name is not None:
+        name = request.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Name cannot be empty.")
+        template.name = name
+    if request.lead_type is not None:
+        template.lead_type = request.lead_type.strip() or None
+    if request.is_active is not None:
+        template.is_active = request.is_active
+    template.updated_by = current_user.id
+    db.commit()
+    db.refresh(template)
+
+    return _template_payload(template)
+
+
+@admin_router.post(
+    "/email-templates",
+    summary="Create a new outreach email template",
+    description='Creates a new outreach email template with a unique `template_key` and an optional lead-type mapping.\n\n**Body:** `{ template_key, name, subject, header, body, lead_type?, is_active? }`.\n**Auth:** Bearer JWT — platform super-admin only.\n**Response:** the created template.',
+)
+def create_email_template(
+    request: EmailTemplateCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+):
+    from ..services import email_templates as email_tpl
+    from ..models import EmailTemplate
+
+    key = (request.template_key or "").strip()
+    if not re.match(r'^[a-z0-9_]+$', key):
+        raise HTTPException(
+            status_code=400,
+            detail="template_key must contain only lowercase letters, numbers, and underscores.",
+        )
+    if email_tpl.get_template(db, key) is not None:
+        raise HTTPException(status_code=400, detail="A template with that key already exists.")
+
+    name = (request.name or "").strip()
+    subject = (request.subject or "").strip()
+    header = (request.header or "").strip()
+    body = (request.body or "").strip()
+    if not (name and subject and header and body):
+        raise HTTPException(status_code=400, detail="Name, subject, header, and body are all required.")
+
+    template = EmailTemplate(
+        template_key=key,
+        lead_type=(request.lead_type or "").strip() or None,
+        name=name,
+        subject=subject,
+        header=header,
+        body=body,
+        is_active=request.is_active,
+        updated_by=current_user.id,
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+
+    return _template_payload(template)
 
 
 @admin_router.get(
