@@ -572,3 +572,76 @@ def test_multi_org_accept_follows_active_org_pointer(db, client):
         assert s1.recipient_org_id == ent.id
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_multi_org_create_follows_active_org_pointer(db, client):
+    """A SENDER who belongs to BOTH an Enterprise and a Professional org must have
+    share creation evaluated against their ACTIVE org. Creating a share works
+    while the Enterprise org is active (no directional restriction) but is blocked
+    by the Professional directional rule once the Professional org is active and
+    owns the creator. This proves create_share resolves the acting org via the
+    active-org pointer rather than an arbitrary `.first()` membership."""
+    # An Enterprise recipient exists so the Professional->Enterprise path is the
+    # only thing under test (recipient is always a valid Enterprise target).
+    recipient = _org(db, account_type="ENTERPRISE", name="RcptOrg216C")
+    _owner(db, recipient, email="rcpt216c@x.com")
+
+    # Sender user is in a Professional org (created first → oldest membership,
+    # what `.first()` would pick) AND an Enterprise org.
+    pro = _org(db, account_type="INDIVIDUAL", name="ProSender216C")
+    user = _owner(db, pro, email="multisnd216c@x.com")
+    ent = _org(db, account_type="ENTERPRISE", name="EntSender216C")
+    db.add(OrganizationMember(organization_id=ent.id, user_id=user.id, role="OWNER"))
+    db.commit()
+
+    # Each org owns its own creator so the create call resolves a creator in the
+    # active org (create_share scopes the creator lookup to the acting org).
+    ent_creator = Creator(organization_id=ent.id, display_name="EntCat216C")
+    pro_creator = Creator(organization_id=pro.id, display_name="ProCat216C")
+    db.add_all([ent_creator, pro_creator]); db.commit()
+    db.refresh(ent_creator); db.refresh(pro_creator)
+
+    app.dependency_overrides[get_current_user] = lambda: db.query(User).get(user.id)
+    try:
+        # Active org = Enterprise → no directional restriction, share created.
+        user.current_organization_id = ent.id
+        db.commit()
+        r_ok = client.post("/api/client-sharing/share", json={
+            "creator_id": ent_creator.id,
+            "recipient_email": "rcpt216c@x.com",
+            "recipient_org_name": "RcptOrg216C",
+            "role": "READER",
+            "passcode": "123456",
+        })
+        assert r_ok.status_code == 200, f"got {r_ok.status_code}: {r_ok.text[:200]}"
+        created = db.query(ClientShare).get(r_ok.json()["id"])
+        assert created.primary_org_id == ent.id
+
+        # Active org = Professional → directional rule applies. Sharing the
+        # Professional org's own creator to a (verified Enterprise) recipient is
+        # actually allowed, but the share must be scoped to the Professional org.
+        user.current_organization_id = pro.id
+        db.commit()
+        r_pro = client.post("/api/client-sharing/share", json={
+            "creator_id": pro_creator.id,
+            "recipient_email": "rcpt216c@x.com",
+            "recipient_org_name": "RcptOrg216C",
+            "role": "READER",
+            "passcode": "123456",
+        })
+        assert r_pro.status_code == 200, f"got {r_pro.status_code}: {r_pro.text[:200]}"
+        pro_share = db.query(ClientShare).get(r_pro.json()["id"])
+        assert pro_share.primary_org_id == pro.id
+
+        # And the Professional org cannot reach the ENTERPRISE org's creator,
+        # because the creator lookup is scoped to the active (Professional) org.
+        r_scope = client.post("/api/client-sharing/share", json={
+            "creator_id": ent_creator.id,
+            "recipient_email": "rcpt216c@x.com",
+            "recipient_org_name": "RcptOrg216C",
+            "role": "READER",
+            "passcode": "654321",
+        })
+        assert r_scope.status_code == 404, f"got {r_scope.status_code}: {r_scope.text[:200]}"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
