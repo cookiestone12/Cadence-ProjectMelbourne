@@ -58,6 +58,7 @@ import Settings from './pages/Settings'
 import Login from './pages/Login'
 import ForcedChangePassword from './pages/ForcedChangePassword'
 import AdminDashboard from './pages/AdminDashboard'
+import LeadsPage from './pages/LeadsPage'
 import WorksPage from './pages/WorksPage'
 import ReleasesPage from './pages/ReleasesPage'
 import ContractsPage from './pages/ContractsPage'
@@ -356,6 +357,9 @@ function App() {
                 <Route path="/org-admin" element={<TenantAdminPage />} />
                 {user?.is_super_admin && (
                   <Route path="/admin" element={<AdminDashboard />} />
+                )}
+                {user?.is_super_admin && (
+                  <Route path="/admin/leads" element={<LeadsPage />} />
                 )}
                 <Route path="*" element={<Navigate to="/" />} />
               </>

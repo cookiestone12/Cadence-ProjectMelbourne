@@ -2395,6 +2395,12 @@ function LeadsTab() {
           >
             <ArrowPathIcon className="w-4 h-4" />
           </button>
+          <a
+            href="/admin/leads"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#5B8A72] text-white hover:opacity-90 transition-colors"
+          >
+            Outreach
+          </a>
         </div>
       </div>
 

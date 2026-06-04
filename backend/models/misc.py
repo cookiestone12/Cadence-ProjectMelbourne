@@ -74,6 +74,8 @@ class Lead(Base):
     resume_data = Column(LargeBinary, nullable=True)
     resume_filename = Column(String, nullable=True)
     resume_mime = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="new", server_default=text("'new'"))
+    contacted_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

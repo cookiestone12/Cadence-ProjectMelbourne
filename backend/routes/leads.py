@@ -318,6 +318,148 @@ async def submit_intern_application(
     return {"message": "Application submitted! We'll review it and reach out if there's a fit.", "status": "created"}
 
 
+class ContactLeadRequest(BaseModel):
+    email_type: str  # "qualify" or "demo_schedule"
+
+
+_EMAIL_FOOTER = (
+    '<p style="color: #9CA3A0; font-size: 12px; margin: 24px 0 0; '
+    'text-align: center;">Cadence Catalog Intelligence Co. | '
+    'communication@cadence-ci.com</p>'
+)
+
+
+def _first_name(lead: Lead) -> str:
+    name = (lead.name or "").strip()
+    if name:
+        return html_escape(name.split()[0])
+    return "there"
+
+
+def _build_qualify_email(lead: Lead):
+    first = _first_name(lead)
+    subject = "You're on the Cadence waitlist"
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #5B8A72, #7BA594); padding: 30px; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">You're on the list</h1>
+        </div>
+        <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 12px 12px;">
+            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px;">Hi {first},</p>
+            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Thank you for joining the Cadence waitlist. We are glad you are here.</p>
+            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Cadence is a catalog management and royalty intelligence platform built for music companies that are serious about their rights data. We help labels, publishers, and creators keep their catalog, royalties, and rights organized and working harder.</p>
+            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Before we reach out to schedule a call, we want to make sure Cadence is the right fit for you. Two quick questions:</p>
+            <ol style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6; padding-left: 20px;">
+                <li style="margin-bottom: 8px;">What best describes your organization (label, publisher, production company, independent artist, or other)?</li>
+                <li>Roughly how many songs or works are in your active catalog?</li>
+            </ol>
+            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Hit reply and let us know. We read every response.</p>
+            <p style="color: #3D4A44; font-size: 16px; margin: 0;">The Cadence Team</p>
+            {_EMAIL_FOOTER}
+        </div>
+    </div>
+    """
+    return subject, html
+
+
+def _build_demo_schedule_email(lead: Lead):
+    first = _first_name(lead)
+    subject = "We received your Cadence demo request"
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #5B8A72, #7BA594); padding: 30px; border-radius: 12px 12px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">Your demo request is in</h1>
+        </div>
+        <div style="background: #f9fafb; padding: 30px; border-radius: 0 0 12px 12px;">
+            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px;">Hi {first},</p>
+            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Thank you for requesting a demo of Cadence. We have your information and you are next on the list.</p>
+            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">Expect an email from our team shortly with a link to book your walkthrough. The session runs about 30 minutes and covers catalog management, royalty processing, and rights administration, tailored to your organization type.</p>
+            <p style="color: #3D4A44; font-size: 16px; margin: 0 0 16px; line-height: 1.6;">If you have any questions in the meantime, just reply to this email.</p>
+            <p style="color: #3D4A44; font-size: 16px; margin: 0;">The Cadence Team</p>
+            {_EMAIL_FOOTER}
+        </div>
+    </div>
+    """
+    return subject, html
+
+
+_EMAIL_BUILDERS = {
+    "qualify": _build_qualify_email,
+    "demo_schedule": _build_demo_schedule_email,
+}
+
+# Each outreach template is only valid for a specific lead type.
+_EMAIL_TYPE_FOR_LEAD = {
+    "WAITLIST": "qualify",
+    "DEMO_REQUEST": "demo_schedule",
+}
+
+
+@admin_router.post(
+    "/leads/{lead_id}/contact",
+    summary="Send a templated outreach email to a lead",
+    description='Sends one of two templated outbound emails to a lead and marks them contacted.\n\n**Path parameter:** `lead_id`.\n**Body:** `{ email_type }` — `"qualify"` (waitlist) or `"demo_schedule"` (demo request).\n**Auth:** Bearer JWT — platform super-admin only.\n**Response:** `{ success: true, lead_id, email_type }`.',
+)
+def contact_lead(
+    lead_id: int,
+    request: ContactLeadRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_super_admin),
+):
+    builder = _EMAIL_BUILDERS.get(request.email_type)
+    if builder is None:
+        raise HTTPException(
+            status_code=400,
+            detail="email_type must be 'qualify' or 'demo_schedule'.",
+        )
+
+    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found.")
+
+    expected = _EMAIL_TYPE_FOR_LEAD.get(lead.lead_type)
+    if expected is None:
+        raise HTTPException(
+            status_code=400,
+            detail="This lead type does not support outreach emails.",
+        )
+    if expected != request.email_type:
+        raise HTTPException(
+            status_code=400,
+            detail=f"email_type '{request.email_type}' is not valid for a "
+            f"{lead.lead_type} lead.",
+        )
+
+    subject, html = builder(lead)
+
+    from ..services.email_provider import get_email_provider
+    try:
+        sent = get_email_provider().send_email(
+            to=lead.email,
+            subject=subject,
+            html_body=html,
+        )
+    except Exception as e:
+        logger.error(f"Failed to send outreach email to lead {lead_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send email. Check logs.")
+
+    if not sent:
+        logger.error(f"Email provider returned failure sending to lead {lead_id}")
+        raise HTTPException(status_code=500, detail="Failed to send email. Check logs.")
+
+    lead.status = "contacted"
+    lead.contacted_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        "success": True,
+        "lead_id": lead_id,
+        "email_type": request.email_type,
+        "status": lead.status,
+        "contacted_at": lead.contacted_at.isoformat() if lead.contacted_at else None,
+    }
+
+
 @admin_router.get(
     "/leads",
     summary='List leads in the admin console',
@@ -343,6 +485,11 @@ def list_leads(
                 "message": l.message,
                 "lead_type": l.lead_type,
                 "resume_path": l.resume_path,
+                "status": getattr(l, "status", None) or "new",
+                "contacted_at": (
+                    getattr(l, "contacted_at", None).isoformat()
+                    if getattr(l, "contacted_at", None) else None
+                ),
                 "created_at": l.created_at.isoformat() if l.created_at else None,
             }
             for l in leads
