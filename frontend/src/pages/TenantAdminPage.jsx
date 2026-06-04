@@ -46,6 +46,7 @@ export default function TenantAdminPage() {
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteResult, setInviteResult] = useState(null)
   const [orgId, setOrgId] = useState(null)
+  const [org, setOrg] = useState(null)
 
   const showMsg = (text, isError = false) => {
     if (isError) setError(text)
@@ -66,6 +67,7 @@ export default function TenantAdminPage() {
       try {
         const orgRes = await axios.get('/api/organizations/current')
         if (orgRes.data?.id) setOrgId(orgRes.data.id)
+        setOrg(orgRes.data)
       } catch {}
 
       try {
@@ -122,7 +124,7 @@ export default function TenantAdminPage() {
 
   const tabs = [
     { id: 'members', label: 'Team Members', icon: UsersIcon },
-    { id: 'plan', label: 'Plan & Capacity', icon: CreditCardIcon },
+    { id: 'plan', label: 'Plan & Usage', icon: CreditCardIcon },
     { id: 'branding', label: 'Organization Branding', icon: BuildingOfficeIcon },
     { id: 'sharing', label: 'Client Sharing', icon: ShareIcon },
     { id: 'imports', label: 'Schedule A Imports', icon: DocumentArrowUpIcon },
@@ -187,7 +189,12 @@ export default function TenantAdminPage() {
       )}
 
       {activeTab === 'plan' && (
-        <PlanTab onMessage={(m) => showMsg(m)} onError={(e) => showMsg(e, true)} />
+        <PlanTab
+          org={org}
+          orgId={orgId}
+          onSave={(updated) => { setOrg(prev => ({ ...prev, ...updated })); showMsg('Plan updated') }}
+          onError={(e) => showMsg(e, true)}
+        />
       )}
 
       {activeTab === 'branding' && (
@@ -245,143 +252,6 @@ export default function TenantAdminPage() {
         sending={inviteSending}
         result={inviteResult}
       />
-    </div>
-  )
-}
-
-function PlanTab({ onMessage, onError }) {
-  const [plan, setPlan] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [accountType, setAccountType] = useState('ENTERPRISE')
-  const [packs, setPacks] = useState(0)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const { data } = await axios.get('/api/tenant-admin/plan')
-      setPlan(data)
-      setAccountType(data.account_type || 'ENTERPRISE')
-      setPacks(data.add_on_packs ?? 0)
-    } catch (e) {
-      onError?.(e.response?.data?.detail || 'Failed to load plan')
-    } finally {
-      setLoading(false)
-    }
-  }, [onError])
-
-  useEffect(() => { load() }, [load])
-
-  const isEnterprise = accountType === 'ENTERPRISE'
-  const dirty = plan && (accountType !== plan.account_type || (isEnterprise ? Number(packs) : 0) !== (plan.add_on_packs ?? 0))
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      const body = { account_type: accountType }
-      if (isEnterprise) body.catalog_addon_packs = Number(packs)
-      const { data } = await axios.patch('/api/tenant-admin/plan', body)
-      setPlan(data)
-      setAccountType(data.account_type)
-      setPacks(data.add_on_packs ?? 0)
-      onMessage?.('Plan updated')
-    } catch (e) {
-      onError?.(e.response?.data?.detail || 'Failed to update plan')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[200px]">
-        <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-[#5B8A72]" />
-      </div>
-    )
-  }
-  if (!plan) return null
-
-  const usagePct = plan.catalog_limit ? Math.min(100, Math.round((plan.catalog_count / plan.catalog_limit) * 100)) : 0
-  const overLimit = plan.catalog_count > plan.catalog_limit
-
-  return (
-    <div className="max-w-3xl space-y-6">
-      {/* Current usage */}
-      <div className="bg-white rounded-2xl border border-[#E5E8E3] p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-[17px] font-semibold text-[#3D4A44]">{plan.plan_label} plan</h3>
-            <p className="text-[13px] text-[#7A8580] mt-0.5">
-              {plan.plan_label === 'Enterprise'
-                ? 'Full client roster, send and receive shared catalogs.'
-                : 'A single client catalog. Can share out to Enterprise accounts only.'}
-            </p>
-          </div>
-          <span className="px-3 py-1 rounded-full text-xs font-medium bg-[#EEF3EF] text-[#5B8A72]">
-            {plan.catalog_count} / {plan.catalog_limit} catalogs
-          </span>
-        </div>
-        <div className="h-2 rounded-full bg-[#EEF1EC] overflow-hidden">
-          <div className={`h-full rounded-full ${overLimit ? 'bg-red-400' : 'bg-[#5B8A72]'}`} style={{ width: `${usagePct}%` }} />
-        </div>
-        {overLimit && (
-          <p className="text-[13px] text-red-600 mt-2 flex items-center gap-1">
-            <ExclamationTriangleIcon className="w-4 h-4" />
-            This organization is over its current catalog limit.
-          </p>
-        )}
-      </div>
-
-      {/* Edit plan */}
-      <div className="bg-white rounded-2xl border border-[#E5E8E3] p-6 space-y-5">
-        <h3 className="text-[15px] font-semibold text-[#3D4A44]">Change plan</h3>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {[
-            { val: 'ENTERPRISE', label: 'Enterprise', desc: 'Roster, send + receive shares' },
-            { val: 'INDIVIDUAL', label: 'Professional', desc: 'Single catalog, share out only' },
-          ].map(opt => (
-            <button
-              key={opt.val}
-              type="button"
-              onClick={() => setAccountType(opt.val)}
-              className={`text-left p-4 rounded-xl border-2 transition-colors ${
-                accountType === opt.val ? 'border-[#5B8A72] bg-[#F5F9F6]' : 'border-[#E5E8E3] hover:border-[#C7D3CC]'
-              }`}
-            >
-              <div className="text-[14px] font-semibold text-[#3D4A44]">{opt.label}</div>
-              <div className="text-[12px] text-[#7A8580] mt-0.5">{opt.desc}</div>
-            </button>
-          ))}
-        </div>
-
-        {isEnterprise && (
-          <div>
-            <label className="block text-[13px] font-medium text-[#3D4A44] mb-1">Add-on packs (+5 catalogs each)</label>
-            <input
-              type="number"
-              min={0}
-              value={packs}
-              onChange={(e) => setPacks(e.target.value === '' ? 0 : Math.max(0, parseInt(e.target.value, 10) || 0))}
-              className="w-32 px-3 py-2 rounded-lg border border-[#E5E8E3] text-sm focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/30"
-            />
-            <p className="text-[12px] text-[#7A8580] mt-1">
-              Capacity: 10 base + {Number(packs)} × 5 = <span className="font-medium text-[#3D4A44]">{10 + Number(packs) * 5}</span> catalogs
-            </p>
-          </div>
-        )}
-
-        <div className="flex items-center gap-3 pt-1">
-          <button
-            onClick={handleSave}
-            disabled={!dirty || saving}
-            className="px-4 py-2 rounded-lg bg-[#5B8A72] text-white text-sm font-medium disabled:opacity-50 hover:bg-[#4E7A63] transition-colors"
-          >
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
-          {dirty && <span className="text-[12px] text-[#7A8580]">Unsaved changes</span>}
-        </div>
-      </div>
     </div>
   )
 }
@@ -914,6 +784,153 @@ function AssignCreatorsModal({ user, creators, onClose, onSave }) {
               {saving ? 'Saving...' : 'Save Assignments'}
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PlanTab({ org, orgId, onSave, onError }) {
+  const ENTERPRISE_BASE = 10
+  const ADDON_PACK_SIZE = org?.add_on_pack_size || 5
+
+  const currentPlan = (org?.plan || org?.account_type || 'ENTERPRISE') === 'INDIVIDUAL'
+    ? 'PROFESSIONAL'
+    : 'ENTERPRISE'
+
+  const [plan, setPlan] = useState(currentPlan)
+  const [packs, setPacks] = useState(org?.add_on_packs ?? 0)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    const p = (org?.plan || org?.account_type) === 'INDIVIDUAL' ? 'PROFESSIONAL' : 'ENTERPRISE'
+    setPlan(p)
+    setPacks(org?.add_on_packs ?? 0)
+  }, [org?.plan, org?.account_type, org?.add_on_packs])
+
+  if (!org) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm p-6 text-sm text-[#7A8580]">
+        Loading plan details…
+      </div>
+    )
+  }
+
+  const inUse = org.catalog_count ?? 0
+  const currentLimit = org.catalog_limit ?? 0
+
+  const projectedLimit = plan === 'PROFESSIONAL'
+    ? 1
+    : ENTERPRISE_BASE + Math.max(0, Number(packs) || 0) * ADDON_PACK_SIZE
+
+  const usagePct = currentLimit > 0 ? Math.min(100, Math.round((inUse / currentLimit) * 100)) : 0
+  const overCapacity = inUse > projectedLimit
+  const dirty = plan !== currentPlan || (plan === 'ENTERPRISE' && Number(packs) !== (org.add_on_packs ?? 0))
+
+  const handleSave = async () => {
+    if (!orgId) { onError('Could not determine your organization.'); return }
+    setSaving(true)
+    try {
+      const body = { account_type: plan }
+      if (plan === 'ENTERPRISE') body.catalog_addon_packs = Math.max(0, Number(packs) || 0)
+      const res = await axios.patch(`/api/organizations/${orgId}/plan`, body)
+      onSave(res.data)
+    } catch (err) {
+      onError(err.response?.data?.detail || 'Failed to update plan')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-[#3D4A44] mb-4">Current Plan & Usage</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+          <div className="bg-[#F5F7F4] rounded-lg p-4">
+            <p className="text-xs text-[#7A8580] uppercase tracking-wide">Plan</p>
+            <p className="text-lg font-semibold text-[#3D4A44] mt-1">{org.plan_label || (currentPlan === 'PROFESSIONAL' ? 'Professional' : 'Enterprise')}</p>
+          </div>
+          <div className="bg-[#F5F7F4] rounded-lg p-4">
+            <p className="text-xs text-[#7A8580] uppercase tracking-wide">Catalog Limit</p>
+            <p className="text-lg font-semibold text-[#3D4A44] mt-1">{currentLimit}</p>
+          </div>
+          <div className="bg-[#F5F7F4] rounded-lg p-4">
+            <p className="text-xs text-[#7A8580] uppercase tracking-wide">In Use</p>
+            <p className="text-lg font-semibold text-[#3D4A44] mt-1">{inUse} <span className="text-sm font-normal text-[#7A8580]">/ {currentLimit}</span></p>
+          </div>
+        </div>
+        <div className="w-full h-2 bg-[#E5E8E3] rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full ${usagePct >= 100 ? 'bg-red-500' : usagePct >= 80 ? 'bg-amber-500' : 'bg-[#5B8A72]'}`}
+            style={{ width: `${usagePct}%` }}
+          />
+        </div>
+        <p className="text-xs text-[#A0A8A3] mt-2">{inUse} of {currentLimit} catalogs used (owned creators + accepted shares).</p>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-[#3D4A44] mb-4">Change Plan</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[#3D4A44] mb-2">Subscription plan</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                { id: 'PROFESSIONAL', name: 'Professional', desc: 'A single client catalog. No roster or incoming shares.' },
+                { id: 'ENTERPRISE', name: 'Enterprise', desc: 'Full roster, send & receive shares. 10 catalogs + 5 per add-on pack.' },
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setPlan(opt.id)}
+                  className={`text-left p-4 rounded-lg border-2 transition-colors ${
+                    plan === opt.id ? 'border-[#5B8A72] bg-[#F1F6F2]' : 'border-[#E5E8E3] hover:border-[#D1D5CE]'
+                  }`}
+                >
+                  <p className="font-semibold text-[#3D4A44]">{opt.name}</p>
+                  <p className="text-xs text-[#7A8580] mt-1">{opt.desc}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {plan === 'ENTERPRISE' && (
+            <div>
+              <label className="block text-sm font-medium text-[#3D4A44] mb-1">Add-on packs</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min="0"
+                  value={packs}
+                  onChange={(e) => setPacks(e.target.value)}
+                  className="w-28 px-3 py-2 border border-[#D1D5CE] rounded-lg text-sm focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent"
+                />
+                <span className="text-sm text-[#7A8580]">× {ADDON_PACK_SIZE} catalogs each</span>
+              </div>
+              <p className="text-xs text-[#A0A8A3] mt-1">Each pack adds {ADDON_PACK_SIZE} catalog slots above the base of {ENTERPRISE_BASE}.</p>
+            </div>
+          )}
+
+          <div className="bg-[#F5F7F4] rounded-lg p-4 flex items-center justify-between">
+            <span className="text-sm text-[#3D4A44]">New catalog limit</span>
+            <span className="text-lg font-semibold text-[#3D4A44]">{projectedLimit}</span>
+          </div>
+
+          {overCapacity && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 text-amber-800">
+              <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+              <span className="text-sm">This org already manages {inUse} catalogs, more than the {projectedLimit}-catalog limit of this selection. Remove or unshare catalogs before downgrading.</span>
+            </div>
+          )}
+        </div>
+        <div className="mt-6 flex justify-end">
+          <button
+            onClick={handleSave}
+            disabled={saving || !dirty || overCapacity}
+            className="px-5 py-2 text-sm bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] disabled:opacity-50 font-medium"
+          >
+            {saving ? 'Saving...' : 'Save Plan'}
+          </button>
         </div>
       </div>
     </div>

@@ -28,6 +28,19 @@ ENTERPRISE_BASE_CATALOGS = 10
 ADDON_PACK_SIZE = 5
 PROFESSIONAL_CATALOG_LIMIT = 1
 
+# Defensive upper bound on admin-settable add-on packs so a typo can't push the
+# derived catalog limit into the millions. 200 packs == 1010 catalogs, far above
+# any realistic roster.
+MAX_ADDON_PACKS = 200
+
+# Friendly plan identifiers accepted from clients, mapped onto the canonical
+# account_type values stored on the Organization.
+_ACCOUNT_TYPE_ALIASES = {
+    "PROFESSIONAL": PROFESSIONAL,
+    "INDIVIDUAL": PROFESSIONAL,
+    "ENTERPRISE": ENTERPRISE,
+}
+
 PLAN_LABELS = {
     ENTERPRISE: "Enterprise",
     PROFESSIONAL: "Professional",
@@ -139,3 +152,74 @@ def enforce_catalog_capacity(db: Session, org_id: int, adding: int = 1) -> None:
                 f"Add another {ADDON_PACK_SIZE}-client pack to grow your roster."
             )
         raise HTTPException(status_code=403, detail=detail)
+
+
+def set_plan(db: Session, org, account_type=None, addon_packs=None) -> dict:
+    """Validate and apply a plan change, then re-derive entitlements.
+
+    Single server-side gate for provisioning a plan from the admin UI. Both
+    arguments are optional so a caller can change just the plan, just the pack
+    count, or both. All validation happens *before* any attribute is mutated so
+    a rejected request never leaves the org in a half-changed state.
+
+    * ``account_type`` accepts the friendly aliases ``"PROFESSIONAL"`` /
+      ``"ENTERPRISE"`` (or the raw canonical values) — anything else is a 400.
+    * ``add_on_packs`` must be a whole number in ``0..MAX_ADDON_PACKS``.
+    * The Professional plan ignores add-on packs entirely, so they're forced to
+      0 to stop the stored value drifting from the derived limit.
+    * A change that would drop the catalog limit below the catalogs the org
+      already manages is refused (409) so a downgrade can't strand data.
+
+    Returns the new entitlements dict. Does NOT commit — the caller owns the
+    transaction.
+    """
+    final_at = normalize_account_type(org)
+    if account_type is not None:
+        key = (account_type or "").strip().upper()
+        if key not in _ACCOUNT_TYPE_ALIASES:
+            raise HTTPException(
+                status_code=400,
+                detail="account_type must be 'PROFESSIONAL' or 'ENTERPRISE'.",
+            )
+        final_at = _ACCOUNT_TYPE_ALIASES[key]
+
+    final_packs = add_on_packs(org)
+    if addon_packs is not None:
+        try:
+            final_packs = int(addon_packs)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=400,
+                detail="catalog_addon_packs must be a whole number.",
+            )
+        if final_packs < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="catalog_addon_packs cannot be negative.",
+            )
+        if final_packs > MAX_ADDON_PACKS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"catalog_addon_packs cannot exceed {MAX_ADDON_PACKS}.",
+            )
+
+    if final_at == PROFESSIONAL:
+        final_packs = 0
+        final_limit = PROFESSIONAL_CATALOG_LIMIT
+    else:
+        final_limit = ENTERPRISE_BASE_CATALOGS + final_packs * ADDON_PACK_SIZE
+
+    in_use = count_catalogs(db, org.id)
+    if in_use > final_limit:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"This org already manages {in_use} catalogs, which exceeds the "
+                f"{final_limit}-catalog limit of the selected plan. Remove or "
+                "unshare catalogs before downgrading."
+            ),
+        )
+
+    org.account_type = final_at
+    org.catalog_addon_packs = final_packs
+    return get_entitlements(org)

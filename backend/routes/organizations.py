@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from ..models import get_db, Organization, OrganizationMember, User, Creator, Song
 from ..utils.auth import get_current_user, resolve_active_org_id
-from ..services.plan_entitlements import get_entitlements, count_catalogs
+from ..services.plan_entitlements import get_entitlements, count_catalogs, set_plan
 
 
 def _generate_access_code():
@@ -445,6 +445,104 @@ def get_organization_members(
         }
         for member, user in members
     ]
+
+
+# ---------------------------------------------------------------------------
+# Plan / add-on-pack provisioning (Task #214)
+# ---------------------------------------------------------------------------
+
+class PlanUpdateRequest(BaseModel):
+    # Either or both may be supplied. account_type accepts the friendly aliases
+    # "PROFESSIONAL" / "ENTERPRISE" (or the raw canonical values).
+    account_type: Optional[str] = None
+    catalog_addon_packs: Optional[int] = None
+
+
+@router.patch(
+    "/{org_id}/plan",
+    summary="Set an org's subscription plan and add-on packs (admin only)",
+    description=(
+        "Switches an organization between the Professional and Enterprise plans "
+        "and/or sets its Enterprise add-on-pack count. The server validates the "
+        "request and re-derives all entitlements (catalog limit, roster, sharing) "
+        "from `account_type` + `catalog_addon_packs` — the frontend never sets "
+        "limits directly. Add-on packs only apply to Enterprise (Professional is "
+        "hard-capped at one catalog and forces packs to 0). A change that would "
+        "drop the catalog limit below the catalogs the org already manages is "
+        "rejected (409).\n\n"
+        "**Auth:** Bearer JWT — caller must be OWNER or ADMIN of the org, or "
+        "Cadence staff / master admin.\n"
+        "**Body:** `{ account_type?: 'PROFESSIONAL'|'ENTERPRISE', "
+        "catalog_addon_packs?: int }`.\n"
+        "**Response:** `{ account_type, catalog_count, ...entitlements }`."
+    ),
+)
+def update_plan(
+    org_id: int,
+    payload: PlanUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    is_staff = current_user.is_super_admin or getattr(current_user, "is_cadence_staff", False)
+    if not is_staff:
+        membership = db.query(OrganizationMember).filter(
+            OrganizationMember.user_id == current_user.id,
+            OrganizationMember.organization_id == org_id,
+        ).first()
+        if not membership or membership.role not in ("OWNER", "ADMIN"):
+            raise HTTPException(
+                status_code=403,
+                detail="Only org Owners or Admins can change the plan.",
+            )
+    if payload.account_type is None and payload.catalog_addon_packs is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide account_type and/or catalog_addon_packs to update.",
+        )
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    previous = {
+        "account_type": org.account_type,
+        "catalog_addon_packs": getattr(org, "catalog_addon_packs", 0),
+    }
+    entitlements = set_plan(
+        db,
+        org,
+        account_type=payload.account_type,
+        addon_packs=payload.catalog_addon_packs,
+    )
+    db.commit()
+    db.refresh(org)
+
+    try:
+        from ..services.audit_service import log_action
+        log_action(
+            db=db,
+            organization_id=org_id,
+            user_id=current_user.id,
+            action="ORG_PLAN_UPDATE",
+            entity_type="ORGANIZATION",
+            entity_id=org_id,
+            entity_name=org.name,
+            details={
+                "previous": previous,
+                "new": {
+                    "account_type": org.account_type,
+                    "catalog_addon_packs": getattr(org, "catalog_addon_packs", 0),
+                },
+            },
+        )
+        db.commit()
+    except Exception:
+        pass
+
+    return {
+        "account_type": org.account_type,
+        "catalog_count": count_catalogs(db, org.id),
+        **entitlements,
+    }
 
 
 # ---------------------------------------------------------------------------
