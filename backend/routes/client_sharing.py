@@ -5,7 +5,7 @@ from typing import Optional
 from datetime import datetime
 import logging
 from ..models import get_db, User, Organization, OrganizationMember, Creator, ClientShare, Song, SongCredit
-from ..utils.auth import get_current_user
+from ..utils.auth import get_current_user, resolve_active_org_id
 from ..services.audit_service import log_action, make_diff
 from ..services.plan_entitlements import (
     is_professional,
@@ -71,14 +71,19 @@ router = APIRouter(prefix="/api/client-sharing", tags=["Client Sharing"])
 
 
 def has_shared_access(db: Session, user_id: int, creator_id: int, required_module: str = None):
-    membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == user_id
-    ).first()
-    if not membership:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return None
+    # Task #216: resolve the org the user is *actively* in (honors the
+    # active-org pointer), not an arbitrary `.first()` membership. For a
+    # multi-org user this guarantees the shared-access check is evaluated
+    # against the same org the rest of the request is scoped to.
+    org_id = resolve_active_org_id(db, user)
+    if org_id is None:
         return None
     share = db.query(ClientShare).filter(
         ClientShare.creator_id == creator_id,
-        ClientShare.recipient_org_id == membership.organization_id,
+        ClientShare.recipient_org_id == org_id,
         ClientShare.status == "ACCEPTED"
     ).first()
     if share and required_module:
@@ -89,8 +94,16 @@ def has_shared_access(db: Session, user_id: int, creator_id: int, required_modul
 
 
 def get_user_org(db: Session, user: User):
+    # Task #216: resolve the user's *active* org (honors the active-org
+    # pointer with self-heal) instead of an arbitrary `.first()` membership.
+    # Sharing create/accept and all other flows that scope by this membership
+    # are now deterministic for users who belong to multiple organizations.
+    org_id = resolve_active_org_id(db, user)
+    if org_id is None:
+        raise HTTPException(status_code=404, detail="Not a member of any organization")
     membership = db.query(OrganizationMember).filter(
-        OrganizationMember.user_id == user.id
+        OrganizationMember.user_id == user.id,
+        OrganizationMember.organization_id == org_id,
     ).first()
     if not membership:
         raise HTTPException(status_code=404, detail="Not a member of any organization")

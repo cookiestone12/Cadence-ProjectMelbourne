@@ -379,3 +379,54 @@ def test_current_org_catalog_count_includes_accepted_shares(db, client):
         assert body["creator_count"] == 1  # owned only
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+# ---- Task #216 — deterministic org resolution for multi-org users ------------
+
+def test_multi_org_accept_follows_active_org_pointer(db, client):
+    """A user who belongs to BOTH a Professional and an Enterprise org must have
+    share acceptance evaluated against their ACTIVE org, not an arbitrary
+    `.first()` membership. Accepting works only while the Enterprise org is
+    active; switching the pointer to the Professional org blocks it."""
+    sender = _org(db, account_type="ENTERPRISE", name="SndOrg")
+    sender_user = _owner(db, sender, email="snd216@x.com")
+    creator = Creator(organization_id=sender.id, display_name="Cat216")
+    db.add(creator); db.commit(); db.refresh(creator)
+
+    # Recipient user belongs to a Professional org (created first → oldest
+    # membership, what `.first()` would have picked) AND an Enterprise org.
+    pro = _org(db, account_type="INDIVIDUAL", name="ProSide216")
+    user = _owner(db, pro, email="multi216@x.com")
+    ent = _org(db, account_type="ENTERPRISE", name="EntSide216")
+    db.add(OrganizationMember(organization_id=ent.id, user_id=user.id, role="OWNER"))
+    db.commit()
+
+    def _pending_share():
+        s = ClientShare(
+            creator_id=creator.id, primary_org_id=sender.id,
+            recipient_user_email="multi216@x.com",
+            passcode="123456", role="READER", status="PENDING",
+            shared_by_user_id=sender_user.id,
+        )
+        db.add(s); db.commit(); db.refresh(s)
+        return s
+
+    app.dependency_overrides[get_current_user] = lambda: db.query(User).get(user.id)
+    try:
+        # Active org = Professional → acceptance blocked deterministically.
+        user.current_organization_id = pro.id
+        db.commit()
+        s1 = _pending_share()
+        r = client.post(f"/api/client-sharing/accept/{s1.id}", json={"passcode": "123456", "org_name": ""})
+        assert r.status_code == 403, f"got {r.status_code}: {r.text[:200]}"
+        assert "professional" in r.text.lower()
+
+        # Switch active org to Enterprise → acceptance now succeeds.
+        user.current_organization_id = ent.id
+        db.commit()
+        r2 = client.post(f"/api/client-sharing/accept/{s1.id}", json={"passcode": "123456", "org_name": ""})
+        assert r2.status_code == 200, f"got {r2.status_code}: {r2.text[:200]}"
+        db.refresh(s1)
+        assert s1.recipient_org_id == ent.id
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
