@@ -57,6 +57,10 @@ export default function ValuationPage() {
   const [sourceTyped, setSourceTyped] = useState(null)
   const [sourceTypedRunning, setSourceTypedRunning] = useState(false)
 
+  // Earnings by track, broken out by source (Task #228)
+  const [earnings, setEarnings] = useState(null)
+  const [expandedTracks, setExpandedTracks] = useState(() => new Set())
+
   // Phase 5 — Blended valuation (Task #172)
   const [fullVal, setFullVal] = useState(null)
   const [fullValRunning, setFullValRunning] = useState(false)
@@ -126,13 +130,15 @@ export default function ValuationPage() {
       const latestUrl = `/api/valuation/underwriting/latest${scopeQs}`
       const catalogUrl = `/api/valuation/catalog/summary${scopeQs}`
       const sourceTypedUrl = `/api/valuation/source-typed/summary${scopeQs}`
+      const earningsUrl = `/api/valuation/earnings-by-track${scopeQs}`
       const fullSummaryUrl = `/api/valuation/full/summary${scopeQs}${scopeQs ? '&' : '?'}method=blended`
       const trendUrl = `/api/valuation/full/trend${scopeQs}${scopeQs ? '&' : '?'}months=12`
-      const [catRes, uwRes, runsRes, stRes, fvRes, trRes] = await Promise.allSettled([
+      const [catRes, uwRes, runsRes, stRes, ebtRes, fvRes, trRes] = await Promise.allSettled([
         axios.get(catalogUrl),
         axios.get(latestUrl),
         axios.get('/api/valuation/underwriting/runs'),
         axios.get(sourceTypedUrl),
+        axios.get(earningsUrl),
         axios.get(fullSummaryUrl),
         axios.get(trendUrl),
       ])
@@ -143,6 +149,8 @@ export default function ValuationPage() {
       if (runsRes.status === 'fulfilled') setRuns(runsRes.value.data)
       if (stRes.status === 'fulfilled') setSourceTyped(stRes.value.data)
       else setSourceTyped(null)
+      if (ebtRes.status === 'fulfilled') setEarnings(ebtRes.value.data)
+      else setEarnings(null)
       if (fvRes.status === 'fulfilled') setFullVal(fvRes.value.data)
       else setFullVal(null)
       if (trRes.status === 'fulfilled') setTrend(trRes.value.data?.trend || [])
@@ -298,6 +306,15 @@ export default function ValuationPage() {
     }
   }
 
+  const toggleTrack = (songId) => {
+    setExpandedTracks(prev => {
+      const next = new Set(prev)
+      if (next.has(songId)) next.delete(songId)
+      else next.add(songId)
+      return next
+    })
+  }
+
   const fmt = (v) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v || 0)
   const fmtDec = (v) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v || 0)
   const fmtPct = (v) => `${((v || 0) * 100).toFixed(1)}%`
@@ -368,6 +385,16 @@ export default function ValuationPage() {
   }
 
   const hasUW = !!uwData
+
+  // Underwriting-only tabs disappear when there's no underwriting payload
+  // (e.g. after a scope switch with no run). Fall back to a tab that is
+  // always available so the page never renders an empty main panel.
+  useEffect(() => {
+    const alwaysAvailable = ['overview', 'earnings']
+    if (!hasUW && !alwaysAvailable.includes(activeTab)) {
+      setActiveTab('overview')
+    }
+  }, [hasUW, activeTab])
 
   return (
     <div className="p-4 sm:p-8">
@@ -593,29 +620,30 @@ export default function ValuationPage() {
         )
       })()}
 
-      {hasUW && (
-        <div className="flex space-x-1 mb-6 bg-[#EEF1EC] rounded-lg p-1 overflow-x-auto whitespace-nowrap">
-          {[
-            { key: 'overview', label: 'Overview', icon: ChartBarIcon },
+      <div className="flex space-x-1 mb-6 bg-[#EEF1EC] rounded-lg p-1 overflow-x-auto whitespace-nowrap">
+        {[
+          { key: 'overview', label: 'Overview', icon: ChartBarIcon },
+          { key: 'earnings', label: 'Earnings by Track', icon: CurrencyDollarIcon },
+          ...(hasUW ? [
             { key: 'spine', label: 'Revenue Spine', icon: TableCellsIcon },
             { key: 'decay', label: 'Decay Analytics', icon: ArrowTrendingDownIcon },
             { key: 'concentration', label: 'Concentration', icon: ChartPieIcon },
             { key: 'projections', label: 'Projections', icon: ArrowTrendingUpIcon },
             { key: 'history', label: 'Run History', icon: ClockIcon },
-          ].map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all flex-shrink-0 ${activeTab === tab.key ? 'bg-white text-[#3D4A44] shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'}`}
-            >
-              <tab.icon className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{tab.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
+          ] : []),
+        ].map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex items-center space-x-1.5 px-3 py-2 rounded-md text-xs font-medium transition-all flex-shrink-0 ${activeTab === tab.key ? 'bg-white text-[#3D4A44] shadow-sm' : 'text-[#7A8580] hover:text-[#3D4A44]'}`}
+          >
+            <tab.icon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{tab.label}</span>
+          </button>
+        ))}
+      </div>
 
-      {(!hasUW || activeTab === 'overview') && (
+      {activeTab === 'overview' && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div className="bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] rounded-xl p-5 border border-[rgba(91,138,114,0.15)]">
@@ -939,6 +967,111 @@ export default function ValuationPage() {
           )}
         </>
       )}
+
+      {activeTab === 'earnings' && (() => {
+        const tracks = earnings?.tracks || []
+        const catalogTotals = earnings?.catalog_right_type_totals || []
+        const attributed = earnings?.total_attributed_earnings_cents || 0
+        const unattr = earnings?.unattributed
+        const tracksWithEarnings = tracks.filter(t => (t.total_earnings_cents || 0) !== 0)
+        return (
+          <div className="space-y-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="bg-gradient-to-br from-[rgba(91,138,114,0.08)] to-[rgba(123,165,148,0.08)] rounded-xl p-5 border border-[rgba(91,138,114,0.15)]">
+                <div className="text-xs font-medium text-[#7A8580] uppercase tracking-wide">Attributed Earnings</div>
+                <div className="text-2xl font-bold text-[#3D4A44] mt-1">{fmtDec(attributed / 100)}</div>
+                <div className="text-xs text-[#7A8580] mt-1">{tracksWithEarnings.length} of {tracks.length} tracks with matched earnings</div>
+              </div>
+              <div className={`rounded-xl p-5 border ${unattr && unattr.earnings_cents ? 'bg-amber-50 border-amber-200' : 'bg-[#FAFBF9] border-[rgba(59,77,67,0.08)]'}`}>
+                <div className="text-xs font-medium text-[#7A8580] uppercase tracking-wide flex items-center gap-1.5">
+                  {unattr && unattr.earnings_cents ? <ExclamationTriangleIcon className="w-3.5 h-3.5 text-amber-600" /> : null}
+                  Unattributed Revenue
+                </div>
+                {unattr ? (
+                  <>
+                    <div className={`text-2xl font-bold mt-1 ${unattr.earnings_cents ? 'text-amber-700' : 'text-[#3D4A44]'}`}>{fmtDec((unattr.earnings_cents || 0) / 100)}</div>
+                    <div className="text-xs text-[#7A8580] mt-1">{fmtNum(unattr.line_count)} unmatched lines not yet tied to a track</div>
+                  </>
+                ) : (
+                  <div className="text-sm text-[#7A8580] mt-2">Shown for org-wide view only</div>
+                )}
+              </div>
+              <div className="bg-[#FAFBF9] rounded-xl p-5 border border-[rgba(59,77,67,0.08)]">
+                <div className="text-xs font-medium text-[#7A8580] uppercase tracking-wide">Earnings by Right Type</div>
+                <div className="mt-2 space-y-1">
+                  {catalogTotals.length === 0 ? (
+                    <div className="text-sm text-[#7A8580]">No matched earnings yet</div>
+                  ) : catalogTotals.map(rt => (
+                    <div key={rt.right_type} className="flex items-center justify-between text-xs">
+                      <span className="text-[#3D4A44]">{rt.right_type}</span>
+                      <span className="font-medium text-[#5B8A72]">{fmtDec(rt.earnings_cents / 100)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)]">
+              <div className="p-5 border-b border-[rgba(59,77,67,0.08)]">
+                <h2 className="text-base font-bold text-[#3D4A44]">Earnings by Track</h2>
+                <p className="text-xs text-[#7A8580] mt-0.5">Actual earnings aggregated across every statement. Only matched lines contribute. Click a track to see right type and source detail.</p>
+              </div>
+              {tracksWithEarnings.length === 0 ? (
+                <div className="p-8 text-center text-sm text-[#7A8580]">No matched royalty earnings for this catalog yet. Match royalty statement lines to tracks to populate this table.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-[#EEF1EC]">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium text-[#7A8580] uppercase text-[10px] min-w-[220px]">Track</th>
+                        <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px] min-w-[110px]">Total Earnings</th>
+                        <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px] min-w-[90px]">Lines</th>
+                        <th className="px-3 py-2 text-right font-medium text-[#7A8580] uppercase text-[10px] w-8"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[rgba(59,77,67,0.06)]">
+                      {tracksWithEarnings.map(track => {
+                        const isOpen = expandedTracks.has(track.song_id)
+                        return (
+                          <React.Fragment key={track.song_id}>
+                            <tr className="hover:bg-[#EEF1EC] cursor-pointer" onClick={() => toggleTrack(track.song_id)}>
+                              <td className="px-3 py-2.5">
+                                <div className="font-medium text-[#3D4A44] truncate max-w-[260px]">{track.title}</div>
+                                <div className="text-[9px] text-[#7A8580]">{track.primary_artist}{track.isrc ? ` · ${track.isrc}` : ''}</div>
+                              </td>
+                              <td className="px-3 py-2.5 text-right font-semibold text-[#5B8A72]">{fmtDec(track.total_earnings_cents / 100)}</td>
+                              <td className="px-3 py-2.5 text-right text-[#7A8580]">{fmtNum(track.line_count)}</td>
+                              <td className="px-3 py-2.5 text-right text-[#7A8580]">{isOpen ? '−' : '+'}</td>
+                            </tr>
+                            {isOpen && (track.right_types || []).map(rt => (
+                              <tr key={`${track.song_id}-${rt.right_type}`} className="bg-[#F5F7F4]">
+                                <td colSpan={4} className="px-3 py-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-semibold text-[#3D4A44]">{rt.right_type}</span>
+                                    <span className="font-medium text-[#3D4A44]">{fmtDec(rt.earnings_cents / 100)}</span>
+                                  </div>
+                                  <div className="mt-1.5 pl-4 space-y-1">
+                                    {(rt.sources || []).map(src => (
+                                      <div key={`${track.song_id}-${rt.right_type}-${src.source}`} className="flex items-center justify-between text-[#7A8580]">
+                                        <span>{src.source}</span>
+                                        <span>{fmtDec(src.earnings_cents / 100)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </React.Fragment>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {hasUW && activeTab === 'spine' && (
         <div className="bg-[#FAFBF9] rounded-xl border border-[rgba(59,77,67,0.08)] mb-6">

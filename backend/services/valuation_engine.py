@@ -507,6 +507,278 @@ def _compute_song_breakdown(
     )
 
 
+# ---------------------------------------------------------------------------
+# Task #228 — Earnings by track, broken out by source.
+#
+# The valuation data room needs a per-track earnings table: total actual
+# earnings per catalog song, grouped by right type (top level) with the
+# issuing source nested underneath. These functions REUSE the same matched
+# lines (``_bulk_lines_by_song``) and the same per-line routing logic the
+# valuation engine uses (society / platform_source / canonical category /
+# source_type), so the per-track breakdown stays consistent with the
+# valuation numbers. The grouping below is display-only and changes NO
+# valuation math.
+#
+# Unlike the valuation engine, this reports ACTUAL booked earnings (the
+# sum of net amounts across every statement), not annualized projections,
+# because an analyst doing diligence wants real historical earnings.
+# ---------------------------------------------------------------------------
+
+# Analyst-facing right types surfaced in the data room.
+RIGHT_TYPE_PUBLISHING = "Publishing"
+RIGHT_TYPE_PERFORMANCE = "Performance"
+RIGHT_TYPE_MECHANICAL = "Mechanical"
+RIGHT_TYPE_SYNC = "Sync"
+RIGHT_TYPE_MASTER = "Master/recording"
+RIGHT_TYPE_OTHER = "Other"
+
+# Stable display order for the catalog-level right-type rollup.
+EARNINGS_RIGHT_TYPE_ORDER: List[str] = [
+    RIGHT_TYPE_PUBLISHING,
+    RIGHT_TYPE_PERFORMANCE,
+    RIGHT_TYPE_MECHANICAL,
+    RIGHT_TYPE_SYNC,
+    RIGHT_TYPE_MASTER,
+    RIGHT_TYPE_OTHER,
+]
+
+# Maps the canonical right category written by the classifier onto the
+# analyst-facing right type. Mirrors ``_CATEGORY_BUCKET`` so the same
+# classification feeds both surfaces.
+_CATEGORY_RIGHT_TYPE: Dict[str, str] = {
+    "performance": RIGHT_TYPE_PERFORMANCE,
+    "public_performance": RIGHT_TYPE_PERFORMANCE,
+    "neighboring_rights": RIGHT_TYPE_PERFORMANCE,
+    "neighbouring_rights": RIGHT_TYPE_PERFORMANCE,
+    "mechanical": RIGHT_TYPE_MECHANICAL,
+    "sync": RIGHT_TYPE_SYNC,
+    "synchronization": RIGHT_TYPE_SYNC,
+    "sync_licensing": RIGHT_TYPE_SYNC,
+    "sync_fee": RIGHT_TYPE_SYNC,
+    "streaming": RIGHT_TYPE_MASTER,
+    "digital": RIGHT_TYPE_MASTER,
+    "interactive_streaming": RIGHT_TYPE_MASTER,
+    "on_demand": RIGHT_TYPE_MASTER,
+    "audio_streaming": RIGHT_TYPE_MASTER,
+    "video_streaming": RIGHT_TYPE_MASTER,
+    "download": RIGHT_TYPE_MASTER,
+    "print_lyrics": RIGHT_TYPE_PUBLISHING,
+    "print": RIGHT_TYPE_PUBLISHING,
+    "lyrics": RIGHT_TYPE_PUBLISHING,
+    "publishing": RIGHT_TYPE_PUBLISHING,
+}
+
+# Fallback right type inferred from the parent statement's source_type
+# when the canonical category is missing or 'other'. Mirrors
+# ``_SOURCE_TYPE_FALLBACK_BUCKET``.
+_SOURCE_TYPE_RIGHT_TYPE: Dict[str, str] = {
+    "BMI": RIGHT_TYPE_PERFORMANCE,
+    "ASCAP": RIGHT_TYPE_PERFORMANCE,
+    "SESAC": RIGHT_TYPE_PERFORMANCE,
+    "SOCAN": RIGHT_TYPE_PERFORMANCE,
+    "PRS": RIGHT_TYPE_PERFORMANCE,
+    "OTHER_PRO": RIGHT_TYPE_PERFORMANCE,
+    "SOUNDEXCHANGE": RIGHT_TYPE_PERFORMANCE,
+    "MLC": RIGHT_TYPE_MECHANICAL,
+    "HARRY_FOX": RIGHT_TYPE_MECHANICAL,
+    "DSP": RIGHT_TYPE_MASTER,
+    "LABEL": RIGHT_TYPE_MASTER,
+}
+
+# Maps the valuation engine's BMI ``classify_bmi_source`` bucket onto a
+# right type, so BMI lines routed by platform_source land in the same
+# right type the valuation treats them as.
+_BUCKET_RIGHT_TYPE: Dict[str, str] = {
+    "streaming": RIGHT_TYPE_MASTER,
+    "sync_adjacent": RIGHT_TYPE_SYNC,
+    "performance": RIGHT_TYPE_PERFORMANCE,
+}
+
+
+def _clean_str(value: Any) -> Optional[str]:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _line_net_amount_dollars(row: Any) -> float:
+    """Actual booked net for a line, preferring the statement-currency
+    normalized amount (same field the valuation engine sums)."""
+    amount = getattr(row, "net_amount_statement_currency", None)
+    if amount is None:
+        amount = getattr(row, "net_amount", None) or 0.0
+    try:
+        return float(amount)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _right_type_for_line(row: Any) -> str:
+    """Resolve the analyst-facing right type for a matched line using the
+    SAME routing the valuation engine applies in
+    ``_compute_song_breakdown_from_data`` (BMI society/platform special
+    cases first, then canonical category, then source_type fallback)."""
+    source_type = getattr(row, "source_type", None) or ""
+    is_bmi = source_type.strip().upper() == "BMI"
+    society = _clean_str(getattr(row, "society", None))
+    platform_source = _clean_str(getattr(row, "platform_source", None))
+
+    if is_bmi and society:
+        return RIGHT_TYPE_PERFORMANCE
+    if is_bmi and platform_source:
+        bucket = classify_bmi_source(platform_source)
+        return _BUCKET_RIGHT_TYPE.get(bucket, RIGHT_TYPE_PERFORMANCE)
+
+    cat = (getattr(row, "canonical_right_category", None) or "").strip().lower()
+    if cat and cat not in ("", "other", "unclassified"):
+        mapped = _CATEGORY_RIGHT_TYPE.get(cat)
+        if mapped:
+            return mapped
+
+    st = source_type.strip().upper()
+    if st in _SOURCE_TYPE_RIGHT_TYPE:
+        return _SOURCE_TYPE_RIGHT_TYPE[st]
+
+    return RIGHT_TYPE_OTHER
+
+
+def _source_label_for_line(row: Any) -> str:
+    """Resolve the issuing source for a line. Foreign-society income is
+    labeled by society; distributor/label/DSP income by the platform that
+    paid (e.g. Spotify); everything else by source_type."""
+    society = _clean_str(getattr(row, "society", None))
+    if society:
+        return society
+    platform_source = _clean_str(getattr(row, "platform_source", None))
+    source_type = _clean_str(getattr(row, "source_type", None))
+    if source_type and source_type.upper() in ("DSP", "LABEL") and platform_source:
+        return platform_source
+    if source_type:
+        return source_type
+    if platform_source:
+        return platform_source
+    return "Unspecified"
+
+
+def compute_unattributed_earnings(db: Session, org_id: int) -> Tuple[int, int]:
+    """Total actual net earnings (cents) on the org's royalty lines that
+    are not yet matched to any catalog song, plus the line count. This is
+    the revenue not yet attributed to a track."""
+    rows = (
+        db.query(
+            RoyaltyStatementLine.net_amount_statement_currency,
+            RoyaltyStatementLine.net_amount,
+        )
+        .filter(
+            RoyaltyStatementLine.org_id == org_id,
+            RoyaltyStatementLine.matched_song_id.is_(None),
+        )
+        .all()
+    )
+    total = 0.0
+    for r in rows:
+        total += _line_net_amount_dollars(r)
+    return int(round(total * 100)), len(rows)
+
+
+def compute_earnings_by_track(
+    db: Session,
+    org_id: int,
+    scope_creator_id: Optional[int] = None,
+    scope_song_ids: Optional[Iterable[int]] = None,
+) -> Dict[str, Any]:
+    """Per-track earnings aggregated across every statement in the
+    catalog, grouped by right type then issuing source. Only matched
+    lines contribute; unmatched revenue is reported separately via the
+    ``unattributed`` bucket (org-wide scope only).
+    """
+    song_ids = _resolve_song_ids(db, org_id, scope_creator_id, scope_song_ids)
+    lines_by_song = _bulk_lines_by_song(db, song_ids)
+
+    meta: Dict[int, Any] = {}
+    if song_ids:
+        for m in db.query(
+            Song.id, Song.title, Song.primary_artist, Song.isrc
+        ).filter(Song.id.in_(song_ids)).all():
+            meta[m.id] = m
+
+    tracks: List[Dict[str, Any]] = []
+    catalog_totals: Dict[str, float] = defaultdict(float)
+    total_attributed_dollars = 0.0
+
+    for sid in song_ids:
+        lines = lines_by_song.get(sid, [])
+        # right_type -> {"dollars": float, "sources": {source: dollars}}
+        by_right_type: Dict[str, Dict[str, Any]] = {}
+        track_total = 0.0
+        for row in lines:
+            amount = _line_net_amount_dollars(row)
+            rt = _right_type_for_line(row)
+            src = _source_label_for_line(row)
+            slot = by_right_type.setdefault(
+                rt, {"dollars": 0.0, "sources": defaultdict(float)}
+            )
+            slot["dollars"] += amount
+            slot["sources"][src] += amount
+            track_total += amount
+            catalog_totals[rt] += amount
+
+        right_types_out: List[Dict[str, Any]] = []
+        for rt_label, data in by_right_type.items():
+            sources_out = [
+                {"source": s, "earnings_cents": int(round(v * 100))}
+                for s, v in sorted(
+                    data["sources"].items(), key=lambda kv: kv[1], reverse=True
+                )
+            ]
+            right_types_out.append({
+                "right_type": rt_label,
+                "earnings_cents": int(round(data["dollars"] * 100)),
+                "sources": sources_out,
+            })
+        right_types_out.sort(key=lambda x: x["earnings_cents"], reverse=True)
+
+        total_cents = int(round(track_total * 100))
+        total_attributed_dollars += track_total
+        m = meta.get(sid)
+        tracks.append({
+            "song_id": sid,
+            "title": (m.title if m else None) or f"Song {sid}",
+            "primary_artist": m.primary_artist if m else None,
+            "isrc": m.isrc if m else None,
+            "total_earnings_cents": total_cents,
+            "line_count": len(lines),
+            "right_types": right_types_out,
+        })
+
+    tracks.sort(key=lambda t: t["total_earnings_cents"], reverse=True)
+
+    catalog_right_type_totals = [
+        {"right_type": rt, "earnings_cents": int(round(catalog_totals.get(rt, 0.0) * 100))}
+        for rt in EARNINGS_RIGHT_TYPE_ORDER
+        if int(round(catalog_totals.get(rt, 0.0) * 100)) != 0
+    ]
+
+    # Unattributed revenue is org-level (unmatched lines can't be tied to a
+    # creator), so it's only meaningful for the org-wide view.
+    unattributed: Optional[Dict[str, Any]] = None
+    if scope_creator_id is None and scope_song_ids is None:
+        unattr_cents, unattr_count = compute_unattributed_earnings(db, org_id)
+        unattributed = {"earnings_cents": unattr_cents, "line_count": unattr_count}
+
+    return {
+        "computed_at": datetime.utcnow().isoformat(),
+        "scope": {
+            "creator_id": scope_creator_id,
+            "song_ids": list(scope_song_ids) if scope_song_ids is not None else None,
+        },
+        "track_count": len(tracks),
+        "tracks_with_earnings": sum(1 for t in tracks if t["total_earnings_cents"] != 0),
+        "total_attributed_earnings_cents": int(round(total_attributed_dollars * 100)),
+        "catalog_right_type_totals": catalog_right_type_totals,
+        "unattributed": unattributed,
+        "tracks": tracks,
+    }
+
+
 def compute_source_typed_valuation(
     db: Session,
     org_id: int,

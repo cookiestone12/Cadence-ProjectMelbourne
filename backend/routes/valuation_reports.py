@@ -16,6 +16,7 @@ from ..services.underwriting_controls import run_reconciliation_controls
 from ..services.valuation_engine import (
     compute_source_typed_valuation,
     compute_full_catalog_valuation,
+    compute_earnings_by_track,
 )
 import io
 import json
@@ -382,6 +383,37 @@ def download_catalog_valuation_excel(
         headers=["Title", "Artist", "ISRC", "Release Date",
                  "Total Streams", "Valuation", "Annual Revenue", "Growth Rate"],
         rows=detail_rows,
+    )
+
+    # Task #228 — Earnings by track, broken out by source. One row per
+    # (track, right type, source) so the diligence breakdown is exportable
+    # alongside the valuation. Uses the same matched lines + classification
+    # as the valuation engine.
+    earnings = compute_earnings_by_track(db, org.id)
+    earnings_rows = []
+    for track in earnings.get("tracks", []):
+        if track.get("total_earnings_cents", 0) == 0 and not track.get("right_types"):
+            continue
+        for rt in track.get("right_types", []):
+            for src in rt.get("sources", []):
+                earnings_rows.append([
+                    track.get("title") or "",
+                    track.get("primary_artist") or "",
+                    track.get("isrc") or "",
+                    rt.get("right_type") or "",
+                    src.get("source") or "",
+                    f"${src.get('earnings_cents', 0) / 100:,.2f}",
+                ])
+    unattr = earnings.get("unattributed")
+    if unattr and unattr.get("earnings_cents"):
+        earnings_rows.append([
+            "Unattributed (unmatched lines)", "", "", "", "All sources",
+            f"${unattr.get('earnings_cents', 0) / 100:,.2f}",
+        ])
+    wb.add_sheet(
+        "Earnings by Track",
+        headers=["Title", "Artist", "ISRC", "Right Type", "Source", "Earnings"],
+        rows=earnings_rows or [["No matched royalty earnings yet", "", "", "", "", "$0.00"]],
     )
 
     safe_org = safe_filename_segment(org.name if org else "catalog", "catalog")
@@ -881,6 +913,30 @@ def get_source_typed_summary(
         membership.organization_id,
         db,
         scope_creator_id,
+    )
+
+
+@router.get(
+    "/earnings-by-track",
+    summary="Per-track earnings broken out by right type then issuing source",
+    description="Aggregates actual booked earnings across every royalty statement in the catalog, one row per matched song, grouped by right type (Publishing, Performance, Mechanical, Sync, Master/recording) with the issuing source (MLC, ASCAP, BMI, SoundExchange, DSPs, foreign societies) nested underneath. Only matched lines contribute; revenue not yet matched to a track is reported separately as `unattributed` (org-wide scope only). Uses the same matched lines and classification as the valuation engine.\n\n**Query:** `scope_creator_id?` (restricts to one creator's catalog).\n**Auth:** Bearer JWT — caller must be a member of the org.",
+)
+def get_earnings_by_track(
+    scope_creator_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    membership = get_active_membership(db, current_user)
+    if not membership:
+        raise HTTPException(status_code=404, detail="Organization membership not found")
+
+    if scope_creator_id is not None:
+        _scope_check_creator(db, scope_creator_id, membership.organization_id)
+
+    return compute_earnings_by_track(
+        db,
+        membership.organization_id,
+        scope_creator_id=scope_creator_id,
     )
 
 
