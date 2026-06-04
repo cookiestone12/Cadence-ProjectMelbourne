@@ -295,6 +295,18 @@ def test_accepted_shares_count_toward_capacity(db, client):
 
     assert pe.count_catalogs(db, recipient.id) == 10
 
+    # A duplicate accepted share for an already-shared creator (e.g. a second
+    # invite to a different email) must NOT consume an extra slot.
+    dup_target = db.query(Creator).filter(Creator.organization_id == sender.id).first()
+    db.add(ClientShare(
+        creator_id=dup_target.id, primary_org_id=sender.id,
+        recipient_org_id=recipient.id, recipient_user_email="other@x.com",
+        passcode="123456", role="READER", status="ACCEPTED",
+        shared_by_user_id=sender_user.id,
+    ))
+    db.commit()
+    assert pe.count_catalogs(db, recipient.id) == 10  # still 10, not 11
+
     # One more pending share -> accept should be blocked at capacity.
     extra = Creator(organization_id=sender.id, display_name="Extra")
     db.add(extra); db.commit(); db.refresh(extra)

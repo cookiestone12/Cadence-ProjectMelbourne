@@ -97,7 +97,13 @@ def count_catalogs(db: Session, org_id: int) -> int:
     owned = db.query(func.count(Creator.id)).filter(
         Creator.organization_id == org_id
     ).scalar() or 0
-    accepted_shares = db.query(func.count(ClientShare.id)).filter(
+    # Count DISTINCT shared catalogs, not share rows: the sharing model allows
+    # multiple accepted ClientShare rows for the same creator into the same
+    # recipient org (e.g. invites to different recipient emails), and access is
+    # org-level, so each unique creator should only consume one slot.
+    accepted_shares = db.query(
+        func.count(func.distinct(ClientShare.creator_id))
+    ).filter(
         ClientShare.recipient_org_id == org_id,
         ClientShare.status == "ACCEPTED",
     ).scalar() or 0

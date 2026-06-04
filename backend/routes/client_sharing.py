@@ -184,26 +184,25 @@ def create_share(
         Organization.id == membership.organization_id
     ).first()
     if sender_org and is_professional(sender_org):
-        # Deterministic rule: a Professional sender may only target a
-        # recipient we can positively verify is an Enterprise account. If the
-        # recipient can't be resolved to an Enterprise org, reject outright
-        # rather than creating an invitation that can never be accepted.
+        # A Professional sender may only target a recipient we can positively
+        # verify is an Enterprise account; otherwise reject outright rather than
+        # creating an invitation that can never be accepted.
         recipient_user = db.query(User).filter(
             User.email == req.recipient_email.lower()
         ).first()
-        recipient_membership = (
-            db.query(OrganizationMember).filter(
-                OrganizationMember.user_id == recipient_user.id
-            ).first()
-            if recipient_user else None
-        )
-        recipient_org = (
-            db.query(Organization).filter(
-                Organization.id == recipient_membership.organization_id
-            ).first()
-            if recipient_membership else None
-        )
-        if not (recipient_org and is_enterprise(recipient_org)):
+        # Deterministic across multi-org recipients: the target is valid iff ANY
+        # of the recipient user's org memberships is an Enterprise org. This
+        # avoids row-order dependence from picking a single membership.
+        recipient_is_enterprise = False
+        if recipient_user:
+            recipient_orgs = (
+                db.query(Organization)
+                .join(OrganizationMember, OrganizationMember.organization_id == Organization.id)
+                .filter(OrganizationMember.user_id == recipient_user.id)
+                .all()
+            )
+            recipient_is_enterprise = any(is_enterprise(o) for o in recipient_orgs)
+        if not recipient_is_enterprise:
             raise HTTPException(
                 status_code=403,
                 detail="Professional accounts can only share their catalog with verified Enterprise accounts.",
