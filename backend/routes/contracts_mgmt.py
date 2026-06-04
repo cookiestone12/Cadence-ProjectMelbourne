@@ -79,9 +79,10 @@ def _resolve_rights_holder_id(
                 "without a creator linkage."
             ),
         )
+    name_lower = holder_name.strip().lower()
     matches = db.query(Creator).filter(
         Creator.organization_id == organization_id,
-        func.lower(Creator.display_name) == holder_name.strip().lower(),
+        func.lower(Creator.display_name) == name_lower,
     ).all()
     if len(matches) == 1:
         return matches[0].id
@@ -94,12 +95,27 @@ def _resolve_rights_holder_id(
                 "explicit rights_holder_id to disambiguate."
             ),
         )
+
+    # No roster Creator matched — check the Creative Directory.
+    # Directory contacts are legitimate rights holders (producers, co-writers,
+    # featured artists, etc.) who don't need to be on the Creator Roster.
+    # If they have a linked creator_id, use it; otherwise save with
+    # rights_holder_id=NULL (allowed by the schema) so the name is still
+    # preserved in rights_holder_name and the split is not lost.
+    directory_match = db.query(CreativeContact).filter(
+        CreativeContact.organization_id == organization_id,
+        func.lower(CreativeContact.display_name) == name_lower,
+    ).first()
+    if directory_match:
+        return directory_match.creator_id  # may be None — that's fine
+
     raise HTTPException(
         status_code=400,
         detail=(
-            f"Unknown rights_holder_name '{holder_name}': no Creator with "
-            "that display_name exists in this org. Create the Creator first "
-            "or pass an explicit rights_holder_id."
+            f"Unknown rights_holder_name '{holder_name}': no Creator or "
+            "directory contact with that name exists in this org. Add them "
+            "to your Creative Directory first, or pass an explicit "
+            "rights_holder_id."
         ),
     )
 
