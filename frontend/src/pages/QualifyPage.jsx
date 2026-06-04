@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import axios from 'axios'
+import SEO from '../components/SEO'
 
 const ROLE_OPTIONS = [
   'Label', 'Publisher', 'Artist/Songwriter', 'Manager',
@@ -102,6 +103,12 @@ export default function QualifyPage() {
 
   return (
     <div style={{ fontFamily: '-apple-system, Inter, sans-serif', background: '#F8F9F7', minHeight: '100vh' }}>
+      <SEO
+        title="Request a Demo"
+        description="Tell us about your catalog — we'll tailor the walkthrough to your rights, royalties, and revenue goals."
+        path="/qualify"
+        image="https://cadence-ci.com/qualify-og.png"
+      />
       <div style={{ background: 'linear-gradient(135deg,#5B8A72 0%,#7BA594 100%)', padding: '20px 32px' }}>
         <img
           src="/assets/email/cadence-logo-white.png"
