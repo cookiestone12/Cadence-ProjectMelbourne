@@ -398,6 +398,13 @@ class RoyaltyStatementLine(Base):
     is_adjustment = Column(Boolean, nullable=True)
     section_code = Column(String, nullable=True)
     parse_quality = Column(Float, nullable=True)
+    # Task #227 — manual-match propagation. When a user manually matches a
+    # line, the decision cascades to other same-key lines in the org. Cascaded
+    # lines are tagged with a batch id (so the cascade is undoable) and a
+    # snapshot of their prior match state (so undo restores it exactly).
+    propagation_batch_id = Column(String, nullable=True)
+    propagation_source_line_id = Column(Integer, nullable=True)
+    propagation_prev = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

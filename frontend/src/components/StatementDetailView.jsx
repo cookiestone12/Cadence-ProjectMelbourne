@@ -124,6 +124,9 @@ export default function StatementDetailView({ orgId, statementId, onBack, initia
   const [bulkConfirming, setBulkConfirming] = useState(false)
   const [autoMatching, setAutoMatching] = useState(false)
 
+  const [propagation, setPropagation] = useState(null)
+  const [propagationBusy, setPropagationBusy] = useState(false)
+
   const loadStatement = useCallback(async () => {
     if (!orgId || !statementId) return
     try {
@@ -208,16 +211,59 @@ export default function StatementDetailView({ orgId, statementId, onBack, initia
 
   const handleConfirmMatch = async (songId) => {
     if (!selectedLine) return
+    const lineId = selectedLine.id
     try {
-      await axios.post(`/api/royalty-processing/${orgId}/lines/${selectedLine.id}/confirm-match`, { song_id: songId })
+      const res = await axios.post(`/api/royalty-processing/${orgId}/lines/${lineId}/confirm-match`, { song_id: songId })
       setSelectedLine(null)
       setSuggestions([])
+      const prop = res.data?.propagation
+      if (prop && prop.tier) {
+        setPropagation({ ...prop, sourceLineId: lineId, songId })
+      } else {
+        setPropagation(null)
+      }
       loadMatchQueue()
       loadStatement()
     } catch (err) {
       console.error('Confirm match failed:', err)
     }
   }
+
+  const handleApplyTitleArtist = async () => {
+    if (!propagation?.sourceLineId) return
+    setPropagationBusy(true)
+    try {
+      const res = await axios.post(
+        `/api/royalty-processing/${orgId}/lines/${propagation.sourceLineId}/propagate-match`,
+        { song_id: propagation.songId },
+      )
+      const prop = res.data?.propagation
+      setPropagation(prop && prop.tier ? { ...prop, sourceLineId: propagation.sourceLineId, songId: propagation.songId } : null)
+      loadMatchQueue()
+      loadStatement()
+    } catch (err) {
+      console.error('Apply propagation failed:', err)
+    } finally {
+      setPropagationBusy(false)
+    }
+  }
+
+  const handleUndoPropagation = async () => {
+    if (!propagation?.batch_id) return
+    setPropagationBusy(true)
+    try {
+      await axios.post(`/api/royalty-processing/${orgId}/propagation/${propagation.batch_id}/undo`)
+      setPropagation(null)
+      loadMatchQueue()
+      loadStatement()
+    } catch (err) {
+      console.error('Undo propagation failed:', err)
+    } finally {
+      setPropagationBusy(false)
+    }
+  }
+
+  const dismissPropagation = () => setPropagation(null)
 
   const handleRejectMatch = async () => {
     if (!selectedLine) return
@@ -470,6 +516,9 @@ export default function StatementDetailView({ orgId, statementId, onBack, initia
           onConfirm={handleConfirmMatch} onReject={handleRejectMatch} onIgnore={handleIgnoreLine}
           bulkThreshold={bulkThreshold} setBulkThreshold={setBulkThreshold}
           onBulkConfirm={handleBulkConfirm} bulkConfirming={bulkConfirming}
+          propagation={propagation} propagationBusy={propagationBusy}
+          onApplyTitleArtist={handleApplyTitleArtist} onUndoPropagation={handleUndoPropagation}
+          onDismissPropagation={dismissPropagation}
         />
       )}
       {activeTab === 'reconciliation' && (
@@ -772,9 +821,118 @@ function LinesPane({ lines, total, loading, filter, setFilter, search, setSearch
   )
 }
 
-function MatchingPane({ queue, queueLoading, selectedLine, onSelectLine, suggestions, suggestionsLoading, onConfirm, onReject, onIgnore, bulkThreshold, setBulkThreshold, onBulkConfirm, bulkConfirming }) {
+const PROPAGATION_TIER_LABELS = {
+  ISRC: 'ISRC',
+  ISWC: 'ISWC',
+  TITLE_ARTIST: 'title and artist',
+}
+
+function PropagationBanner({ propagation, busy, onApplyTitleArtist, onUndo, onDismiss }) {
+  if (!propagation || !propagation.tier) return null
+
+  const tierLabel = PROPAGATION_TIER_LABELS[propagation.tier] || propagation.tier
+  const lines = propagation.affected_count || 0
+  const stmts = propagation.statements_count || 0
+  const lineWord = lines === 1 ? 'line' : 'lines'
+  const stmtWord = stmts === 1 ? 'statement' : 'statements'
+
+  if (!propagation.applied) {
+    if (lines === 0) return null
+    return (
+      <div className="rounded-[14px] border border-[rgba(91,138,114,0.3)] bg-[rgba(91,138,114,0.06)] p-4">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="flex items-start gap-3">
+            <LinkIcon className="w-5 h-5 text-[#5B8A72] mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-[#3D4A44]">
+                {lines} other {lineWord} across {stmts} {stmtWord} look like this song, matched by {tierLabel}.
+              </p>
+              <p className="text-xs text-[#7A8580] mt-1">
+                This is a lower-confidence match. Review before applying it to every line.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onApplyTitleArtist}
+              disabled={busy}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs bg-gradient-to-r from-[#5B8A72] to-[#7BA594] text-white rounded-lg hover:shadow-[0px_4px_12px_rgba(91,138,114,0.3)] transition-all font-medium disabled:opacity-50"
+            >
+              <CheckCircleIcon className="w-3.5 h-3.5" /> {busy ? 'Applying...' : `Apply to all ${lines} ${lineWord}`}
+            </button>
+            <button
+              onClick={onDismiss}
+              disabled={busy}
+              className="px-3 py-1.5 text-xs text-[#7A8580] hover:text-[#3D4A44] rounded-lg transition-colors font-medium disabled:opacity-50"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (lines === 0) {
+    return (
+      <div className="rounded-[14px] border border-[rgba(59,77,67,0.12)] bg-white/60 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-[#7A8580]">No other lines in this catalog matched this song by {tierLabel}.</p>
+          <button onClick={onDismiss} className="text-[#7A8580] hover:text-[#3D4A44] transition-colors">
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-[14px] border border-[rgba(91,138,114,0.3)] bg-[rgba(91,138,114,0.08)] p-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="flex items-start gap-3">
+          <CheckCircleIcon className="w-5 h-5 text-[#5B8A72] mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-[#3D4A44]">
+              Linked {lines} more {lineWord} across {stmts} {stmtWord}, matched by {tierLabel}.
+            </p>
+            <p className="text-xs text-[#7A8580] mt-1">
+              Existing confirmed and ignored lines were left unchanged.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {propagation.batch_id && (
+            <button
+              onClick={onUndo}
+              disabled={busy}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs border border-[#5B8A72] text-[#5B8A72] rounded-lg hover:bg-[rgba(91,138,114,0.06)] transition-all font-medium disabled:opacity-50"
+            >
+              <ArrowPathIcon className="w-3.5 h-3.5" /> {busy ? 'Undoing...' : 'Undo'}
+            </button>
+          )}
+          <button
+            onClick={onDismiss}
+            disabled={busy}
+            className="px-2 py-1.5 text-[#7A8580] hover:text-[#3D4A44] rounded-lg transition-colors disabled:opacity-50"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MatchingPane({ queue, queueLoading, selectedLine, onSelectLine, suggestions, suggestionsLoading, onConfirm, onReject, onIgnore, bulkThreshold, setBulkThreshold, onBulkConfirm, bulkConfirming, propagation, propagationBusy, onApplyTitleArtist, onUndoPropagation, onDismissPropagation }) {
   return (
     <div className="space-y-4">
+      <PropagationBanner
+        propagation={propagation}
+        busy={propagationBusy}
+        onApplyTitleArtist={onApplyTitleArtist}
+        onUndo={onUndoPropagation}
+        onDismiss={onDismissPropagation}
+      />
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h3 className="text-lg font-semibold text-[#3D4A44]">Matching Console</h3>
         <div className="flex items-center gap-3">

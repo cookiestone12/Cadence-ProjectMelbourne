@@ -27,6 +27,8 @@ from ..services.royalty_processing_engine import (
     reject_match,
     ignore_line,
     bulk_confirm_high_confidence,
+    apply_confirm_propagation,
+    undo_propagation,
     get_allocation_preview,
     process_statement,
     reprocess_statement,
@@ -428,8 +430,56 @@ def confirm_line_match(
     verify_org_access(current_user, org_id, db)
     try:
         confirm_match(db, line_id, org_id, body.song_id, current_user.id, body.work_id, body.release_id)
+        propagation = apply_confirm_propagation(
+            db, org_id, line_id, body.song_id, current_user.id,
+            body.work_id, body.release_id, apply_title_artist=False,
+        )
         db.commit()
-        return {"success": True}
+        return {"success": True, "propagation": propagation}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post(
+    "/{org_id}/lines/{line_id}/propagate-match",
+    summary="Cascade a confirmed line's match to all same-key lines in the catalog",
+    description="Applies the match on `line_id` to every eligible line in the same organization that shares the line's matching key (ISRC, then ISWC, then normalized title + artist), across all statements (past included). ISRC/ISWC tiers already cascade automatically on confirm; this endpoint is primarily for explicitly applying the lower-confidence title + artist tier after the operator has reviewed the preview count.\n\n**Path parameters:** `org_id`, `line_id` — the already-matched source RoyaltyStatementLine.\n**Body (`ConfirmMatchRequest`):** `song_id` (required), `work_id?`, `release_id?`.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ success: true, propagation: { tier, key, affected_count, statements_count, batch_id, applied } }`.",
+)
+def propagate_line_match(
+    org_id: int,
+    line_id: int,
+    body: ConfirmMatchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    try:
+        propagation = apply_confirm_propagation(
+            db, org_id, line_id, body.song_id, current_user.id,
+            body.work_id, body.release_id, apply_title_artist=True,
+        )
+        db.commit()
+        return {"success": True, "propagation": propagation}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post(
+    "/{org_id}/propagation/{batch_id}/undo",
+    summary="Undo a match-propagation batch",
+    description="Reverts every line linked by a single propagation cascade, restoring each line's prior match state (status, matched song/work/release, confidence, method). Strictly org-scoped.\n\n**Path parameters:** `org_id`, `batch_id` — the `propagation_batch_id` returned when the cascade was applied.\n\n**Auth:** Bearer JWT. Caller must be a member of the org.\n\n**Response:** `{ success: true, reverted_count, batch_id }`.",
+)
+def undo_propagation_batch(
+    org_id: int,
+    batch_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    verify_org_access(current_user, org_id, db)
+    try:
+        result = undo_propagation(db, org_id, batch_id)
+        db.commit()
+        return {"success": True, **result}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

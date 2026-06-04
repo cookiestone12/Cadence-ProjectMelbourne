@@ -1,11 +1,14 @@
 import logging
 import hashlib
 import re
+import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from difflib import SequenceMatcher
+
+from .track_matcher import _normalize_title, _normalize_artist
 
 from ..models import (
     get_db, Song, Work, WorkTrack, Release, Creator, Contract, ContractAsset, RightsSplit,
@@ -520,6 +523,30 @@ def auto_match_lines(db: Session, statement_id: int, org_id: int) -> dict:
         raise
 
 
+def _assert_entities_in_org(
+    db: Session,
+    org_id: int,
+    song_id: Optional[int],
+    work_id: Optional[int] = None,
+    release_id: Optional[int] = None,
+):
+    """Guard against cross-tenant linking: every catalog entity a line is
+    matched to must belong to ``org_id``. Raises ``ValueError`` otherwise.
+    """
+    if song_id is not None:
+        ok = db.query(Song.id).filter(Song.id == song_id, Song.organization_id == org_id).first()
+        if not ok:
+            raise ValueError(f"Song {song_id} not found in org {org_id}")
+    if work_id is not None:
+        ok = db.query(Work.id).filter(Work.id == work_id, Work.organization_id == org_id).first()
+        if not ok:
+            raise ValueError(f"Work {work_id} not found in org {org_id}")
+    if release_id is not None:
+        ok = db.query(Release.id).filter(Release.id == release_id, Release.organization_id == org_id).first()
+        if not ok:
+            raise ValueError(f"Release {release_id} not found in org {org_id}")
+
+
 def confirm_match(
     db: Session,
     line_id: int,
@@ -536,6 +563,8 @@ def confirm_match(
         ).first()
         if not line:
             raise ValueError(f"Statement line {line_id} not found for org {org_id}")
+
+        _assert_entities_in_org(db, org_id, song_id, work_id, release_id)
 
         line.matched_song_id = song_id
         line.matched_work_id = work_id
@@ -630,6 +659,262 @@ def bulk_confirm_high_confidence(
     except Exception as e:
         logger.error(f"Error bulk confirming for statement {statement_id}: {e}")
         raise
+
+
+# ---------------------------------------------------------------------------
+# Task #227 — manual-match propagation
+#
+# When a user manually matches a line to a song, cascade that decision to every
+# other line in the SAME organization that refers to the same song, retroactive
+# across all statements (past included). Strictly org-scoped: a line in another
+# catalog is never touched. The matching key is tiered (ISRC, then ISWC, then
+# normalized title+artist) and the tier logic is isolated here so it can be
+# tuned later.
+# ---------------------------------------------------------------------------
+
+# Tiers that are trustworthy enough to apply automatically. The title+artist
+# fallback is lower confidence and must be confirmed by the operator first.
+AUTO_PROPAGATION_TIERS = ("ISRC", "ISWC")
+
+
+def _norm_identifier(s: Optional[str]) -> str:
+    """Strip an identifier (ISRC/ISWC) to its alphanumeric core, uppercased.
+
+    Mirrors the ``_norm_id`` helper used inside ``auto_match_lines`` so the
+    propagation key matches how auto-match already normalizes identifiers.
+    """
+    return re.sub(r"[^A-Za-z0-9]", "", s or "").upper()
+
+
+def compute_propagation_key(line: RoyaltyStatementLine) -> Optional[Tuple[str, str]]:
+    """Return ``(tier, normalized_value)`` for a line, or ``None`` if no usable
+    key exists. Tiered: ISRC, then ISWC, then normalized title+artist.
+    """
+    isrc = _norm_identifier(line.isrc)
+    if isrc:
+        return ("ISRC", isrc)
+    iswc = _norm_identifier(line.iswc)
+    if iswc:
+        return ("ISWC", iswc)
+    title = _normalize_title(line.track_title_raw or "")
+    artist = _normalize_artist(line.artist_name_raw or "")
+    if title and artist:
+        return ("TITLE_ARTIST", f"{title}|{artist}")
+    return None
+
+
+def _candidate_lines_for_key(
+    db: Session, org_id: int, tier: str, key_value: str
+) -> List[RoyaltyStatementLine]:
+    """All org lines whose value in the given tier's field matches ``key_value``.
+
+    Matched directly on the tier field (not via ``compute_propagation_key``) so
+    that, e.g., an ISWC cascade still reaches a line that also happens to carry
+    its own ISRC.
+    """
+    base = db.query(RoyaltyStatementLine).filter(RoyaltyStatementLine.org_id == org_id)
+    out: List[RoyaltyStatementLine] = []
+    if tier == "ISRC":
+        for ln in base.filter(RoyaltyStatementLine.isrc.isnot(None)).all():
+            if _norm_identifier(ln.isrc) == key_value:
+                out.append(ln)
+    elif tier == "ISWC":
+        for ln in base.filter(RoyaltyStatementLine.iswc.isnot(None)).all():
+            if _norm_identifier(ln.iswc) == key_value:
+                out.append(ln)
+    else:  # TITLE_ARTIST
+        for ln in base.filter(RoyaltyStatementLine.track_title_raw.isnot(None)).all():
+            title = _normalize_title(ln.track_title_raw or "")
+            artist = _normalize_artist(ln.artist_name_raw or "")
+            if title and artist and f"{title}|{artist}" == key_value:
+                out.append(ln)
+    return out
+
+
+def _is_eligible_target(
+    line: RoyaltyStatementLine, source_line_id: int, song_id: int
+) -> bool:
+    """Whether a candidate line may be (re)linked by a cascade."""
+    if line.id == source_line_id:
+        return False
+    if line.match_status == "IGNORED":
+        return False
+    # Never override a human's explicit, different confirmed decision.
+    if (
+        line.match_status == "CONFIRMED"
+        and line.matched_song_id
+        and line.matched_song_id != song_id
+    ):
+        return False
+    # Already correctly linked to this song -> nothing to do.
+    if line.matched_song_id == song_id and line.match_status in ("CONFIRMED", "AUTO_MATCHED"):
+        return False
+    return True
+
+
+def preview_propagation(
+    db: Session, org_id: int, source_line_id: int, song_id: int, tier: str, key_value: str
+) -> dict:
+    """Count (without applying) how many eligible lines / statements a cascade
+    would touch."""
+    stmt_ids = set()
+    affected = 0
+    for ln in _candidate_lines_for_key(db, org_id, tier, key_value):
+        if _is_eligible_target(ln, source_line_id, song_id):
+            affected += 1
+            stmt_ids.add(ln.statement_id)
+    return {
+        "tier": tier,
+        "key": key_value,
+        "affected_count": affected,
+        "statements_count": len(stmt_ids),
+    }
+
+
+def propagate_match(
+    db: Session,
+    org_id: int,
+    source_line_id: int,
+    song_id: int,
+    user_id: int,
+    tier: str,
+    key_value: str,
+    work_id: Optional[int] = None,
+    release_id: Optional[int] = None,
+) -> dict:
+    """Link every eligible same-key line in the org to ``song_id``.
+
+    Each touched line gets a shared ``propagation_batch_id`` and a snapshot of
+    its prior match state in ``propagation_prev`` so the cascade can be undone.
+    Returns counts plus the batch id (``None`` when nothing was changed).
+    """
+    batch_id = uuid.uuid4().hex
+    stmt_ids = set()
+    affected = 0
+    confidence = 100.0 if tier in AUTO_PROPAGATION_TIERS else 90.0
+
+    for ln in _candidate_lines_for_key(db, org_id, tier, key_value):
+        if not _is_eligible_target(ln, source_line_id, song_id):
+            continue
+        ln.propagation_prev = {
+            "matched_song_id": ln.matched_song_id,
+            "matched_work_id": ln.matched_work_id,
+            "matched_release_id": ln.matched_release_id,
+            "match_status": ln.match_status,
+            "match_confidence": ln.match_confidence,
+            "match_method": ln.match_method,
+            "matched_by_user_id": ln.matched_by_user_id,
+            "matched_at": ln.matched_at.isoformat() if ln.matched_at else None,
+        }
+        ln.matched_song_id = song_id
+        ln.matched_work_id = work_id
+        ln.matched_release_id = release_id
+        ln.match_status = "CONFIRMED"
+        ln.match_confidence = confidence
+        ln.match_method = f"PROPAGATED_{tier}"
+        ln.matched_by_user_id = user_id
+        ln.matched_at = datetime.utcnow()
+        ln.propagation_batch_id = batch_id
+        ln.propagation_source_line_id = source_line_id
+        affected += 1
+        stmt_ids.add(ln.statement_id)
+
+    db.flush()
+    logger.info(
+        f"Propagated match (org {org_id}, song {song_id}, tier {tier}): "
+        f"{affected} lines across {len(stmt_ids)} statements (batch {batch_id})"
+    )
+    return {
+        "tier": tier,
+        "key": key_value,
+        "affected_count": affected,
+        "statements_count": len(stmt_ids),
+        "batch_id": batch_id if affected else None,
+    }
+
+
+def apply_confirm_propagation(
+    db: Session,
+    org_id: int,
+    source_line_id: int,
+    song_id: int,
+    user_id: int,
+    work_id: Optional[int] = None,
+    release_id: Optional[int] = None,
+    apply_title_artist: bool = False,
+) -> dict:
+    """Orchestrate propagation for a just-confirmed line.
+
+    ISRC/ISWC tiers apply automatically. The title+artist tier returns a
+    preview (``applied=False``) unless ``apply_title_artist`` is set, so the
+    operator can confirm the lower-confidence cascade first.
+    """
+    source = db.query(RoyaltyStatementLine).filter(
+        RoyaltyStatementLine.id == source_line_id,
+        RoyaltyStatementLine.org_id == org_id,
+    ).first()
+    if not source:
+        raise ValueError(f"Statement line {source_line_id} not found for org {org_id}")
+
+    # The cascade always follows the source line's own confirmed match; never an
+    # arbitrary song passed by the caller. This blocks retargeting a propagation
+    # to a different (or foreign-org) song than the one the line is confirmed to.
+    if source.match_status != "CONFIRMED" or source.matched_song_id is None:
+        raise ValueError(f"Statement line {source_line_id} is not confirmed to a song")
+    if song_id is not None and song_id != source.matched_song_id:
+        raise ValueError("Propagation song must match the source line's confirmed song")
+    song_id = source.matched_song_id
+    work_id = source.matched_work_id
+    release_id = source.matched_release_id
+    # Defensive: even when derived from the source line, re-assert the catalog
+    # entities belong to this org (guards against legacy/corrupted link state).
+    _assert_entities_in_org(db, org_id, song_id, work_id, release_id)
+
+    key = compute_propagation_key(source)
+    if not key:
+        return {"tier": None, "applied": True, "affected_count": 0, "statements_count": 0, "batch_id": None}
+
+    tier, key_value = key
+    if tier in AUTO_PROPAGATION_TIERS or apply_title_artist:
+        result = propagate_match(db, org_id, source_line_id, song_id, user_id, tier, key_value, work_id, release_id)
+        result["applied"] = True
+        return result
+
+    preview = preview_propagation(db, org_id, source_line_id, song_id, tier, key_value)
+    preview["applied"] = False
+    preview["batch_id"] = None
+    return preview
+
+
+def undo_propagation(db: Session, org_id: int, batch_id: str) -> dict:
+    """Revert a propagation batch, restoring each line's prior match state."""
+    lines = db.query(RoyaltyStatementLine).filter(
+        RoyaltyStatementLine.org_id == org_id,
+        RoyaltyStatementLine.propagation_batch_id == batch_id,
+    ).all()
+    if not lines:
+        raise ValueError(f"Propagation batch {batch_id} not found for org {org_id}")
+
+    reverted = 0
+    for ln in lines:
+        prev = ln.propagation_prev or {}
+        ln.matched_song_id = prev.get("matched_song_id")
+        ln.matched_work_id = prev.get("matched_work_id")
+        ln.matched_release_id = prev.get("matched_release_id")
+        ln.match_status = prev.get("match_status") or "UNMATCHED"
+        ln.match_confidence = prev.get("match_confidence")
+        ln.match_method = prev.get("match_method")
+        ln.matched_by_user_id = prev.get("matched_by_user_id")
+        matched_at = prev.get("matched_at")
+        ln.matched_at = datetime.fromisoformat(matched_at) if matched_at else None
+        ln.propagation_batch_id = None
+        ln.propagation_source_line_id = None
+        ln.propagation_prev = None
+        reverted += 1
+
+    db.flush()
+    logger.info(f"Undid propagation batch {batch_id} (org {org_id}): reverted {reverted} lines")
+    return {"reverted_count": reverted, "batch_id": batch_id}
 
 
 def _find_splits_for_song(db: Session, org_id: int, song_id: int) -> List[Tuple]:
