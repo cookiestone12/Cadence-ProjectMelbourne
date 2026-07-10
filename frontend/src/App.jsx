@@ -2,6 +2,7 @@ import React, { useState, useEffect, Component } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import axios from 'axios'
 import { apiUrl } from './lib/apiBase'
+import NotFoundPage from './pages/NotFoundPage'
 
 // Global axios request interceptor: route every legacy `/api/...` call
 // through the single API_BASE constant in lib/apiBase.js (currently
@@ -267,7 +268,8 @@ function App() {
           <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
           <Route path="/shared/credits/:token" element={<SharedCreditsPage />} />
           <Route path="/qualify" element={<QualifyPage />} />
-          <Route path="*" element={<Navigate to="/" />} />
+          <Route path="/qualify" element={<QualifyPage />} />
+<Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Router>
     )
@@ -325,7 +327,7 @@ function App() {
                 <Route path="/support" element={<SupportPage />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/guide" element={<UserGuidePage />} />
-                <Route path="*" element={<Navigate to="/client-portal" />} />
+                <Route path="*" element={<NotFoundPage />} />
               </>
             ) : (
               <>

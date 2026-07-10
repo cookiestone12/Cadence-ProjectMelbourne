@@ -806,3 +806,9 @@
 .animate-slide-in-right {
   animation: slide-in-right 0.3s ease-out;
 }
+/* Keyboard accessibility: visible focus indicator */
+*:focus-visible {
+  outline: 3px solid rgba(91, 138, 114, 0.5);
+  outline-offset: 2px;
+}
+
