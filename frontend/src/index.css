@@ -38,7 +38,23 @@
   --apple-error: #C47068;
   --apple-info: #5A8A9A;
 }
+.dark {
+  --am-bg: #111312;
+  --am-bg-elevated: #1C211E;
+  --am-surface: #171B18;
+  --am-subtle: #242A26;
+  --am-border: rgba(255,255,255,0.08);
+  --am-border-strong: rgba(255,255,255,0.15);
+  --am-separator: rgba(255,255,255,0.1);
 
+  --am-text: #F5F5F5;
+  --am-text-secondary: #A1A1A6;
+  --am-text-tertiary: #6E6E73;
+
+  --am-accent: #7BA594;
+  --am-accent-light: #96BBA8;
+  --am-accent-hover: #5B8A72;
+}
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;

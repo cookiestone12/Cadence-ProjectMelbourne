@@ -108,7 +108,14 @@ import Sidebar from './components/Sidebar'
 import AssistantChat from './components/AssistantChat'
 import OnboardingTour from './components/OnboardingTour'
 
-function App() {
+function 
+App() {
+  const [darkMode, setDarkMode] = useState(false)
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode)
+  }, [darkMode])
+
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
