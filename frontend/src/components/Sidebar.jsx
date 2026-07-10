@@ -25,12 +25,16 @@ import {
   ShareIcon,
   LifebuoyIcon,
   ChevronDownIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  MoonIcon,
+  SunIcon
 } from '@heroicons/react/24/outline'
 import NotificationBell from './NotificationBell'
 import OrgSwitcher from './OrgSwitcher'
 
-export default function Sidebar({ user, onLogout, isOpen, onClose }) {
+export default function Sidebar({ user, onLogout, isOpen, onClose, 
+darkMode, setDarkMode }) {
+
   const location = useLocation()
   const [orgBranding, setOrgBranding] = useState(null)
   const [isOrgAdmin, setIsOrgAdmin] = useState(false)
@@ -205,7 +209,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
             </div>
             <button
               onClick={onClose}
-              className="lg:hidden w-9 h-9 flex items-center justify-center rounded-full text-am-text-secondary hover:text-am-text hover:bg-am-subtle transition-all duration-150"
+              className="lg:hidden p-2 rounded-lg hover:bg-am-subtle"
             >
               <XMarkIcon className="w-5 h-5" />
             </button>
@@ -324,7 +328,25 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }) {
               </Link>
             ) : null}
 
-            <button 
+      
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="w-full px-3 py-2.5 text-am-text-secondary 
+hover:bg-am-subtle rounded-xl transition-all duration-150 flex 
+items-center gap-3"
+            >
+              {darkMode ? (
+                <SunIcon className="w-[20px] h-[20px]" />
+              ) : (
+                <MoonIcon className="w-[20px] h-[20px]" />
+              )}
+              <span className="text-[14px]">
+                {darkMode ? 'Light Mode' : 'Dark Mode'}
+              </span>
+            </button>
+
+
+            <button
               onClick={onLogout}
               className="w-full px-3 py-2.5 text-am-text-secondary hover:text-am-error hover:bg-red-50 rounded-xl transition-all duration-150 text-left flex items-center gap-3 group"
             >

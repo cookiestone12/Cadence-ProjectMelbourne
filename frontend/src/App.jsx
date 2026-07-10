@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import axios from 'axios'
 import { apiUrl } from './lib/apiBase'
 import NotFoundPage from './pages/NotFoundPage'
+import ServerErrorPage from './pages/ServerErrorPage'
+import ForbiddenPage from './pages/ForbiddenPage'
 
 // Global axios request interceptor: route every legacy `/api/...` call
 // through the single API_BASE constant in lib/apiBase.js (currently
@@ -277,7 +279,10 @@ App() {
           <Route path="/qualify" element={<QualifyPage />} />
           <Route path="/qualify" element={<QualifyPage />} />
 <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+<Route path="/500" element={<ServerErrorPage />} />
+<Route path="/403" element={<ForbiddenPage />} />
+   
+     </Routes>
       </Router>
     )
   }
@@ -285,11 +290,13 @@ App() {
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <div className="min-h-screen bg-gray-100 flex">
-        <Sidebar 
+       <Sidebar 
           user={user} 
           onLogout={handleLogout} 
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
         />
         <main className="flex-1 min-w-0 bg-[#F5F7F4]">
           <div className="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
@@ -376,7 +383,6 @@ App() {
                 {user?.is_super_admin && (
                   <Route path="/admin/qualifications" element={<QualificationsAdminPage />} />
                 )}
-                <Route path="*" element={<Navigate to="/" />} />
               </>
             )}
           </Routes>
