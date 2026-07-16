@@ -31,22 +31,10 @@ class ErrorBoundary extends Component {
     console.error('Page crashed:', error, info)
   }
   render() {
-    if (this.state.hasError) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full p-8">
-          <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] p-8 max-w-md text-center shadow-sm">
-            <h2 className="text-xl font-bold text-[#3D4A44] mb-2">Something went wrong</h2>
-            <p className="text-[#7A8580] mb-4">This page ran into an issue. Try refreshing or going back.</p>
-            <button
-              onClick={() => { this.setState({ hasError: false, error: null }); window.location.href = '/' }}
-              className="px-5 py-2 bg-[#5B8A72] text-white rounded-lg hover:bg-[#4A7A62] transition-colors text-sm font-medium"
-            >
-              Go to Home
-            </button>
-          </div>
-        </div>
-      )
+   if (this.state.hasError) {
+    return <ServerErrorPage />
     }
+
     return this.props.children
   }
 }
@@ -112,11 +100,14 @@ import OnboardingTour from './components/OnboardingTour'
 
 function 
 App() {
-  const [darkMode, setDarkMode] = useState(false)
+const [darkMode, setDarkMode] = useState(() => {
+  return localStorage.getItem("darkMode") === "true"
+})
 
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', darkMode)
-  }, [darkMode])
+useEffect(() => {
+ document.documentElement.classList.toggle('dark', darkMode)
+  localStorage.setItem("darkMode", darkMode)
+}, [darkMode])
 
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState(null)
@@ -277,7 +268,6 @@ App() {
           <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
           <Route path="/shared/credits/:token" element={<SharedCreditsPage />} />
           <Route path="/qualify" element={<QualifyPage />} />
-          <Route path="/qualify" element={<QualifyPage />} />
 <Route path="*" element={<NotFoundPage />} />
 <Route path="/500" element={<ServerErrorPage />} />
 <Route path="/403" element={<ForbiddenPage />} />
@@ -374,15 +364,39 @@ App() {
                 <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
                 <Route path="/shared/credits/:token" element={<SharedCreditsPage />} />
                 <Route path="/org-admin" element={<TenantAdminPage />} />
-                {user?.is_super_admin && (
-                  <Route path="/admin" element={<AdminDashboard />} />
-                )}
-                {user?.is_super_admin && (
-                  <Route path="/admin/leads" element={<LeadsPage />} />
-                )}
-                {user?.is_super_admin && (
-                  <Route path="/admin/qualifications" element={<QualificationsAdminPage />} />
-                )}
+              <Route
+  path="/admin"
+  element={
+    user?.is_super_admin ? (
+      <AdminDashboard />
+    ) : (
+      <ForbiddenPage />
+    )
+  }
+/>
+                <Route
+  path="/admin/leads"
+  element={
+    user?.is_super_admin ? (
+      <LeadsPage />
+    ) : (
+      <ForbiddenPage />
+    )
+  }
+/>
+
+<Route
+  path="/admin/qualifications"
+  element={
+    user?.is_super_admin ? (
+      <QualificationsAdminPage />
+    ) : (
+      <ForbiddenPage />
+    )
+  }
+/>
+
+                <Route path="*" element={<NotFoundPage />} />
               </>
             )}
           </Routes>

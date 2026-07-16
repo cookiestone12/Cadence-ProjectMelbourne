@@ -15,6 +15,8 @@ export default function FolderPicker({ isOpen, onClose, onSelect, provider = 'DR
   const [initialized, setInitialized] = useState(false)
   const [navStack, setNavStack] = useState([])
 
+   const modalRef = React.useRef(null)
+
   const isGoogleDrive = provider === 'GOOGLE_DRIVE'
 
   const browseFolders = useCallback(async (path = '', folderName = '') => {
@@ -64,6 +66,12 @@ export default function FolderPicker({ isOpen, onClose, onSelect, provider = 'DR
   }, [isOpen, initialized, browseFolders, initialPath])
 
   React.useEffect(() => {
+  if (isOpen) {
+    modalRef.current?.focus()
+  }
+}, [isOpen])
+
+  React.useEffect(() => {
     if (!isOpen) {
       setInitialized(false)
       setFolderContents([])
@@ -73,6 +81,20 @@ export default function FolderPicker({ isOpen, onClose, onSelect, provider = 'DR
       setNavStack([])
     }
   }, [isOpen])
+
+React.useEffect(() => {
+  const handleKeyDown = (event) => {
+    if (event.key === 'Escape' && isOpen) {
+      onClose()
+    }
+  }
+
+  window.addEventListener('keydown', handleKeyDown)
+
+  return () => {
+    window.removeEventListener('keydown', handleKeyDown)
+  }
+}, [isOpen, onClose])
 
   if (!isOpen) return null
 
@@ -123,10 +145,22 @@ export default function FolderPicker({ isOpen, onClose, onSelect, provider = 'DR
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-[18px] shadow-xl w-full max-w-lg max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div
+  ref={modalRef}
+  tabIndex="-1"
+  role="dialog"
+  aria-modal="true"
+  className="bg-white rounded-[18px] shadow-xl w-full max-w-lg max-h-[70vh] flex flex-col"
+  onClick={e => e.stopPropagation()}
+>
         <div className="flex items-center justify-between p-5 border-b border-[rgba(59,77,67,0.08)]">
           <div className="flex-1 min-w-0">
-            <h3 className="text-[18px] font-medium text-[#3D4A44]">Select Folder</h3>
+            <h3
+  id="folder-picker-title"
+  className="text-[18px] font-medium text-[#3D4A44]"
+>
+  Select Folder
+</h3>
             <div className="flex items-center gap-1 mt-1 text-[13px] text-[#7A8580] overflow-hidden">
               <button
                 onClick={goToRoot}

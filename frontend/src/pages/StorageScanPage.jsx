@@ -70,6 +70,8 @@ function CoverageBar({ label, value, total, color = 'bg-[#5B8A72]' }) {
 }
 
 export default function StorageScanPage() {
+  const folderButtonRef = React.useRef(null)
+  const orgScanFolderButtonRef = React.useRef(null)
   const [orgId, setOrgId] = useState(null)
 
   const [activeTab, setActiveTab] = useState('overview')
@@ -544,6 +546,7 @@ export default function StorageScanPage() {
                       className="flex-1 border border-[rgba(59,77,67,0.12)] rounded-xl px-3 py-2.5 text-sm bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent placeholder-[#7A8580]"
                     />
                     <button
+                      ref={orgScanFolderButtonRef}
                       type="button"
                       onClick={() => setOrgScanFolderPickerOpen(true)}
                       className="flex items-center gap-1.5 px-3 py-2.5 border border-[#5B8A72] text-[#5B8A72] rounded-xl text-sm font-medium hover:bg-[rgba(91,138,114,0.08)] transition-colors shrink-0"
@@ -999,7 +1002,8 @@ export default function StorageScanPage() {
                     className="flex-1 border border-[rgba(59,77,67,0.12)] rounded-xl px-3 py-2.5 text-sm bg-white text-[#3D4A44] focus:ring-2 focus:ring-[#5B8A72] focus:border-transparent placeholder-[#7A8580]"
                   />
                   <button
-                    type="button"
+                   ref={folderButtonRef}
+                   type="button"
                     onClick={() => setFolderPickerOpen(true)}
                     disabled={!providers.some(p => p.provider === linkForm.provider)}
                     className="flex items-center gap-1.5 px-3 py-2.5 border border-[#5B8A72] text-[#5B8A72] rounded-xl text-sm font-medium hover:bg-[rgba(91,138,114,0.08)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
@@ -1047,7 +1051,10 @@ export default function StorageScanPage() {
 
       <FolderPicker
         isOpen={folderPickerOpen}
-        onClose={() => setFolderPickerOpen(false)}
+        onClose={() => {
+        setFolderPickerOpen(false)
+        folderButtonRef.current?.focus()
+        }}
         onSelect={(path, displayPath) => {
           setLinkForm(prev => ({ ...prev, folder_path: displayPath || path }))
         }}
@@ -1058,7 +1065,10 @@ export default function StorageScanPage() {
 
       <FolderPicker
         isOpen={orgScanFolderPickerOpen}
-        onClose={() => setOrgScanFolderPickerOpen(false)}
+        onClose={() => {
+       setOrgScanFolderPickerOpen(false)
+        orgScanFolderButtonRef.current?.focus()
+        }}
         onSelect={(path) => {
           setOrgScanFolder(path)
         }}

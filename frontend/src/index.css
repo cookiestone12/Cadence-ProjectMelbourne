@@ -1,98 +1,14 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --am-bg: #F8F9F7;
-  --am-bg-elevated: #FFFFFF;
-  --am-surface: #FAFBF9;
-  --am-subtle: #F0F2EE;
-  --am-border: rgba(60,60,67,0.06);
-  --am-border-strong: rgba(60,60,67,0.12);
-  --am-separator: rgba(60,60,67,0.08);
-  --am-text: #1D1D1F;
-  --am-text-secondary: #86868B;
-  --am-text-tertiary: #AEAEB2;
-  --am-accent: #5B8A72;
-  --am-accent-light: #7BA594;
-  --am-accent-hover: #4A7A62;
-  --am-success: #5B9A6E;
-  --am-warning: #C4956B;
-  --am-error: #C47068;
-  --am-info: #5A8A9A;
-  --am-gradient: linear-gradient(135deg, #5B8A72 0%, #7BA594 100%);
-  
-  --apple-bg: #F5F7F4;
-  --apple-card: #FAFBF9;
-  --apple-subtle: #EEF1EC;
-  --apple-border: rgba(59,77,67,0.08);
-  --apple-text: #3D4A44;
-  --apple-text-secondary: #7A8580;
-  --apple-purple: #5B8A72;
-  --apple-pink: #7BA594;
-  --apple-gradient: linear-gradient(135deg, #5B8A72 0%, #7BA594 100%);
-  --apple-success: #5B9A6E;
-  --apple-warning: #C4956B;
-  --apple-error: #C47068;
-  --apple-info: #5A8A9A;
+.am-text-display {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  color: var(--am-text);
 }
-.dark {
-  --am-bg: #111312;
-  --am-bg-elevated: #1C211E;
-  --am-surface: #171B18;
-  --am-subtle: #242A26;
-  --am-border: rgba(255,255,255,0.08);
-  --am-border-strong: rgba(255,255,255,0.15);
-  --am-separator: rgba(255,255,255,0.1);
-
-  --am-text: #F5F5F5;
-  --am-text-secondary: #A1A1A6;
-  --am-text-tertiary: #6E6E73;
-
-  --am-accent: #7BA594;
-  --am-accent-light: #96BBA8;
-  --am-accent-hover: #5B8A72;
-}
-@layer base {
-  html {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    text-rendering: optimizeLegibility;
-  }
-
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', system-ui, sans-serif;
-    background: var(--am-bg);
-    color: var(--am-text);
-    font-size: 15px;
-    line-height: 1.47;
-    letter-spacing: -0.01em;
-  }
-
-  code {
-    font-family: 'SF Mono', 'Roboto Mono', source-code-pro, Menlo, Monaco, Consolas, monospace;
-  }
-
-  * {
-    transition-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1);
-  }
-
-  ::selection {
-    background: rgba(91, 138, 114, 0.2);
-  }
-}
-
-@layer components {
-  .am-text-large-title {
-    font-size: 34px;
-    font-weight: 700;
-    line-height: 1.06;
-    letter-spacing: -0.02em;
-    color: var(--am-text);
-  }
 
   .am-text-title-1 {
     font-size: 28px;
@@ -642,7 +558,6 @@
   .apple-input::placeholder {
     color: #7A8580;
   }
-}
 
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {

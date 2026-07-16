@@ -17,6 +17,7 @@ const NOTIFICATION_TYPES = {
 }
 
 export default function Settings() {
+  const folderButtonRef = React.useRef(null)
   const [activeTab, setActiveTab] = useState('notifications')
   const [apiStatus, setApiStatus] = useState({})
   const [preferences, setPreferences] = useState([])
@@ -1401,8 +1402,10 @@ export default function Settings() {
                           <span>{integrations.dropbox?.default_folder || '/ (root)'}</span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => setFolderPickerOpen(true)}
+                    <button
+                    ref={folderButtonRef}
+                    onClick={() => setFolderPickerOpen(true)}
+
                         className="px-3 py-1.5 text-[13px] font-medium text-[#5B8A72] border border-[#5B8A72] rounded-lg hover:bg-[rgba(91,138,114,0.08)] transition-colors"
                       >
                         Change
@@ -1467,7 +1470,10 @@ export default function Settings() {
 
         <FolderPicker
           isOpen={folderPickerOpen}
-          onClose={() => setFolderPickerOpen(false)}
+         onClose={() => {
+        setFolderPickerOpen(false)
+        folderButtonRef.current?.focus()
+          }}
           onSelect={handleFolderSelected}
           provider="DROPBOX"
           orgId={organizationId}
