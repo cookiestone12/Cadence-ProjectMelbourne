@@ -969,7 +969,7 @@ export default function CreativeDirectoryPage() {
         </div>
         ) : (
         <div className="bg-white rounded-2xl border border-[rgba(59,77,67,0.12)] overflow-x-auto">
-          <table className="w-full min-w-[640px]">
+          <table className="w-full min-w-[640px]" aria-label="Creative directory contacts">
             <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
               <tr>
                 <th className="px-2 sm:px-4 py-3 w-8 sm:w-10">
@@ -977,6 +977,7 @@ export default function CreativeDirectoryPage() {
                     type="checkbox"
                     checked={filteredContacts.length > 0 && selectedIds.size === filteredContacts.length}
                     onChange={toggleSelectAll}
+                    aria-label="Select all contacts"
                     className="rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
                   />
                 </th>
@@ -996,6 +997,7 @@ export default function CreativeDirectoryPage() {
                       type="checkbox"
                       checked={selectedIds.has(contact.id)}
                       onChange={() => toggleSelect(contact.id)}
+                      aria-label={`Select ${contact.display_name}`}
                       className="rounded border-[rgba(59,77,67,0.3)] text-[#5B8A72] focus:ring-[#5B8A72]"
                     />
                   </td>
@@ -1043,16 +1045,16 @@ export default function CreativeDirectoryPage() {
                   </td>
                   <td className="px-2 sm:px-4 py-3">
                     <div className="flex items-center justify-end gap-0.5 sm:gap-1">
-                      <button onClick={() => openEdit(contact)} className="p-1 sm:p-1.5 rounded-lg hover:bg-[#5B8A72]/10 text-[#7A8580] hover:text-[#5B8A72] transition-colors" title="Edit">
+                      <button onClick={() => openEdit(contact)} className="p-1 sm:p-1.5 rounded-lg hover:bg-[#5B8A72]/10 text-[#7A8580] hover:text-[#5B8A72] transition-colors" title="Edit" aria-label={`Edit ${contact.display_name}`}>
                         <PencilIcon className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(contact)} className="p-1 sm:p-1.5 rounded-lg hover:bg-red-50 text-[#7A8580] hover:text-red-500 transition-colors" title="Delete">
+                      <button onClick={() => handleDelete(contact)} className="p-1 sm:p-1.5 rounded-lg hover:bg-red-50 text-[#7A8580] hover:text-red-500 transition-colors" title="Delete" aria-label={`Delete ${contact.display_name}`}>
                         <TrashIcon className="w-4 h-4" />
                       </button>
-                      <button onClick={() => { setShareModalContact(contact); setShareResult(null) }} className="p-1 sm:p-1.5 rounded-lg hover:bg-[#5B8A72]/10 text-[#7A8580] hover:text-[#5B8A72] transition-colors" title="Share Card">
+                      <button onClick={() => { setShareModalContact(contact); setShareResult(null) }} className="p-1 sm:p-1.5 rounded-lg hover:bg-[#5B8A72]/10 text-[#7A8580] hover:text-[#5B8A72] transition-colors" title="Share Card" aria-label={`Share ${contact.display_name}`}>
                         <EnvelopeIcon className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleCopyProInfo(contact)} className="p-1 sm:p-1.5 rounded-lg hover:bg-[#5A8A9A]/10 text-[#7A8580] hover:text-[#5A8A9A] transition-colors hidden sm:inline-flex" title="Copy PRO Info">
+                      <button onClick={() => handleCopyProInfo(contact)} className="p-1 sm:p-1.5 rounded-lg hover:bg-[#5A8A9A]/10 text-[#7A8580] hover:text-[#5A8A9A] transition-colors hidden sm:inline-flex" title="Copy PRO Info" aria-label={`Copy PRO info for ${contact.display_name}`}>
                         {proCopied === contact.id ? <CheckIcon className="w-4 h-4 text-green-500" /> : <DocumentDuplicateIcon className="w-4 h-4" />}
                       </button>
                       <button

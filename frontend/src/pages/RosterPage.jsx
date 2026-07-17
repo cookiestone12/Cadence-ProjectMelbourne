@@ -571,7 +571,7 @@ export default function RosterPage() {
           </div>
           ) : (
           <div className="bg-white rounded-[18px] shadow-[0px_4px_12px_rgba(0,0,0,0.08)] overflow-hidden overflow-x-auto">
-            <table className="w-full min-w-[640px]">
+            <table className="w-full min-w-[640px]" aria-label="Roster creators">
               <thead className="bg-[#EEF1EC] border-b border-[rgba(59,77,67,0.08)]">
                 <tr>
                   {selectMode && <th className="px-4 py-3 w-10"></th>}
@@ -587,6 +587,14 @@ export default function RosterPage() {
                   <tr
                     key={creator.id}
                     onClick={selectMode ? () => toggleSelect(creator.id) : undefined}
+                    onKeyDown={selectMode ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        toggleSelect(creator.id)
+                      }
+                    } : undefined}
+                    tabIndex={selectMode ? 0 : undefined}
+                    aria-selected={selectMode ? selectedIds.has(creator.id) : undefined}
                     className={`hover:bg-[#FAFBF9] transition-colors ${selectMode ? 'cursor-pointer' : ''} ${selectMode && selectedIds.has(creator.id) ? 'bg-[rgba(91,138,114,0.06)]' : ''}`}
                   >
                     {selectMode && (
@@ -643,6 +651,7 @@ export default function RosterPage() {
                           }}
                           className="p-1.5 rounded-lg hover:bg-[#EEF1EC] transition-colors text-[#7A8580] hover:text-[#3D4A44]"
                           title="Upload photo"
+                          aria-label={`Upload photo for ${creator.display_name}`}
                         >
                           <CameraIcon className="w-4 h-4" />
                         </button>
@@ -655,6 +664,7 @@ export default function RosterPage() {
                           disabled={deletingId === creator.id}
                           className="p-1.5 rounded-lg hover:bg-red-50 transition-colors text-[#7A8580] hover:text-[#C47068]"
                           title="Remove from roster"
+                          aria-label={`Remove ${creator.display_name} from roster`}
                         >
                           <TrashIcon className="w-4 h-4" />
                         </button>

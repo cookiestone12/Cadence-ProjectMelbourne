@@ -14,6 +14,7 @@ import {
   getAssistantContext,
   pageFromPath,
 } from '../lib/assistantContext'
+import useModalFocus from '../hooks/useModalFocus'
 
 function parseMarkdownInline(text) {
   const parts = []
@@ -280,6 +281,7 @@ export default function AssistantChat({ user }) {
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const abortRef = useRef(null)
+  const panelRef = useModalFocus(isOpen, () => setIsOpen(false))
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -530,6 +532,7 @@ export default function AssistantChat({ user }) {
       {!isOpen && (
         <button
           onClick={handleOpen}
+          aria-label="Open Cadence assistant"
           className="fixed bottom-6 right-6 z-40 w-14 h-14 bg-gradient-to-br from-[#5B8A72] to-[#4A7A62] rounded-full shadow-lg hover:shadow-xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 group"
           title="Ask Cadence Assistant"
         >
@@ -542,9 +545,16 @@ export default function AssistantChat({ user }) {
 
       {isOpen && <div className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[1px] transition-opacity duration-200" onClick={() => setIsOpen(false)} />}
 
-      <div className={`fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100vh-6rem)] bg-white rounded-2xl shadow-2xl border border-[rgba(59,77,67,0.12)] flex flex-col overflow-hidden transition-all duration-300 ease-out origin-bottom-right ${
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cadence-assistant-title"
+        tabIndex="-1"
+        className={`fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-2rem)] h-[560px] max-h-[calc(100vh-6rem)] bg-white rounded-2xl shadow-2xl border border-[rgba(59,77,67,0.12)] flex flex-col overflow-hidden transition-all duration-300 ease-out origin-bottom-right ${
         isOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-4 pointer-events-none'
-      }`}>
+      }`}
+      >
       <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-[#5B8A72] to-[#4A7A62] flex-shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0 relative">
@@ -560,13 +570,14 @@ export default function AssistantChat({ user }) {
             `}</style>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white leading-tight">Cadence</h3>
+            <h3 id="cadence-assistant-title" className="text-sm font-semibold text-white leading-tight">Cadence</h3>
             <p className="text-[10px] text-white/70">Ask me anything about the app</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={handleClear}
+            aria-label="Clear chat"
             className="p-1.5 hover:bg-white/15 rounded-lg transition-colors"
             title="Clear chat"
           >
@@ -574,6 +585,7 @@ export default function AssistantChat({ user }) {
           </button>
           <button
             onClick={() => setIsOpen(false)}
+            aria-label="Close assistant"
             className="p-1.5 hover:bg-white/15 rounded-lg transition-colors"
             title="Close"
           >
@@ -648,6 +660,7 @@ export default function AssistantChat({ user }) {
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask about any feature or your data..."
+            aria-label="Message Cadence assistant"
             rows={1}
             disabled={streaming}
             className="flex-1 px-3.5 py-2.5 bg-[#F5F7F4] border border-[rgba(59,77,67,0.1)] rounded-xl text-sm text-[#3D4A44] placeholder-[#B0B5B2] resize-none focus:outline-none focus:ring-2 focus:ring-[#5B8A72]/20 focus:border-[#5B8A72] disabled:opacity-60 max-h-[80px] overflow-y-auto"
@@ -660,6 +673,7 @@ export default function AssistantChat({ user }) {
           <button
             onClick={handleSend}
             disabled={!input.trim() || streaming}
+            aria-label="Send message"
             className="p-2.5 bg-[#5B8A72] text-white rounded-xl hover:bg-[#4A7A62] disabled:opacity-40 disabled:hover:bg-[#5B8A72] transition-colors flex-shrink-0"
           >
             <PaperAirplaneIcon className="w-4 h-4" />

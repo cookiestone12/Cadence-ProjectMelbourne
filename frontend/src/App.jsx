@@ -19,6 +19,14 @@ axios.interceptors.request.use((config) => {
   return config
 })
 
+const routeToErrorPage = (status) => {
+  if (typeof window === 'undefined') return
+  const path = status === 403 ? '/403' : '/500'
+  if (window.location.pathname === path) return
+  window.history.pushState({}, '', path)
+  window.dispatchEvent(new PopStateEvent('popstate'))
+}
+
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
@@ -149,16 +157,19 @@ useEffect(() => {
     }
     setLoading(false)
 
-    // Add axios interceptor to handle expired tokens
+    // Add axios interceptor to handle expired tokens and global error pages.
     const interceptor = axios.interceptors.response.use(
       (response) => response,
       (error) => {
-        if (error.response?.status === 401) {
+        const status = error.response?.status
+        if (status === 401) {
           // Token expired or invalid - log user out
           localStorage.removeItem('token')
           delete axios.defaults.headers.common['Authorization']
           setIsAuthenticated(false)
           setUser(null)
+        } else if (status === 403 || status >= 500) {
+          routeToErrorPage(status === 403 ? 403 : 500)
         }
         return Promise.reject(error)
       }
@@ -279,7 +290,7 @@ useEffect(() => {
 
   return (
     <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <div className="min-h-screen bg-gray-100 flex">
+      <div className="min-h-screen bg-gray-100 dark:bg-[#18231f] flex">
        <Sidebar 
           user={user} 
           onLogout={handleLogout} 
@@ -288,8 +299,8 @@ useEffect(() => {
           darkMode={darkMode}
           setDarkMode={setDarkMode}
         />
-        <main className="flex-1 min-w-0 bg-[#F5F7F4]">
-          <div className="lg:hidden sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+        <main className="flex-1 min-w-0 bg-[#F5F7F4] dark:bg-[#18231f]">
+          <div className="lg:hidden sticky top-0 z-30 bg-white dark:bg-[#22312b] border-b border-gray-200 dark:border-white/10 px-4 py-3 flex items-center justify-between">
             <button
               onClick={() => setSidebarOpen(true)}
               aria-label="Open menu"
@@ -331,6 +342,8 @@ useEffect(() => {
                 <Route path="/support" element={<SupportPage />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/guide" element={<UserGuidePage />} />
+                <Route path="/403" element={<ForbiddenPage />} />
+                <Route path="/500" element={<ServerErrorPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </>
             ) : (
@@ -364,6 +377,8 @@ useEffect(() => {
                 <Route path="/shared/contacts/:token" element={<SharedContactsPage />} />
                 <Route path="/shared/credits/:token" element={<SharedCreditsPage />} />
                 <Route path="/org-admin" element={<TenantAdminPage />} />
+                <Route path="/403" element={<ForbiddenPage />} />
+                <Route path="/500" element={<ServerErrorPage />} />
               <Route
   path="/admin"
   element={

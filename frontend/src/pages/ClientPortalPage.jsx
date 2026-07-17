@@ -578,7 +578,7 @@ function CatalogTab({ organizationId, creatorId }) {
 
       {view === 'songs' && (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[500px]">
+          <table className="w-full min-w-[500px]" aria-label="Client portal songs">
             <thead className="bg-[#F5F7F4]">
               <tr>
                 <th className="text-left px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Title</th>
@@ -596,6 +596,14 @@ function CatalogTab({ organizationId, creatorId }) {
                   key={s.id}
                   className="hover:bg-[#FAFBF9] cursor-pointer"
                   onClick={() => setSelectedSong({ id: s.id, title: s.title, primary_artist: s.artist })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      setSelectedSong({ id: s.id, title: s.title, primary_artist: s.artist })
+                    }
+                  }}
+                  tabIndex={0}
+                  aria-label={`Open song ${s.title}`}
                 >
                   <td className="px-4 py-3 text-sm font-medium text-[#3D4A44]">{s.title}</td>
                   <td className="px-4 py-3 text-sm text-[#7A8580]">{s.artist}</td>
@@ -633,7 +641,7 @@ function CatalogTab({ organizationId, creatorId }) {
 
       {view === 'works' && (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[400px]">
+          <table className="w-full min-w-[400px]" aria-label="Client portal works">
             <thead className="bg-[#F5F7F4]">
               <tr>
                 <th className="text-left px-4 py-2 text-xs font-semibold text-[#7A8580] uppercase">Title</th>

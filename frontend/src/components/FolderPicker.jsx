@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import axios from 'axios'
 import { FolderIcon, XMarkIcon, ArrowUturnLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import useModalFocus from '../hooks/useModalFocus'
 
 function getAuthHeaders() {
   return { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
@@ -15,7 +16,7 @@ export default function FolderPicker({ isOpen, onClose, onSelect, provider = 'DR
   const [initialized, setInitialized] = useState(false)
   const [navStack, setNavStack] = useState([])
 
-   const modalRef = React.useRef(null)
+  const modalRef = useModalFocus(isOpen, onClose)
 
   const isGoogleDrive = provider === 'GOOGLE_DRIVE'
 
@@ -66,12 +67,6 @@ export default function FolderPicker({ isOpen, onClose, onSelect, provider = 'DR
   }, [isOpen, initialized, browseFolders, initialPath])
 
   React.useEffect(() => {
-  if (isOpen) {
-    modalRef.current?.focus()
-  }
-}, [isOpen])
-
-  React.useEffect(() => {
     if (!isOpen) {
       setInitialized(false)
       setFolderContents([])
@@ -81,20 +76,6 @@ export default function FolderPicker({ isOpen, onClose, onSelect, provider = 'DR
       setNavStack([])
     }
   }, [isOpen])
-
-React.useEffect(() => {
-  const handleKeyDown = (event) => {
-    if (event.key === 'Escape' && isOpen) {
-      onClose()
-    }
-  }
-
-  window.addEventListener('keydown', handleKeyDown)
-
-  return () => {
-    window.removeEventListener('keydown', handleKeyDown)
-  }
-}, [isOpen, onClose])
 
   if (!isOpen) return null
 
@@ -150,6 +131,7 @@ React.useEffect(() => {
   tabIndex="-1"
   role="dialog"
   aria-modal="true"
+  aria-labelledby="folder-picker-title"
   className="bg-white rounded-[18px] shadow-xl w-full max-w-lg max-h-[70vh] flex flex-col"
   onClick={e => e.stopPropagation()}
 >
@@ -164,6 +146,7 @@ React.useEffect(() => {
             <div className="flex items-center gap-1 mt-1 text-[13px] text-[#7A8580] overflow-hidden">
               <button
                 onClick={goToRoot}
+                aria-label="Go to root folder"
                 className="shrink-0 hover:text-[#5B8A72] transition-colors"
               >
                 / root
@@ -195,6 +178,7 @@ React.useEffect(() => {
           </div>
           <button
             onClick={onClose}
+            aria-label="Close folder picker"
             className="p-1.5 text-[#7A8580] hover:text-[#3D4A44] rounded-lg hover:bg-[#FAFBF9] transition-colors ml-2"
           >
             <XMarkIcon className="w-5 h-5" />
@@ -205,6 +189,7 @@ React.useEffect(() => {
           {hasParent && (
             <button
               onClick={goUp}
+              aria-label="Go to parent folder"
               className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-[#FAFBF9] transition-colors text-left mb-1"
             >
               <ArrowUturnLeftIcon className="w-5 h-5 text-[#7A8580]" />
@@ -240,6 +225,7 @@ React.useEffect(() => {
                 <button
                   key={folder.id || idx}
                   onClick={() => navigateToFolder(folder)}
+                  aria-label={`Open folder ${folder.name}`}
                   className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-[#FAFBF9] transition-colors text-left group"
                 >
                   <FolderIcon className="w-5 h-5 text-[#5B8A72] shrink-0" />
