@@ -105,9 +105,11 @@ import InternalOnboarding from './internal/Onboarding'
 import Sidebar from './components/Sidebar'
 import AssistantChat from './components/AssistantChat'
 import OnboardingTour from './components/OnboardingTour'
+import useGlobalAccessibility from './hooks/useGlobalAccessibility'
 
 function 
 App() {
+useGlobalAccessibility()
 const [darkMode, setDarkMode] = useState(() => {
   return localStorage.getItem("darkMode") === "true"
 })
